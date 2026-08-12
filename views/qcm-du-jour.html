@@ -842,6 +842,46 @@
       font-weight: 700;
       white-space: nowrap;
     }
+    /* "Les liens" (cf. renderLinksSection, server.js
+       findAndStoreCultureGeneraleNotionLink) — connaissances déjà apprises
+       reliées à celle-ci dans la fiche, cliquables pour ouvrir la fiche liée. */
+    .qcm-fiche-links {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0 0 14px;
+    }
+    .qcm-fiche-link-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid #e2e8ec;
+      border-radius: 10px;
+      background: #f8fafb;
+      font-family: Arial, Helvetica, sans-serif;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-fiche-link-item:hover {
+      border-color: #a8bcc7;
+      background: #eef3f6;
+    }
+    .qcm-fiche-link-label {
+      flex: none;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #dde8ee;
+      color: #34505f;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .qcm-fiche-link-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1f2d33;
+    }
     /* Corrigé des questions dans la fiche "Mes QCM" (cf.
        renderFicheQuestionCorrige) — lecture seule, jamais interactif : la
        bonne réponse est directement mise en évidence, contrairement au vrai
@@ -1110,6 +1150,32 @@
       font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.02em;
+    }
+    /* Bouton "Ne plus me la demander" (cf. wireExcludeButton) : discret,
+       même gabarit pilule que les badges voisins mais cliquable — exclut la
+       question courante des futures repasses ("Renforcement"), jamais de la
+       session en cours. */
+    .qcm-exclude-btn {
+      display: inline-block;
+      float: right;
+      margin: 0 0 8px;
+      padding: 3px 10px;
+      border: 1px solid #dbe2e7;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #7a8792;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+    }
+    .qcm-exclude-btn:hover {
+      border-color: #b8c2ca;
+      color: #516776;
+    }
+    .qcm-exclude-btn:disabled {
+      opacity: 0.6;
+      cursor: default;
     }
     /* Marqueur "___" d'une question texte_a_trous, mis en valeur dans le
        texte de la question — jamais introduit avant l'échappement HTML
@@ -1513,6 +1579,59 @@
     return '<span class="qcm-origin-badge"><i class="fa-solid fa-newspaper"></i>Actualité</span>';
   }
 
+  // Retirer une question de ses futures repasses ("Renforcement") — l'utilisateur
+  // la connaît déjà ou n'est plus intéressé (demande du 12/08/2026). N'affecte
+  // jamais la session en cours (chaque question n'apparaît qu'une fois par
+  // session de toute façon, cf. questions[currentIndex]) : seul le choix des
+  // futures repasses en tient compte côté serveur (cf. server.js
+  // fetchCultureGeneraleReviewInjectionForToday, filtré sur cette table).
+  function renderExcludeButtonHtml() {
+    return '<button type="button" class="qcm-exclude-btn" id="qcm-exclude-btn" title="Ne plus jamais me reposer cette question">Ne plus me la demander</button>';
+  }
+  // Laisser réfléchir avant d'afficher les propositions (demande du
+  // 12/08/2026) — seulement pour les formats où il y a vraiment une réponse
+  // à deviner avant de voir des choix (qcm, texte à trous, qcm à choix
+  // multiples) : jamais vrai_faux (les 2 options sont triviales, connues
+  // d'avance), ni intrus/association/ordre (les propositions SONT la
+  // question, impossible d'y répondre sans les voir). Jamais réactivé sur
+  // une question déjà répondue (answer truthy) : rien à deviner, juste à
+  // relire le résultat.
+  var QCM_REVEAL_GATE_TYPES = ['qcm', 'texte_a_trous', 'qcm_multi'];
+  function needsRevealGate(type, answer) {
+    return !answer && QCM_REVEAL_GATE_TYPES.indexOf(type) !== -1;
+  }
+  function renderRevealGateHtml() {
+    return '<button type="button" class="qcm-next-btn visible" id="qcm-reveal-btn">Réfléchis à ta réponse, puis affiche les propositions</button>';
+  }
+  function wireRevealGate(hiddenElIds) {
+    var revealBtn = document.getElementById('qcm-reveal-btn');
+    if (!revealBtn) return;
+    revealBtn.addEventListener('click', function () {
+      revealBtn.remove();
+      hiddenElIds.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.hidden = false;
+      });
+    });
+  }
+
+  function wireExcludeButton(question) {
+    var btn = document.getElementById('qcm-exclude-btn');
+    if (!btn || !voterKey) return;
+    btn.onclick = function () {
+      btn.disabled = true;
+      btn.textContent = 'Retirée';
+      fetch('/api/daily-quiz/exclude-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legacyKey: voterKey, questionId: question.id })
+      }).catch(function () {
+        btn.disabled = false;
+        btn.textContent = 'Ne plus me la demander';
+      });
+    };
+  }
+
   // Point d'entrée unique : dispatché selon le format de la question
   // courante. "association"/"qcm_multi"/"ordre" ont chacun une interaction
   // fondamentalement différente d'un choix unique et un rendu dédié ; les
@@ -1554,13 +1673,17 @@
 
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge(type);
+    html += renderOriginBadge(question) + renderTypeBadge(type) + renderExcludeButtonHtml();
     html += '<p class="qcm-question">' + questionHtml + '</p>';
-    html += '<div class="qcm-options" id="qcm-options"></div>';
-    html += '<button type="button" class="qcm-next-btn visible" id="qcm-choice-submit-btn" disabled>Valider ma réponse</button>';
+    var gated = needsRevealGate(type, answer);
+    if (gated) html += renderRevealGateHtml();
+    html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
+    html += '<button type="button" class="qcm-next-btn visible" id="qcm-choice-submit-btn" disabled' + (gated ? ' hidden' : '') + '>Valider ma réponse</button>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
+    wireExcludeButton(question);
+    if (gated) wireRevealGate(['qcm-options', 'qcm-choice-submit-btn']);
 
     var optionsEl = document.getElementById('qcm-options');
     var selectedOptionIndex = null;
@@ -1650,13 +1773,14 @@
   function renderAssociationQuestion(question, answer) {
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge('association');
+    html += renderOriginBadge(question) + renderTypeBadge('association') + renderExcludeButtonHtml();
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     html += '<div id="qcm-assoc-rows"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn visible" id="qcm-assoc-submit-btn" disabled>Valider</button>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
+    wireExcludeButton(question);
 
     var rowsEl = document.getElementById('qcm-assoc-rows');
     var lefts = question.lefts || [];
@@ -1780,14 +1904,18 @@
   function renderMultiChoiceQuestion(question, answer) {
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge('qcm_multi');
+    html += renderOriginBadge(question) + renderTypeBadge('qcm_multi') + renderExcludeButtonHtml();
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    var gated = needsRevealGate('qcm_multi', answer);
+    if (gated) html += renderRevealGateHtml();
     html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
-    html += '<div class="qcm-options" id="qcm-options"></div>';
+    html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
-    html += '<button type="button" class="qcm-next-btn visible" id="qcm-multi-submit-btn" disabled>Valider</button>';
+    html += '<button type="button" class="qcm-next-btn visible" id="qcm-multi-submit-btn" disabled' + (gated ? ' hidden' : '') + '>Valider</button>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
+    wireExcludeButton(question);
+    if (gated) wireRevealGate(['qcm-options', 'qcm-multi-submit-btn']);
 
     var optionsEl = document.getElementById('qcm-options');
     var submitBtn = document.getElementById('qcm-multi-submit-btn');
@@ -1873,7 +2001,7 @@
   function renderOrderQuestion(question, answer) {
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge('ordre');
+    html += renderOriginBadge(question) + renderTypeBadge('ordre') + renderExcludeButtonHtml();
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
     html += '<div class="qcm-order-chosen" id="qcm-order-chosen"></div>';
@@ -1882,6 +2010,7 @@
     html += '<button type="button" class="qcm-next-btn visible" id="qcm-order-submit-btn" disabled>Valider</button>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
+    wireExcludeButton(question);
 
     var poolEl = document.getElementById('qcm-order-pool');
     var chosenEl = document.getElementById('qcm-order-chosen');
@@ -2029,7 +2158,10 @@
   // corrigé des questions (cf. openMesQcmFiche).
   // `themes` (optionnel) : pastilles de thématiques juste sous le nom, cf.
   // renderThemeTags — une connaissance peut en couvrir plusieurs.
-  function buildFicheModalHtml(iconClass, rubricLabel, name, detail, extraHtml, themes) {
+  // `links` (optionnel) : connaissances reliées (cf. renderLinksSection), affichées après
+  // le détail de la notion et avant extraHtml (le corrigé des questions sur "Mes
+  // apprentissages" — vide ailleurs, ex. Éclairages).
+  function buildFicheModalHtml(iconClass, rubricLabel, name, detail, extraHtml, themes, links) {
     var html =
       '<div class="qcm-fiche-modal">' +
       '<div class="qcm-fiche-head">' +
@@ -2053,6 +2185,7 @@
       if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
       html += '<p class="qcm-fiche-explanation">' + escapeHtml(section.text) + '</p>';
     });
+    html += renderLinksSection(links);
     if (extraHtml) html += extraHtml;
     html += '<button type="button" class="qcm-fiche-bottom-close">Fermer</button>';
     html += '</div>';
@@ -2125,6 +2258,17 @@
     });
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
     overlay.querySelector('.qcm-fiche-bottom-close').addEventListener('click', close);
+    // "Les liens" (cf. renderLinksSection) : ferme la fiche courante avant d'ouvrir la
+    // fiche liée, plutôt que d'empiler les overlays.
+    overlay.querySelectorAll('.qcm-fiche-link-item').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var type = btn.getAttribute('data-link-type');
+        var sourceId = btn.getAttribute('data-link-source-id');
+        var name = btn.getAttribute('data-link-name');
+        close();
+        openMesQcmFicheByLink(type, sourceId, name);
+      });
+    });
     document.addEventListener('keydown', onKeydown);
   }
 
@@ -2235,6 +2379,24 @@
     if (!Array.isArray(themes) || !themes.length) return '';
     return '<div class="qcm-mesqcm-themes">' +
       themes.map(function (t) { return '<span class="qcm-mesqcm-theme-tag">' + escapeHtml(t) + '</span>'; }).join('') +
+      '</div>';
+  }
+
+  // "Les liens" (cf. server.js findAndStoreCultureGeneraleNotionLink) : connaissances déjà
+  // apprises reliées à celle-ci (ex. "Voltaire" ↔ "Les Lumières"), un lien pédagogique
+  // direct expliqué en 2-5 mots. Cliquer ouvre la fiche liée (cf. openFicheOverlay, qui
+  // câble le clic sur .qcm-fiche-link-item). Tableau vide (aucun lien détecté, ou pas
+  // encore) : rien affiché plutôt qu'une section vide visible.
+  function renderLinksSection(links) {
+    if (!Array.isArray(links) || !links.length) return '';
+    return '<h3 class="qcm-fiche-section-label">Les liens</h3>' +
+      '<div class="qcm-fiche-links">' +
+      links.map(function (l) {
+        return '<button type="button" class="qcm-fiche-link-item" data-link-type="' + escapeHtml(l.type) + '" data-link-source-id="' + escapeHtml(l.sourceId) + '" data-link-name="' + escapeHtml(l.name) + '">' +
+          '<span class="qcm-fiche-link-label">' + escapeHtml(l.label) + '</span>' +
+          '<span class="qcm-fiche-link-name">' + escapeHtml(l.name) + '</span>' +
+          '</button>';
+      }).join('') +
       '</div>';
   }
 
@@ -2701,9 +2863,9 @@
   // complet de ses questions — jamais filtré par ce que ce visiteur précis
   // a déjà répondu, la fiche sert de support de révision.
   var mesQcmFicheToken = 0;
-  function openMesQcmFiche(quiz) {
+  function openMesQcmFicheFromUrl(url, fallbackLabel) {
     var myToken = ++mesQcmFicheToken;
-    fetch('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(quiz.slot) + '&date=' + encodeURIComponent(quiz.quizDate), { cache: 'no-store' })
+    fetch(url, { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (myToken !== mesQcmFicheToken) return;
@@ -2712,12 +2874,21 @@
         var detail = data.sourceDetail || { meta: null, sections: [] };
         var corrigeHtml = '<h3 class="qcm-fiche-section-label">Questions et réponses</h3>';
         (data.questions || []).forEach(function (q, i) { corrigeHtml += renderFicheQuestionCorrige(q, i); });
-        openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, data.label || quiz.label || meta.label, detail, corrigeHtml, data.themes));
+        openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, data.label || fallbackLabel || meta.label, detail, corrigeHtml, data.themes, data.links));
       })
       .catch(function () {
         if (myToken !== mesQcmFicheToken) return;
-        openFicheOverlay(buildFicheModalHtml('fa-circle-exclamation', 'Fiche', quiz.label || 'Cette notion', { meta: null, sections: [{ label: null, text: 'Impossible de charger la fiche pour le moment.' }] }, ''));
+        openFicheOverlay(buildFicheModalHtml('fa-circle-exclamation', 'Fiche', fallbackLabel || 'Cette notion', { meta: null, sections: [{ label: null, text: 'Impossible de charger la fiche pour le moment.' }] }, ''));
       });
+  }
+  function openMesQcmFiche(quiz) {
+    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(quiz.slot) + '&date=' + encodeURIComponent(quiz.quizDate), quiz.label);
+  }
+  // Ouvre la fiche d'une connaissance liée (cf. renderLinksSection) : retrouvée par son
+  // identité (type, sourceId) plutôt que par (slot, date), qui peuvent différer de la
+  // fiche d'origine (autre date de génération, autre niveau).
+  function openMesQcmFicheByLink(type, sourceId, fallbackName) {
+    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?linkType=' + encodeURIComponent(type) + '&linkSourceId=' + encodeURIComponent(sourceId), fallbackName);
   }
 
   // `quizDate` : un QCM de notion vit sous sa date de création, jamais

@@ -12226,7 +12226,16 @@ function buildFormatAssignments(count) {
   return assignments;
 }
 
-function buildQuestionFormatsPromptBlock(sourceIdField, questionCount) {
+// `includeAltVariant` (demande du 12/08/2026) : demande en plus, pour
+// chaque question, une SECONDE façon de tester exactement le même fait —
+// utilisée pour qu'une repasse de répétition espacée ne pose plus jamais la
+// question sous la même forme que la fois précédente (cf.
+// resolveActiveQuestionVariant, alternée sans appel IA supplémentaire à
+// chaque repasse — tout est généré une seule fois, ici, à la création).
+// Restreint à qcm/vrai_faux/texte_a_trous : les autres formats (association/
+// intrus/qcm_multi/ordre) ont besoin d'éléments supplémentaires qui
+// n'existent pas pour une simple reformulation d'un seul fait isolé.
+function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAltVariant) {
   const assignments = buildFormatAssignments(questionCount);
   return [
     "=== Formats de question possibles ===",
@@ -12243,7 +12252,14 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount) {
     assignments.map((f, i) => (i + 1) + ". " + f).join(" · "),
     "Respecte cette suggestion. Exception : si le sujet retenu pour UNE question précise ne se prête vraiment pas au format suggéré (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée), utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet.",
     "",
-    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association|intrus|qcm_multi|ordre","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","${sourceIdField}":"id fourni"}]}.`
+    ...(includeAltVariant ? [
+      "=== Variante alternative (obligatoire pour chaque question) ===",
+      "En plus des champs normaux, ajoute pour chaque question un champ \"altVariant\" : une SECONDE façon de tester exactement le même fait/la même réponse que la question principale, mais dans un type DIFFÉRENT — ex. une question principale \"qcm\" peut avoir un altVariant \"vrai_faux\" ou \"texte_a_trous\" sur le même fait, et inversement. Cette variante est destinée à être reposée plus tard (répétition espacée), sous une forme différente de la première fois — jamais la même question mot pour mot.",
+      "\"altVariant\" doit être un objet avec exactement les mêmes champs qu'une question de son propre type (\"type\", \"question\", \"options\"/\"correctIndex\" selon le type, \"explanation\") — MAIS son \"type\" doit obligatoirement être \"qcm\", \"vrai_faux\" ou \"texte_a_trous\" (jamais association/intrus/qcm_multi/ordre, qui ont besoin d'éléments supplémentaires que la reformulation d'un seul fait isolé ne peut pas fournir honnêtement), et jamais le même type que la question principale.",
+      "Aucun champ \"" + sourceIdField + "\" à l'intérieur de \"altVariant\" (implicite, le même que la question principale).",
+      ""
+    ] : []),
+    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association|intrus|qcm_multi|ordre","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","${sourceIdField}":"id fourni"${includeAltVariant ? ',"altVariant":{"type":"qcm|vrai_faux|texte_a_trous","question":"...","options":[...],"correctIndex":0,"explanation":"..."}' : ""}}]}.`
   ];
 }
 
@@ -12367,7 +12383,7 @@ function validateOrderItems(rawItems) {
 // appelle ce helper puis y ajoute cette vérification. Une réponse de forme
 // inconnue/invalide renvoie null, jamais une exception (traitée comme une
 // question ignorée par l'appelant).
-function validateQuestionItemCore(item) {
+function validateQuestionItemCoreBase(item) {
   const questionType = QUESTION_TYPES.has(item?.type) ? item.type : "qcm";
   const question = String(item?.question || "").trim();
   const explanation = String(item?.explanation || "").trim();
@@ -12402,6 +12418,31 @@ function validateQuestionItemCore(item) {
   if (questionType === "texte_a_trous" && !question.includes(FILL_BLANK_MARKER)) return null;
   const shuffled = shuffleOptionsPreservingCorrectIndex(options, correctIndex);
   return { type: questionType, question, options: shuffled.options, correctIndex: shuffled.correctIndex, explanation };
+}
+
+// Formats autorisés pour un altVariant (cf. buildQuestionFormatsPromptBlock,
+// includeAltVariant) : uniquement des formats autonomes autour d'un seul
+// fait — jamais association/intrus/qcm_multi/ordre, qui ont besoin
+// d'éléments supplémentaires qu'une simple reformulation ne peut fournir.
+const ALT_VARIANT_ALLOWED_TYPES = new Set(["qcm", "vrai_faux", "texte_a_trous"]);
+
+function validateAltVariant(rawAltVariant, primaryType) {
+  if (!rawAltVariant || typeof rawAltVariant !== "object") return null;
+  if (!ALT_VARIANT_ALLOWED_TYPES.has(rawAltVariant.type) || rawAltVariant.type === primaryType) return null;
+  const core = validateQuestionItemCoreBase(rawAltVariant);
+  if (!core || !ALT_VARIANT_ALLOWED_TYPES.has(core.type)) return null;
+  return core;
+}
+
+// Point d'entrée public (inchangé pour tous les appelants existants) —
+// n'ajoute que la validation/attache de altVariant par-dessus la logique de
+// base, jamais nécessaire ni présente pour les prompts qui ne le demandent
+// pas (cf. includeAltVariant côté buildQuestionFormatsPromptBlock).
+function validateQuestionItemCore(item) {
+  const core = validateQuestionItemCoreBase(item);
+  if (!core) return null;
+  const altVariant = validateAltVariant(item?.altVariant, core.type);
+  return altVariant ? { ...core, altVariant } : core;
 }
 
 // ── QCM "Ce jour dans l'Histoire" et "Parallèle historique" ────────────────
@@ -12700,8 +12741,8 @@ function buildCultureGeneraleQuizPrompt(items, quotaByItemId, levelInstruction) 
   return [
     `Tu écris un QCM de culture générale en français à partir des éléments ci-dessous — des événements "Ce jour dans l'Histoire" et des éclairages (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal, une citation d'auteur, une œuvre d'art ou un mot latin).`,
     "Règles strictes :",
-    "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
-    "- Ne retiens que les faits qui méritent vraiment d'être sus et retenus sur le sujet — l'essentiel structurant — jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet.",
+    "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien. En cas de doute sur l'exactitude d'un fait du texte (chiffre, date, nom), préfère une formulation plus générale plutôt qu'une précision incertaine présentée comme certaine.",
+    "- Ne retiens que les faits qui méritent vraiment d'être sus et retenus sur le sujet — l'essentiel structurant — jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet et à comprendre ses enjeux réels. Un fait étonnant ou curieux est un plus s'il est vrai et pertinent, mais jamais au détriment de l'utilité — ne choisis jamais un détail insolite à la place d'un fait structurant.",
     "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
     "- Pour un élément \"mot latin du jour\" dont la provenance indiquée est \"traduction composée pour l'occasion\" : ne le présente JAMAIS comme une expression latine ancienne, un proverbe ou une citation historique — les questions ne peuvent porter que sur sa grammaire (cas, déclinaison, conjugaison, sens des mots), jamais sur une prétendue origine ou un prétendu auteur.",
     "- Pour un élément \"Ce jour dans l'Histoire\", les questions portent sur les faits de l'événement lui-même — pas de détails insignifiants (dates exactes au jour près, chiffres secondaires).",
@@ -12776,7 +12817,7 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
 // deuxième point de rejet possible pour un sujet déjà fiable.
 function buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, requireValidation) {
   const { target, instruction, sectionsRange, lengthHint } = levelConfig;
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target).slice(0, -1);
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target, true).slice(0, -1);
   const lines = [`Tu es un rédacteur pédagogique francophone. Un visiteur veut mémoriser ce sujet : "${subject}".`];
   if (contextHint) lines.push(`Contexte d'origine (pour t'aider à cerner le sujet, mais la fiche doit rester une présentation autonome et complète du sujet lui-même, pas un résumé de ce contexte) : ${contextHint}`);
   lines.push("");
@@ -12790,8 +12831,10 @@ function buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, r
   }
   lines.push("1. Une fiche de mémorisation synthétique et strictement factuelle en français (esprit fiche de révision : dense, claire, sans blabla, aucune approximation présentée comme un fait établi, aucune invention) — elle doit contenir tous les faits nécessaires pour répondre seule à chacune des questions du quiz ci-dessous : chaque réponse doit être vérifiable en la relisant.");
   lines.push(`2. Un quiz de ${target} questions permettant de vérifier la compréhension de cette fiche — chaque question et sa réponse doivent être intégralement fondées sur le contenu de la fiche que tu rédiges, jamais sur un fait absent de cette fiche.`);
-  lines.push("3. Ne retiens, pour la fiche comme pour les questions, que les faits qui méritent vraiment d'être sus et retenus sur ce sujet — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet.");
-  if (instruction) lines.push(`4. ${instruction}`);
+  lines.push("3. Ne retiens, pour la fiche comme pour les questions, que les faits qui méritent vraiment d'être sus et retenus sur ce sujet — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet et à comprendre les enjeux réels du sujet (pourquoi il compte, ce qui s'y joue), pas seulement des dates ou des noms isolés.");
+  lines.push("4. Priorité à l'utilité, jamais au simple effet : un fait étonnant, curieux ou peu connu est un vrai plus s'il est réellement vrai et aide à comprendre le sujet, mais ne remplace jamais un fait utile et structurant par un détail choisi seulement parce qu'il est original ou insolite.");
+  lines.push("5. Vérifie l'exactitude de chaque fait avant de l'utiliser (dates, chiffres, noms, mécanismes) — en cas de doute réel sur un fait précis, écarte-le ou reste plus général plutôt que de risquer une erreur présentée comme certaine. Aucune approximation, aucune invention, même partielle.");
+  if (instruction) lines.push(`6. ${instruction}`);
   lines.push("");
   lines.push("Champs de la fiche :");
   lines.push("- \"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Guerre de Cent Ans\", \"Photosynthèse\") — reformule si la saisie de départ est une question ou une phrase (ex. \"c'est quoi la photosynthèse\" → \"Photosynthèse\"), jamais recopiée telle quelle dans ce cas.");
@@ -12834,7 +12877,7 @@ function parseLeveledFicheAndQuiz(parsed, fallbackName, id, levelConfig) {
   return { sourceName, sourceDetail, validated };
 }
 
-async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel) {
+async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, userId) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
   const id = String(sourceId || "").trim();
@@ -12878,6 +12921,11 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel) {
     }
     const { sourceName, sourceDetail, validated } = result;
     const sourceThemes = await classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail);
+    // Jamais attendu : coûte une lecture du corpus + un appel IA + une écriture, sans
+    // rapport avec la génération du QCM lui-même (cf. findAndStoreCultureGeneraleNotionLink).
+    findAndStoreCultureGeneraleNotionLink(sourceType, id, sourceName, sourceDetail, userId).catch((e) =>
+      console.warn("[culture-generale notion-links] échec :", e.message)
+    );
 
     return validated.map((q, index) => ({
       id: `notion:${sourceType}:${id}-${level}-q${index + 1}`,
@@ -12922,6 +12970,9 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel) {
     console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
     return [];
   }
+  findAndStoreCultureGeneraleNotionLink(sourceType, id, sourceName, sourceDetail, userId).catch((e) =>
+    console.warn("[culture-generale notion-links] échec :", e.message)
+  );
 
   const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], levelConfig.max, levelConfig.max);
   if (validated.length < levelConfig.min) {
@@ -13051,6 +13102,7 @@ function buildEnumerableItemsChunkPrompt(subject, alreadyCovered, count) {
   }
   lines.push("");
   lines.push(`Donne ${count} éléments NOUVEAUX et DISTINCTS de cette liste (jamais déjà couverts ci-dessus), chacun sous une forme courte et autonome qui donne à la fois l'élément ET sa réponse (ex. "France – Paris", "go – went – gone", "la mela – la pomme").`);
+  lines.push("Chaque élément doit être réellement exact et vérifiable — en cas de doute réel sur un élément précis (orthographe, forme, association), écarte-le plutôt que de l'inclure avec une réponse incertaine.");
   lines.push("Si le sujet ne compte plus assez d'éléments réellement distincts et non déjà couverts pour ce lot, donne-en le maximum possible sans jamais répéter ou inventer, et indique \"exhausted\":true.");
   lines.push("");
   lines.push("Réponds uniquement en JSON strict, sous la forme {\"exhausted\":false,\"items\":[\"...\",\"...\"]}.");
@@ -13104,7 +13156,7 @@ function buildEnumerableFicheSections(items) {
 
 function buildEnumerableQuizChunkPrompt(subject, itemsChunk, id) {
   const count = itemsChunk.length;
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count).slice(0, -1);
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count, true).slice(0, -1);
   return [
     `Tu écris un quiz de mémorisation en français sur : "${subject}".`,
     "Éléments à couvrir dans ce lot (base-toi UNIQUEMENT sur ceux-ci, ne les modifie pas, n'en invente aucun autre) :",
@@ -13141,7 +13193,7 @@ async function generateEnumerableQuizQuestions(apiKey, subject, items, id) {
   return all;
 }
 
-async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceName) {
+async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceName, userId) {
   const finalSourceName = sourceName || capitalizeFirstLetter(topic);
   const sourceDetail = { meta: `${items.length} éléments à mémoriser`, sections: buildEnumerableFicheSections(items), image: null };
 
@@ -13151,6 +13203,9 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
     return { error: "failed" };
   }
   const sourceThemes = await classifyCultureGeneraleThemesWithAI("custom", finalSourceName, sourceDetail);
+  findAndStoreCultureGeneraleNotionLink("custom", id, finalSourceName, sourceDetail, userId).catch((e) =>
+    console.warn("[culture-generale notion-links] échec :", e.message)
+  );
 
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}-expert-q${index + 1}`,
@@ -13168,7 +13223,7 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
 
 // Générée à la demande au clic sur "Générer" de la barre de recherche libre
 // (cf. POST /api/users/notion-quizzes/custom, buildLeveledFicheAndQuizPrompt).
-async function buildCustomTopicQuiz(topic, id, rawLevel) {
+async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { error: "failed" };
   const levelConfig = resolveNotionQuizLevel(rawLevel);
@@ -13185,7 +13240,7 @@ async function buildCustomTopicQuiz(topic, id, rawLevel) {
     if (scope.enumerable) {
       const items = await fetchEnumerableItems(apiKey, scope.sourceName || topic);
       if (items.length > levelConfig.max) {
-        return buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, scope.sourceName);
+        return buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, scope.sourceName, userId);
       }
     }
   }
@@ -13214,6 +13269,15 @@ async function buildCustomTopicQuiz(topic, id, rawLevel) {
     return { error: "failed" };
   }
   const { sourceName, sourceDetail, validated } = result;
+  // Contrairement à buildNotionQuestions, ce chemin (sujet libre, hors "Expert"
+  // énumérable) codait en dur sourceThemes:[] — jamais classé, quel que soit le
+  // contenu (bug distinct du budget de tokens insuffisant, cf.
+  // fetchGpt5JsonContentWithRetry) : constaté en pratique le 12/08/2026, cause
+  // principale des sujets libres tombés dans "Autres" sur "Mes apprentissages".
+  const sourceThemes = await classifyCultureGeneraleThemesWithAI("custom", sourceName, sourceDetail);
+  findAndStoreCultureGeneraleNotionLink("custom", id, sourceName, sourceDetail, userId).catch((e) =>
+    console.warn("[culture-generale notion-links] échec :", e.message)
+  );
 
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}${level ? `-${level}` : ""}-q${index + 1}`,
@@ -13222,7 +13286,7 @@ async function buildCustomTopicQuiz(topic, id, rawLevel) {
     sourceScope: null,
     sourceName,
     sourceDetail,
-    sourceThemes: [],
+    sourceThemes,
     level,
     // Même raison que buildNotionQuestions : requis par
     // recordDailyQuizEclairageAcquisition pour qu'une bonne réponse alimente
@@ -13255,6 +13319,8 @@ function buildDebateTopicNotionsPrompt(question, content) {
     "- Base-toi uniquement sur le texte fourni, n'invente aucun fait.",
     `- Choisis entre ${DEBATE_TOPIC_NOTIONS_MIN} et ${DEBATE_TOPIC_NOTIONS_MAX} notions distinctes, jamais de doublon ni de synonymes proches.`,
     "- Écarte les notions triviales ou déjà évidentes pour un lecteur de la presse générale — ne retiens que celles qui apportent un vrai éclairage.",
+    "- Priorité absolue à l'utilité : choisis les notions qui aident vraiment à comprendre les ENJEUX du débat (pourquoi ce sujet compte, ce qui se joue, ce qui est débattu) — jamais une notion choisie seulement parce qu'elle est technique ou qu'elle sonne savante. Une notion étonnante ou peu connue est un plus si elle est réellement vraie et pertinente pour ce débat, mais jamais au détriment de l'utilité : ne sacrifie jamais la compréhension des enjeux pour un fait curieux mais secondaire.",
+    "- Vérifie que chaque notion et son explication sont exactes et vérifiables avant de les retenir — en cas de doute sur un fait, écarte-le plutôt que de risquer une explication fausse ou approximative.",
     "- Pour chaque notion : un nom court et correctement capitalisé (1 à 4 mots, jamais une phrase ni une question), et une explication neutre de 1 à 3 phrases qui définit la notion et précise son lien avec ce débat précis.",
     "- Français neutre, sans jugement de valeur, sans reprendre le camp \"pour\" ou \"contre\" du débat.",
     "- Si le texte fourni est trop pauvre pour en tirer au moins 3 notions sérieuses, réponds avec une liste vide plutôt que d'inventer.",
@@ -13580,20 +13646,60 @@ function isCultureGeneraleReviewDueToday(state, todayKey) {
 // persistées dans daily_quiz, recalculées à chaque appel (pas de cache, cf.
 // getDailyQuizQuestions).
 const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 10;
+
+// Questions qu'un visiteur a explicitement écartées de ses futures repasses
+// (cf. POST /api/daily-quiz/exclude-question) — il les connaît déjà ou n'est
+// plus intéressé. Un échec de lecture n'est jamais bloquant : au pire, une
+// question exclue réapparaît une fois de plus plutôt que de casser toute
+// l'injection de repasses du jour.
+async function fetchExcludedQuestionIds(voterKey) {
+  const key = String(voterKey || "").trim();
+  if (!key) return new Set();
+  const { data, error } = await supabase.from("user_question_exclusions").select("question_id").eq("voter_key", key);
+  if (error) {
+    console.warn("[question-exclusions] lecture échouée :", error.message);
+    return new Set();
+  }
+  return new Set((data || []).map((r) => r.question_id));
+}
+
+// Alterne entre la question telle que générée à l'origine et son
+// altVariant (cf. buildQuestionFormatsPromptBlock, includeAltVariant) selon
+// le nombre de fois où elle a déjà été répondue — jamais la même forme
+// deux repasses de suite (demande du 12/08/2026). Recalculé à l'identique au
+// SERVICE (GET) et à la CORRECTION (POST /answer, qui relit aussi
+// fetchCultureGeneraleReviewInjectionForToday avant d'enregistrer la
+// réponse en cours) : `reviewCount` provient à chaque fois du même historique
+// daily_quiz_answers pas encore mis à jour par cette réponse, donc les deux
+// calculs tombent toujours sur la même variante. Sans altVariant (contenu
+// plus ancien, ou provenant d'Éclairages/Ce jour dans l'Histoire qui ne le
+// génèrent pas) : renvoie la question telle quelle, inchangé.
+function resolveActiveQuestionVariant(question, reviewCount) {
+  if (!question.altVariant || reviewCount % 2 === 0) return question;
+  const { altVariant, ...rest } = question;
+  return { ...rest, ...altVariant };
+}
+
 async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
-  const { events, contentByQuestionId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
+  const [{ events, contentByQuestionId }, excludedIds] = await Promise.all([
+    fetchUserCultureGeneraleAnswerEvents(voterKey),
+    fetchExcludedQuestionIds(voterKey)
+  ]);
   if (!events.length) return [];
   const streaks = computeQuestionStreaks(events);
+  const reviewCountByQuestionId = new Map();
+  for (const e of events) reviewCountByQuestionId.set(e.questionId, (reviewCountByQuestionId.get(e.questionId) || 0) + 1);
   const due = [];
   for (const [questionId, state] of streaks) {
+    if (excludedIds.has(questionId)) continue;
     if (!isCultureGeneraleReviewDueToday(state, todayKey)) continue;
     const question = contentByQuestionId.get(questionId);
     if (!question) continue;
-    due.push({ questionId, lastQuizDate: state.lastQuizDate, question });
+    due.push({ questionId, lastQuizDate: state.lastQuizDate, question, reviewCount: reviewCountByQuestionId.get(questionId) || 0 });
   }
   due.sort((a, b) => (a.lastQuizDate < b.lastQuizDate ? -1 : a.lastQuizDate > b.lastQuizDate ? 1 : 0));
-  return due.slice(0, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY).map(({ question, questionId }) => ({
-    ...question,
+  return due.slice(0, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY).map(({ question, questionId, reviewCount }) => ({
+    ...resolveActiveQuestionVariant(question, reviewCount),
     id: `cgreview-${questionId}`
   }));
 }
@@ -14805,7 +14911,7 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     if (existingQuiz) {
       questions = existingQuiz.questions || [];
     } else {
-      questions = await buildNotionQuestions(sourceType, sourceDebateId, item, level);
+      questions = await buildNotionQuestions(sourceType, sourceDebateId, item, level, user.id);
       if (!questions.length) return res.status(502).json({ ok: false, error: "Génération du QCM impossible pour le moment." });
 
       const { error: insertError } = await supabase.from("daily_quiz").insert({
@@ -14881,7 +14987,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     if (existingQuiz) {
       questions = existingQuiz.questions || [];
     } else {
-      const result = await buildCustomTopicQuiz(topic, id, level);
+      const result = await buildCustomTopicQuiz(topic, id, level, user.id);
       if (result.error) {
         const status = result.error === "rejected" ? 422 : 502;
         return res.status(status).json({ ok: false, error: result.reason || "Génération de la fiche impossible pour le moment." });
@@ -15037,23 +15143,51 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
   try {
     const slot = String(req.query.slot || "").trim();
     const quizDate = String(req.query.date || "").trim();
-    if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
-      return res.status(400).json({ error: "Requête invalide." });
+    // Navigation depuis "Les liens" d'une autre fiche (cf. findAndStoreCultureGeneraleNotionLink) :
+    // la notion ciblée peut avoir été générée à une autre date/niveau que la fiche source, donc
+    // retrouvée par son identité (linkType/linkSourceId) plutôt que par (slot, date).
+    const linkType = String(req.query.linkType || "").trim();
+    const linkSourceId = String(req.query.linkSourceId || "").trim();
+
+    let questions;
+    let resolvedSlot = slot;
+    let resolvedQuizDate = quizDate;
+    if (linkType && linkSourceId) {
+      const { data: rows, error } = await supabase
+        .from("daily_quiz").select("quiz_date, slot, questions")
+        .ilike("slot", "notion:%").order("quiz_date", { ascending: false }).limit(2000);
+      if (error) throw new Error(error.message);
+      const match = (rows || []).find((row) => {
+        const q = row.questions?.[0];
+        return q?.sourceType === linkType && String(q?.sourceDebateId) === linkSourceId;
+      });
+      if (!match) return res.status(404).json({ error: "QCM introuvable." });
+      questions = match.questions || [];
+      resolvedSlot = match.slot;
+      resolvedQuizDate = match.quiz_date;
+    } else {
+      if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
+        return res.status(400).json({ error: "Requête invalide." });
+      }
+      const { data, error } = await supabase
+        .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+      if (error) throw new Error(error.message);
+      questions = data?.questions || [];
     }
-    const { data, error } = await supabase
-      .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
-    if (error) throw new Error(error.message);
-    const questions = data?.questions || [];
     if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
 
     const first = questions[0];
+    const links = first.sourceType && first.sourceDebateId
+      ? await fetchCultureGeneraleNotionLinks(first.sourceType, String(first.sourceDebateId))
+      : [];
     res.json({
-      slot,
-      quizDate,
+      slot: resolvedSlot,
+      quizDate: resolvedQuizDate,
       label: first.sourceName || null,
       sourceType: first.sourceType || null,
       themes: first.sourceThemes || [],
       sourceDetail: first.sourceDetail || null,
+      links,
       questions: questions.map((q) => {
         const type = q.type || "qcm";
         const base = { id: q.id, type, question: q.question, explanation: q.explanation || "" };
@@ -15131,6 +15265,40 @@ function flattenCultureGeneraleDetail(detail) {
     .join(" — ");
 }
 
+// Certains contenus font épuiser tout le budget de tokens à un modèle gpt-5 en
+// raisonnement caché avant même de produire le JSON de réponse (finish_reason
+// "length", contenu vide) — constaté en pratique le 12/08/2026 sur "Historiens
+// français du XXIe siècle" avec un budget de 1200, jamais classée du coup.
+// Utilisé par les quatre étapes de classification IA de "Ma mémoire"/"Mes
+// apprentissages" (catégorie, système solaire, étoile, thématiques) : dans les
+// quatre cas, une connaissance doit TOUJOURS finir classée — le coût d'un ou
+// deux appels IA supplémentaires est négligeable face à un classement manqué
+// (demande du 12/08/2026). Redouble le budget à chaque tentative plutôt que
+// d'abandonner après la première réponse vide.
+async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, { reasoningEffort = "low", initialBudget = 1200 } = {}) {
+  let budget = initialBudget;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_completion_tokens: budget,
+        reasoning_effort: reasoningEffort
+      })
+    });
+    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (content) return content;
+    console.warn(`${logPrefix} réponse IA vide (tentative ${attempt}/4, budget=${budget}) : finish_reason=${data?.choices?.[0]?.finish_reason}`);
+    budget *= 2;
+  }
+  return "";
+}
+
 // Classe un contenu Culture Générale dans une des 16 OPINION_ARTICLE_CATEGORY_OPTIONS
 // (mêmes rubriques que "Autres actus", cf. classifyOpinionArticlesWithAI ~9757) pour en
 // dériver la galaxie (cf. getOpinionArticleGalaxy) — remplace l'ancien mapping fixe
@@ -15162,26 +15330,25 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
 
   try {
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-    const body = {
-      model: OPINION_ARTICLE_CATEGORY_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" }
-    };
+    let content;
     if (isGpt5) {
-      body.max_completion_tokens = 400;
-      body.reasoning_effort = "low";
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale category]");
     } else {
-      body.max_tokens = 150;
-      body.temperature = 0;
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: OPINION_ARTICLE_CATEGORY_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_tokens: 150,
+          temperature: 0
+        })
+      });
+      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      const data = await r.json();
+      content = data?.choices?.[0]?.message?.content;
     }
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: JSON.stringify(body)
-    });
-    if (!r.ok) throw new Error(`openai http ${r.status}`);
-    const data = await r.json();
-    const content = data?.choices?.[0]?.message?.content;
     const parsed = content ? JSON.parse(content) : null;
     const category = normalizeOpinionArticleCategory(parsed?.category);
     if (!category) {
@@ -15227,26 +15394,25 @@ async function classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourc
 
   try {
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-    const body = {
-      model: OPINION_ARTICLE_CATEGORY_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" }
-    };
+    let content;
     if (isGpt5) {
-      body.max_completion_tokens = 400;
-      body.reasoning_effort = "low";
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale themes]");
     } else {
-      body.max_tokens = 150;
-      body.temperature = 0;
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: OPINION_ARTICLE_CATEGORY_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_tokens: 150,
+          temperature: 0
+        })
+      });
+      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      const data = await r.json();
+      content = data?.choices?.[0]?.message?.content;
     }
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: JSON.stringify(body)
-    });
-    if (!r.ok) throw new Error(`openai http ${r.status}`);
-    const data = await r.json();
-    const content = data?.choices?.[0]?.message?.content;
     const parsed = content ? JSON.parse(content) : null;
     const rawThemes = Array.isArray(parsed?.themes) ? parsed.themes : [];
     return [...new Set(rawThemes.map((t) => normalizeOpinionArticleCategory(t)).filter(Boolean))].slice(0, 3);
@@ -15254,6 +15420,143 @@ async function classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourc
     console.warn("[culture-generale themes] classification IA ignorée :", error.message);
     return [];
   }
+}
+
+// ---- Liens entre connaissances de "Mes apprentissages" (ex. "Voltaire" ↔ "Les
+// Lumières") : détectés une fois à la création d'une fiche, en comparant au corpus des
+// fiches déjà existantes, jamais dans le contenu figé de la fiche elle-même (contrairement
+// à sourceThemes) — stockés dans culture_generale_notion_links (cf. data/migration-
+// culture-generale-notion-links.sql) et consultés à l'affichage de CHAQUE fiche, si bien
+// qu'un lien apparaît immédiatement des DEUX côtés dès sa création, sans jamais avoir à
+// ré-écrire la fiche existante (demande du 12/08/2026).
+
+// Identité canonique d'une notion, indépendante du niveau (élémentaire/avancé) ou de la
+// date de génération — même paire que eclairage_type/eclairage_source_id dans
+// user_article_acquisitions (cf. recordDailyQuizEclairageAcquisition).
+function cultureGeneraleNotionKey(sourceType, sourceId) {
+  return `${sourceType}::${sourceId}`;
+}
+
+// Ordre canonique (indépendant du sens de création A→B ou B→A) pour ne jamais stocker deux
+// fois le même lien — la contrainte UNIQUE (type_a,source_id_a,type_b,source_id_b) protège
+// contre une course entre deux créations simultanées.
+async function resolveOrCreateCultureGeneraleNotionLink(typeA, idA, nameA, typeB, idB, nameB, label) {
+  const keyA = cultureGeneraleNotionKey(typeA, idA);
+  const keyB = cultureGeneraleNotionKey(typeB, idB);
+  const [type1, id1, name1, type2, id2, name2] = keyA < keyB
+    ? [typeA, idA, nameA, typeB, idB, nameB]
+    : [typeB, idB, nameB, typeA, idA, nameA];
+  const { error } = await supabase.from("culture_generale_notion_links").upsert(
+    { type_a: type1, source_id_a: id1, name_a: name1, type_b: type2, source_id_b: id2, name_b: name2, label },
+    { onConflict: "type_a,source_id_a,type_b,source_id_b", ignoreDuplicates: true }
+  );
+  if (error) console.warn("[culture-generale notion-links] création échouée :", error.message);
+}
+
+// Corpus de candidats pour findAndStoreCultureGeneraleNotionLink : uniquement les
+// connaissances que CET utilisateur a personnellement ajoutées à "Mes apprentissages"
+// (user_notion_quizzes), jamais tout le corpus global — comparer contre les fiches de tous
+// les visiteurs serait à la fois un coût IA inutile et sans intérêt pédagogique, un lien
+// n'ayant de sens que rapporté aux connaissances qu'UN visiteur a lui-même en cours
+// (demande du 12/08/2026). Le contenu des fiches reste partagé (daily_quiz), seule la
+// LISTE (quiz_date, slot) que ce visiteur a choisi de garder est propre à lui.
+async function fetchUserOwnCultureGeneraleNotions(userId) {
+  const { data: ownRows, error: ownError } = await supabase
+    .from("user_notion_quizzes")
+    .select("quiz_date, slot")
+    .eq("user_id", userId)
+    .limit(2000);
+  if (ownError) { console.warn("[culture-generale notion-links] lecture user_notion_quizzes échouée :", ownError.message); return []; }
+  if (!ownRows?.length) return [];
+
+  const ownPairs = new Set(ownRows.map((r) => `${r.quiz_date}::${r.slot}`));
+  const slots = [...new Set(ownRows.map((r) => r.slot))];
+  const { data: quizRows, error: quizError } = await supabase
+    .from("daily_quiz")
+    .select("quiz_date, slot, questions")
+    .in("slot", slots)
+    .limit(2000);
+  if (quizError) { console.warn("[culture-generale notion-links] lecture daily_quiz échouée :", quizError.message); return []; }
+
+  const seen = new Set();
+  const notions = [];
+  for (const row of quizRows || []) {
+    // .in("slot", slots) présélectionne large (un même libellé de slot peut avoir été
+    // généré à d'autres dates par d'autres visiteurs) — seule la paire (date, slot) exacte
+    // de user_notion_quizzes confirme que CET utilisateur l'a bien dans sa propre liste.
+    if (!ownPairs.has(`${row.quiz_date}::${row.slot}`)) continue;
+    const q = row.questions?.[0];
+    if (!q?.sourceDebateId || !q?.sourceType || !q?.sourceName) continue;
+    const key = cultureGeneraleNotionKey(q.sourceType, q.sourceDebateId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    notions.push({ type: q.sourceType, id: String(q.sourceDebateId), name: q.sourceName });
+  }
+  return notions;
+}
+
+// Recherche un lien pédagogiquement pertinent entre la nouvelle fiche (sourceType/sourceId)
+// et l'une des connaissances déjà présentes dans "Mes apprentissages" de CE visiteur
+// (fetchUserOwnCultureGeneraleNotions) — jamais contre tout le corpus global. Jamais
+// bloquant pour la génération de la fiche : appelée sans attendre par l'appelant.
+async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourceName, sourceDetail, userId) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !sourceId || !userId) return;
+
+  const selfKey = cultureGeneraleNotionKey(sourceType, sourceId);
+  const candidates = (await fetchUserOwnCultureGeneraleNotions(userId))
+    .filter((c) => cultureGeneraleNotionKey(c.type, c.id) !== selfKey);
+  if (!candidates.length) return;
+
+  const compact = {
+    title: String(sourceName || "").slice(0, 160),
+    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
+    existing_notions: candidates.map((c) => `${cultureGeneraleNotionKey(c.type, c.id)}:${c.name}`).join(" | ")
+  };
+  const prompt = [
+    "Réponds uniquement en json valide.",
+    "Un contenu de culture générale peut avoir un lien pédagogiquement pertinent et direct avec une connaissance déjà apprise, listée dans existing_notions (sous la forme identifiant:nom).",
+    "Ce lien doit être une vraie relation intellectuelle directe et non triviale — ex. une personne appartenant à un mouvement, une cause et sa conséquence directe, un concept illustré par un événement précis. Un simple point commun vague (même siècle, même pays, même discipline générale) NE SUFFIT JAMAIS.",
+    "S'il existe UNE connaissance de existing_notions avec un tel lien direct et clair, renvoie son identifiant EXACT (recopié tel quel depuis existing_notions, avant le \":\") dans related_key, et un libellé de 2 à 5 mots expliquant le lien dans label (ex. \"Figure des Lumières\", \"Cause directe\").",
+    "S'il n'y a aucun lien vraiment pertinent, renvoie related_key à null et label à null.",
+    "Format obligatoire : {\"related_key\":null,\"label\":null}",
+    "",
+    JSON.stringify(compact)
+  ].join("\n");
+
+  try {
+    const content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale notion-links]");
+    const parsed = content ? JSON.parse(content) : null;
+    const relatedKey = String(parsed?.related_key || "").trim();
+    const label = String(parsed?.label || "").trim().slice(0, 60);
+    if (!relatedKey || !label) return;
+    const match = candidates.find((c) => cultureGeneraleNotionKey(c.type, c.id) === relatedKey);
+    if (!match) return;
+    await resolveOrCreateCultureGeneraleNotionLink(sourceType, String(sourceId), String(sourceName || "").slice(0, 300), match.type, match.id, match.name, label);
+  } catch (e) {
+    console.warn("[culture-generale notion-links] classification IA ignorée :", e.message);
+  }
+}
+
+// Lit les liens d'une notion pour l'affichage de sa fiche — deux requêtes indexées
+// (type_a,source_id_a) et (type_b,source_id_b) plutôt qu'un .or() avec interpolation de
+// sourceId dans la chaîne de filtre (risque d'injection PostgREST sur un identifiant qui
+// n'est pas systématiquement numérique, ex. hash de sujet libre).
+async function fetchCultureGeneraleNotionLinks(sourceType, sourceId) {
+  const [{ data: asA, error: errA }, { data: asB, error: errB }] = await Promise.all([
+    supabase.from("culture_generale_notion_links").select("type_b, source_id_b, name_b, label")
+      .eq("type_a", sourceType).eq("source_id_a", sourceId),
+    supabase.from("culture_generale_notion_links").select("type_a, source_id_a, name_a, label")
+      .eq("type_b", sourceType).eq("source_id_b", sourceId)
+  ]);
+  if (errA || errB) {
+    console.warn("[culture-generale notion-links] lecture échouée :", (errA || errB).message);
+    return [];
+  }
+  const links = [];
+  for (const r of asA || []) links.push({ type: r.type_b, sourceId: r.source_id_b, name: r.name_b, label: r.label });
+  for (const r of asB || []) links.push({ type: r.type_a, sourceId: r.source_id_a, name: r.name_a, label: r.label });
+  return links;
 }
 
 // Systèmes solaires "de départ" pour certaines galaxies : des sous-domaines
@@ -15465,44 +15768,38 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
 
   try {
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-    const body = {
-      model: OPINION_ARTICLE_CATEGORY_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" }
-    };
+    let content;
     if (isGpt5) {
       // "medium" (pas "low") pour les galaxies à domaines fixes : c'est là que
       // l'IA doit vraiment comparer le contenu à existing_systems plutôt que
       // recopier le titre de la notion — un raisonnement plus poussé réduit
       // (sans l'annuler) le risque de rattachement raté, cf. filet de
-      // sécurité déterministe plus bas (limite de mots) pour le reste. Budget
-      // de tokens relevé en conséquence (1200, pas 500) : "medium" consomme
-      // largement plus de tokens de raisonnement caché avant la réponse
-      // finale — à 500, le modèle épuisait ce budget en pleine réflexion et
-      // renvoyait un contenu vide (constaté en pratique le 10/08/2026).
-      body.max_completion_tokens = domainConfig ? 1200 : 500;
-      body.reasoning_effort = domainConfig ? "medium" : "low";
+      // sécurité déterministe plus bas (limite de mots) pour le reste.
+      // fetchGpt5JsonContentWithRetry redouble le budget si la première tentative
+      // épuise tout son budget en raisonnement caché (contenu vide) plutôt que
+      // d'abandonner (cf. sa doc) — jamais de classement manqué faute de budget.
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale solar-system]", {
+        reasoningEffort: domainConfig ? "medium" : "low",
+        initialBudget: domainConfig ? 1200 : 500
+      });
     } else {
-      body.max_tokens = 200;
-      body.temperature = 0;
-    }
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: JSON.stringify(body)
-    });
-    if (!r.ok) {
-      const errBody = await r.text().catch(() => "");
-      throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
-    }
-    const data = await r.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) {
-      // Réponse vide (arrive parfois avec reasoning_effort "medium" quand le
-      // modèle épuise son budget de tokens en plein raisonnement, cf.
-      // max_completion_tokens ci-dessus) — jamais silencieux, sinon
-      // indiscernable d'un succès.
-      console.warn(`[culture-generale solar-system] réponse IA vide : galaxy=${galaxy} finish_reason=${data?.choices?.[0]?.finish_reason}`);
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: OPINION_ARTICLE_CATEGORY_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_tokens: 200,
+          temperature: 0
+        })
+      });
+      if (!r.ok) {
+        const errBody = await r.text().catch(() => "");
+        throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
+      }
+      const data = await r.json();
+      content = data?.choices?.[0]?.message?.content;
     }
     const parsed = content ? JSON.parse(content) : null;
 
@@ -15655,34 +15952,37 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
 
   try {
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-    const body = {
-      model: OPINION_ARTICLE_CATEGORY_MODEL,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" }
-    };
+    let content;
     if (isGpt5) {
       // Mêmes raisons que resolveCultureGeneraleSolarSystemWithAI : "medium"
       // pour les galaxies à domaines fixes (l'IA doit vraiment comparer au
-      // système solaire donné, pas recopier le contenu), budget de tokens
-      // relevé en conséquence (1200, pas 500) pour laisser la place au
-      // raisonnement caché avant la réponse finale.
-      body.max_completion_tokens = domainConfig ? 1200 : 500;
-      body.reasoning_effort = domainConfig ? "medium" : "low";
+      // système solaire donné, pas recopier le contenu). fetchGpt5JsonContentWithRetry
+      // redouble le budget si la première tentative épuise tout son budget en
+      // raisonnement caché plutôt que d'abandonner — jamais de classement manqué
+      // faute de budget.
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale star]", {
+        reasoningEffort: domainConfig ? "medium" : "low",
+        initialBudget: domainConfig ? 1200 : 500
+      });
     } else {
-      body.max_tokens = 200;
-      body.temperature = 0;
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify({
+          model: OPINION_ARTICLE_CATEGORY_MODEL,
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_tokens: 200,
+          temperature: 0
+        })
+      });
+      if (!r.ok) {
+        const errBody = await r.text().catch(() => "");
+        throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
+      }
+      const data = await r.json();
+      content = data?.choices?.[0]?.message?.content;
     }
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: JSON.stringify(body)
-    });
-    if (!r.ok) {
-      const errBody = await r.text().catch(() => "");
-      throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
-    }
-    const data = await r.json();
-    const content = data?.choices?.[0]?.message?.content;
     const parsed = content ? JSON.parse(content) : null;
 
     const candidateId = Number(parsed?.star_id);
@@ -15948,6 +16248,35 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// "Ne plus me la demander" (cf. views/qcm-du-jour.html wireExcludeButton) —
+// demande du 12/08/2026 : l'utilisateur sait déjà la réponse ou n'est plus
+// intéressé par cette question précise, elle ne doit plus jamais réapparaître
+// dans ses repasses de répétition espacée ("Renforcement"). N'affecte jamais
+// la session de QCM en cours (chaque question n'y apparaît qu'une fois de
+// toute façon) — seul fetchCultureGeneraleReviewInjectionForToday consulte
+// cette table, cf. plus bas. `questionId` peut arriver préfixé "cgreview-"
+// si l'exclusion est cliquée pendant une repasse : normalisé ici vers l'id
+// canonique, le seul utilisé par computeQuestionStreaks/les événements de
+// réponse (cf. fetchUserCultureGeneraleAnswerEvents).
+app.post("/api/daily-quiz/exclude-question", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+    const questionId = String(req.body?.questionId || "").trim().replace(/^cgreview-/, "");
+    if (!questionId || questionId.length > 200) return res.status(400).json({ ok: false, error: "Requête invalide." });
+
+    const { error } = await supabase.from("user_question_exclusions").upsert(
+      { voter_key: validation.legacyKey, question_id: questionId },
+      { onConflict: "voter_key,question_id", ignoreDuplicates: true }
+    );
+    if (error) throw new Error(error.message);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[daily-quiz] exclusion question :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
