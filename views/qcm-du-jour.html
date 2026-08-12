@@ -174,12 +174,20 @@
     .qcm-custom-search-input {
       flex: 1;
       min-width: 0;
+      /* <textarea> plutôt qu'un <input> à une seule ligne (cf. 12/08/2026) :
+         un placeholder/sujet trop long pour la largeur du champ passait à la
+         ligne suivante au lieu de rester lisible en entier — jamais de
+         coupure ni d'ellipsis, la hauteur s'adapte plutôt que le texte. */
+      min-height: 56px;
       padding: 10px 14px;
       border: 1px solid #d1d5db;
-      border-radius: 999px;
+      border-radius: 18px;
       background: #f9fafb;
       color: #1f2937;
       font-size: 14px;
+      font-family: inherit;
+      line-height: 1.4;
+      resize: none;
     }
     .qcm-custom-search-input:focus {
       outline: none;
@@ -1358,8 +1366,8 @@
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <form class="qcm-custom-search" id="qcm-custom-search" hidden>
-      <input type="text" id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150"
-        placeholder="Tape un sujet à mémoriser (ex. la photosynthèse, la Révolution française…)">
+      <textarea id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150" rows="2"
+        placeholder="Tape un sujet à mémoriser (ex. la photosynthèse)"></textarea>
       <button type="submit" class="qcm-custom-search-btn" id="qcm-custom-search-btn">
         <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Générer
       </button>
@@ -2335,6 +2343,16 @@
     });
   }
   customSearchForm.addEventListener('submit', submitCustomTopic);
+  // <textarea> plutôt qu'un <input> (cf. 12/08/2026) : Entrée y insère une
+  // ligne par défaut au lieu de soumettre le formulaire — on garde le
+  // réflexe "Entrée = valider" tant que Shift n'est pas maintenu (qui reste
+  // libre d'insérer un retour à la ligne volontaire).
+  customSearchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      customSearchForm.requestSubmit();
+    }
+  });
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),

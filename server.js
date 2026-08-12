@@ -8605,10 +8605,15 @@ const NOTIFICATION_EVENTS_RETENTION_DAYS = 30;
 // quelques jours — GET /api/opinion-articles ne montre de toute façon que les 200 plus
 // récentes.
 // Passé de 2 à 7 jours le 19/07/2026 (demande : plus de cartes consultables sur
-// Autres actus). Coût maîtrisé : ~300-600 lignes légères/jour, soit ~2000-4000
-// lignes en base au lieu de ~1200 — la sélection lue toutes les 5 min (cache)
-// reste bornée par OPINION_ARTICLES_SELECTION_SCAN_LIMIT (4000) et les buckets
-// à 250, sans rapport avec l'incident de quota du 20/06/2026 (tables sans purge).
+// Autres actus), sans rapport avec l'incident de quota du 20/06/2026 (tables
+// sans purge). L'estimation initiale de volume (~2000-4000 lignes en base)
+// est dépassée : 7 880 lignes mesurées le 12/08/2026, OPINION_ARTICLES_SELECTION_SCAN_LIMIT
+// étant passé à 10 000 entretemps (27/07/2026) — la passe légère de
+// buildFreshOpinionArticlesSelection couvre donc désormais la table entière à
+// chaque reconstruction plutôt qu'une fenêtre bornée. Coût egress compensé en
+// espaçant les reconstructions (cf. OPINION_ARTICLES_CACHE_TTL_MS, relevé à 15
+// min le même jour) plutôt qu'en réduisant la limite de scan, qui pénaliserait
+// la diversité de la sélection (orientations peu représentées).
 const OPINION_ARTICLES_RETENTION_DAYS = 7;
 // Un QCM par jour : 30 jours suffisent largement pour les stats/debug, sans
 // accumuler indéfiniment (même logique que les autres tables purgées ici).
@@ -9948,10 +9953,18 @@ function attachOpinionArticlePreviews(articles) {
 // Cache court en mémoire : la page /autres-sources n'a pas besoin d'être seconde-près,
 // et sans lui chaque visiteur redéclenchait le fetch + la requête ciblée ci-dessous contre
 // Supabase (cf. incident de quota Disk IO du 20/06/2026 — server.js:7403, 7455).
-// TTL 5 min : le recalcul complet prend plus d'une seconde et se voyait à chaque
-// visite avec l'ancien TTL de 60 s ; la fraîcheur reste assurée par l'invalidation
-// explicite aux endpoints veille (ingestion et retrait).
-const OPINION_ARTICLES_CACHE_TTL_MS = 5 * 60 * 1000;
+// TTL 15 min (relevé de 5 min le 12/08/2026, audit egress) : la passe légère de
+// buildFreshOpinionArticlesSelection scanne désormais jusqu'à
+// OPINION_ARTICLES_SELECTION_SCAN_LIMIT lignes — qui couvre la table ENTIÈRE
+// des 7 jours de rétention (7 880 lignes mesurées ce jour-là pour une limite à
+// 10 000), ~2,35 Mo par reconstruction. Réduire cette limite pénaliserait la
+// diversité de la sélection (orientations peu représentées, ex. "gauche",
+// qui doivent piocher plus loin dans les 7 jours) ; espacer les reconstructions
+// réduit l'egress sans ce risque, même principe que DEBATES_RECENT_CACHE_TTL_MS
+// (2 min → 15 min, même audit). La fraîcheur reste assurée par l'invalidation
+// explicite aux endpoints veille (ingestion et retrait) : ce TTL ne borne que
+// le pire cas (aucun événement d'invalidation), pas le cas normal.
+const OPINION_ARTICLES_CACHE_TTL_MS = 15 * 60 * 1000;
 let _opinionArticlesCache = null;
 let _opinionArticlesCacheComputedAt = 0;
 // Anti-dogpile (même principe que debatesApiInFlight/latestDebatesMetaInFlight) :
