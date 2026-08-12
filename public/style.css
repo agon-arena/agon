@@ -25390,6 +25390,19 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   }
 }
 
+/* Standalone : Bulles Actu/Agôn rapprochent leur cadre du bandeau du haut via
+   alignStandaloneBubbleFrameToActiveFilter (script.js), qui aligne le cadre sous le tag de
+   filtre actif — un concept qui n'existe pas en "Ma mémoire" (pas de tag de filtre), et cette
+   fonction s'exclut donc explicitement de ce mode (garde _memoireCloudMode, script.js). Sans
+   équivalent dédié, "Ma mémoire" restait ~84px plus bas que Actu/Agôn au même point de départ
+   (diagnostic du 12/08/2026, __memoireFrameDiagLog : cloudTop mesuré à 243px avec marge à 0
+   contre 159px quand une marge d'une session Actu/Agôn précédente restait accidentellement
+   appliquée — visuellement jugée correcte par comparaison, confirmant le rapprochement voulu).
+   Rapprochement direct, indépendant de ce mécanisme fragile plutôt que de le détourner. */
+body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
+  margin-top: -84px !important;
+}
+
 /* Liseré noir autour du cadre décoratif EXISTANT (.agon-tag-trends-cloud::before, hérité),
    pas un nouveau cadre séparé sur le conteneur (essayé le 06/08/2026, retiré : ce n'était pas
    ce qui était demandé). box-shadow plutôt qu'un vrai border/outline : suit correctement le
