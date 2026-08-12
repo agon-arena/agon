@@ -5753,6 +5753,21 @@ function ensureDebateIframeModal() {
       pointer-events: none;
       box-shadow: none;
     }
+    /* Garde-fou indépendant de la classe .loading (posée/retirée par
+       setDebateIframeModalLoadingState) : #debate-iframe-modal-inner
+       (fond #fff) doit rester masqué tant que le VRAI contenu de la page
+       embarquée n'est pas prêt, quel que soit l'état de .loading — .loading
+       et .debate-iframe-modal-frame-loading (posée par
+       concealDebateIframeModalFrame/navigateDebateIframeModalFrame) sont
+       deux mécanismes normalement synchronisés mais distincts ; ce sélecteur
+       :has() ferme tout écart entre les deux plutôt que de dépendre d'un
+       seul (cadre blanc vide furtif signalé le 12/08/2026 malgré la
+       correction de l'ordre .loading/.open). */
+    #debate-iframe-modal-inner:has(#debate-iframe-modal-frame.debate-iframe-modal-frame-loading) {
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: none;
+    }
     #debate-iframe-modal.loading #debate-iframe-modal-close {
       opacity: 0;
       pointer-events: none;
@@ -6882,6 +6897,21 @@ function openDebateIframeModal(url, options = {}) {
   __agonDebugRefreshLog("openDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay", targetUrl: url });
   setDebateIframeModalCloseButtonVisible(true);
   if (!modalAlreadyOpen) suspendIndexEmbedsForDebateModal();
+  // .loading DOIT être posé AVANT .open (jamais après) : #debate-iframe-modal-inner
+  // (fond #fff) n'est masqué (opacity:0) que par la règle CSS
+  // ".loading #debate-iframe-modal-inner" — dans l'ordre inverse, la toute première
+  // fois que le modal devient display:flex (.open) se produit SANS .loading encore
+  // posé, laissant une chance qu'un rendu intermédiaire expose ce fond blanc plein
+  // cadre avant que la ligne suivante ne le masque (rectangle blanc furtif sous la
+  // barre du haut, signalé le 12/08/2026 sur /apprentissage — persistait malgré la
+  // correction du bandeau de chargement, la vraie cause étant ici). Même bloc
+  // synchrone dans les deux ordres, mais celui-ci ne dépend d'aucune hypothèse sur
+  // le comportement de rendu du navigateur entre deux lignes.
+  setDebateIframeModalLoadingState(
+    true,
+    isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours",
+    !isIframePageWithoutLoadingOverlay(iframeUrlPathname)
+  );
   modal.classList.add("open");
   if (useNativeParentScroll) {
     setDebateIframeNativeParentScrollMode(true);
@@ -6889,14 +6919,6 @@ function openDebateIframeModal(url, options = {}) {
     setDebateIframeNativeParentScrollMode(false);
     lockPageScrollForDebateModal(_debateModalSavedScrollY);
   }
-  // Pas de bandeau "Chargement en cours" pour Connaissances/Éclairages : ces
-  // pages ont leur propre rendu léger et quasi immédiat, le bandeau
-  // n'apportait rien qu'un flash de plus.
-  setDebateIframeModalLoadingState(
-    true,
-    isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours",
-    !isIframePageWithoutLoadingOverlay(iframeUrlPathname)
-  );
   navigateDebateIframeModalFrame(frame, url);
 
   armDebateIframeParentLoadingFallback(iframeUrlPathname);
@@ -35136,11 +35158,22 @@ function syncAgonHomeTrendsSectionMinHeight() {
     return;
   }
   document.documentElement.style.setProperty('--agon-home-trends-section-top', `${sectionTop}px`);
+  // Mesures supplémentaires (hauteur réellement rendue de la section, position du switch de
+  // mode et des flèches flottantes de scroll) : la min-height n'est qu'un plancher, la valeur
+  // mesurée peut donc être correcte tout en laissant le rendu final incohérent pour une autre
+  // raison — ces champs permettent de voir directement si la section grandit au-delà de sa
+  // min-height (contenu qui déborde) plutôt que de le déduire par le calcul.
+  const switchEl = document.getElementById('agon-cloud-mode-switch');
+  const scrollDownBtn = document.querySelector('.index-floating-scroll-down');
   __memoireFrameDiagLog('applied', {
     sectionTop,
     memoire: !!_memoireCloudMode,
     innerHeight: window.innerHeight,
-    vvHeight: window.visualViewport ? Math.round(window.visualViewport.height) : null
+    vvHeight: window.visualViewport ? Math.round(window.visualViewport.height) : null,
+    sectionHeight: Math.round(section.getBoundingClientRect().height),
+    computedMinHeight: Math.round(parseFloat(window.getComputedStyle(section).minHeight) || 0),
+    switchBottom: switchEl ? Math.round(switchEl.getBoundingClientRect().bottom) : null,
+    scrollDownTop: scrollDownBtn ? Math.round(scrollDownBtn.getBoundingClientRect().top) : null
   });
 }
 
