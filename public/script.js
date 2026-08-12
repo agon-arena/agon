@@ -35170,6 +35170,8 @@ function syncAgonHomeTrendsSectionMinHeight() {
   const switchEl = document.getElementById('agon-cloud-mode-switch');
   const scrollDownBtn = document.querySelector('.index-floating-scroll-down');
   const cloudEl = document.getElementById('agon-tag-trends-cloud');
+  const captionEl = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
+  const beforeEl = document.getElementById('agon-memoire-embed-before');
   __memoireFrameDiagLog('applied', {
     sectionTop,
     memoire: !!_memoireCloudMode,
@@ -35182,6 +35184,12 @@ function syncAgonHomeTrendsSectionMinHeight() {
     switchTop: switchEl ? Math.round(switchEl.getBoundingClientRect().top) : null,
     switchBottom: switchEl ? Math.round(switchEl.getBoundingClientRect().bottom) : null,
     switchMarginTop: switchEl ? window.getComputedStyle(switchEl).marginTop : null,
+    captionHiddenAttr: captionEl ? captionEl.hidden : null,
+    captionDisplay: captionEl ? window.getComputedStyle(captionEl).display : null,
+    captionHeight: captionEl ? Math.round(captionEl.getBoundingClientRect().height) : null,
+    captionTop: captionEl ? Math.round(captionEl.getBoundingClientRect().top) : null,
+    beforeElHidden: beforeEl ? beforeEl.hidden : null,
+    beforeElHeight: beforeEl ? Math.round(beforeEl.getBoundingClientRect().height) : null,
     scrollDownTop: scrollDownBtn ? Math.round(scrollDownBtn.getBoundingClientRect().top) : null
   });
 }
