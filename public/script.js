@@ -19617,7 +19617,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260812-universe-fetch-timeout').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260812-orbit-line-gradient').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -21538,7 +21538,7 @@ function initCarouselLazyLoad() {
 }
 
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
-let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260809-memory-empty-caption");
+let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260812-orbit-line-gradient");
 
 function lockAgonCloudFrameTop(container) {
   const cloud = container || document.getElementById('agon-tag-trends-cloud');
@@ -25359,6 +25359,66 @@ function showDebateNotionMemorizeExplainer(notionName) {
   });
 }
 
+// Niveaux d'approfondissement proposés avant toute génération de QCM de
+// notion (débat ou sujet libre, cf. server.js NOTION_QUIZ_LEVELS) — demande
+// du 12/08/2026 : toujours demander le niveau avant de lancer l'appel IA,
+// jamais de génération silencieuse à un niveau devinné.
+const NOTION_QUIZ_LEVEL_OPTIONS = [
+  { level: "elementaire", name: "Élémentaire", desc: "3 à 6 questions" },
+  { level: "avance", name: "Avancé", desc: "8 à 12 questions" },
+  { level: "expert", name: "Expert", desc: "Une vingtaine de questions" }
+];
+
+// Modale de choix de niveau — `onSelect(level)` n'est appelé que si
+// l'utilisateur choisit effectivement un niveau (jamais sur simple
+// fermeture/Escape/clic à l'extérieur).
+function showNotionQuizLevelPicker(onSelect) {
+  const overlay = document.createElement("div");
+  overlay.className = "notion-level-picker-overlay";
+  const modal = document.createElement("div");
+  modal.className = "notion-level-picker-modal";
+  const title = document.createElement("p");
+  title.className = "notion-level-picker-title";
+  title.textContent = "Quel niveau d'approfondissement ?";
+  modal.appendChild(title);
+
+  NOTION_QUIZ_LEVEL_OPTIONS.forEach(({ level, name, desc }) => {
+    const optionBtn = document.createElement("button");
+    optionBtn.type = "button";
+    optionBtn.className = "notion-level-picker-option";
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "notion-level-picker-option-name";
+    nameSpan.textContent = name;
+    const descSpan = document.createElement("span");
+    descSpan.className = "notion-level-picker-option-desc";
+    descSpan.textContent = desc;
+    optionBtn.appendChild(nameSpan);
+    optionBtn.appendChild(descSpan);
+    optionBtn.addEventListener("click", () => {
+      close();
+      onSelect(level);
+    });
+    modal.appendChild(optionBtn);
+  });
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "notion-level-picker-cancel";
+  cancelBtn.textContent = "Annuler";
+  modal.appendChild(cancelBtn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+  }
+  function onKeydown(e) { if (e.key === "Escape") close(); }
+  document.addEventListener("keydown", onKeydown);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  cancelBtn.addEventListener("click", close);
+}
+
 function activateDebateNotion(btn, voterKey, debateId, quizDate) {
   const notionName = btn.getAttribute("data-notion-name") || "cette notion";
   if (btn.getAttribute("data-memorized") === "true") {
@@ -25371,28 +25431,31 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
   const debateQuestion = btn.getAttribute("data-debate-question") || "";
   if (!slug) return;
 
-  btn.setAttribute("data-memorized", "true");
-  btn.classList.add("is-active");
-  showDebateNotionMemorizeExplainer(notionName);
+  showNotionQuizLevelPicker((level) => {
+    btn.setAttribute("data-memorized", "true");
+    btn.classList.add("is-active");
+    showDebateNotionMemorizeExplainer(notionName);
 
-  fetchJSON(`${API}/users/notion-quizzes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      legacyKey: voterKey,
-      sourceType: "debat-notion",
-      sourceDebateId: `${debateId}-${slug}`,
-      quizDate,
-      item: {
-        current_topic_id: `${debateId}-${slug}`,
-        current_topic_title: debateQuestion,
-        notion_name: notionName,
-        notion_explanation: explanation
-      }
-    })
-  }).catch(() => {
-    btn.setAttribute("data-memorized", "false");
-    btn.classList.remove("is-active");
+    fetchJSON(`${API}/users/notion-quizzes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        legacyKey: voterKey,
+        sourceType: "debat-notion",
+        sourceDebateId: `${debateId}-${slug}`,
+        quizDate,
+        level,
+        item: {
+          current_topic_id: `${debateId}-${slug}`,
+          current_topic_title: debateQuestion,
+          notion_name: notionName,
+          notion_explanation: explanation
+        }
+      })
+    }).catch(() => {
+      btn.setAttribute("data-memorized", "false");
+      btn.classList.remove("is-active");
+    });
   });
 }
 
@@ -25426,8 +25489,13 @@ function renderDebateNotions(debateId, debateQuestion, notions) {
       .then((data) => {
         const quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
         buttons.forEach((btn) => {
-          const slot = `notion:debat-notion:${debateId}-${btn.getAttribute("data-notion-slug")}`;
-          if (!quizzes.some((q) => q.slot === slot)) return;
+          // Le slot porte désormais un suffixe de niveau (cf.
+          // server.js NOTION_QUIZ_LEVELS, ":elementaire|avance|expert") : on
+          // matche sur le préfixe plutôt que sur une égalité stricte, sinon
+          // une notion déjà mémorisée redeviendrait "non mémorisée" au
+          // rechargement de la page.
+          const slotPrefix = `notion:debat-notion:${debateId}-${btn.getAttribute("data-notion-slug")}`;
+          if (!quizzes.some((q) => q.slot === slotPrefix || q.slot.startsWith(`${slotPrefix}:`))) return;
           btn.setAttribute("data-memorized", "true");
           btn.classList.add("is-active");
         });
@@ -34968,8 +35036,35 @@ function syncAgonHomeTrendsCaptionAnchor() {
   root.style.setProperty('--agon-home-first-row-mt', `${nextMarginTop}px`);
 }
 
+// Le min-height CSS de .agon-tag-trends-section en standalone (cf. style.css,
+// body.is-standalone .agon-tag-trends-section) suppose par défaut une hauteur de bandeau du
+// haut fixe (110px, repli avant le premier passage de cette fonction) — hypothèse fragile :
+// devenue fausse une première fois avec l'ajout du bandeau de score et du bouton "Trier /
+// Rechercher" (cadre "Ma mémoire" affiché trop bas, 11/08/2026 puis reconstaté 12/08/2026).
+// Mesuré en direct plutôt que deviné : sectionTop ne dépend que de ce qui précède la section
+// dans le flux (jamais de sa propre hauteur, donc pas de dépendance circulaire avec le
+// min-height qu'on est en train de calculer), et .home-bottom-nav est position:fixed (73px
+// déjà correct dans le calc(), aucune mesure nécessaire de ce côté).
+function syncAgonHomeTrendsSectionMinHeight() {
+  const body = document.body;
+  if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
+  if (window.__agonDebateModalOpen === true) return;
+  const section = document.getElementById('agon-tag-trends-section');
+  if (!section || section.hidden) return;
+  const sectionTop = Math.round(section.getBoundingClientRect().top);
+  // Garde-fou : une mesure prise pendant un scroll (section déjà remontée hors du haut de
+  // l'écran) ou avant que la mise en page se soit stabilisée donnerait une valeur aberrante —
+  // mieux vaut garder la dernière bonne valeur (ou le repli CSS calc()) que d'écraser avec du
+  // n'importe quoi. Plage large (0-400px) : couvre topbar + bandeau de score + bouton "Trier /
+  // Rechercher" sur tous les téléphones, sans jamais accepter un scroll qui a fait défiler la
+  // section hors du haut de l'écran.
+  if (!Number.isFinite(sectionTop) || sectionTop < 0 || sectionTop > 400) return;
+  document.documentElement.style.setProperty('--agon-home-trends-section-top', `${sectionTop}px`);
+}
+
 function updateHomeBottomNavViewportOffset() {
   syncAgonHomeTrendsCaptionAnchor();
+  syncAgonHomeTrendsSectionMinHeight();
   const viewportBottomFill = getAgonMobileViewportBottomFill();
   const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
   const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);

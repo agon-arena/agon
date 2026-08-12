@@ -1,7 +1,7 @@
 // Page "Mon univers" : réutilise le moteur de bulles existant (tagTrendCloud.js), jamais
 // dupliqué. Volontairement léger — pas de chargement de script.js (qui alourdirait la page
 // pour un seul besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260809-memory-empty-caption";
+import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260812-orbit-line-gradient";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }

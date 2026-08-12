@@ -5632,7 +5632,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         source: CULTURE_GENERALE_SOURCE_TYPE_LABEL[a.eclairage_type] || "Culture générale",
         sourceType: a.eclairage_type,
         sourceDebateId: a.eclairage_source_id,
-        quizSlot: fiche?.notionQuizDate ? `notion:${a.eclairage_type}:${a.eclairage_source_id}` : null,
+        quizSlot: fiche?.notionQuizSlot || null,
         quizDate: fiche?.notionQuizDate || null,
         sourceDetail,
         category: null,
@@ -12423,6 +12423,48 @@ const DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE = 3;
 const DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC = 4;
 const DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC = 5;
 
+// Niveau d'approfondissement choisi par l'utilisateur avant génération d'un
+// QCM de notion de débat ou de sujet libre (demande du 12/08/2026) — décide
+// à la fois du nombre de questions visé et de leur exigence. `instruction`
+// est injectée dans le prompt IA (cf. buildCultureGeneraleQuizPrompt/
+// buildCustomTopicPrompt) pour que la difficulté suive vraiment le niveau,
+// pas seulement le nombre de questions.
+const NOTION_QUIZ_LEVELS = {
+  elementaire: {
+    label: "Élémentaire",
+    target: 5, max: 6, min: 3,
+    instruction: "Niveau élémentaire : questions simples et accessibles, portant sur les notions de base uniquement, formulées avec un vocabulaire courant."
+  },
+  avance: {
+    label: "Avancé",
+    target: 10, max: 12, min: 8,
+    instruction: "Niveau avancé : questions de difficulté intermédiaire, incluant quelques détails plus précis que l'essentiel, sans verser dans le point de détail obscur."
+  },
+  expert: {
+    label: "Expert",
+    target: 20, max: 22, min: 15,
+    instruction: "Niveau expert : questions exigeantes et pointues, couvrant les détails précis du texte, avec un vocabulaire technique si le sujet s'y prête, pour tester une compréhension fine du sujet."
+  }
+};
+// Comportement historique (clic "Mémoriser" sur Éclairages / Ce jour dans
+// l'Histoire, cf. views/eclairages.html) : cette page ne propose aucun choix
+// de niveau à l'utilisateur — on y garde exactement le dimensionnement
+// d'avant l'introduction des niveaux plutôt que de lui appliquer un niveau
+// par défaut arbitraire.
+const NOTION_QUIZ_LEGACY_LEVEL_CONFIG = {
+  label: null,
+  target: DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC,
+  max: DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC,
+  min: DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE,
+  instruction: null
+};
+
+function resolveNotionQuizLevel(rawLevel) {
+  const level = String(rawLevel || "").trim();
+  if (NOTION_QUIZ_LEVELS[level]) return { level, ...NOTION_QUIZ_LEVELS[level] };
+  return { level: null, ...NOTION_QUIZ_LEGACY_LEVEL_CONFIG };
+}
+
 // Champs communs (current_topic_id/title, shared_mechanism, essential_difference)
 // mais champs "concept" propres à chaque rubrique — formatage par type plutôt
 // qu'un seul gabarit générique.
@@ -12604,7 +12646,7 @@ function extractCultureGeneraleItemDetail(item) {
   }
 }
 
-function buildCultureGeneraleQuizPrompt(items, quotaByItemId) {
+function buildCultureGeneraleQuizPrompt(items, quotaByItemId, levelInstruction) {
   const list = items.map(formatCultureGeneraleItemForPrompt).join("\n");
   const quotaLines = items
     .map((item) => {
@@ -12627,6 +12669,7 @@ function buildCultureGeneraleQuizPrompt(items, quotaByItemId) {
     "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source.",
     "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous.",
     "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
+    ...(levelInstruction ? [`- ${levelInstruction}`] : []),
     "",
     "=== Nombre de questions par sujet (obligatoire) ===",
     `Génère EXACTEMENT ce nombre de questions pour chaque sujet ci-dessous (${totalQuota} questions au total) — ne saute AUCUN sujet, chacun doit être couvert :`,
@@ -12676,7 +12719,7 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
 // formatCultureGeneraleItemForPrompt) ; `sourceId` est son identifiant
 // stable (current_topic_id pour un Éclairage, id pour un événement
 // historique), repris tel quel comme sourceDebateId des questions générées.
-async function buildNotionQuestions(sourceType, sourceId, rawItem) {
+async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
   const id = String(sourceId || "").trim();
@@ -12686,8 +12729,9 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem) {
   const sourceName = extractCultureGeneraleItemName(item);
   const sourceDetail = extractCultureGeneraleItemDetail(item);
   const sourceScope = sourceType === "histoire" ? (["france", "europe"].includes(item.category) ? item.category : "world") : null;
+  const { level, target, max, min, instruction } = resolveNotionQuizLevel(rawLevel);
 
-  const quotaByItemId = new Map([[id, DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC]]);
+  const quotaByItemId = new Map([[id, target]]);
   let parsed;
   let sourceThemes = [];
   try {
@@ -12696,7 +12740,7 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem) {
     // l'autre, jamais bloquantes l'une pour l'autre (la classification
     // échoue en silence, renvoie [] au pire).
     const [content, themes] = await Promise.all([
-      _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt([item], quotaByItemId) }], {
+      _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt([item], quotaByItemId, instruction) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
         responseFormat: { type: "json_object" }
@@ -12710,20 +12754,26 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem) {
     return [];
   }
 
-  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC, DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC);
-  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
+  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], max, max);
+  if (validated.length < min) {
     console.warn(`[notion-quiz:${sourceType}:${id}] seulement ${validated.length} question(s) valide(s).`);
     return [];
   }
 
+  // Le niveau est ajouté à l'id de question (jamais à sourceDebateId, cf.
+  // NOTION_QUIZ_LEVELS) : deux niveaux de la même notion doivent produire des
+  // ids distincts (progression "Mes apprentissages" indépendante par niveau)
+  // sans jamais dédoubler la bulle "Ma mémoire" de cette notion, qui reste
+  // indexée sur sourceDebateId seul.
   return validated.map((q, index) => ({
-    id: `notion:${sourceType}:${id}-q${index + 1}`,
+    id: `notion:${sourceType}:${id}${level ? `-${level}` : ""}-q${index + 1}`,
     ...q,
     sourceType,
     sourceScope,
     sourceName,
     sourceDetail,
     sourceThemes,
+    level,
     // Sans ce champ, POST /api/daily-quiz/answer n'appelle jamais
     // recordDailyQuizEclairageAcquisition pour ce QCM (elle exige
     // sourceDebateId, cf. son early-return) : une bonne réponse restait sans
@@ -12754,8 +12804,9 @@ function normalizeCustomTopicKey(topic) {
 // ("Réponds en JSON strict {"questions":[...]}") : ici la question et la
 // fiche sont demandées dans un même objet JSON plus large, avec son propre
 // gabarit de réponse écrit à la fin de ce prompt.
-function buildCustomTopicPrompt(topic, id) {
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC).slice(0, -1);
+function buildCustomTopicPrompt(topic, id, levelConfig) {
+  const { target, instruction } = levelConfig;
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target).slice(0, -1);
   return [
     `Tu es un rédacteur pédagogique francophone. Un visiteur veut mémoriser ce sujet, tapé librement dans une barre de recherche : "${topic}".`,
     "",
@@ -12765,6 +12816,7 @@ function buildCustomTopicPrompt(topic, id) {
     "Étape 2 : si le sujet est valide, rédige :",
     "1. Une fiche de mémorisation synthétique et strictement factuelle en français (esprit fiche de révision : dense, claire, sans blabla, aucune approximation présentée comme un fait établi, aucune invention).",
     "2. Un quiz permettant de vérifier la compréhension de cette fiche — chaque question et sa réponse doivent être intégralement fondées sur le contenu de la fiche que tu rédiges, jamais sur un fait absent de cette fiche.",
+    ...(instruction ? [`3. ${instruction}`] : []),
     "",
     "Champs de la fiche :",
     "- \"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Guerre de Cent Ans\", \"Photosynthèse\") — reformule si la saisie de l'utilisateur est une question ou une phrase (ex. \"c'est quoi la photosynthèse\" → \"Photosynthèse\"), jamais recopiée telle quelle dans ce cas.",
@@ -12787,13 +12839,15 @@ function buildCustomTopicPrompt(topic, id) {
 // un seul appel IA produit à la fois la fiche et son quiz, pour garantir que
 // les questions restent fondées sur les mêmes faits que la fiche affichée
 // (jamais deux appels séparés qui pourraient diverger sur le contenu).
-async function buildCustomTopicQuiz(topic, id) {
+async function buildCustomTopicQuiz(topic, id, rawLevel) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { error: "failed" };
+  const levelConfig = resolveNotionQuizLevel(rawLevel);
+  const { level, max, min } = levelConfig;
 
   let parsed;
   try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCustomTopicPrompt(topic, id) }], {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCustomTopicPrompt(topic, id, levelConfig) }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" }
@@ -12819,20 +12873,21 @@ async function buildCustomTopicQuiz(topic, id) {
   if (!sourceName || !sections.length) return { error: "failed" };
   const sourceDetail = { meta: parsed.meta ? String(parsed.meta).trim().slice(0, 200) : null, sections, image: null };
 
-  const validated = validateNarrativeQuizQuestions(parsed.questions, [id], DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC, DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC);
-  if (validated.length < DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE) {
+  const validated = validateNarrativeQuizQuestions(parsed.questions, [id], max, max);
+  if (validated.length < min) {
     console.warn(`[notion-quizzes:custom:${id}] seulement ${validated.length} question(s) valide(s).`);
     return { error: "failed" };
   }
 
   const questions = validated.map((q, index) => ({
-    id: `notion:custom:${id}-q${index + 1}`,
+    id: `notion:custom:${id}${level ? `-${level}` : ""}-q${index + 1}`,
     ...q,
     sourceType: "custom",
     sourceScope: null,
     sourceName,
     sourceDetail,
     sourceThemes: [],
+    level,
     // Même raison que buildNotionQuestions : requis par
     // recordDailyQuizEclairageAcquisition pour qu'une bonne réponse alimente
     // "Ma mémoire" (demande du 10/08/2026).
@@ -12991,7 +13046,7 @@ function parseCultureGeneraleReviewRef(questionId) {
 // index du contenu par sourceDebateId et par questionId.
 async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   const key = String(voterKey || "").trim();
-  const empty = () => ({ events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map(), contentByQuestionId: new Map() });
+  const empty = () => ({ events: [], contentBySourceId: new Map(), originalQuizDateBySourceId: new Map(), contentByQuestionId: new Map(), slotBySourceId: new Map() });
   if (!key) return empty();
 
   const { data: answerRows, error: answersError } = await fetchAllSupabaseRows(() =>
@@ -13028,7 +13083,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   // isCultureGeneraleQuestionId, jamais via le slot de la ligne.
   const quizDates = [...new Set(originalAnswers.map((a) => a.quizDate).filter(Boolean))];
   const { data: quizRows, error: quizRowsError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
-    supabase.from("daily_quiz").select("quiz_date, questions").in("quiz_date", chunk));
+    supabase.from("daily_quiz").select("quiz_date, slot, questions").in("quiz_date", chunk));
   if (quizRowsError) throw new Error(quizRowsError.message);
 
   // contentBySourceId/contentByQuestionId couvrent aussi les repasses : une
@@ -13045,6 +13100,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   const contentBySourceId = new Map();
   const contentByQuestionId = new Map();
   const originalQuizDateBySourceId = new Map();
+  const slotBySourceId = new Map();
   const originalByDateAndId = new Map();
   for (const row of quizRows || []) {
     for (const q of (row.questions || [])) {
@@ -13054,6 +13110,12 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
       if (q.sourceDebateId) {
         contentBySourceId.set(q.sourceDebateId, q);
         originalQuizDateBySourceId.set(q.sourceDebateId, row.quiz_date);
+        // Slot réel de la ligne daily_quiz qui porte cette notion — depuis
+        // l'introduction des niveaux (12/08/2026), il peut porter un suffixe
+        // ":elementaire|avance|expert" que rien ne permet de reconstruire par
+        // simple concaténation (cf. GET /api/users/intellectual-universe, qui
+        // devinait auparavant ce slot au lieu de le lire ici).
+        if (row.slot) slotBySourceId.set(q.sourceDebateId, row.slot);
       }
     }
   }
@@ -13080,7 +13142,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
     });
   }
   events.sort((x, y) => (x.quizDate < y.quizDate ? -1 : x.quizDate > y.quizDate ? 1 : 0));
-  return { events, contentBySourceId, originalQuizDateBySourceId, contentByQuestionId };
+  return { events, contentBySourceId, originalQuizDateBySourceId, contentByQuestionId, slotBySourceId };
 }
 
 // Rejoue l'historique d'une clé de regroupement (sourceDebateId pour "Ma
@@ -13338,7 +13400,7 @@ async function resolveMissingAcquisSourceNames(acquis, originalQuizDateBySourceI
 // (fiche affichée au clic sur une étoile, cf. /api/users/intellectual-universe)
 // et par le badge de progression de "Mes apprentissages".
 async function fetchUserAcquis(voterKey, options = {}) {
-  const { events, contentBySourceId, originalQuizDateBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
+  const { events, contentBySourceId, originalQuizDateBySourceId, slotBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
   if (!events.length) return [];
   const streaks = computeCultureGeneraleStreaks(events);
 
@@ -13347,6 +13409,7 @@ async function fetchUserAcquis(voterKey, options = {}) {
     if (!state.everCorrect) continue;
     const question = contentBySourceId.get(sourceDebateId);
     if (!question) continue;
+    const isNotionQuiz = String(question.id || "").startsWith("notion:");
     acquis.push({
       sourceDebateId,
       // Repli "histoire" volontairement absent ici : resolveMissingAcquisSourceNames
@@ -13356,12 +13419,14 @@ async function fetchUserAcquis(voterKey, options = {}) {
       sourceType: question.sourceType || null,
       sourceName: question.sourceName || null,
       sourceDetail: question.sourceDetail || null,
-      // Date de la ligne daily_quiz qui porte le QCM complet de cette notion.
-      // Seulement pour les QCM créés depuis Mes apprentissages : les anciens
-      // QCM Culture Générale n'ont pas de fiche notion dédiée à recharger.
-      notionQuizDate: String(question.id || "").startsWith("notion:")
-        ? (originalQuizDateBySourceId.get(sourceDebateId) || null)
-        : null,
+      // Date + slot réels de la ligne daily_quiz qui porte le QCM complet de
+      // cette notion (le slot peut porter un suffixe de niveau depuis le
+      // 12/08/2026, cf. NOTION_QUIZ_LEVELS — jamais reconstruit par
+      // concaténation en aval). Seulement pour les QCM créés depuis Mes
+      // apprentissages : les anciens QCM Culture Générale n'ont pas de fiche
+      // notion dédiée à recharger.
+      notionQuizDate: isNotionQuiz ? (originalQuizDateBySourceId.get(sourceDebateId) || null) : null,
+      notionQuizSlot: isNotionQuiz ? (slotBySourceId.get(sourceDebateId) || null) : null,
       streak: state.streak,
       validated: state.validated,
       target: DAILY_QUIZ_ACQUIS_VALIDATION_STREAK,
@@ -14384,7 +14449,11 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     if (!NOTION_QUIZ_SOURCE_TYPES.has(sourceType) || !sourceDebateId || sourceDebateId.length > 200 || !item || typeof item !== "object") {
       return res.status(400).json({ ok: false, error: "Requête invalide." });
     }
-    const slot = `notion:${sourceType}:${sourceDebateId}`;
+    // Niveau absent (cf. views/eclairages.html, qui ne propose pas ce choix) :
+    // slot inchangé depuis avant l'introduction des niveaux, pour ne pas
+    // invalider le cache déjà en base ni les acquisitions déjà enregistrées.
+    const { level } = resolveNotionQuizLevel(req.body?.level);
+    const slot = `notion:${sourceType}:${sourceDebateId}${level ? `:${level}` : ""}`;
 
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
@@ -14400,7 +14469,7 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     if (existingQuiz) {
       questions = existingQuiz.questions || [];
     } else {
-      questions = await buildNotionQuestions(sourceType, sourceDebateId, item);
+      questions = await buildNotionQuestions(sourceType, sourceDebateId, item, level);
       if (!questions.length) return res.status(502).json({ ok: false, error: "Génération du QCM impossible pour le moment." });
 
       const { error: insertError } = await supabase.from("daily_quiz").insert({
@@ -14459,7 +14528,8 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
       : parisDateKey();
 
     const id = normalizeCustomTopicKey(topic);
-    const slot = `notion:custom:${id}`;
+    const { level } = resolveNotionQuizLevel(req.body?.level);
+    const slot = `notion:custom:${id}${level ? `:${level}` : ""}`;
 
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
@@ -14475,7 +14545,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     if (existingQuiz) {
       questions = existingQuiz.questions || [];
     } else {
-      const result = await buildCustomTopicQuiz(topic, id);
+      const result = await buildCustomTopicQuiz(topic, id, level);
       if (result.error) {
         const status = result.error === "rejected" ? 422 : 502;
         return res.status(status).json({ ok: false, error: result.reason || "Génération de la fiche impossible pour le moment." });

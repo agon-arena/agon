@@ -794,13 +794,35 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
     line.style.top = Math.round(startY) + "px";
     line.style.width = Math.round(lineLength) + "px";
     line.style.transform = `rotate(${angle}rad)`;
-    if (customBackground) line.style.background = customBackground;
     container.appendChild(line);
 
     // Seules les deux petites portions qui franchissent les bords doivent passer
     // devant les anneaux. Le long segment central conserve son z-index bas : il ne
     // pourra donc pas recouvrir une autre bulle ou son libellé sur son trajet.
     if (customBackground) {
+      // Le trait est découpé en 3 éléments DOM (segment central + 2 bouts qui
+      // franchissent les anneaux), mais doit rester visuellement UNE seule ligne
+      // continue. Appliquer le même `linear-gradient(to right, …)` indépendamment
+      // sur chaque morceau (comme avant, cf. git blame) reproduit ce dégradé sur
+      // CHAQUE largeur individuelle : au point de jonction, le bout de 14px affiche
+      // déjà sa couleur de fin pendant que le long segment central est encore proche
+      // de sa couleur de départ — d'où un saut de teinte visible à chaque jonction
+      // (signalé le 12/08/2026 : "connecteurs faits en plusieurs morceaux"). Fix :
+      // un seul dégradé de la largeur totale du trait (bout-in inclus jusqu'à
+      // bout-out inclus), positionné en `background-position` négatif propre à
+      // chaque morceau — chacun n'affiche alors qu'une fenêtre de ce même dégradé.
+      const totalStart = Math.max(0, targetR - solarOverlap);
+      const totalEnd = dist - geo.r + starRingOverlap;
+      const totalSpan = totalEnd - totalStart;
+
+      const applyGradientSlice = (el, elStartDistance) => {
+        el.style.backgroundImage = customBackground;
+        el.style.backgroundSize = `${Math.round(totalSpan)}px 100%`;
+        el.style.backgroundPosition = `${Math.round(-(elStartDistance - totalStart))}px 0`;
+      };
+
+      applyGradientSlice(line, targetR);
+
       const appendOverlap = (distanceFromTarget, width, fadeDirection) => {
         if (width <= 0) return;
         const overlap = document.createElement("div");
@@ -810,7 +832,7 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
         overlap.style.top = Math.round(targetY + sinAngle * distanceFromTarget) + "px";
         overlap.style.width = Math.round(width) + "px";
         overlap.style.transform = `rotate(${angle}rad)`;
-        overlap.style.background = customBackground;
+        applyGradientSlice(overlap, distanceFromTarget);
         container.appendChild(overlap);
       };
 

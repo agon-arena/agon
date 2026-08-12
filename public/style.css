@@ -5105,6 +5105,84 @@ body.page-debate #score-b {
   color:#243038;
 }
 
+/* Choix du niveau d'approfondissement avant génération d'un QCM de notion
+   (débat ou sujet libre, cf. showNotionQuizLevelPicker, script.js) — même
+   habillage overlay/modal que .ecl-memorize-explainer-*, options empilées. */
+.notion-level-picker-overlay{
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  background:rgba(17, 24, 39, 0.55);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  overflow-y:auto;
+}
+.notion-level-picker-modal{
+  width:100%;
+  max-width:400px;
+  padding:24px;
+  border-radius:12px;
+  background:#ffffff;
+  box-shadow:0 20px 45px rgba(17, 24, 39, 0.25);
+  text-align:center;
+}
+.notion-level-picker-title{
+  margin:0 0 16px;
+  color:#243038;
+  font-size:15px;
+  line-height:1.4;
+  font-weight:700;
+}
+.notion-level-picker-option{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  width:100%;
+  margin:0 0 10px;
+  padding:12px 18px;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  background:#f9fafb;
+  cursor:pointer;
+  text-align:left;
+}
+.notion-level-picker-option:hover{
+  border-color:#f5b642;
+  background:#fff8ea;
+}
+.notion-level-picker-option-name{
+  color:#243038;
+  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-size:16px;
+  font-weight:700;
+  letter-spacing:0.02em;
+  text-transform:uppercase;
+}
+.notion-level-picker-option-desc{
+  color:#6b7280;
+  font-size:13px;
+}
+.notion-level-picker-cancel{
+  width:100%;
+  margin-top:4px;
+  padding:10px 20px;
+  border:none;
+  border-radius:999px;
+  background:none;
+  color:#6b7280;
+  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:0.02em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.notion-level-picker-cancel:hover{
+  color:#243038;
+}
+
 /* Vue liste */
 
 .debate-view-switch {
@@ -11345,10 +11423,16 @@ body.is-standalone .topbar-refresh-btn {
   display: flex;
 }
 
-/* Standalone : bulles centrées à l'écran, débats sous le fold */
+/* Standalone : bulles centrées à l'écran, débats sous le fold. Le premier terme (110px de
+   repli) est une hauteur de bandeau du haut devinée, mesurée en direct dès que possible via
+   --agon-home-trends-section-top (cf. syncAgonHomeTrendsSectionMinHeight, script.js) — ce
+   repli sert uniquement avant le premier passage du script ou si la mesure échoue. Sans
+   mesure live, cette valeur devient fausse à chaque ajout de contenu au-dessus de la section
+   (ex. bandeau de score, bouton "Trier / Rechercher") et le cadre apparaît décalé trop bas
+   (constaté à nouveau le 12/08/2026). */
 body.is-standalone .agon-tag-trends-section {
   margin-top: 0 !important;
-  min-height: calc(100dvh - 110px - 73px - env(safe-area-inset-bottom, 0px));
+  min-height: calc(100dvh - var(--agon-home-trends-section-top, 110px) - 73px - env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260810-debate-notions-compact">
+  <link rel="stylesheet" href="/style.min.css?v=20260812-notion-quiz-levels">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -1197,7 +1197,7 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <h1><i class="fa-solid fa-circle-question"></i> <span id="qcm-title-text"></span></h1>
+    <h1><span id="qcm-title-text"></span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <form class="qcm-custom-search" id="qcm-custom-search" hidden>
@@ -1211,7 +1211,7 @@
     <div id="qcm-body"></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260810-standalone-loading-overlay" defer></script>
+<script src="/script.min.js?v=20260812-notion-quiz-levels" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -1246,8 +1246,18 @@
   // apparaître un flash vide le temps que ce script inline prenne le relais.
   var iframeReadySignaled = false;
   function signalIframeReady() {
-    if (iframeReadySignaled || window.self === window.top) return;
+    if (iframeReadySignaled) return;
     iframeReadySignaled = true;
+    // En page autonome (lien direct, nouvel onglet, lancement PWA), il n'y a
+    // pas de parent à qui poster ce message : on signale directement au voile
+    // de la page elle-même (cf. markPageArrivalLoadingOverlayReady dans
+    // script.js, désormais bloqué en attente explicite pour /apprentissage)
+    // que le vrai contenu est affiché, au lieu de le laisser disparaître au
+    // bout d'un délai générique déconnecté du fetch réel.
+    if (window.self === window.top) {
+      if (typeof markPageArrivalLoadingOverlayReady === 'function') markPageArrivalLoadingOverlayReady();
+      return;
+    }
     try {
       window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
     } catch (e) {}
@@ -2024,6 +2034,8 @@
   // sur Éclairages/Ce jour dans l'Histoire (optimiste, instantané), la fiche
   // n'existe pas encore ici — on attend la vraie réponse (génération IA,
   // quelques secondes) avant d'ouvrir le QCM tout juste créé via loadSlot.
+  // Niveau d'approfondissement toujours demandé avant génération (cf.
+  // showNotionQuizLevelPicker, public/script.js — demande du 12/08/2026).
   function submitCustomTopic(e) {
     e.preventDefault();
     var topic = (customSearchInput.value || '').trim();
@@ -2035,32 +2047,38 @@
       setCustomSearchStatus('Identifiant introuvable, recharge la page et réessaie.', true);
       return;
     }
-    customSearchBtn.disabled = true;
-    customSearchInput.disabled = true;
-    setCustomSearchStatus('Génération de la fiche en cours (quelques secondes)…', false);
+    if (typeof showNotionQuizLevelPicker !== 'function') {
+      setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
+      return;
+    }
+    showNotionQuizLevelPicker(function (level) {
+      customSearchBtn.disabled = true;
+      customSearchInput.disabled = true;
+      setCustomSearchStatus('Génération de la fiche en cours (quelques secondes)…', false);
 
-    fetch('/api/users/notion-quizzes/custom', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ legacyKey: voterKey, topic: topic })
-    })
-      .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
-      .then(function (result) {
-        customSearchBtn.disabled = false;
-        customSearchInput.disabled = false;
-        if (!result.data.ok) {
-          setCustomSearchStatus(result.data.error || 'Génération impossible pour le moment.', true);
-          return;
-        }
-        customSearchInput.value = '';
-        setCustomSearchStatus('', false);
-        loadSlot(result.data.slot, result.data.quizDate, result.data.label);
+      fetch('/api/users/notion-quizzes/custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legacyKey: voterKey, topic: topic, level: level })
       })
-      .catch(function () {
-        customSearchBtn.disabled = false;
-        customSearchInput.disabled = false;
-        setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
-      });
+        .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+        .then(function (result) {
+          customSearchBtn.disabled = false;
+          customSearchInput.disabled = false;
+          if (!result.data.ok) {
+            setCustomSearchStatus(result.data.error || 'Génération impossible pour le moment.', true);
+            return;
+          }
+          customSearchInput.value = '';
+          setCustomSearchStatus('', false);
+          loadSlot(result.data.slot, result.data.quizDate, result.data.label);
+        })
+        .catch(function () {
+          customSearchBtn.disabled = false;
+          customSearchInput.disabled = false;
+          setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
+        });
+    });
   }
   customSearchForm.addEventListener('submit', submitCustomTopic);
 
