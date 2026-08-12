@@ -1382,6 +1382,10 @@ function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail)
     localStorage.setItem(AGON_SCORE_CHANGE_BASELINE_KEY, JSON.stringify({ votesScore, notesScore, gnosisScore }));
   } catch (e) {}
 
+  // Aucune notification quand les 3 scores sont déjà à 100% : il n'y a plus
+  // de progression à évoquer, seulement un plafond (demande du 12/08/2026).
+  if (votesScore === 100 && notesScore === 100 && gnosisScore === 100) return;
+
   const changes = [];
   if (votesScore !== null && previous.votesScore !== votesScore) {
     changes.push({ icon: '<i class="fa-solid fa-bolt"></i>', label: "Rhetor", value: votesScore });
@@ -35165,14 +35169,19 @@ function syncAgonHomeTrendsSectionMinHeight() {
   // min-height (contenu qui déborde) plutôt que de le déduire par le calcul.
   const switchEl = document.getElementById('agon-cloud-mode-switch');
   const scrollDownBtn = document.querySelector('.index-floating-scroll-down');
+  const cloudEl = document.getElementById('agon-tag-trends-cloud');
   __memoireFrameDiagLog('applied', {
     sectionTop,
     memoire: !!_memoireCloudMode,
     innerHeight: window.innerHeight,
     vvHeight: window.visualViewport ? Math.round(window.visualViewport.height) : null,
     sectionHeight: Math.round(section.getBoundingClientRect().height),
-    computedMinHeight: Math.round(parseFloat(window.getComputedStyle(section).minHeight) || 0),
+    minHeightRaw: window.getComputedStyle(section).minHeight,
+    cloudTop: cloudEl ? Math.round(cloudEl.getBoundingClientRect().top) : null,
+    cloudBottom: cloudEl ? Math.round(cloudEl.getBoundingClientRect().bottom) : null,
+    switchTop: switchEl ? Math.round(switchEl.getBoundingClientRect().top) : null,
     switchBottom: switchEl ? Math.round(switchEl.getBoundingClientRect().bottom) : null,
+    switchMarginTop: switchEl ? window.getComputedStyle(switchEl).marginTop : null,
     scrollDownTop: scrollDownBtn ? Math.round(scrollDownBtn.getBoundingClientRect().top) : null
   });
 }
