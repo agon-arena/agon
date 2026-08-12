@@ -26,6 +26,18 @@
     });
   </script>
   <style>
+    /* Garde-fou (bug constaté le 13/08/2026) : l'attribut hidden est ignoré
+       dès qu'un élément porte une classe qui fixe elle-même son display
+       (ex. .qcm-options { display:flex }, .qcm-next-btn.visible { display:
+       block }) — même spécificité CSS que la règle native [hidden]{display:
+       none}, donc la classe posée après dans la feuille de style l'emporte.
+       Résultat concret : le bouton "Réfléchis à ta réponse" affichait les
+       propositions juste en dessous au lieu de les cacher tant qu'on n'a pas
+       cliqué (cf. wireRevealGate). !important au lieu d'une règle par
+       élément affecté : plus sûr contre un futur cas similaire. */
+    [hidden] {
+      display: none !important;
+    }
     /* Même bleu-gris foncé que le bandeau des bulles sur l'accueil (#243038).
        Posé à la fois sur html et body : html a déjà ce fond par défaut (cf.
        style.css ligne ~14068), mais sans hauteur de body qui couvre tout le
@@ -746,21 +758,33 @@
       flex: 0 0 auto;
       color: #516776;
     }
-    /* Menu de choix ouvert au clic sur le nom d'un apprentissage (cf.
-       openMesQcmActionMenu) : "Consulter la fiche" ou "Faire/refaire le
-       QCM" — position:fixed direct sur <body> (même contrainte que
-       .qcm-fiche-fade-hint plus bas : un enfant absolute d'un ancêtre
-       transformé/scrollable dérive sur iOS Safari), repositionné sous le
-       bouton par JS. */
-    .qcm-mesqcm-action-menu {
-      position: fixed;
-      z-index: 1002;
-      min-width: 220px;
-      padding: 6px;
-      border-radius: 12px;
-      background: #ffffff;
-      border: 1px solid #d1d5db;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+    /* Fenêtre de choix ouverte au clic sur le nom d'un apprentissage (cf.
+       openMesQcmActionMenu) : "Consulter la fiche", "Faire/refaire le QCM"
+       ou "Supprimer". Une vraie fenêtre modale centrée (.qcm-fiche-overlay/
+       .qcm-fiche-modal, même gabarit que la fiche elle-même) plutôt qu'un
+       petit menu ancré sous le bouton (demande du 13/08/2026 : "trop petit,
+       on dirait un menu") — .qcm-mesqcm-action-menu-item/-info ci-dessous
+       restent utilisées à l'intérieur de cette fenêtre. */
+    .qcm-mesqcm-action-modal-name {
+      margin: 0 0 12px;
+      font-size: 17px;
+      font-weight: 800;
+      color: #111827;
+    }
+    /* Taux d'ancrage (demande du 13/08/2026) : rappelé en tête de la fenêtre
+       de choix plutôt que seulement dans la colonne du tableau, désormais
+       cachée derrière ce popup pour Fiche/QCM/Supprimer. */
+    .qcm-mesqcm-action-menu-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 12px 10px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid #eef1f3;
+      font-size: 13px;
+      font-weight: 700;
+      color: #6b7280;
     }
     .qcm-mesqcm-action-menu-item {
       display: flex;
@@ -797,12 +821,6 @@
     .qcm-mesqcm-action-menu-item-danger:hover,
     .qcm-mesqcm-action-menu-item-danger:focus-visible {
       background: #fef2f2;
-    }
-    .qcm-mesqcm-action-menu-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1001;
-      background: transparent;
     }
     /* Retrait d'un apprentissage (cf. server.js POST
        /api/users/notion-quizzes/remove) — ne supprime que la ligne
@@ -1047,7 +1065,23 @@
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }
+    /* position:fixed (pas un simple élément du flux dans .qcm-fiche-head) :
+       la croix doit rester visible en haut à droite même en scrollant une
+       fiche longue (demande du 13/08/2026) — .qcm-fiche-overlay est le
+       conteneur qui scrolle (position:fixed + overflow-y:auto), un enfant du
+       flux normal défile avec le reste de la carte. Retiré du flux par
+       position:fixed, .qcm-fiche-head n'a donc plus qu'à afficher le libellé
+       de rubrique (justify-content:space-between sans second élément reste
+       sans effet visuel). Même principe que #debate-iframe-modal-close
+       ailleurs sur le site (déjà position:fixed avec succès) — contrairement
+       à .qcm-fiche-fade-hint plus haut, aucun souci connu ici : c'est
+       position:absolute spécifiquement qui ne reste pas épinglé sur iOS
+       Safari dans ce type de conteneur, pas position:fixed. */
     .qcm-fiche-close {
+      position: fixed;
+      top: max(20px, env(safe-area-inset-top));
+      right: 20px;
+      z-index: 1002;
       flex: 0 0 auto;
       width: 28px;
       height: 28px;
@@ -1057,6 +1091,7 @@
       color: #243038;
       font-size: 14px;
       cursor: pointer;
+      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.18);
     }
     .qcm-fiche-name {
       margin: 0 0 4px;
@@ -1605,8 +1640,21 @@
   // une question déjà répondue (answer truthy) : rien à deviner, juste à
   // relire le résultat.
   var QCM_REVEAL_GATE_TYPES = ['qcm', 'texte_a_trous', 'qcm_multi'];
-  function needsRevealGate(type, answer) {
-    return !answer && QCM_REVEAL_GATE_TYPES.indexOf(type) !== -1;
+  // Le format seul (qcm/texte_a_trous/qcm_multi) ne suffit pas à savoir si
+  // une question est répondable sans voir les propositions — ex. "Lequel de
+  // ces historiens n'a pas travaillé sur le Moyen Âge ?" est un "qcm" mais
+  // fait explicitement référence aux propositions elles-mêmes, impossible d'y
+  // répondre sans les voir (constaté le 13/08/2026). D'abord corrigé par un
+  // motif de texte détectant les tournures comparatives côté client : trop
+  // fragile (ne couvre que quelques tournures françaises précises). Remplacé
+  // par question.selfContained, un jugement explicite fait par l'IA
+  // elle-même pour CHAQUE question à la génération (cf. server.js
+  // buildQuestionFormatsPromptBlock) — absent (contenu généré avant ce
+  // champ) vaut false : pas de rustine de repli, juste pas de gate tant que
+  // le contenu n'a pas été régénéré avec ce champ.
+  function needsRevealGate(type, answer, question) {
+    if (answer || QCM_REVEAL_GATE_TYPES.indexOf(type) === -1) return false;
+    return question.selfContained === true;
   }
   function renderRevealGateHtml() {
     return '<button type="button" class="qcm-next-btn visible" id="qcm-reveal-btn">Réfléchis à ta réponse, puis affiche les propositions</button>';
@@ -1683,7 +1731,7 @@
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
     html += renderOriginBadge(question) + renderTypeBadge(type) + renderExcludeButtonHtml();
     html += '<p class="qcm-question">' + questionHtml + '</p>';
-    var gated = needsRevealGate(type, answer);
+    var gated = needsRevealGate(type, answer, question);
     if (gated) html += renderRevealGateHtml();
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
     html += '<button type="button" class="qcm-next-btn visible" id="qcm-choice-submit-btn" disabled' + (gated ? ' hidden' : '') + '>Valider ma réponse</button>';
@@ -1914,7 +1962,7 @@
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
     html += renderOriginBadge(question) + renderTypeBadge('qcm_multi') + renderExcludeButtonHtml();
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
-    var gated = needsRevealGate('qcm_multi', answer);
+    var gated = needsRevealGate('qcm_multi', answer, question);
     if (gated) html += renderRevealGateHtml();
     html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
@@ -2286,6 +2334,35 @@
     customSearchStatus.classList.toggle('is-error', !!isError);
   }
 
+  // Chrono affiché pendant la génération (demande du 13/08/2026) : la
+  // génération peut prendre "quelques secondes à quelques minutes" (niveau
+  // Expert énumérable) et le message statique précédent ne donnait aucun
+  // signe de vie pendant l'attente — le temps écoulé rassure que ça travaille
+  // toujours plutôt que de sembler figé.
+  var customSearchTimerId = null;
+  var customSearchTimerStartedAt = 0;
+  function formatCustomSearchElapsed(totalSeconds) {
+    var m = Math.floor(totalSeconds / 60);
+    var s = totalSeconds % 60;
+    return m > 0 ? (m + ':' + (s < 10 ? '0' : '') + s) : (s + 's');
+  }
+  function stopCustomSearchTimer() {
+    if (customSearchTimerId) {
+      clearInterval(customSearchTimerId);
+      customSearchTimerId = null;
+    }
+  }
+  function startCustomSearchTimer(baseText) {
+    stopCustomSearchTimer();
+    customSearchTimerStartedAt = Date.now();
+    var tick = function () {
+      var elapsed = Math.floor((Date.now() - customSearchTimerStartedAt) / 1000);
+      setCustomSearchStatus(baseText + ' (' + formatCustomSearchElapsed(elapsed) + ')', false);
+    };
+    tick();
+    customSearchTimerId = setInterval(tick, 1000);
+  }
+
   // Barre de recherche libre "Mes apprentissages" (cf. server.js POST
   // /api/users/notion-quizzes/custom) : contrairement au clic "Mémoriser"
   // sur Éclairages/Ce jour dans l'Histoire (optimiste, instantané), la fiche
@@ -2311,11 +2388,10 @@
     showNotionQuizLevelPicker(function (level) {
       customSearchBtn.disabled = true;
       customSearchInput.disabled = true;
-      setCustomSearchStatus(
+      startCustomSearchTimer(
         level === 'expert'
-          ? 'Génération en cours (quelques secondes, jusqu’à quelques minutes pour une liste à mémoriser en entier)…'
-          : 'Génération de la fiche en cours (quelques secondes)…',
-        false
+          ? 'Génération en cours, jusqu’à quelques minutes pour une liste à mémoriser en entier…'
+          : 'Génération de la fiche en cours…'
       );
 
       fetch('/api/users/notion-quizzes/custom', {
@@ -2325,6 +2401,7 @@
       })
         .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
         .then(function (result) {
+          stopCustomSearchTimer();
           customSearchBtn.disabled = false;
           customSearchInput.disabled = false;
           if (!result.data.ok) {
@@ -2336,6 +2413,7 @@
           loadSlot(result.data.slot, result.data.quizDate, result.data.label);
         })
         .catch(function () {
+          stopCustomSearchTimer();
           customSearchBtn.disabled = false;
           customSearchInput.disabled = false;
           setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
@@ -2819,61 +2897,67 @@
   }
 
   // Clic sur le nom d'un apprentissage dans le tableau "Mes apprentissages" :
-  // trois actions possibles (la suppression ajoutée le 12/08/2026, en plus
-  // du bouton corbeille déjà présent dans sa propre colonne), proposées via
-  // un petit menu ancré sous le bouton plutôt qu'une colonne "Fiche" séparée.
-  // Un seul menu ouvert à la fois (closeMesQcmActionMenu la ferme au préalable).
-  var mesQcmActionMenuEls = null;
-  function closeMesQcmActionMenu() {
-    if (!mesQcmActionMenuEls) return;
-    mesQcmActionMenuEls.menu.remove();
-    mesQcmActionMenuEls.backdrop.remove();
-    document.removeEventListener('keydown', mesQcmActionMenuEls.onKeydown, true);
-    window.removeEventListener('resize', mesQcmActionMenuEls.close, { passive: true });
-    mesQcmActionMenuEls = null;
+  // trois actions possibles (Fiche / QCM / Supprimer) plus le taux d'ancrage,
+  // dans une vraie fenêtre modale centrée (même gabarit que la fiche,
+  // .qcm-fiche-overlay/.qcm-fiche-modal) — pas un petit menu ancré sous le
+  // bouton (demande du 13/08/2026 : "trop petit, on dirait un menu"). Un seul
+  // popup ouvert à la fois (closeMesQcmActionModal le ferme au préalable).
+  var mesQcmActionModalEls = null;
+  function closeMesQcmActionModal() {
+    if (!mesQcmActionModalEls) return;
+    mesQcmActionModalEls.overlay.remove();
+    document.removeEventListener('keydown', mesQcmActionModalEls.onKeydown);
+    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    mesQcmActionModalEls = null;
   }
   function openMesQcmActionMenu(btn, q, quizzes) {
-    closeMesQcmActionMenu();
-    var backdrop = document.createElement('div');
-    backdrop.className = 'qcm-mesqcm-action-menu-backdrop';
-    var menu = document.createElement('div');
-    menu.className = 'qcm-mesqcm-action-menu';
-    menu.setAttribute('role', 'menu');
+    closeMesQcmActionModal();
+    var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
     var doLabel = q.realized ? 'Refaire le QCM' : 'Faire le QCM';
-    menu.innerHTML =
-      '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="fiche"><i class="fa-solid fa-file-lines"></i> Consulter la fiche</button>' +
-      '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="quiz"><i class="fa-solid fa-play"></i> ' + escapeHtml(doLabel) + '</button>' +
-      '<button type="button" class="qcm-mesqcm-action-menu-item qcm-mesqcm-action-menu-item-danger" data-action="delete"><i class="fa-solid fa-trash-can"></i> Supprimer</button>';
-    document.body.appendChild(backdrop);
-    document.body.appendChild(menu);
+    var progressPct = Math.max(0, Math.min(100, Number(q.progressPct) || 0));
+    var ancrageBadgeHtml = q.validated
+      ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
+      : '<span class="qcm-acquis-badge">' + progressPct + '%</span>';
 
-    var rect = btn.getBoundingClientRect();
-    var menuWidth = menu.offsetWidth;
-    var left = Math.min(rect.left, window.innerWidth - menuWidth - 12);
-    left = Math.max(12, left);
-    var top = rect.bottom + 6;
-    if (top + menu.offsetHeight > window.innerHeight - 12) top = Math.max(12, rect.top - menu.offsetHeight - 6);
-    menu.style.left = left + 'px';
-    menu.style.top = top + 'px';
+    var modalHtml =
+      '<div class="qcm-fiche-modal qcm-mesqcm-action-modal">' +
+        '<div class="qcm-fiche-head">' +
+          '<p class="qcm-fiche-rubric"><i class="fa-solid ' + meta.icon + '"></i> ' + escapeHtml(meta.label) + '</p>' +
+          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>' +
+        '<p class="qcm-mesqcm-action-modal-name">' + escapeHtml(q.label || meta.label) + '</p>' +
+        '<div class="qcm-mesqcm-action-menu-info"><span>Ancrage</span>' + ancrageBadgeHtml + '</div>' +
+        '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="fiche"><i class="fa-solid fa-file-lines"></i> Consulter la fiche</button>' +
+        '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="quiz"><i class="fa-solid fa-play"></i> ' + escapeHtml(doLabel) + '</button>' +
+        '<button type="button" class="qcm-mesqcm-action-menu-item qcm-mesqcm-action-menu-item-danger" data-action="delete"><i class="fa-solid fa-trash-can"></i> Supprimer</button>' +
+      '</div>';
 
-    function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionMenu(); }
-    backdrop.addEventListener('click', closeMesQcmActionMenu);
-    document.addEventListener('keydown', onKeydown, true);
-    window.addEventListener('resize', closeMesQcmActionMenu, { passive: true });
-    menu.querySelector('[data-action="fiche"]').addEventListener('click', function () {
-      closeMesQcmActionMenu();
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
+    document.body.appendChild(overlay);
+    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+    function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionModal(); }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) closeMesQcmActionModal();
+    });
+    document.addEventListener('keydown', onKeydown);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeMesQcmActionModal);
+    overlay.querySelector('[data-action="fiche"]').addEventListener('click', function () {
+      closeMesQcmActionModal();
       openMesQcmFiche(q);
     });
-    menu.querySelector('[data-action="quiz"]').addEventListener('click', function () {
-      closeMesQcmActionMenu();
+    overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
+      closeMesQcmActionModal();
       loadSlot(q.slot, q.quizDate, q.label);
     });
-    menu.querySelector('[data-action="delete"]').addEventListener('click', function () {
-      closeMesQcmActionMenu();
+    overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
+      closeMesQcmActionModal();
       removeMesQcmItem(q, quizzes, btn);
     });
 
-    mesQcmActionMenuEls = { menu: menu, backdrop: backdrop, onKeydown: onKeydown, close: closeMesQcmActionMenu };
+    mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown };
   }
 
   // Fiche d'un QCM de notion (cf. server.js GET /api/users/notion-quizzes/fiche) :

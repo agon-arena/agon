@@ -12265,6 +12265,12 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAl
     assignments.map((f, i) => (i + 1) + ". " + f).join(" · "),
     "Respecte cette suggestion. Exception : si le sujet retenu pour UNE question précise ne se prête vraiment pas au format suggéré (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée), utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet.",
     "",
+    "=== Répondable sans voir les propositions ? ===",
+    "Pour chaque question de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) : l'interface l'utilise pour proposer ou non de réfléchir à la réponse avant d'afficher les propositions — une décision qui dépend du CONTENU de la question, jamais de son seul type.",
+    "- true : la réponse existe indépendamment des propositions, un lecteur qui connaît le sujet peut la deviner seul avant de les voir (ex. \"Quel est l'historien qui a écrit « Le Fromage et les Vers » ?\").",
+    "- false : la question ne peut être comprise ou résolue qu'en comparant les propositions entre elles, ou y fait explicitement référence (ex. \"Lequel de ces historiens n'a pas travaillé sur le Moyen Âge ?\", \"Parmi ces éléments, lequel...\", toute question de type comparatif ou par élimination). Sois honnête et strict : en cas de doute réel, réponds false plutôt que true — mieux vaut afficher les propositions à tort que de bloquer une question à laquelle on ne peut objectivement pas répondre sans elles.",
+    "Aucun champ \"selfContained\" pour les autres types (vrai_faux, association, intrus, ordre) — la question n'est jamais concernée par ce choix.",
+    "",
     ...(includeAltVariant ? [
       "=== Variante alternative (obligatoire pour chaque question) ===",
       "En plus des champs normaux, ajoute pour chaque question un champ \"altVariant\" : une SECONDE façon de tester exactement le même fait/la même réponse que la question principale, mais dans un type DIFFÉRENT — ex. une question principale \"qcm\" peut avoir un altVariant \"vrai_faux\" ou \"texte_a_trous\" sur le même fait, et inversement. Cette variante est destinée à être reposée plus tard (répétition espacée), sous une forme différente de la première fois — jamais la même question mot pour mot.",
@@ -12272,7 +12278,7 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAl
       "Aucun champ \"" + sourceIdField + "\" à l'intérieur de \"altVariant\" (implicite, le même que la question principale).",
       ""
     ] : []),
-    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association|intrus|qcm_multi|ordre","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","${sourceIdField}":"id fourni"${includeAltVariant ? ',"altVariant":{"type":"qcm|vrai_faux|texte_a_trous","question":"...","options":[...],"correctIndex":0,"explanation":"..."}' : ""}}]}.`
+    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association|intrus|qcm_multi|ordre","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"${includeAltVariant ? ',"altVariant":{"type":"qcm|vrai_faux|texte_a_trous","question":"...","options":[...],"correctIndex":0,"explanation":"...","selfContained":true|false}' : ""}}]}.`
   ];
 }
 
@@ -12444,18 +12450,29 @@ function validateAltVariant(rawAltVariant, primaryType) {
   if (!ALT_VARIANT_ALLOWED_TYPES.has(rawAltVariant.type) || rawAltVariant.type === primaryType) return null;
   const core = validateQuestionItemCoreBase(rawAltVariant);
   if (!core || !ALT_VARIANT_ALLOWED_TYPES.has(core.type)) return null;
-  return core;
+  // selfContained propre à cette variante (cf. validateQuestionItemCore) :
+  // sa formulation peut être répondable sans les propositions même si la
+  // question principale ne l'est pas, ou inversement — jamais hérité.
+  return { ...core, selfContained: rawAltVariant?.selfContained === true };
 }
 
 // Point d'entrée public (inchangé pour tous les appelants existants) —
-// n'ajoute que la validation/attache de altVariant par-dessus la logique de
-// base, jamais nécessaire ni présente pour les prompts qui ne le demandent
-// pas (cf. includeAltVariant côté buildQuestionFormatsPromptBlock).
+// n'ajoute que la validation/attache de altVariant et selfContained par-dessus
+// la logique de base. `selfContained` (demande du 13/08/2026, remplace un
+// filtrage par expression régulière côté client jugé trop fragile) : décidé
+// par l'IA elle-même à la génération, question par question — le format seul
+// (qcm/texte_a_trous/qcm_multi) ne suffit pas à savoir si elle est répondable
+// sans voir les propositions (ex. "Lequel de ces historiens..." est un
+// "qcm" mais ne l'est pas). Absent ou faux par défaut (jamais présent pour
+// les prompts qui ne le demandent pas, cf. buildQuestionFormatsPromptBlock) :
+// choix volontairement sûr, un contenu plus ancien sans ce champ ne propose
+// simplement plus l'écran "réfléchis avant de voir les propositions" plutôt
+// que de deviner via un motif de texte.
 function validateQuestionItemCore(item) {
   const core = validateQuestionItemCoreBase(item);
   if (!core) return null;
   const altVariant = validateAltVariant(item?.altVariant, core.type);
-  return altVariant ? { ...core, altVariant } : core;
+  return { ...core, selfContained: item?.selfContained === true, ...(altVariant ? { altVariant } : {}) };
 }
 
 // ── QCM "Ce jour dans l'Histoire" et "Parallèle historique" ────────────────
@@ -14805,8 +14822,11 @@ function stripQuestionForClient(q) {
   }
   // qcm/vrai_faux/texte_a_trous/intrus/qcm_multi partagent tous "options" —
   // correctIndex/correctIndexes ne sont jamais inclus ici, seulement révélés
-  // après réponse (cf. POST /answer et GET /results).
-  return { id: q.id, type, question: q.question, options: q.options, ...originFields };
+  // après réponse (cf. POST /answer et GET /results). selfContained (cf.
+  // validateQuestionItemCore) sert au client à décider d'afficher ou non
+  // l'écran "réfléchis avant de voir les propositions" — transmis même pour
+  // les types qui l'ignorent (vrai_faux/intrus), sans effet côté client.
+  return { id: q.id, type, question: q.question, options: q.options, selfContained: q.selfContained === true, ...originFields };
 }
 
 // Un QCM de notion vit sous sa date de création (cf. buildNotionQuestions),
