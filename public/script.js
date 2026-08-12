@@ -35141,6 +35141,13 @@ function bindAgonMobileViewportBottomFillSync() {
   window.addEventListener("pageshow", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
   window.addEventListener("load", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
   document.addEventListener("visibilitychange", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  // Repli du bandeau de la barre Safari (URL/onglets) déclenché par le scroll de la page
+  // elle-même (pas un zoom/pan) : ni "resize" ni visualViewport "resize"/"scroll" ne se
+  // déclenchent de façon fiable pendant ce scroll sur iOS Safari (constaté le 12/08/2026, le
+  // bandeau blanc du bas restait à l'ancienne position après que la barre a disparu au
+  // scroll) — un listener sur le scroll de la page comble ce trou, sans nouveau calcul
+  // (réutilise le même throttle rAF que les autres déclencheurs).
+  window.addEventListener("scroll", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
 
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });

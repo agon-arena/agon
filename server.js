@@ -12424,26 +12424,37 @@ const DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC = 4;
 const DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC = 5;
 
 // Niveau d'approfondissement choisi par l'utilisateur avant génération d'un
-// QCM de notion de débat ou de sujet libre (demande du 12/08/2026) — décide
-// à la fois du nombre de questions visé et de leur exigence. `instruction`
+// QCM de notion de débat ou de sujet libre (demande du 12/08/2026, affinée le
+// 12/08/2026 : les questions ne doivent porter que sur ce qui mérite vraiment
+// d'être su, et un niveau plus élevé doit diversifier les angles couverts —
+// pas seulement empiler plus de questions sur le même angle). `instruction`
 // est injectée dans le prompt IA (cf. buildCultureGeneraleQuizPrompt/
-// buildCustomTopicPrompt) pour que la difficulté suive vraiment le niveau,
-// pas seulement le nombre de questions.
+// buildLeveledFicheAndQuizPrompt) pour que la difficulté et la diversité
+// suivent vraiment le niveau. `sectionsRange`/`maxSections`/`lengthHint`
+// dimensionnent la fiche associée (elle doit contenir tous les faits
+// nécessaires pour répondre aux questions, cf. buildLeveledFicheAndQuizPrompt)
+// : plus le niveau est avancé, plus elle peut être longue.
 const NOTION_QUIZ_LEVELS = {
   elementaire: {
     label: "Élémentaire",
     target: 5, max: 6, min: 3,
-    instruction: "Niveau élémentaire : questions simples et accessibles, portant sur les notions de base uniquement, formulées avec un vocabulaire courant."
+    instruction: "Niveau élémentaire : ne retiens que les quelques faits vraiment essentiels du sujet — questions simples et directement accessibles, vocabulaire courant, pour poser les bases sans détail secondaire.",
+    sectionsRange: "1 à 2", maxSections: 2, sectionTextLimit: 600,
+    lengthHint: "reste très brève, l'essentiel condensé en quelques phrases par bloc."
   },
   avance: {
     label: "Avancé",
     target: 10, max: 12, min: 8,
-    instruction: "Niveau avancé : questions de difficulté intermédiaire, incluant quelques détails plus précis que l'essentiel, sans verser dans le point de détail obscur."
+    instruction: "Niveau avancé : couvre l'essentiel du sujet sous plusieurs angles différents (contexte, mécanisme, exemples ou chiffres clés, conséquences) pour vérifier une compréhension solide — jamais plusieurs questions qui reformulent le même angle.",
+    sectionsRange: "2 à 4", maxSections: 4, sectionTextLimit: 1000,
+    lengthHint: "peut développer chaque bloc en quelques phrases pour donner du contexte et de la nuance."
   },
   expert: {
     label: "Expert",
     target: 20, max: 22, min: 15,
-    instruction: "Niveau expert : questions exigeantes et pointues, couvrant les détails précis du texte, avec un vocabulaire technique si le sujet s'y prête, pour tester une compréhension fine du sujet."
+    instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet (origine, mécanismes précis, controverses ou nuances, chiffres et exemples précis, conséquences, comparaisons) pour vérifier une maîtrise fine et complète — chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée.",
+    sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
+    lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
   }
 };
 // Comportement historique (clic "Mémoriser" sur Éclairages / Ce jour dans
@@ -12456,8 +12467,29 @@ const NOTION_QUIZ_LEGACY_LEVEL_CONFIG = {
   target: DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC,
   max: DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC,
   min: DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE,
-  instruction: null
+  instruction: null,
+  sectionsRange: "1 à 3", maxSections: 3, sectionTextLimit: 1200,
+  lengthHint: "couvre l'essentiel à retenir sur ce sujet."
 };
+
+// Sujet libre "énumérable" en niveau Expert (demande du 12/08/2026 : capitales
+// du monde, verbes irréguliers, vocabulaire d'une langue... — une vraie liste
+// finie d'éléments à mémoriser un par un, où le plafond expert normal
+// (NOTION_QUIZ_LEVELS.expert.max) est trop restrictif). Détecté par
+// scopeCustomTopic ; si détecté, la fiche liste directement les éléments
+// (jamais reformulés par l'IA) et le quiz est généré par lots successifs
+// (un seul appel IA ne tient pas de façon fiable au-delà d'une vingtaine de
+// questions) plutôt que par le flux standard buildLeveledFicheAndQuizPrompt.
+const NOTION_QUIZ_ENUMERABLE_MAX_ITEMS = 200;
+const NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE = 20;
+const NOTION_QUIZ_ENUMERABLE_MIN_VALID = 10;
+// Plafond dur du nombre de lots d'énumération (fetchEnumerableItems) — borne
+// le coût en appels IA même sur un sujet mal classé "bounded" : au-delà, on
+// s'arrête avec ce qu'on a plutôt que de continuer indéfiniment (demande du
+// 12/08/2026 : le vrai garde-fou de coût reste le tri "bounded"/"unbounded"
+// à la source, cf. buildTopicScopePrompt, mais ce plafond protège aussi
+// contre une mauvaise classification).
+const NOTION_QUIZ_ENUMERABLE_MAX_ROUNDS = Math.ceil(NOTION_QUIZ_ENUMERABLE_MAX_ITEMS / NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) + 3;
 
 function resolveNotionQuizLevel(rawLevel) {
   const level = String(rawLevel || "").trim();
@@ -12660,6 +12692,7 @@ function buildCultureGeneraleQuizPrompt(items, quotaByItemId, levelInstruction) 
     `Tu écris un QCM de culture générale en français à partir des éléments ci-dessous — des événements "Ce jour dans l'Histoire" et des éclairages (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal, une citation d'auteur, une œuvre d'art ou un mot latin).`,
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien.",
+    "- Ne retiens que les faits qui méritent vraiment d'être sus et retenus sur le sujet — l'essentiel structurant — jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet.",
     "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
     "- Pour un élément \"mot latin du jour\" dont la provenance indiquée est \"traduction composée pour l'occasion\" : ne le présente JAMAIS comme une expression latine ancienne, un proverbe ou une citation historique — les questions ne peuvent porter que sur sa grammaire (cas, déclinaison, conjugaison, sens des mots), jamais sur une prétendue origine ou un prétendu auteur.",
     "- Pour un élément \"Ce jour dans l'Histoire\", les questions portent sur les faits de l'événement lui-même — pas de détails insignifiants (dates exactes au jour près, chiffres secondaires).",
@@ -12719,17 +12752,144 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
 // formatCultureGeneraleItemForPrompt) ; `sourceId` est son identifiant
 // stable (current_topic_id pour un Éclairage, id pour un événement
 // historique), repris tel quel comme sourceDebateId des questions générées.
+// Rédige en un seul appel IA la fiche de révision ET le quiz d'un sujet
+// désigné par son seul nom — sujet libre tapé par un visiteur, ou notion déjà
+// extraite d'un débat (demande du 12/08/2026 : la fiche doit contenir tous
+// les faits nécessaires pour répondre aux questions, et sa longueur doit
+// suivre le niveau, cf. NOTION_QUIZ_LEVELS). Un seul appel garantit que les
+// questions restent fondées sur les mêmes faits que la fiche affichée
+// (jamais deux appels séparés qui pourraient diverger sur le contenu).
+// `contextHint` donne un point de départ factuel (ex. le débat d'origine
+// d'une notion) sans borner le sujet à ce seul contexte : la fiche reste une
+// présentation autonome et complète du sujet lui-même. `requireValidation`
+// est désactivé pour une notion de débat (déjà vérifiée réelle et sérieuse
+// à l'extraction, cf. buildDebateTopicNotionsPrompt) — inutile d'exposer ce
+// deuxième point de rejet possible pour un sujet déjà fiable.
+function buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, requireValidation) {
+  const { target, instruction, sectionsRange, lengthHint } = levelConfig;
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target).slice(0, -1);
+  const lines = [`Tu es un rédacteur pédagogique francophone. Un visiteur veut mémoriser ce sujet : "${subject}".`];
+  if (contextHint) lines.push(`Contexte d'origine (pour t'aider à cerner le sujet, mais la fiche doit rester une présentation autonome et complète du sujet lui-même, pas un résumé de ce contexte) : ${contextHint}`);
+  lines.push("");
+  if (requireValidation) {
+    lines.push("Étape 1 : vérifie que ce sujet désigne bien un sujet de connaissance réel et sérieux (fait historique, scientifique, culturel, géographique, technique, etc.) sur lequel on peut écrire une fiche factuelle vérifiable. Refuse (valid:false) s'il est vide, absurde, injurieux, dangereux, illégal, à caractère sexuel, ou trop vague/générique pour donner une fiche précise (ex. \"tout\", \"la vie\").");
+    lines.push("Si le sujet n'est pas valide, réponds uniquement : {\"valid\":false,\"reason\":\"phrase courte en français expliquant pourquoi, destinée à être affichée à l'utilisateur\"}");
+    lines.push("");
+    lines.push("Étape 2 : si le sujet est valide, rédige :");
+  } else {
+    lines.push("Rédige :");
+  }
+  lines.push("1. Une fiche de mémorisation synthétique et strictement factuelle en français (esprit fiche de révision : dense, claire, sans blabla, aucune approximation présentée comme un fait établi, aucune invention) — elle doit contenir tous les faits nécessaires pour répondre seule à chacune des questions du quiz ci-dessous : chaque réponse doit être vérifiable en la relisant.");
+  lines.push(`2. Un quiz de ${target} questions permettant de vérifier la compréhension de cette fiche — chaque question et sa réponse doivent être intégralement fondées sur le contenu de la fiche que tu rédiges, jamais sur un fait absent de cette fiche.`);
+  lines.push("3. Ne retiens, pour la fiche comme pour les questions, que les faits qui méritent vraiment d'être sus et retenus sur ce sujet — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet.");
+  if (instruction) lines.push(`4. ${instruction}`);
+  lines.push("");
+  lines.push("Champs de la fiche :");
+  lines.push("- \"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Guerre de Cent Ans\", \"Photosynthèse\") — reformule si la saisie de départ est une question ou une phrase (ex. \"c'est quoi la photosynthèse\" → \"Photosynthèse\"), jamais recopiée telle quelle dans ce cas.");
+  lines.push("- \"meta\" : une ligne courte de repères (dates, lieu, auteur...) si pertinent, sinon null.");
+  lines.push(`- "sections" : ${sectionsRange} blocs {"label": string ou null, "text": string} — la fiche ${lengthHint}`);
+  lines.push("");
+  lines.push(...formatBlock);
+  lines.push("");
+  lines.push(`Pour chaque question, le champ "sourceId" doit valoir exactement la chaîne : "${id}".`);
+  lines.push("");
+  if (requireValidation) {
+    lines.push("Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces deux formes exactement :");
+    lines.push("- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}");
+    lines.push("- Sujet accepté : {\"valid\":true,\"sourceName\":\"...\",\"meta\":\"...\"|null,\"sections\":[{\"label\":\"...\"|null,\"text\":\"...\"}],\"questions\":[{...}]}");
+  } else {
+    lines.push("Réponds uniquement en JSON strict, sans aucun texte autour, sous cette forme exactement : {\"sourceName\":\"...\",\"meta\":\"...\"|null,\"sections\":[{\"label\":\"...\"|null,\"text\":\"...\"}],\"questions\":[{...}]}");
+  }
+  return lines.join("\n");
+}
+
+// Parse et valide la réponse commune à buildLeveledFicheAndQuizPrompt (fiche
+// + questions) — factorisé entre buildNotionQuestions (notion de débat avec
+// niveau) et buildCustomTopicQuiz (sujet libre), seul le gabarit `id` de
+// question diffère entre les deux appelants.
+function parseLeveledFicheAndQuiz(parsed, fallbackName, id, levelConfig) {
+  const { max, min, maxSections, sectionTextLimit } = levelConfig;
+  const sourceName = capitalizeFirstLetter(String(parsed?.sourceName || fallbackName).trim()).slice(0, 120);
+  const sections = Array.isArray(parsed?.sections)
+    ? parsed.sections
+        .map((s) => ({ label: s?.label ? String(s.label).trim().slice(0, 80) : null, text: String(s?.text || "").trim().slice(0, sectionTextLimit) }))
+        .filter((s) => s.text)
+        .slice(0, maxSections)
+    : [];
+  if (!sourceName || !sections.length) return null;
+  const sourceDetail = { meta: parsed?.meta ? String(parsed.meta).trim().slice(0, 200) : null, sections, image: null };
+
+  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], max, max);
+  if (validated.length < min) return null;
+
+  return { sourceName, sourceDetail, validated };
+}
+
 async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
   const id = String(sourceId || "").trim();
   if (!id) return [];
   const item = { ...rawItem, type: sourceType, id, current_topic_id: id };
+  const levelConfig = resolveNotionQuizLevel(rawLevel);
+  const { level, target, instruction } = levelConfig;
 
+  // Notion de débat avec niveau choisi (toujours le cas depuis le
+  // 12/08/2026, cf. activateDebateNotion côté client) : fiche ET quiz
+  // réécrits en un seul appel IA, la fiche scalant avec le niveau — au lieu
+  // de recopier tel quel le court `notion_explanation` extrait une fois pour
+  // toutes à la génération des notions du débat (comportement d'avant le
+  // 12/08/2026, insuffisant pour servir de support de révision complet).
+  if (level) {
+    const subject = capitalizeFirstLetter(String(rawItem?.notion_name || "").trim()) || "cette notion";
+    const debateQuestion = String(rawItem?.current_topic_title || "").trim();
+    const seedExplanation = String(rawItem?.notion_explanation || "").trim();
+    const contextHint = [
+      debateQuestion ? `cette notion apparaît dans un débat d'actualité intitulé « ${debateQuestion} »` : null,
+      seedExplanation ? `point de départ : ${seedExplanation}` : null
+    ].filter(Boolean).join(" ; ") || null;
+
+    let parsed;
+    try {
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, false) }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" }
+      });
+      parsed = JSON.parse(content);
+    } catch (error) {
+      console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
+      return [];
+    }
+
+    const result = parseLeveledFicheAndQuiz(parsed, subject, id, levelConfig);
+    if (!result) {
+      console.warn(`[notion-quiz:${sourceType}:${id}] fiche ou QCM invalide.`);
+      return [];
+    }
+    const { sourceName, sourceDetail, validated } = result;
+    const sourceThemes = await classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail);
+
+    return validated.map((q, index) => ({
+      id: `notion:${sourceType}:${id}-${level}-q${index + 1}`,
+      ...q,
+      sourceType,
+      sourceScope: null,
+      sourceName,
+      sourceDetail,
+      sourceThemes,
+      level,
+      sourceDebateId: id
+    }));
+  }
+
+  // ── Comportement historique (clic "Mémoriser" sur Éclairages / Ce jour
+  // dans l'Histoire, cf. views/eclairages.html) : aucun choix de niveau,
+  // fiche déjà écrite en base (extractCultureGeneraleItemDetail) réutilisée
+  // telle quelle, seules les questions sont générées par IA. ──
   const sourceName = extractCultureGeneraleItemName(item);
   const sourceDetail = extractCultureGeneraleItemDetail(item);
   const sourceScope = sourceType === "histoire" ? (["france", "europe"].includes(item.category) ? item.category : "world") : null;
-  const { level, target, max, min, instruction } = resolveNotionQuizLevel(rawLevel);
 
   const quotaByItemId = new Map([[id, target]]);
   let parsed;
@@ -12754,26 +12914,21 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel) {
     return [];
   }
 
-  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], max, max);
-  if (validated.length < min) {
+  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], levelConfig.max, levelConfig.max);
+  if (validated.length < levelConfig.min) {
     console.warn(`[notion-quiz:${sourceType}:${id}] seulement ${validated.length} question(s) valide(s).`);
     return [];
   }
 
-  // Le niveau est ajouté à l'id de question (jamais à sourceDebateId, cf.
-  // NOTION_QUIZ_LEVELS) : deux niveaux de la même notion doivent produire des
-  // ids distincts (progression "Mes apprentissages" indépendante par niveau)
-  // sans jamais dédoubler la bulle "Ma mémoire" de cette notion, qui reste
-  // indexée sur sourceDebateId seul.
   return validated.map((q, index) => ({
-    id: `notion:${sourceType}:${id}${level ? `-${level}` : ""}-q${index + 1}`,
+    id: `notion:${sourceType}:${id}-q${index + 1}`,
     ...q,
     sourceType,
     sourceScope,
     sourceName,
     sourceDetail,
     sourceThemes,
-    level,
+    level: null,
     // Sans ce champ, POST /api/daily-quiz/answer n'appelle jamais
     // recordDailyQuizEclairageAcquisition pour ce QCM (elle exige
     // sourceDebateId, cf. son early-return) : une bonne réponse restait sans
@@ -12799,55 +12954,208 @@ function normalizeCustomTopicKey(topic) {
   return crypto.createHash("sha1").update(normalized).digest("hex").slice(0, 16);
 }
 
-// Réutilise le même bloc de règles de formats de question que les autres QCM
-// narratifs (cf. buildQuestionFormatsPromptBlock), moins sa dernière ligne
-// ("Réponds en JSON strict {"questions":[...]}") : ici la question et la
-// fiche sont demandées dans un même objet JSON plus large, avec son propre
-// gabarit de réponse écrit à la fin de ce prompt.
-function buildCustomTopicPrompt(topic, id, levelConfig) {
-  const { target, instruction } = levelConfig;
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target).slice(0, -1);
+// Détermine, avant toute génération, si un sujet libre en niveau Expert
+// désigne une vraie liste énumérable (cf. NOTION_QUIZ_ENUMERABLE_MAX_ITEMS).
+// Ne demande PAS la liste elle-même ici (voir fetchEnumerableItems) : un
+// essai réel a montré qu'un unique appel réclamant jusqu'à 200 éléments d'un
+// coup (ex. verbes irréguliers anglais) se fait régulièrement tronquer en
+// cours de génération par le filtre de contenu d'OpenAI (finish_reason:
+// "content_filter", déclenché sur un mot totalement anodin comme "shoot"
+// dans une liste de verbes) — la réponse devient alors du JSON invalide.
+// Un échec de cet appel (ou une réponse mal formée) n'est jamais bloquant :
+// il retombe silencieusement sur le flux standard (enumerable:false), jamais
+// sur une erreur affichée à l'utilisateur pour ce seul appel de repérage.
+function buildTopicScopePrompt(topic) {
   return [
-    `Tu es un rédacteur pédagogique francophone. Un visiteur veut mémoriser ce sujet, tapé librement dans une barre de recherche : "${topic}".`,
+    `Un visiteur veut mémoriser ce sujet, tapé librement dans une barre de recherche : "${topic}".`,
     "",
     "Étape 1 : vérifie que ce sujet désigne bien un sujet de connaissance réel et sérieux (fait historique, scientifique, culturel, géographique, technique, etc.) sur lequel on peut écrire une fiche factuelle vérifiable. Refuse (valid:false) s'il est vide, absurde, injurieux, dangereux, illégal, à caractère sexuel, ou trop vague/générique pour donner une fiche précise (ex. \"tout\", \"la vie\").",
     "Si le sujet n'est pas valide, réponds uniquement : {\"valid\":false,\"reason\":\"phrase courte en français expliquant pourquoi, destinée à être affichée à l'utilisateur\"}",
     "",
-    "Étape 2 : si le sujet est valide, rédige :",
-    "1. Une fiche de mémorisation synthétique et strictement factuelle en français (esprit fiche de révision : dense, claire, sans blabla, aucune approximation présentée comme un fait établi, aucune invention).",
-    "2. Un quiz permettant de vérifier la compréhension de cette fiche — chaque question et sa réponse doivent être intégralement fondées sur le contenu de la fiche que tu rédiges, jamais sur un fait absent de cette fiche.",
-    ...(instruction ? [`3. ${instruction}`] : []),
+    "Étape 2 : détermine si ce sujet correspond à une VÉRITABLE liste finie et énumérable d'éléments distincts à mémoriser un par un (ex. les capitales du monde, les verbes irréguliers anglais, du vocabulaire dans une langue étrangère, les éléments chimiques, les présidents d'un pays, les départements français, les drapeaux...) — PAS un sujet narratif, conceptuel ou événementiel (ex. la Révolution française, la photosynthèse, un mécanisme, une notion, un événement historique précis), même s'il comporte de nombreuses dates ou de nombreux faits.",
+    "\"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Capitales du monde\", \"Verbes irréguliers anglais\") — reformule si la saisie de départ est une question ou une phrase, jamais recopiée telle quelle dans ce cas.",
     "",
-    "Champs de la fiche :",
-    "- \"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Guerre de Cent Ans\", \"Photosynthèse\") — reformule si la saisie de l'utilisateur est une question ou une phrase (ex. \"c'est quoi la photosynthèse\" → \"Photosynthèse\"), jamais recopiée telle quelle dans ce cas.",
-    "- \"meta\" : une ligne courte de repères (dates, lieu, auteur...) si pertinent, sinon null.",
-    "- \"sections\" : 1 à 3 blocs {\"label\": string ou null, \"text\": string} couvrant l'essentiel à retenir sur ce sujet.",
-    "",
-    ...formatBlock,
-    "",
-    `Pour chaque question, le champ "sourceId" doit valoir exactement la chaîne : "${id}".`,
-    "",
-    "Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces deux formes exactement :",
+    "Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces formes exactement :",
     "- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}",
-    "- Sujet accepté : {\"valid\":true,\"sourceName\":\"...\",\"meta\":\"...\"|null,\"sections\":[{\"label\":\"...\"|null,\"text\":\"...\"}],\"questions\":[{...}]}"
+    "- Sujet accepté : {\"valid\":true,\"enumerable\":true|false,\"sourceName\":\"...\"}"
   ].join("\n");
 }
 
+async function scopeCustomTopic(apiKey, topic) {
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildTopicScopePrompt(topic) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.3,
+      responseFormat: { type: "json_object" }
+    });
+    const parsed = JSON.parse(content);
+    if (!parsed || parsed.valid === false) {
+      const reason = String(parsed?.reason || "").trim().slice(0, 300);
+      return { rejected: true, reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
+    }
+    const sourceName = capitalizeFirstLetter(String(parsed.sourceName || topic).trim()).slice(0, 120);
+    return { rejected: false, enumerable: !!parsed.enumerable, sourceName };
+  } catch (error) {
+    console.warn("[notion-quizzes:custom] repérage IA du sujet échoué, repli sur le flux standard :", error.message);
+    return { rejected: false, enumerable: false, sourceName: null };
+  }
+}
+
+// Récupère la liste réelle des éléments d'un sujet énumérable, lot par lot
+// (jamais en un seul appel géant, cf. buildTopicScopePrompt) : chaque lot
+// demande les prochains éléments encore non couverts, jusqu'à
+// NOTION_QUIZ_ENUMERABLE_MAX_ITEMS ou jusqu'à ce que l'IA indique ne plus
+// avoir d'élément distinct à ajouter ("exhausted":true). Un lot en échec ne
+// bloque pas les suivants (le lot suivant redemande simplement "la suite").
+function buildEnumerableItemsChunkPrompt(subject, alreadyCovered, count) {
+  const lines = [`Sujet : "${subject}" — une vraie liste finie d'éléments à mémoriser un par un (ex. capitales, verbes irréguliers, vocabulaire d'une langue...).`];
+  if (alreadyCovered.length) {
+    lines.push("Éléments déjà couverts dans les lots précédents (ne les reprends JAMAIS) :");
+    lines.push(alreadyCovered.map((it) => `- ${it}`).join("\n"));
+  } else {
+    lines.push("Aucun élément couvert pour l'instant : c'est le premier lot.");
+  }
+  lines.push("");
+  lines.push(`Donne ${count} éléments NOUVEAUX et DISTINCTS de cette liste (jamais déjà couverts ci-dessus), chacun sous une forme courte et autonome qui donne à la fois l'élément ET sa réponse (ex. "France – Paris", "go – went – gone", "la mela – la pomme").`);
+  lines.push("Si le sujet ne compte plus assez d'éléments réellement distincts et non déjà couverts pour ce lot, donne-en le maximum possible sans jamais répéter ou inventer, et indique \"exhausted\":true.");
+  lines.push("");
+  lines.push("Réponds uniquement en JSON strict, sous la forme {\"exhausted\":false,\"items\":[\"...\",\"...\"]}.");
+  return lines.join("\n");
+}
+
+async function fetchEnumerableItems(apiKey, subject) {
+  const items = [];
+  const seen = new Set();
+  for (let round = 0; round < NOTION_QUIZ_ENUMERABLE_MAX_ROUNDS && items.length < NOTION_QUIZ_ENUMERABLE_MAX_ITEMS; round++) {
+    const askCount = Math.min(NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE, NOTION_QUIZ_ENUMERABLE_MAX_ITEMS - items.length);
+    try {
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: buildEnumerableItemsChunkPrompt(subject, items, askCount) }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" }
+      });
+      const parsed = JSON.parse(content);
+      const newItems = Array.isArray(parsed?.items) ? parsed.items.map((it) => String(it || "").trim()).filter(Boolean) : [];
+      let addedAny = false;
+      for (const it of newItems) {
+        const key = it.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push(it);
+        addedAny = true;
+        if (items.length >= NOTION_QUIZ_ENUMERABLE_MAX_ITEMS) break;
+      }
+      if (parsed?.exhausted || !addedAny) break;
+    } catch (error) {
+      console.warn(`[notion-quizzes:custom] énumération lot ${round + 1} échouée, on tente la suite :`, error.message);
+    }
+  }
+  return items;
+}
+
+// Fiche d'un sujet énumérable : construite directement à partir de la liste
+// réelle d'éléments plutôt que reformulée par l'IA — garantit qu'elle
+// contient exactement les mêmes faits que les questions générées, sans
+// risque de divergence ni d'invention (demande du 12/08/2026 : la fiche doit
+// contenir les réponses).
+function buildEnumerableFicheSections(items) {
+  const chunkSize = 25;
+  const sections = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    const chunk = items.slice(i, i + chunkSize);
+    sections.push({ label: `Éléments ${i + 1} à ${Math.min(i + chunkSize, items.length)}`, text: chunk.join(" · ") });
+  }
+  return sections;
+}
+
+function buildEnumerableQuizChunkPrompt(subject, itemsChunk, id) {
+  const count = itemsChunk.length;
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count).slice(0, -1);
+  return [
+    `Tu écris un quiz de mémorisation en français sur : "${subject}".`,
+    "Éléments à couvrir dans ce lot (base-toi UNIQUEMENT sur ceux-ci, ne les modifie pas, n'en invente aucun autre) :",
+    itemsChunk.map((it) => `- ${it}`).join("\n"),
+    "",
+    `Génère exactement ${count} question(s), une par élément ci-dessus (dans l'ordre), permettant de vérifier que cet élément précis est bien mémorisé (ex. donner un pays et demander sa capitale, donner l'infinitif d'un verbe irrégulier et demander son prétérit et son participe passé, donner un mot dans la langue cible et demander sa traduction, ou l'inverse) — jamais une question sur un élément hors de cette liste.`,
+    ...formatBlock,
+    "",
+    `Pour chaque question, le champ "sourceId" doit valoir exactement la chaîne : "${id}".`,
+    "Réponds uniquement en JSON strict, sous la forme {\"questions\":[{...}]}."
+  ].join("\n");
+}
+
+// Lots successifs plutôt qu'un seul appel : au-delà d'une vingtaine de
+// questions, un seul appel IA ne tient pas de façon fiable (troncature,
+// qualité qui se dégrade). Un lot en échec ne bloque jamais les autres — un
+// sujet à 200 éléments reste utile avec 180 questions plutôt que 0.
+async function generateEnumerableQuizQuestions(apiKey, subject, items, id) {
+  const all = [];
+  for (let start = 0; start < items.length; start += NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) {
+    const chunk = items.slice(start, start + NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE);
+    try {
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: buildEnumerableQuizChunkPrompt(subject, chunk, id) }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" }
+      });
+      const parsedChunk = JSON.parse(content);
+      all.push(...validateNarrativeQuizQuestions(parsedChunk?.questions, [id], chunk.length, chunk.length));
+    } catch (error) {
+      console.warn(`[notion-quizzes:custom:${id}] lot ${start + 1}-${start + chunk.length} échoué :`, error.message);
+    }
+  }
+  return all;
+}
+
+async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceName) {
+  const finalSourceName = sourceName || capitalizeFirstLetter(topic);
+  const sourceDetail = { meta: `${items.length} éléments à mémoriser`, sections: buildEnumerableFicheSections(items), image: null };
+
+  const validated = await generateEnumerableQuizQuestions(apiKey, finalSourceName, items, id);
+  if (validated.length < NOTION_QUIZ_ENUMERABLE_MIN_VALID) {
+    console.warn(`[notion-quizzes:custom:${id}] sujet énumérable : seulement ${validated.length} question(s) valide(s).`);
+    return { error: "failed" };
+  }
+  const sourceThemes = await classifyCultureGeneraleThemesWithAI("custom", finalSourceName, sourceDetail);
+
+  const questions = validated.map((q, index) => ({
+    id: `notion:custom:${id}-expert-q${index + 1}`,
+    ...q,
+    sourceType: "custom",
+    sourceScope: null,
+    sourceName: finalSourceName,
+    sourceDetail,
+    sourceThemes,
+    level: "expert",
+    sourceDebateId: id
+  }));
+  return { questions };
+}
+
 // Générée à la demande au clic sur "Générer" de la barre de recherche libre
-// (cf. POST /api/users/notion-quizzes/custom) — contrairement à
-// buildNotionQuestions, la fiche (sourceDetail) n'existe pas encore en base :
-// un seul appel IA produit à la fois la fiche et son quiz, pour garantir que
-// les questions restent fondées sur les mêmes faits que la fiche affichée
-// (jamais deux appels séparés qui pourraient diverger sur le contenu).
+// (cf. POST /api/users/notion-quizzes/custom, buildLeveledFicheAndQuizPrompt).
 async function buildCustomTopicQuiz(topic, id, rawLevel) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { error: "failed" };
   const levelConfig = resolveNotionQuizLevel(rawLevel);
-  const { level, max, min } = levelConfig;
+  const { level } = levelConfig;
+
+  // Niveau Expert : un sujet qui désigne une véritable liste énumérable
+  // (capitales, verbes irréguliers, vocabulaire...) mérite un quiz qui
+  // couvre chaque élément plutôt que d'être plafonné au palier expert
+  // habituel (demande du 12/08/2026) — détecté par un appel IA de repérage
+  // avant de partir sur la génération standard sinon.
+  if (level === "expert") {
+    const scope = await scopeCustomTopic(apiKey, topic);
+    if (scope.rejected) return { error: "rejected", reason: scope.reason };
+    if (scope.enumerable && scope.items.length > levelConfig.max) {
+      return buildEnumerableCustomTopicQuiz(apiKey, topic, id, scope.items, scope.sourceName);
+    }
+  }
 
   let parsed;
   try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCustomTopicPrompt(topic, id, levelConfig) }], {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildLeveledFicheAndQuizPrompt(topic, null, id, levelConfig, true) }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" }
@@ -12863,21 +13171,12 @@ async function buildCustomTopicQuiz(topic, id, rawLevel) {
     return { error: "rejected", reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
   }
 
-  const sourceName = capitalizeFirstLetter(String(parsed.sourceName || topic).trim()).slice(0, 120);
-  const sections = Array.isArray(parsed.sections)
-    ? parsed.sections
-        .map((s) => ({ label: s?.label ? String(s.label).trim().slice(0, 80) : null, text: String(s?.text || "").trim().slice(0, 1200) }))
-        .filter((s) => s.text)
-        .slice(0, 3)
-    : [];
-  if (!sourceName || !sections.length) return { error: "failed" };
-  const sourceDetail = { meta: parsed.meta ? String(parsed.meta).trim().slice(0, 200) : null, sections, image: null };
-
-  const validated = validateNarrativeQuizQuestions(parsed.questions, [id], max, max);
-  if (validated.length < min) {
-    console.warn(`[notion-quizzes:custom:${id}] seulement ${validated.length} question(s) valide(s).`);
+  const result = parseLeveledFicheAndQuiz(parsed, topic, id, levelConfig);
+  if (!result) {
+    console.warn(`[notion-quizzes:custom:${id}] fiche ou QCM invalide.`);
     return { error: "failed" };
   }
+  const { sourceName, sourceDetail, validated } = result;
 
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}${level ? `-${level}` : ""}-q${index + 1}`,
