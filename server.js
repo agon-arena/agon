@@ -12490,6 +12490,15 @@ const NOTION_QUIZ_ENUMERABLE_MIN_VALID = 10;
 // à la source, cf. buildTopicScopePrompt, mais ce plafond protège aussi
 // contre une mauvaise classification).
 const NOTION_QUIZ_ENUMERABLE_MAX_ROUNDS = Math.ceil(NOTION_QUIZ_ENUMERABLE_MAX_ITEMS / NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) + 3;
+// Second garde-fou de coût (demande du 12/08/2026), en amont du premier :
+// un sujet "bounded" dont l'IA estime elle-même le compte d'éléments
+// au-delà de ce seuil est bloqué dès le petit appel de repérage — avant de
+// dépenser les ~20 appels IA d'énumération puis de génération — plutôt que
+// d'attendre le plafond dur ci-dessus après coup. Fixé au-dessus des plus
+// gros exemples validés (ex. "Os du corps humain" ~206) pour ne pas les
+// bloquer, mais sous NOTION_QUIZ_ENUMERABLE_MAX_ITEMS pour agir avant que la
+// troncature silencieuse n'entre en jeu.
+const NOTION_QUIZ_ENUMERABLE_ESTIMATE_BLOCK_THRESHOLD = 250;
 
 function resolveNotionQuizLevel(rawLevel) {
   const level = String(rawLevel || "").trim();
@@ -12973,7 +12982,7 @@ function buildTopicScopePrompt(topic) {
     "Si le sujet n'est pas valide, réponds uniquement : {\"valid\":false,\"reason\":\"phrase courte en français expliquant pourquoi, destinée à être affichée à l'utilisateur\"}",
     "",
     "Étape 2 : classe ce sujet dans une de ces trois catégories (champ \"scope\") :",
-    `- "bounded" : une VÉRITABLE liste finie et raisonnablement bornée d'éléments distincts à mémoriser un par un, dont tu peux estimer un nombre total réaliste et non arbitraire (ex. les capitales du monde ~195, les pays de l'Union européenne ~27, les verbes irréguliers anglais courants, les éléments chimiques, les présidents d'un pays, les départements français, les drapeaux).`,
+    `- "bounded" : une VÉRITABLE liste finie et raisonnablement bornée d'éléments distincts à mémoriser un par un, dont tu peux estimer un nombre total réaliste et non arbitraire (ex. les capitales du monde ~195, les pays de l'Union européenne ~27, les verbes irréguliers anglais courants, les éléments chimiques, les présidents d'un pays, les départements français, les drapeaux). Ajoute alors un champ "estimatedCount" : ton estimation du nombre total réel d'éléments (un entier, ta meilleure estimation même approximative).`,
     `- "unbounded" : un sujet en apparence énumérable mais SANS liste naturellement complète ou bornée — il faudrait piocher arbitrairement dans un ensemble bien plus vaste que ce qu'on peut raisonnablement couvrir, sans qu'un sous-ensemble précis s'impose de lui-même (ex. "le vocabulaire italien" seul, "les mots anglais", "des expressions en espagnol"). Choisis "unbounded" plutôt que d'inventer une sélection arbitraire.`,
     `- "narrative" : un sujet narratif, conceptuel ou événementiel (ex. la Révolution française, la photosynthèse, un mécanisme, une notion, un événement historique précis), même s'il comporte de nombreuses dates ou de nombreux faits — pas une liste d'éléments à énumérer.`,
     "Si \"unbounded\", ajoute un champ \"reason\" : une phrase courte en français expliquant que le sujet est trop large et suggérant comment le préciser (ex. un thème, une catégorie, une sous-liste), destinée à être affichée telle quelle à l'utilisateur.",
@@ -12983,7 +12992,8 @@ function buildTopicScopePrompt(topic) {
     "Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces formes exactement :",
     "- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}",
     "- Sujet trop large : {\"valid\":true,\"scope\":\"unbounded\",\"reason\":\"...\",\"sourceName\":\"...\"}",
-    "- Autre sujet : {\"valid\":true,\"scope\":\"bounded\"|\"narrative\",\"sourceName\":\"...\"}"
+    "- Sujet borné : {\"valid\":true,\"scope\":\"bounded\",\"estimatedCount\":123,\"sourceName\":\"...\"}",
+    "- Sujet narratif : {\"valid\":true,\"scope\":\"narrative\",\"sourceName\":\"...\"}"
   ].join("\n");
 }
 
@@ -13003,6 +13013,20 @@ async function scopeCustomTopic(apiKey, topic) {
     if (parsed.scope === "unbounded") {
       const reason = String(parsed?.reason || "").trim().slice(0, 300);
       return { rejected: true, reason: reason || "Ce sujet est trop large pour être couvert de façon exhaustive — essaie de le préciser (un thème, une catégorie, une sous-liste)." };
+    }
+    // Second garde-fou de coût (cf. NOTION_QUIZ_ENUMERABLE_ESTIMATE_BLOCK_THRESHOLD) :
+    // un sujet borné mais dont l'IA elle-même estime le compte très au-delà
+    // du plafond technique est bloqué ici, avant de dépenser les ~20 appels
+    // d'énumération puis de génération pour un sujet qu'on sait déjà trop
+    // volumineux. Estimation absente ou non numérique : jamais bloquant (le
+    // plafond dur de fetchEnumerableItems/NOTION_QUIZ_ENUMERABLE_MAX_ITEMS
+    // protège de toute façon en aval).
+    const estimatedCount = Number(parsed.estimatedCount);
+    if (parsed.scope === "bounded" && Number.isFinite(estimatedCount) && estimatedCount > NOTION_QUIZ_ENUMERABLE_ESTIMATE_BLOCK_THRESHOLD) {
+      return {
+        rejected: true,
+        reason: `Ce sujet compte environ ${estimatedCount} éléments, trop pour une liste complète — essaie de le diviser en plusieurs sujets plus précis.`
+      };
     }
     return { rejected: false, enumerable: parsed.scope === "bounded", sourceName };
   } catch (error) {

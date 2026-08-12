@@ -1933,6 +1933,7 @@
       '<p class="qcm-final-score-hint">' + scoreHint + '</p>' +
       '<div class="qcm-final-actions">' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-review-btn">Revoir</button>' +
+      '<button type="button" class="qcm-next-btn visible" id="qcm-back-to-mesqcm-btn">Retour à mes apprentissages</button>' +
       '</div>';
 
     // Les réponses du jour sont verrouillées côté serveur (une seule par
@@ -1941,6 +1942,10 @@
     document.getElementById('qcm-review-btn').onclick = function () {
       currentIndex = 0;
       renderQuestion();
+    };
+    document.getElementById('qcm-back-to-mesqcm-btn').onclick = function () {
+      if (currentSlot) window.history.replaceState({}, '', window.location.pathname);
+      loadMesQcm();
     };
   }
 

@@ -35083,6 +35083,17 @@ function __memoireFrameDiagLog(outcome, data) {
   __scrollJumpDiagLog('memoire-frame:' + outcome, data);
 }
 
+// Un seul passage stable suffisait en théorie (sectionTop ne dépend pas de sa propre
+// min-height), mais mesuré en pratique le 12/08/2026 (diagnostic __memoireFrameDiagLog) : au
+// lancement standalone à froid, sectionTop oscille violemment pendant plusieurs secondes
+// (127 → 171 → 229 → 211 → 80 → négatif → 34 → 161 → 229…) en même temps que window.innerHeight
+// lui-même rapporte des hauteurs provisoires avant de se stabiliser (768 → 806 → 812, même
+// symptôme que initAgonDockAlignment plus haut). Appliquer CHAQUE mesure immédiatement posait
+// donc parfois une valeur transitoire fausse si l'utilisateur regardait avant que ça se calme.
+// Même principe que le polling de stabilisation plus haut (retour de Connaissances/Éclairages/
+// Ce jour dans l'histoire) : n'appliquer une mesure qu'une fois confirmée par 2 passages
+// consécutifs identiques, jamais la toute première lecture isolée.
+let __agonTrendsSectionTopPending = null;
 function syncAgonHomeTrendsSectionMinHeight() {
   const body = document.body;
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
@@ -35090,6 +35101,7 @@ function syncAgonHomeTrendsSectionMinHeight() {
   const section = document.getElementById('agon-tag-trends-section');
   if (!section) return;
   if (section.hidden) {
+    __agonTrendsSectionTopPending = null;
     __memoireFrameDiagLog('skip-hidden', { memoire: !!_memoireCloudMode });
     return;
   }
@@ -35101,7 +35113,13 @@ function syncAgonHomeTrendsSectionMinHeight() {
   // Rechercher" sur tous les téléphones, sans jamais accepter un scroll qui a fait défiler la
   // section hors du haut de l'écran.
   if (!Number.isFinite(sectionTop) || sectionTop < 0 || sectionTop > 400) {
+    __agonTrendsSectionTopPending = null;
     __memoireFrameDiagLog('skip-out-of-range', { sectionTop, memoire: !!_memoireCloudMode });
+    return;
+  }
+  if (__agonTrendsSectionTopPending !== sectionTop) {
+    __agonTrendsSectionTopPending = sectionTop;
+    __memoireFrameDiagLog('pending', { sectionTop, memoire: !!_memoireCloudMode });
     return;
   }
   document.documentElement.style.setProperty('--agon-home-trends-section-top', `${sectionTop}px`);
