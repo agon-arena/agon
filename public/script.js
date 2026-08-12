@@ -19688,6 +19688,13 @@ function setMemoireCloudMode(enable, skipSync = false) {
   // de hauteur (légende, switch gauche/droite) — celui-ci en était le seul absent.
   syncCloudSectionHeight();
   syncMemoireMobileBackButtonPosition();
+  // Remesure la min-height standalone (cf. syncAgonHomeTrendsSectionMinHeight) juste après
+  // l'activation réelle de "Ma mémoire" : les déclencheurs génériques (resize/scroll/timers,
+  // bindAgonMobileViewportBottomFillSync) peuvent tomber pendant une fenêtre où la section
+  // partagée est masquée par une tâche Actu concurrente (cf. garde-fou ajouté juste au-dessus
+  // dans updateIndexTagTrends) — sans ce point d'ancrage dédié, une mesure ratée pendant cette
+  // fenêtre ne se rattrapait qu'au hasard du prochain scroll/resize de l'utilisateur.
+  window.__agonSyncMobileBottomNavViewport?.();
 }
 
 // ── Filtre gauche/droite du nuage Bulles Actu (veille mixte) ──
@@ -21657,7 +21664,15 @@ function updateIndexTagTrends(items) {
   const requestedCloudModeToken = window._agonCloudModeToken || 0;
 
   if (!Array.isArray(items) || !items.length) {
-    if ((_agonCloudMode || _agonCloudSwitchLoading) && cloudContainer?.querySelector(".agon-tag-bubble")) {
+    // _memoireCloudMode : même garde-fou que plus bas dans cette fonction (cf. commentaire sur
+    // le guard après le fetch /cloud-bubbles) — "Ma mémoire" partage #agon-tag-trends-section/
+    // #agon-tag-trends-cloud avec Bulles Actu, et cette branche tournait SANS cette garde,
+    // masquant toute la section (contenu "Ma mémoire" y compris, plus aucune mesure de hauteur
+    // possible tant qu'elle reste hidden) dès que la liste de débats Actu passait par un état
+    // vide — même en tâche de fond, sans rapport avec le mode réellement affiché. Repéré le
+    // 12/08/2026 : cadre "Ma mémoire" standalone à la mauvaise taille de façon intermittente
+    // selon le timing de ce fetch Actu en arrière-plan.
+    if (_memoireCloudMode || ((_agonCloudMode || _agonCloudSwitchLoading) && cloudContainer?.querySelector(".agon-tag-bubble"))) {
       return;
     }
     window.AGON_TAG_TRENDS = [];

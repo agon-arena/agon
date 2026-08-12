@@ -12972,12 +12972,18 @@ function buildTopicScopePrompt(topic) {
     "Étape 1 : vérifie que ce sujet désigne bien un sujet de connaissance réel et sérieux (fait historique, scientifique, culturel, géographique, technique, etc.) sur lequel on peut écrire une fiche factuelle vérifiable. Refuse (valid:false) s'il est vide, absurde, injurieux, dangereux, illégal, à caractère sexuel, ou trop vague/générique pour donner une fiche précise (ex. \"tout\", \"la vie\").",
     "Si le sujet n'est pas valide, réponds uniquement : {\"valid\":false,\"reason\":\"phrase courte en français expliquant pourquoi, destinée à être affichée à l'utilisateur\"}",
     "",
-    "Étape 2 : détermine si ce sujet correspond à une VÉRITABLE liste finie et énumérable d'éléments distincts à mémoriser un par un (ex. les capitales du monde, les verbes irréguliers anglais, du vocabulaire dans une langue étrangère, les éléments chimiques, les présidents d'un pays, les départements français, les drapeaux...) — PAS un sujet narratif, conceptuel ou événementiel (ex. la Révolution française, la photosynthèse, un mécanisme, une notion, un événement historique précis), même s'il comporte de nombreuses dates ou de nombreux faits.",
+    "Étape 2 : classe ce sujet dans une de ces trois catégories (champ \"scope\") :",
+    `- "bounded" : une VÉRITABLE liste finie et raisonnablement bornée d'éléments distincts à mémoriser un par un, dont tu peux estimer un nombre total réaliste et non arbitraire (ex. les capitales du monde ~195, les pays de l'Union européenne ~27, les verbes irréguliers anglais courants, les éléments chimiques, les présidents d'un pays, les départements français, les drapeaux).`,
+    `- "unbounded" : un sujet en apparence énumérable mais SANS liste naturellement complète ou bornée — il faudrait piocher arbitrairement dans un ensemble bien plus vaste que ce qu'on peut raisonnablement couvrir, sans qu'un sous-ensemble précis s'impose de lui-même (ex. "le vocabulaire italien" seul, "les mots anglais", "des expressions en espagnol"). Choisis "unbounded" plutôt que d'inventer une sélection arbitraire.`,
+    `- "narrative" : un sujet narratif, conceptuel ou événementiel (ex. la Révolution française, la photosynthèse, un mécanisme, une notion, un événement historique précis), même s'il comporte de nombreuses dates ou de nombreux faits — pas une liste d'éléments à énumérer.`,
+    "Si \"unbounded\", ajoute un champ \"reason\" : une phrase courte en français expliquant que le sujet est trop large et suggérant comment le préciser (ex. un thème, une catégorie, une sous-liste), destinée à être affichée telle quelle à l'utilisateur.",
+    "",
     "\"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Capitales du monde\", \"Verbes irréguliers anglais\") — reformule si la saisie de départ est une question ou une phrase, jamais recopiée telle quelle dans ce cas.",
     "",
     "Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces formes exactement :",
     "- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}",
-    "- Sujet accepté : {\"valid\":true,\"enumerable\":true|false,\"sourceName\":\"...\"}"
+    "- Sujet trop large : {\"valid\":true,\"scope\":\"unbounded\",\"reason\":\"...\",\"sourceName\":\"...\"}",
+    "- Autre sujet : {\"valid\":true,\"scope\":\"bounded\"|\"narrative\",\"sourceName\":\"...\"}"
   ].join("\n");
 }
 
@@ -12994,7 +13000,11 @@ async function scopeCustomTopic(apiKey, topic) {
       return { rejected: true, reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
     }
     const sourceName = capitalizeFirstLetter(String(parsed.sourceName || topic).trim()).slice(0, 120);
-    return { rejected: false, enumerable: !!parsed.enumerable, sourceName };
+    if (parsed.scope === "unbounded") {
+      const reason = String(parsed?.reason || "").trim().slice(0, 300);
+      return { rejected: true, reason: reason || "Ce sujet est trop large pour être couvert de façon exhaustive — essaie de le préciser (un thème, une catégorie, une sous-liste)." };
+    }
+    return { rejected: false, enumerable: parsed.scope === "bounded", sourceName };
   } catch (error) {
     console.warn("[notion-quizzes:custom] repérage IA du sujet échoué, repli sur le flux standard :", error.message);
     return { rejected: false, enumerable: false, sourceName: null };
@@ -13148,8 +13158,11 @@ async function buildCustomTopicQuiz(topic, id, rawLevel) {
   if (level === "expert") {
     const scope = await scopeCustomTopic(apiKey, topic);
     if (scope.rejected) return { error: "rejected", reason: scope.reason };
-    if (scope.enumerable && scope.items.length > levelConfig.max) {
-      return buildEnumerableCustomTopicQuiz(apiKey, topic, id, scope.items, scope.sourceName);
+    if (scope.enumerable) {
+      const items = await fetchEnumerableItems(apiKey, scope.sourceName || topic);
+      if (items.length > levelConfig.max) {
+        return buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, scope.sourceName);
+      }
     }
   }
 

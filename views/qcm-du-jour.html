@@ -686,24 +686,53 @@
       flex: 0 0 auto;
       color: #516776;
     }
-    .qcm-mesqcm-fiche-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
+    /* Menu de choix ouvert au clic sur le nom d'un apprentissage (cf.
+       openMesQcmActionMenu) : "Consulter la fiche" ou "Faire/refaire le
+       QCM" — position:fixed direct sur <body> (même contrainte que
+       .qcm-fiche-fade-hint plus bas : un enfant absolute d'un ancêtre
+       transformé/scrollable dérive sur iOS Safari), repositionné sous le
+       bouton par JS. */
+    .qcm-mesqcm-action-menu {
+      position: fixed;
+      z-index: 1002;
+      min-width: 220px;
+      padding: 6px;
+      border-radius: 12px;
+      background: #ffffff;
       border: 1px solid #d1d5db;
-      border-radius: 999px;
-      background: #f9fafb;
-      color: #243038;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+    }
+    .qcm-mesqcm-action-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+      background: none;
       font: inherit;
-      font-size: 13px;
-      font-weight: 700;
-      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 600;
+      color: #111827;
+      text-align: left;
       cursor: pointer;
     }
-    .qcm-mesqcm-fiche-btn:hover {
-      background: #eef3f6;
-      border-color: #516776;
+    .qcm-mesqcm-action-menu-item:hover,
+    .qcm-mesqcm-action-menu-item:focus-visible {
+      background: #f3f4f6;
+    }
+    .qcm-mesqcm-action-menu-item i {
+      flex: 0 0 auto;
+      width: 18px;
+      text-align: center;
+      color: #516776;
+    }
+    .qcm-mesqcm-action-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1001;
+      background: transparent;
     }
     /* Retrait d'un apprentissage (cf. server.js POST
        /api/users/notion-quizzes/remove) — ne supprime que la ligne
@@ -2128,15 +2157,17 @@
       '</div>';
   }
 
-  // Un tableau (nom + progression + fiche) pour une liste de QCM déjà
-  // filtrée — `allQuizzes` sert uniquement à retrouver l'index d'origine
+  // Un tableau (nom + progression) pour une liste de QCM déjà filtrée —
+  // `allQuizzes` sert uniquement à retrouver l'index d'origine
   // (data-mesqcm-index), pour que le câblage des clics reste unique même
   // quand un même QCM apparaît dans plusieurs rubriques (cf. renderMesQcmList).
+  // Cliquer sur le nom ouvre directement la fiche (openMesQcmFiche) — plus de
+  // bouton "Fiche" dédié à côté (demande du 12/08/2026, redondant).
   function renderMesQcmTableHtml(list, allQuizzes) {
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
     html += '<table class="qcm-mesqcm-table">';
-    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th>Fiche</th><th></th></tr></thead><tbody>';
+    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th></tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
@@ -2153,7 +2184,6 @@
       html += '</button></td>';
       html += '<td>' + stateHtml + '</td>';
       html += '<td>' + badgeHtml + '</td>';
-      html += '<td><button type="button" class="qcm-mesqcm-fiche-btn" data-mesqcm-fiche-index="' + index + '"><i class="fa-solid fa-file-lines"></i> Fiche</button></td>';
       html += '<td><button type="button" class="qcm-mesqcm-delete-btn" data-mesqcm-delete-index="' + index + '" aria-label="Supprimer cet apprentissage" title="Supprimer"><i class="fa-solid fa-trash-can"></i></button></td>';
       html += '</tr>';
     });
@@ -2351,13 +2381,7 @@
     body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
-        loadSlot(q.slot, q.quizDate, q.label);
-      });
-    });
-    body.querySelectorAll('[data-mesqcm-fiche-index]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var q = quizzes[Number(btn.getAttribute('data-mesqcm-fiche-index'))];
-        openMesQcmFiche(q);
+        openMesQcmActionMenu(btn, q);
       });
     });
     body.querySelectorAll('[data-mesqcm-delete-index]').forEach(function (btn) {
@@ -2443,6 +2467,58 @@
     if (q.explanation) html += '<p class="qcm-fiche-corrige-explanation">' + escapeHtml(q.explanation) + '</p>';
     html += '</div>';
     return html;
+  }
+
+  // Clic sur le nom d'un apprentissage dans le tableau "Mes apprentissages" :
+  // deux actions possibles (demande du 12/08/2026), proposées via un petit
+  // menu ancré sous le bouton plutôt qu'une colonne "Fiche" séparée. Un seul
+  // menu ouvert à la fois (closeMesQcmActionMenu la ferme au préalable).
+  var mesQcmActionMenuEls = null;
+  function closeMesQcmActionMenu() {
+    if (!mesQcmActionMenuEls) return;
+    mesQcmActionMenuEls.menu.remove();
+    mesQcmActionMenuEls.backdrop.remove();
+    document.removeEventListener('keydown', mesQcmActionMenuEls.onKeydown, true);
+    window.removeEventListener('resize', mesQcmActionMenuEls.close, { passive: true });
+    mesQcmActionMenuEls = null;
+  }
+  function openMesQcmActionMenu(btn, q) {
+    closeMesQcmActionMenu();
+    var backdrop = document.createElement('div');
+    backdrop.className = 'qcm-mesqcm-action-menu-backdrop';
+    var menu = document.createElement('div');
+    menu.className = 'qcm-mesqcm-action-menu';
+    menu.setAttribute('role', 'menu');
+    var doLabel = q.realized ? 'Refaire le QCM' : 'Faire le QCM';
+    menu.innerHTML =
+      '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="fiche"><i class="fa-solid fa-file-lines"></i> Consulter la fiche</button>' +
+      '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="quiz"><i class="fa-solid fa-play"></i> ' + escapeHtml(doLabel) + '</button>';
+    document.body.appendChild(backdrop);
+    document.body.appendChild(menu);
+
+    var rect = btn.getBoundingClientRect();
+    var menuWidth = menu.offsetWidth;
+    var left = Math.min(rect.left, window.innerWidth - menuWidth - 12);
+    left = Math.max(12, left);
+    var top = rect.bottom + 6;
+    if (top + menu.offsetHeight > window.innerHeight - 12) top = Math.max(12, rect.top - menu.offsetHeight - 6);
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+
+    function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionMenu(); }
+    backdrop.addEventListener('click', closeMesQcmActionMenu);
+    document.addEventListener('keydown', onKeydown, true);
+    window.addEventListener('resize', closeMesQcmActionMenu, { passive: true });
+    menu.querySelector('[data-action="fiche"]').addEventListener('click', function () {
+      closeMesQcmActionMenu();
+      openMesQcmFiche(q);
+    });
+    menu.querySelector('[data-action="quiz"]').addEventListener('click', function () {
+      closeMesQcmActionMenu();
+      loadSlot(q.slot, q.quizDate, q.label);
+    });
+
+    mesQcmActionMenuEls = { menu: menu, backdrop: backdrop, onKeydown: onKeydown, close: closeMesQcmActionMenu };
   }
 
   // Fiche d'un QCM de notion (cf. server.js GET /api/users/notion-quizzes/fiche) :
