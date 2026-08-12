@@ -3146,7 +3146,14 @@ function markPageArrivalLoadingOverlayReady() {
 function initPageArrivalLoadingOverlay() {
   if (document.documentElement.dataset.pageArrivalLoadingInitialized === "true") return;
   document.documentElement.dataset.pageArrivalLoadingInitialized = "true";
-  pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/";
+  // "/apprentissage" a son propre fetch (Mes QCM), potentiellement plus lent
+  // qu'un simple chargement de page statique : comme /debate et "/", on
+  // attend le vrai signal de contenu prêt (cf. signalIframeReady dans
+  // qcm-du-jour.html, qui appelle markPageArrivalLoadingOverlayReady même en
+  // page autonome désormais) plutôt que le délai générique load+120ms, qui
+  // révélait un état intermédiaire ("Chargement de tes QCM…") avant le vrai
+  // rendu final (demande répétée du 12/08/2026).
+  pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/" && location.pathname !== "/apprentissage";
 
   const isNotificationsInIframe = window.self !== window.top && location.pathname === "/notifications";
   // Retour depuis Autres actus (ou reload interne à l'index) : window.__agonSkipStartupOnce
@@ -3180,7 +3187,7 @@ function initPageArrivalLoadingOverlay() {
   window.addEventListener("scroll", refreshBounds, { passive: true });
 
   const finish = (force = false) => {
-    if ((location.pathname === "/debate" || location.pathname === "/") && !pageArrivalLoadingOverlayReady && !force) {
+    if ((location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/apprentissage") && !pageArrivalLoadingOverlayReady && !force) {
       return;
     }
 
@@ -3207,7 +3214,7 @@ function initPageArrivalLoadingOverlay() {
 
   pageArrivalLoadingOverlayFallbackTimer = setTimeout(() => {
     finish(true);
-  }, location.pathname === "/debate" || location.pathname === "/" ? 5000 : 2200);
+  }, location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/apprentissage" ? 5000 : 2200);
 }
 
 function getDebateViewMode() {
@@ -21667,7 +21674,15 @@ function updateIndexTagTrends(items) {
     return;
   }
 
-  showBubbleCloudLoadingSpinner();
+  // Si "Ma mémoire"/Bulles Agôn a déjà pris le relais avant même ce premier chargement Actu
+  // (course possible dès l'arrivée sur l'accueil, cf. garde-fou identique juste plus bas une
+  // fois le fetch résolu), inutile de rallumer un sablier que ce mode a déjà retiré — sans
+  // cette garde, ce sablier recréé n'était jamais retiré par le bail-out ci-dessous (son seul
+  // job étant de ne PAS toucher au conteneur), restant bloqué à l'écran indéfiniment par-dessus
+  // le contenu du mode réellement actif (demande du 12/08/2026, "sablier qui tourne
+  // indéfiniment sur le message [Ma mémoire] vide", surtout visible en PWA standalone où ce
+  // fetch Actu, plus lent à froid, laisse plus de temps à la course de se produire).
+  if (!_memoireCloudMode && !_agonCloudMode) showBubbleCloudLoadingSpinner();
 
   Promise.all([indexTagTrendsModulePromise, indexTagTrendCloudModulePromise])
     .then(async ([module, cloudModule]) => {
@@ -21685,6 +21700,11 @@ function updateIndexTagTrends(items) {
       if (tagTrends.length) window.AGON_TAG_TRENDS = tagTrends;
       if (requestedCloudModeToken !== (window._agonCloudModeToken || 0) ||
           _agonCloudMode || _memoireCloudMode || _agonCloudSwitchLoading) {
+        // Le sablier a pu être affiché avant cette transition (cf. garde-fou plus haut, qui ne
+        // couvre que l'appel initial) : le retirer ici aussi, sinon il reste bloqué sur l'écran
+        // du mode qui a effectivement pris le relais (Ma mémoire/Bulles Agôn), qui ne le
+        // retirera jamais lui-même puisqu'il ne l'a pas créé.
+        if (_memoireCloudMode || _agonCloudMode) hideBubbleCloudLoadingSpinner();
         return;
       }
 
