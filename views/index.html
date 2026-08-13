@@ -430,6 +430,33 @@
       line.classList.add('is-playing');
     });
   });
+  // Bande blanche furtive en bas de l'écran au lancement standalone (revu le 13/08/2026) :
+  // se corrige TOUTE SEULE un instant après — donc pas la limitation de peinture WebKit
+  // définitive déjà rencontrée ailleurs (cf. mémoire projet), plutôt un calque fixed
+  // (position:fixed;inset:0) mis en page une première fois pendant qu'iOS rapporte encore une
+  // hauteur de viewport provisoire (ex. 768 au lieu de 812, cf. window.innerHeight — écart de
+  // ~44px qui correspond pile à la largeur de bande déjà mesurée par le passé), PUIS iOS
+  // corrige sa hauteur SANS toujours émettre de "resize" (même symptôme exact que
+  // initAgonDockAlignment dans script.js pour le dock flottant débat, déjà rencontré et
+  // corrigé pour ce même mécanisme) — le calque ne se remet donc pas en page tout seul tant
+  // que rien ne le lui redemande explicitement. Force un reflow du loader à quelques instants
+  // rapprochés (display toggle, synchrone via offsetHeight avant repeint : jamais de flash
+  // visible, inset:0 se contente de se recaler sur la valeur déjà à jour) plutôt que d'attendre
+  // qu'un événement resize hypothétique le déclenche.
+  var forceLoaderReflow = function () {
+    if (!loader.parentNode || loader.classList.contains('is-hiding')) return;
+    var prevDisplay = loader.style.display;
+    loader.style.display = 'none';
+    void loader.offsetHeight;
+    loader.style.display = prevDisplay;
+  };
+  [30, 80, 150, 300, 600, 1000].forEach(function (delay) {
+    setTimeout(forceLoaderReflow, delay);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', forceLoaderReflow, { passive: true });
+  }
+  window.addEventListener('resize', forceLoaderReflow, { passive: true });
 })();
 </script>
 <header class="topbar">
