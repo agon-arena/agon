@@ -93,6 +93,12 @@ html.thematic-scroll body {
      qui semble la faire tardivement dans ce contexte précis. */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
+  /* will-change (13/08/2026, amélioration du même correctif) : deuxième indice au moteur, en
+     plus de translateZ(0), pour que WebKit prépare le calque de composition dès la construction
+     du style plutôt qu'au premier repaint réellement demandé — combiné à la boucle de nudge
+     opacity par frame côté JS (cf. index.html), qui reste le filet de rattrapage si ce calque
+     est malgré tout composé en retard. */
+  will-change: opacity, transform;
 }
 
 .agon-startup-loader.is-hiding {
@@ -25944,6 +25950,17 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.35s ease;
+  /* .agon-tag-bubble pose padding:8px (pensé pour ses bulles, toujours ≥83px) — sous
+     box-sizing:border-box, un élément ne peut jamais être plus petit que son propre
+     padding+bordure : hérité tel quel, ce padding imposait un plancher de 20px en unités
+     "monde" (avant même le zoom caméra) à toute bulle, y compris les étoiles dont le rayon
+     "monde" est souvent bien inférieur à ça — une fois multiplié par le zoom de la caméra
+     (parfois ×20-60), cette taille plancher gonflait artificiellement la bulle jusqu'à remplir
+     tout le cadre (constaté le 13/08/2026 : cadre rempli d'un flou uni malgré des étoiles bien
+     révélées dans le DOM). Le label (span enfant, cf. createBubbleEl) n'a pas besoin de ce
+     padding : sa propre taille de police fixe (contre-scale, cf. .universe-zoom-bubble-label)
+     suffit à l'espacer visuellement. */
+  padding: 0;
 }
 .universe-zoom-bubble.is-revealed {
   opacity: 1;

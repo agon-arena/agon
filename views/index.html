@@ -49,7 +49,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260813-startup-band-gpu">
+  <link rel="stylesheet" href="/style.min.css?v=20260813-startup-band-raf">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -452,9 +452,18 @@
     loader.style.opacity = '1';
     loader.style.transition = prevTransition;
   };
-  [30, 80, 150, 300, 600, 1000].forEach(function (delay) {
-    setTimeout(nudgeLoaderComposite, delay);
-  });
+  // Amélioration du 13/08/2026 : des points de contrôle espacés (30/80/150ms...) pouvaient
+  // rater la toute première fenêtre où le calque est mal composé si elle se referme entre deux
+  // points — remplacé par une boucle sur CHAQUE frame pendant la première seconde (bien plus
+  // dense que quelques points isolés), qui s'arrête d'elle-même dès que le loader disparaît.
+  var nudgeStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+  var nudgeLoop = function () {
+    if (!loader.parentNode || loader.classList.contains('is-hiding')) return;
+    var now = window.performance && window.performance.now ? window.performance.now() : Date.now();
+    nudgeLoaderComposite();
+    if (now - nudgeStartedAt < 1000) requestAnimationFrame(nudgeLoop);
+  };
+  requestAnimationFrame(nudgeLoop);
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', nudgeLoaderComposite, { passive: true });
   }
@@ -1423,7 +1432,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260813-startup-band-gpu" defer></script>
+<script src="/script.min.js?v=20260813-startup-band-raf" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
