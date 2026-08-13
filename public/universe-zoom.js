@@ -233,9 +233,12 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
   }
 
   // ---- Molette (desktop) ----
+  // 0.0009 (pas 0.0016, trop sensible : quelques crans suffisaient à dépasser toute la plage
+  // utile et à se retrouver "dans" une bulle sans plus rien voir, constaté le 13/08/2026) —
+  // zoom plus progressif, contrôlable sur toute la plage min/max.
   viewportEl.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const factor = Math.exp(-e.deltaY * 0.0016);
+    const factor = Math.exp(-e.deltaY * 0.0009);
     zoomAtViewportPoint(e.clientX, e.clientY, factor);
   }, { passive: false });
 

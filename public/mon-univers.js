@@ -219,15 +219,17 @@ function getSolarSystemById(galaxy, id) {
 // de niveau, juste une caméra continue) : exactement comme un zoom de carte, une bulle plus
 // grosse/plus riche se révèle avant une petite, indépendamment d'où pointe la caméra.
 const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
-const CHILD_HINT_PX = 118; // rayon à l'écran à partir duquel un système commence à laisser deviner ses étoiles (indicatif, la révélation réelle suit REVEAL_PX_SELF ci-dessus)
 
-function revealScaleFor(node) {
-  return REVEAL_PX_SELF / node.r;
-}
-// Seuil visé par un clic (focusOn) : assez zoomé pour que les enfants soient confortablement
-// lisibles, pas seulement au ras du seuil de révélation.
+// Rayon à l'écran visé par un clic (focusOn) : posé au montage (mountUniverse), proportionnel à
+// la taille réelle du viewport plutôt qu'une constante en pixels absolue — sans ça, un nœud
+// ciblé pouvait déborder largement du cadre visible (viewport plus petit que prévu), laissant
+// voir seulement un gros aplat de son propre dégradé plutôt que ses enfants (constaté le
+// 13/08/2026 : cadre rempli d'un flou uni après un clic sur un système solaire, alors que ses
+// étoiles étaient bien révélées dans le DOM — simplement hors-cadre ou trop proches du bord).
+let focusFillRadiusPx = 150;
+
 function focusScaleFor(node) {
-  return (CHILD_HINT_PX * 1.7) / node.r;
+  return focusFillRadiusPx / node.r;
 }
 
 function pluralize(n, word) { return `${n} ${word}${n > 1 ? "s" : ""}`; }
@@ -402,15 +404,17 @@ function mountUniverse() {
     nodeById.set(unclassifiedNode.id, unclassifiedNode);
   }
 
-  const maxChildRevealScale = worldLayout.solarSystems.length
-    ? Math.max(...worldLayout.solarSystems.map((s) => focusScaleFor(s)))
-    : (worldLayout.galaxies.length ? Math.max(...worldLayout.galaxies.map((g) => focusScaleFor(g))) : 4);
-
+  // Plafond fixe plutôt que dérivé du plus petit système solaire (focusScaleFor) : un seul
+  // système avec très peu d'étoiles peut avoir un rayon minuscule, poussant ce calcul très haut
+  // — un plafond global aligné dessus laissait alors quelques crans de molette suffire à
+  // dépasser toute zone utile pour les AUTRES systèmes, plus grands, et à se retrouver "dans"
+  // une bulle sans plus rien voir (constaté le 13/08/2026). 60 laisse une marge confortable
+  // au-delà du focusScaleFor typique d'un système solaire sans dépendre des cas extrêmes.
   camera = createUniverseCamera({
     viewportEl,
     worldEl,
     minScale: 1,
-    maxScale: Math.max(6, maxChildRevealScale * 1.6),
+    maxScale: 60,
     onChange: onCameraChange
   });
   camera.setState({ x: 0, y: 0, scale: 1 }, false);
