@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260812-notion-level-picker-layout">
+  <link rel="stylesheet" href="/style.min.css?v=20260813-level-picker-close">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -189,8 +189,18 @@
       /* <textarea> plutôt qu'un <input> à une seule ligne (cf. 12/08/2026) :
          un placeholder/sujet trop long pour la largeur du champ passait à la
          ligne suivante au lieu de rester lisible en entier — jamais de
-         coupure ni d'ellipsis, la hauteur s'adapte plutôt que le texte. */
-      min-height: 56px;
+         coupure ni d'ellipsis, la hauteur s'adapte plutôt que le texte.
+         Compact par défaut (desktop, largeur confortable, le placeholder
+         tient sur une ligne) — agrandi seulement sur mobile ci-dessous, où
+         il ne tient pas (cf. 13/08/2026 : trop haute sur desktop sinon).
+         height:auto obligatoire : public/style.css impose "textarea{height:
+         140px}" globalement (zones de commentaires) — height prime sur
+         min-height, sans ce override le champ restait bloqué à 140px malgré
+         min-height:44px (constaté le 13/08/2026, capture à l'appui : le
+         bouton "Générer" s'étirait aussi en énorme cercle à côté, cf.
+         align-items:stretch par défaut sur .qcm-custom-search). */
+      height: auto;
+      min-height: 44px;
       padding: 10px 14px;
       border: 1px solid #d1d5db;
       border-radius: 18px;
@@ -231,12 +241,126 @@
     .qcm-custom-search-status.is-error {
       color: #d64545;
     }
+    /* "Camembert" qui se noircit en boucle pendant la génération (demande du
+       13/08/2026, remplace un chiffré temps écoulé/compte à rebours écarté
+       par l'utilisateur) : la durée réelle varie de quelques secondes à
+       plusieurs minutes (sujet énumérable, cf. server.js
+       NOTION_QUIZ_ENUMERABLE_MAX_ROUNDS) — plutôt que d'afficher un temps
+       potentiellement faux, une boucle indéterminée qui montre juste "ça
+       travaille" sans jamais prétendre savoir combien de temps il reste.
+       conic-gradient mis à jour en JS (cf. startPieSpinner) plutôt qu'une
+       animation CSS pure : évite @property, pas supporté partout. */
+    .qcm-pie-spinner {
+      width: 36px;
+      height: 36px;
+      margin: 4px auto 20px;
+      border-radius: 50%;
+      background: conic-gradient(#243038 0deg, #e2e6ea 0deg);
+      box-shadow: inset 0 0 0 1px #d1d5db;
+    }
+    /* Bouton "Explorer les apprentissages disponibles" (demande du 13/08/2026) :
+       adopter un sujet déjà généré par un autre visiteur plutôt que de
+       relancer une génération IA pour un sujet proche. Style secondaire
+       (contour, pas fond plein) : moins prioritaire que "Générer". */
+    .qcm-explore-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      margin: 0 0 20px;
+      padding: 10px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #243038;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .qcm-explore-btn:hover,
+    .qcm-explore-btn:focus-visible {
+      background: #eef3f6;
+      border-color: #516776;
+    }
+    .qcm-explore-search-input {
+      width: 100%;
+      margin: 0 0 14px;
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #1f2937;
+      font: inherit;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .qcm-explore-search-input:focus {
+      outline: none;
+      border-color: #516776;
+      background: #ffffff;
+    }
+    /* position:relative (jamais fixed, contrairement à .qcm-fiche-overlay) :
+       porte le dégradé "suite" générique (.scroll-fade-hint, cf. style.css,
+       position:absolute) directement en enfant — la contrainte iOS Safari
+       documentée plus haut (position:absolute dans un ancêtre position:fixed
+       scrollable) ne s'applique pas ici, .qcm-explore-list-wrap n'est pas
+       fixed. */
+    .qcm-explore-list-wrap {
+      position: relative;
+    }
+    .qcm-explore-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+    .qcm-explore-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-explore-item:hover:not(:disabled),
+    .qcm-explore-item:focus-visible:not(:disabled) {
+      border-color: #516776;
+      background: #f9fafb;
+    }
+    .qcm-explore-item:disabled {
+      cursor: default;
+      opacity: 0.6;
+    }
+    .qcm-explore-item-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: #111827;
+    }
+    .qcm-explore-item-meta {
+      flex: 0 0 auto;
+      font-size: 12px;
+      font-weight: 700;
+      color: #6b7280;
+      white-space: nowrap;
+    }
     @media (max-width: 480px) {
       .qcm-custom-search {
         flex-direction: column;
       }
       .qcm-custom-search-btn {
         width: 100%;
+      }
+      .qcm-custom-search-input {
+        min-height: 56px;
       }
     }
     .qcm-progress {
@@ -1198,13 +1322,14 @@
       letter-spacing: 0.02em;
     }
     /* Bouton "Ne plus me la demander" (cf. wireExcludeButton) : discret,
-       même gabarit pilule que les badges voisins mais cliquable — exclut la
+       en bas de carte sous "Valider ma réponse"/les propositions (jamais en
+       haut, cf. demande du 13/08/2026 — pour ne pas laisser deviner qu'une
+       question est "à écarter" avant même de l'avoir lue) — exclut la
        question courante des futures repasses ("Renforcement"), jamais de la
        session en cours. */
     .qcm-exclude-btn {
-      display: inline-block;
-      float: right;
-      margin: 0 0 8px;
+      display: block;
+      margin: 10px auto 0;
       padding: 3px 10px;
       border: 1px solid #dbe2e7;
       border-radius: 999px;
@@ -1404,13 +1529,17 @@
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
     <form class="qcm-custom-search" id="qcm-custom-search" hidden>
-      <textarea id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150" rows="2"
+      <textarea id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150" rows="1"
         placeholder="Tape un sujet à mémoriser (ex. la photosynthèse)"></textarea>
       <button type="submit" class="qcm-custom-search-btn" id="qcm-custom-search-btn">
         <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Générer
       </button>
     </form>
     <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
+    <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
+    <button type="button" class="qcm-explore-btn" id="qcm-explore-btn" hidden>
+      <i class="fa-solid fa-compass" aria-hidden="true"></i> Explorer les apprentissages disponibles
+    </button>
     <!-- Contenu par défaut statique (pas posé par JS) : le cadre .qcm-panel est
          stylé (fond blanc, ombre, coins arrondis) dès le parsing du HTML, avant
          toute exécution de script — sans ce sablier déjà présent dans le HTML
@@ -1423,7 +1552,7 @@
     <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260812-score-100-mute" defer></script>
+<script src="/script.min.js?v=20260813-level-picker-close" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -1434,6 +1563,7 @@
   var customSearchInput = document.getElementById('qcm-custom-search-input');
   var customSearchBtn = document.getElementById('qcm-custom-search-btn');
   var customSearchStatus = document.getElementById('qcm-custom-search-status');
+  var exploreBtn = document.getElementById('qcm-explore-btn');
   var voterKey = null;
   var questions = [];
   var answeredByQuestionId = {};
@@ -1442,6 +1572,10 @@
   var currentQuizDate = null;
   var currentCategory = null;
   var slotsStatus = null;
+  // Dernière liste "Mes apprentissages" reçue (cf. renderMesQcmList) : lue par
+  // le popup "Explorer les apprentissages disponibles" pour ne pas proposer
+  // d'adopter un sujet déjà présent dans la liste personnelle du visiteur.
+  var currentMesQcmQuizzes = [];
   // Jeton incrémenté à chaque loadSlot/loadMesQcm : les callbacks async de
   // ces fonctions (fetch imbriqués, parfois lents) vérifient qu'ils sont
   // toujours le dernier appel en date avant de toucher au DOM. Sans ça, un
@@ -1536,6 +1670,7 @@
     customSearchForm.hidden = !visible;
     customSearchForm.classList.toggle('visible', visible);
     if (!visible) customSearchStatus.hidden = true;
+    exploreBtn.hidden = !visible;
   }
 
   function renderCategorySwitcher() {
@@ -2082,12 +2217,12 @@
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
     html += renderOriginBadge(question) + renderTypeBadge('ordre');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
-    html += renderExcludeButtonHtml();
     html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
     html += '<div class="qcm-order-chosen" id="qcm-order-chosen"></div>';
     html += '<div class="qcm-order-pool" id="qcm-order-pool"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn visible" id="qcm-order-submit-btn" disabled>Valider</button>';
+    html += renderExcludeButtonHtml();
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
     wireExcludeButton(question);
@@ -2358,33 +2493,35 @@
     customSearchStatus.classList.toggle('is-error', !!isError);
   }
 
-  // Chrono affiché pendant la génération (demande du 13/08/2026) : la
-  // génération peut prendre "quelques secondes à quelques minutes" (niveau
-  // Expert énumérable) et le message statique précédent ne donnait aucun
-  // signe de vie pendant l'attente — le temps écoulé rassure que ça travaille
-  // toujours plutôt que de sembler figé.
-  var customSearchTimerId = null;
-  var customSearchTimerStartedAt = 0;
-  function formatCustomSearchElapsed(totalSeconds) {
-    var m = Math.floor(totalSeconds / 60);
-    var s = totalSeconds % 60;
-    return m > 0 ? (m + ':' + (s < 10 ? '0' : '') + s) : (s + 's');
-  }
-  function stopCustomSearchTimer() {
-    if (customSearchTimerId) {
-      clearInterval(customSearchTimerId);
-      customSearchTimerId = null;
+  // Camembert qui se noircit en boucle pendant la génération (demande du
+  // 13/08/2026) : la génération peut prendre "quelques secondes à plusieurs
+  // minutes" (niveau Expert énumérable, cf. server.js
+  // NOTION_QUIZ_ENUMERABLE_MAX_ROUNDS) — sans savoir laquelle à l'avance, un
+  // temps affiché (écoulé ou compte à rebours) donnerait une indication
+  // potentiellement trompeuse. Boucle indéterminée à la place : montre juste
+  // "ça travaille" sans jamais prétendre connaître la durée réelle.
+  var pieSpinnerId = null;
+  var PIE_SPINNER_LOOP_MS = 2600;
+  function stopPieSpinner() {
+    if (pieSpinnerId) {
+      clearInterval(pieSpinnerId);
+      pieSpinnerId = null;
     }
+    var el = document.getElementById('qcm-pie-spinner');
+    if (el) el.hidden = true;
   }
-  function startCustomSearchTimer(baseText) {
-    stopCustomSearchTimer();
-    customSearchTimerStartedAt = Date.now();
+  function startPieSpinner() {
+    stopPieSpinner();
+    var el = document.getElementById('qcm-pie-spinner');
+    if (!el) return;
+    el.hidden = false;
+    var startedAt = Date.now();
     var tick = function () {
-      var elapsed = Math.floor((Date.now() - customSearchTimerStartedAt) / 1000);
-      setCustomSearchStatus(baseText + ' (' + formatCustomSearchElapsed(elapsed) + ')', false);
+      var deg = ((Date.now() - startedAt) % PIE_SPINNER_LOOP_MS) / PIE_SPINNER_LOOP_MS * 360;
+      el.style.background = 'conic-gradient(#243038 ' + deg + 'deg, #e2e6ea ' + deg + 'deg)';
     };
     tick();
-    customSearchTimerId = setInterval(tick, 1000);
+    pieSpinnerId = setInterval(tick, 60);
   }
 
   // Barre de recherche libre "Mes apprentissages" (cf. server.js POST
@@ -2412,11 +2549,13 @@
     showNotionQuizLevelPicker(function (level) {
       customSearchBtn.disabled = true;
       customSearchInput.disabled = true;
-      startCustomSearchTimer(
+      setCustomSearchStatus(
         level === 'expert'
           ? 'Génération en cours, jusqu’à quelques minutes pour une liste à mémoriser en entier…'
-          : 'Génération de la fiche en cours…'
+          : 'Génération de la fiche en cours…',
+        false
       );
+      startPieSpinner();
 
       fetch('/api/users/notion-quizzes/custom', {
         method: 'POST',
@@ -2425,7 +2564,7 @@
       })
         .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
         .then(function (result) {
-          stopCustomSearchTimer();
+          stopPieSpinner();
           customSearchBtn.disabled = false;
           customSearchInput.disabled = false;
           if (!result.data.ok) {
@@ -2437,7 +2576,7 @@
           loadSlot(result.data.slot, result.data.quizDate, result.data.label);
         })
         .catch(function () {
-          stopCustomSearchTimer();
+          stopPieSpinner();
           customSearchBtn.disabled = false;
           customSearchInput.disabled = false;
           setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
@@ -2455,6 +2594,136 @@
       customSearchForm.requestSubmit();
     }
   });
+
+  // "Explorer les apprentissages disponibles" (demande du 13/08/2026) :
+  // adopter un sujet libre déjà généré par un autre visiteur (cf. server.js
+  // GET /api/users/notion-quizzes/explore) au lieu de relancer une
+  // génération IA (submitCustomTopic ci-dessus) pour un sujet proche mais
+  // formulé différemment. Même fenêtre modale que openMesQcmActionMenu
+  // (.qcm-fiche-overlay/.qcm-fiche-modal) pour rester cohérent visuellement.
+  var mesQcmExploreModalEls = null;
+  function closeMesQcmExploreModal() {
+    if (!mesQcmExploreModalEls) return;
+    mesQcmExploreModalEls.overlay.remove();
+    document.removeEventListener('keydown', mesQcmExploreModalEls.onKeydown);
+    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    mesQcmExploreModalEls = null;
+  }
+  function openMesQcmExploreModal() {
+    closeMesQcmActionModal();
+    closeMesQcmExploreModal();
+    var modalHtml =
+      '<div class="qcm-fiche-modal qcm-explore-modal">' +
+        '<div class="qcm-fiche-head">' +
+          '<p class="qcm-fiche-rubric"><i class="fa-solid fa-compass"></i> Apprentissages disponibles</p>' +
+          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>' +
+        '<input type="text" class="qcm-explore-search-input" id="qcm-explore-search-input" placeholder="Filtrer par sujet…">' +
+        '<div class="qcm-explore-list-wrap"><div class="qcm-explore-list" id="qcm-explore-list"></div></div>' +
+      '</div>';
+
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
+    document.body.appendChild(overlay);
+    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+    function onKeydown(e) { if (e.key === 'Escape') closeMesQcmExploreModal(); }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) closeMesQcmExploreModal();
+    });
+    document.addEventListener('keydown', onKeydown);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeMesQcmExploreModal);
+    mesQcmExploreModalEls = { overlay: overlay, onKeydown: onKeydown };
+
+    var searchInput = overlay.querySelector('#qcm-explore-search-input');
+    var listWrapEl = overlay.querySelector('.qcm-explore-list-wrap');
+    var listEl = overlay.querySelector('#qcm-explore-list');
+    var ownedSlots = {};
+    currentMesQcmQuizzes.forEach(function (q) { ownedSlots[q.slot] = true; });
+
+    // "suite" + dégradé (demande du 13/08/2026, même habillage générique que
+    // les autres listes/pages du site, cf. .scroll-fade-hint dans style.css)
+    // signalant qu'il reste des sujets à découvrir plus bas dans la liste.
+    // Contrairement à .qcm-fiche-fade-hint plus haut (posé directement sur
+    // <body> à cause du parent position:fixed+scroll de la fiche),
+    // .qcm-explore-list-wrap n'est PAS position:fixed : le positionnement
+    // absolute générique fonctionne ici sans contournement.
+    var exploreFadeHint = document.createElement('div');
+    exploreFadeHint.className = 'scroll-fade-hint is-hidden';
+    exploreFadeHint.style.setProperty('--scroll-fade-color', '#ffffff');
+    exploreFadeHint.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
+    listWrapEl.appendChild(exploreFadeHint);
+    exploreFadeHint.querySelector('.scroll-fade-hint-text').addEventListener('click', function (e) {
+      e.stopPropagation();
+      listEl.scrollBy({ top: listEl.clientHeight * 0.8, behavior: 'smooth' });
+    });
+    function updateExploreFadeHint() {
+      var hasOverflow = listEl.scrollHeight > listEl.clientHeight + 2;
+      var atBottom = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - 4;
+      exploreFadeHint.classList.toggle('is-hidden', !hasOverflow || atBottom);
+    }
+    listEl.addEventListener('scroll', updateExploreFadeHint, { passive: true });
+
+    function renderExploreList(items) {
+      if (!items.length) {
+        listEl.innerHTML = '<p class="qcm-state-message">Aucun sujet trouvé pour le moment.</p>';
+        updateExploreFadeHint();
+        return;
+      }
+      listEl.innerHTML = items.map(function (item) {
+        var already = !!ownedSlots[item.slot];
+        var metaText = already ? 'Déjà dans ta liste' : (item.userCount + ' visiteur' + (item.userCount > 1 ? 's' : ''));
+        return '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '"' + (already ? ' disabled' : '') + '>' +
+          '<span class="qcm-explore-item-label">' + escapeHtml(item.label) + '</span>' +
+          '<span class="qcm-explore-item-meta">' + escapeHtml(metaText) + '</span>' +
+        '</button>';
+      }).join('');
+      listEl.querySelectorAll('.qcm-explore-item:not(:disabled)').forEach(function (itemBtn) {
+        itemBtn.addEventListener('click', function () {
+          adoptExploreItem(itemBtn.getAttribute('data-slot'), itemBtn.getAttribute('data-quiz-date'), itemBtn);
+        });
+      });
+      requestAnimationFrame(updateExploreFadeHint);
+    }
+
+    function fetchAndRenderExplore(search) {
+      listEl.innerHTML = '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement…</p>';
+      updateExploreFadeHint();
+      fetch('/api/users/notion-quizzes/explore' + (search ? '?search=' + encodeURIComponent(search) : ''))
+        .then(function (res) { return res.json(); })
+        .then(function (data) { renderExploreList(Array.isArray(data.items) ? data.items : []); })
+        .catch(function () {
+          listEl.innerHTML = '<p class="qcm-state-message">Impossible de charger la liste pour le moment.</p>';
+          updateExploreFadeHint();
+        });
+    }
+
+    function adoptExploreItem(slot, quizDate, itemBtn) {
+      itemBtn.disabled = true;
+      fetch('/api/users/notion-quizzes/adopt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.ok) { itemBtn.disabled = false; return; }
+          closeMesQcmExploreModal();
+          loadMesQcm();
+        })
+        .catch(function () { itemBtn.disabled = false; });
+    }
+
+    var exploreSearchDebounce = null;
+    searchInput.addEventListener('input', function () {
+      clearTimeout(exploreSearchDebounce);
+      exploreSearchDebounce = setTimeout(function () { fetchAndRenderExplore(searchInput.value.trim()); }, 300);
+    });
+
+    fetchAndRenderExplore('');
+  }
+  exploreBtn.addEventListener('click', openMesQcmExploreModal);
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
@@ -2702,6 +2971,7 @@
   // (détail de la notion + corrigé complet des questions, cf.
   // openMesQcmFiche).
   function renderMesQcmList(quizzes) {
+    currentMesQcmQuizzes = quizzes;
     if (!quizzes.length) { renderMesQcmEmpty(); return; }
 
     var byTheme = {};

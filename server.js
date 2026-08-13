@@ -15076,6 +15076,112 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
   }
 });
 
+// Bouton "Explorer les apprentissages disponibles" (demande du 13/08/2026) :
+// liste les sujets libres déjà générés par d'autres visiteurs (slot
+// "notion:custom:*" uniquement — les QCM Éclairages/Ce jour dans l'Histoire
+// sont déjà automatiquement partagés via leur propre slot par notion, aucun
+// doublon possible pour eux). But : éviter qu'un visiteur relance une
+// génération IA (POST /custom ci-dessus) pour un sujet qu'un autre a déjà
+// couvert avec un intitulé légèrement différent (normalizeCustomTopicKey ne
+// dédoublonne que les intitulés strictement équivalents une fois normalisés).
+// Volume actuel très faible (quelques dizaines de sujets libres au 13/08/2026)
+// : agrégation en mémoire, jamais de pagination nécessaire pour l'instant —
+// à revoir si le volume grossit significativement (cf. [[project_supabase_1000_rows]]).
+app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req, res) => {
+  try {
+    // ->>0->>sourceName : ne relit que le libellé de la première question du
+    // tableau JSONB, jamais le contenu complet (fiche + corrigé de chaque
+    // question, plusieurs Ko par ligne) — inutile pour une simple liste à
+    // parcourir (cf. audit egress du 12-13/08/2026).
+    const { data: quizRows, error: quizError } = await supabase
+      .from("daily_quiz")
+      .select("quiz_date, slot, label:questions->0->>sourceName")
+      .like("slot", "notion:custom:%");
+    if (quizError) throw new Error(quizError.message);
+
+    const { data: linkRows, error: linkError } = await supabase
+      .from("user_notion_quizzes")
+      .select("slot")
+      .like("slot", "notion:custom:%");
+    if (linkError) throw new Error(linkError.message);
+
+    const userCountBySlot = new Map();
+    for (const row of linkRows || []) {
+      userCountBySlot.set(row.slot, (userCountBySlot.get(row.slot) || 0) + 1);
+    }
+
+    // Un même sujet normalisé (slot) peut avoir plusieurs lignes daily_quiz
+    // (régénéré à des dates différentes, le slot ne porte pas la date) : on
+    // n'affiche que la plus récente par slot, mais le compteur de popularité
+    // ci-dessus reste toutes dates confondues pour ce même slot.
+    const bySlot = new Map();
+    for (const row of quizRows || []) {
+      if (!row.label) continue;
+      const existing = bySlot.get(row.slot);
+      if (!existing || row.quiz_date > existing.quiz_date) bySlot.set(row.slot, row);
+    }
+
+    const searchQuery = String(req.query.search || "").trim().toLowerCase();
+    let items = Array.from(bySlot.values()).map((row) => ({
+      slot: row.slot,
+      quizDate: row.quiz_date,
+      label: row.label,
+      userCount: userCountBySlot.get(row.slot) || 0
+    }));
+    if (searchQuery) items = items.filter((item) => item.label.toLowerCase().includes(searchQuery));
+    items.sort((a, b) => b.userCount - a.userCount || a.label.localeCompare(b.label));
+
+    res.json({ ok: true, items });
+  } catch (error) {
+    console.error("[notion-quizzes] exploration :", error.message);
+    res.status(500).json({ ok: false, items: [], error: error.message });
+  }
+});
+
+// Clic sur un QCM existant dans "Explorer les apprentissages disponibles" :
+// rattache le QCM déjà généré (daily_quiz) à la liste personnelle du
+// visiteur, sans jamais rappeler l'IA — seul le nom "custom" (jamais un
+// sujet Éclairages/Histoire, déjà accessibles par leur propre flux) est
+// autorisé ici, à la fois par cohérence avec l'explorateur et comme
+// garde-fou contre un slot arbitraire.
+app.post("/api/users/notion-quizzes/adopt", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+
+    const slot = String(req.body?.slot || "").trim();
+    const quizDate = String(req.body?.quizDate || "").trim();
+    if (!slot.startsWith("notion:custom:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
+      return res.status(400).json({ ok: false, error: "Requête invalide." });
+    }
+
+    const { data: existingQuiz, error: existingQuizError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot)
+      .maybeSingle();
+    if (existingQuizError) throw new Error(existingQuizError.message);
+    if (!existingQuiz) return res.status(404).json({ ok: false, error: "Ce QCM n'existe plus." });
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    const { error: linkError } = await supabase
+      .from("user_notion_quizzes")
+      .upsert(
+        { user_id: user.id, quiz_date: quizDate, slot },
+        { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+      );
+    if (linkError) throw new Error(linkError.message);
+
+    const questions = existingQuiz.questions || [];
+    res.json({ ok: true, slot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length });
+  } catch (error) {
+    console.error("[notion-quizzes] adoption :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Déclic sur "Mémoriser" : retire uniquement la ligne de la liste
 // personnelle, jamais le QCM partagé (daily_quiz) — recliquer plus tard sur
 // la même notion le même jour ne régénère donc rien.

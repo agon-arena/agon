@@ -5135,6 +5135,7 @@ body.page-debate #score-b {
   overflow-y:auto;
 }
 .notion-level-picker-modal{
+  position:relative;
   width:100%;
   max-width:400px;
   padding:24px;
@@ -5142,6 +5143,26 @@ body.page-debate #score-b {
   background:#ffffff;
   box-shadow:0 20px 45px rgba(17, 24, 39, 0.25);
   text-align:center;
+}
+/* Croix de fermeture (demande du 13/08/2026) : jusqu'ici seuls le clic hors
+   modale, Échap ou "Annuler" en bas fermaient — incohérent avec les autres
+   fenêtres du site (fiche, Explorer...) qui ont toutes une croix visible en
+   haut à droite. */
+.notion-level-picker-close{
+  position:absolute;
+  top:12px;
+  right:12px;
+  width:28px;
+  height:28px;
+  border:none;
+  border-radius:999px;
+  background:#eef3f6;
+  color:#243038;
+  font-size:14px;
+  cursor:pointer;
+}
+.notion-level-picker-close:hover{
+  background:#e5e9ec;
 }
 .notion-level-picker-title{
   margin:0 0 16px;
@@ -25979,6 +26000,13 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Sans white-space:nowrap, text-overflow:ellipsis ne s'applique jamais (il exige une seule
+     ligne) : le texte passait à la ligne sur 2-3 lignes, débordant en hauteur du cercle de la
+     bulle et coupé net par son overflow:hidden — un nom long ("Révolution française & Empire")
+     apparaissait tronqué de façon illisible ("evolutio / française / Empir", haut ET bas du
+     texte perdus), constaté le 13/08/2026 par capture d'écran. Une seule ligne, "…" en fin si
+     ça déborde toujours à 120px, corrige les deux problèmes à la fois. */
+  white-space: nowrap;
   transform: scale(calc(1 / var(--universe-cam-scale, 1)));
 }
 /* Même police que les bulles de la page d'accueil (demande du 08/08/2026) : sans ce correctif,

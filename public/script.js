@@ -25428,6 +25428,12 @@ function showNotionQuizLevelPicker(onSelect) {
   overlay.className = "notion-level-picker-overlay";
   const modal = document.createElement("div");
   modal.className = "notion-level-picker-modal";
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "notion-level-picker-close";
+  closeBtn.setAttribute("aria-label", "Fermer");
+  closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+  modal.appendChild(closeBtn);
   const title = document.createElement("p");
   title.className = "notion-level-picker-title";
   title.textContent = "Quel niveau d'approfondissement ?";
@@ -25468,6 +25474,7 @@ function showNotionQuizLevelPicker(onSelect) {
   document.addEventListener("keydown", onKeydown);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   cancelBtn.addEventListener("click", close);
+  closeBtn.addEventListener("click", close);
 }
 
 function activateDebateNotion(btn, voterKey, debateId, quizDate) {
