@@ -1681,15 +1681,26 @@
     var btn = document.getElementById('qcm-exclude-btn');
     if (!btn || !voterKey) return;
     btn.onclick = function () {
-      btn.disabled = true;
-      btn.textContent = 'Retirée';
-      fetch('/api/daily-quiz/exclude-question', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ legacyKey: voterKey, questionId: question.id })
-      }).catch(function () {
-        btn.disabled = false;
-        btn.textContent = 'Ne plus me la demander';
+      // Confirmation avant retrait (demande du 13/08/2026) : contrairement au clic
+      // "Mémoriser" ailleurs sur le site (optimiste, réversible), exclure une question
+      // arrête définitivement de la reposer — même modale de confirmation que les
+      // suppressions définitives du site (showDeleteConfirmModal, cf.
+      // removeMesQcmItems plus bas, déjà chargée via script.min.js sur cette page).
+      showDeleteConfirmModal({
+        title: 'Ne plus jamais te reposer cette question ?',
+        text: 'Elle ne te sera désormais plus jamais posée pour être mémorisée. Utile si elle te semble trop facile ou inutile à mémoriser.',
+        onConfirm: function () {
+          btn.disabled = true;
+          btn.textContent = 'Retirée';
+          fetch('/api/daily-quiz/exclude-question', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ legacyKey: voterKey, questionId: question.id })
+          }).catch(function () {
+            btn.disabled = false;
+            btn.textContent = 'Ne plus me la demander';
+          });
+        }
       });
     };
   }
@@ -1735,8 +1746,9 @@
 
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge(type) + renderExcludeButtonHtml();
+    html += renderOriginBadge(question) + renderTypeBadge(type);
     html += '<p class="qcm-question">' + questionHtml + '</p>';
+    html += renderExcludeButtonHtml();
     var gated = needsRevealGate(type, answer, question);
     if (gated) html += renderRevealGateHtml();
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
@@ -1835,8 +1847,9 @@
   function renderAssociationQuestion(question, answer) {
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge('association') + renderExcludeButtonHtml();
+    html += renderOriginBadge(question) + renderTypeBadge('association');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += renderExcludeButtonHtml();
     html += '<div id="qcm-assoc-rows"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn visible" id="qcm-assoc-submit-btn" disabled>Valider</button>';
@@ -1966,8 +1979,9 @@
   function renderMultiChoiceQuestion(question, answer) {
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge('qcm_multi') + renderExcludeButtonHtml();
+    html += renderOriginBadge(question) + renderTypeBadge('qcm_multi');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += renderExcludeButtonHtml();
     var gated = needsRevealGate('qcm_multi', answer, question);
     if (gated) html += renderRevealGateHtml();
     html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
@@ -2063,8 +2077,9 @@
   function renderOrderQuestion(question, answer) {
     var html = '';
     html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    html += renderOriginBadge(question) + renderTypeBadge('ordre') + renderExcludeButtonHtml();
+    html += renderOriginBadge(question) + renderTypeBadge('ordre');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += renderExcludeButtonHtml();
     html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
     html += '<div class="qcm-order-chosen" id="qcm-order-chosen"></div>';
     html += '<div class="qcm-order-pool" id="qcm-order-pool"></div>';
