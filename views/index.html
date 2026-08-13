@@ -49,7 +49,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260813-startup-band-cleanup">
+  <link rel="stylesheet" href="/style.min.css?v=20260813-memoire-hierarchy-fix">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -128,6 +128,25 @@
       color: #ffffff;
       opacity: 1;
       transition: opacity 0.45s ease, visibility 0.45s ease;
+    }
+    /* Bande basse furtive au tout début de l'animation en standalone (revu le 13/08/2026,
+       après plusieurs essais infructueux pour forcer WebKit à peindre correctement ce calque
+       fixed dès la toute première image) : plutôt que de continuer à chasser un bug de
+       composition qui échappe au code de la page, on évite simplement de MONTRER ce calque
+       pendant la fenêtre à risque — invisible par défaut, révélé par JS (classe is-ready) un
+       court instant après (cf. script plus bas). Le fond du <body> (déjà #243038, cf. règle
+       html,body plus haut) reste seul visible entre-temps : lui peint fiablement jusqu'au bord
+       dans cette même bande (établi par une investigation antérieure sur une autre page, cf.
+       mémoire projet), donc rien à voir de travers pendant ce court instant. Scopé à
+       (display-mode: standalone) uniquement — jamais observé en navigateur classique d'après
+       retour utilisateur, pas de raison d'y introduire ce délai. */
+    @media (display-mode: standalone) {
+      .agon-startup-loader {
+        opacity: 0;
+      }
+      .agon-startup-loader.is-ready {
+        opacity: 1;
+      }
     }
     .agon-startup-loader.is-hiding {
       opacity: 0;
@@ -389,6 +408,14 @@
 (function(){
   var loader = document.getElementById('agon-startup-loader');
   if (!loader) return;
+  // Révèle le loader (opacity 0 → 1 par défaut, cf. .agon-startup-loader/.is-ready plus haut)
+  // après un court délai plutôt qu'immédiatement : laisse la fenêtre à risque (bande basse
+  // furtive en standalone, WebKit peint ce calque en retard tout au début) se passer pendant
+  // que SEUL le fond du <body> est visible (déjà sombre, lui peint fiablement jusqu'au bord).
+  // Démarré ici, au tout début du script, avant toute autre logique (y compris le cas
+  // __agonSkipStartupOnce ci-dessous, où le loader est de toute façon retiré du DOM avant que
+  // ce délai n'expire — l'ajout de la classe sur un nœud détaché ne fait alors rien).
+  setTimeout(function () { loader.classList.add('is-ready'); }, 200);
   if (window.__agonSkipStartupOnce === true) {
     if (loader.parentNode) loader.parentNode.removeChild(loader);
     return;
@@ -1432,7 +1459,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260813-startup-band-raf" defer></script>
+<script src="/script.min.js?v=20260813-memoire-hierarchy-fix" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -8,7 +8,7 @@
 // quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-real-zoom";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-safari-pinch";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -214,11 +214,16 @@ function getSolarSystemById(galaxy, id) {
   return (galaxy?.solarSystems || []).find((s) => String(s.id) === String(id)) || null;
 }
 
-// ---- Seuils de révélation : une bulle n'apparaît (et ne devient cliquable) que lorsque son
-// rayon À L'ÉCRAN dépasse ce seuil — pas de dépendance à "quel niveau est ouvert" (il n'y a plus
-// de niveau, juste une caméra continue) : exactement comme un zoom de carte, une bulle plus
-// grosse/plus riche se révèle avant une petite, indépendamment d'où pointe la caméra.
+// ---- Seuils de révélation : une bulle système/étoile n'apparaît (et ne devient cliquable) que
+// lorsque SON PROPRE rayon à l'écran dépasse REVEAL_PX_SELF ET que son PARENT DIRECT est déjà
+// assez zoomé (PARENT_REVEAL_PX) — double condition, pas juste la taille propre. Une hiérarchie
+// stricte à 3 niveaux est demandée explicitement (13/08/2026) : sans le filtre par parent, un
+// jeu de données avec peu d'éléments par niveau pouvait faire franchir le seuil de taille aux 3
+// niveaux en même temps dès la vue d'ensemble (galaxie ET système ET étoile assez grands pour
+// se révéler d'un coup) — les étoiles, peintes en dernier donc par-dessus, masquaient alors
+// visuellement galaxies/systèmes en dessous, donnant l'impression de ne voir QUE les étoiles.
 const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
+const PARENT_REVEAL_PX = 70; // rayon à l'écran minimum du PARENT pour que ses enfants puissent apparaître
 
 // Rayon à l'écran visé, pour le plus gros enfant d'un nœud, une fois ce nœud ciblé par un clic
 // (focusOn) — comfortablement au-dessus de REVEAL_PX_SELF pour qu'il apparaisse net, pas
@@ -473,11 +478,22 @@ function onCameraChange(state) {
   document.documentElement.style.setProperty("--universe-cam-scale", String(state.scale));
 
   worldEl.querySelectorAll(".universe-zoom-bubble").forEach((el) => {
-    if (el.dataset.kind === "galaxy") return; // toujours révélées
+    const kind = el.dataset.kind;
+    if (kind === "galaxy" || kind === "unclassified") { el.classList.add("is-revealed"); return; } // toujours révélées
     const node = nodeById.get(el.dataset.nodeId);
     if (!node) return;
-    const revealed = node.r * state.scale >= REVEAL_PX_SELF;
-    el.classList.toggle("is-revealed", revealed);
+    // Hiérarchie stricte à 3 niveaux (demande du 13/08/2026) : un système/une étoile ne se
+    // révèle jamais seul(e) sur sa seule taille à l'écran — il faut AUSSI que son parent direct
+    // soit déjà lui-même assez zoomé (PARENT_REVEAL_PX). Sans cette double condition, un jeu de
+    // données avec peu d'éléments par niveau pouvait faire franchir le seuil de révélation aux
+    // 3 niveaux simultanément dès la vue d'ensemble — les étoiles, dessinées en dernier (donc
+    // par-dessus), masquaient alors visuellement galaxies/systèmes en dessous, donnant
+    // l'impression de ne voir QUE les étoiles, sans étapes intermédiaires.
+    const parentId = kind === "solarSystem" ? node.galaxyId : node.solarSystemId;
+    const parent = nodeById.get(parentId);
+    const parentZoomedIn = parent && parent.r * state.scale >= PARENT_REVEAL_PX;
+    const selfRevealed = node.r * state.scale >= REVEAL_PX_SELF;
+    el.classList.toggle("is-revealed", parentZoomedIn && selfRevealed);
   });
 
   renderBreadcrumb(computeFocusInfo(state));

@@ -242,6 +242,32 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
     zoomAtViewportPoint(e.clientX, e.clientY, factor);
   }, { passive: false });
 
+  // ---- Pincement trackpad Mac dans Safari ----
+  // Chrome/Edge sur Mac traduisent déjà le pincement en wheel+ctrlKey (géré juste au-dessus),
+  // mais Safari déclenche à la place gesturestart/gesturechange/gestureend (API legacy propre à
+  // WebKit, jamais wheel+ctrlKey pour ce geste précis) — sans ces écouteurs, pincer sur le
+  // trackpad dans Safari ne faisait rien du tout (constaté le 13/08/2026). event.scale est
+  // cumulé depuis gesturestart, jamais un delta : gestureLastScale retient la valeur précédente
+  // pour en tirer un facteur incrémental, même principe que le pincement tactile (pointerdown/
+  // pointermove à deux doigts) juste en dessous. no-zoom.js bloque déjà le zoom natif de la
+  // page sur ces mêmes événements (document, sans stopPropagation) : ces écouteurs, posés sur
+  // viewportEl, se déclenchent avant lui dans l'ordre de bouillonnement et pilotent la caméra à
+  // la place.
+  let gestureLastScale = 1;
+  viewportEl.addEventListener("gesturestart", (e) => {
+    e.preventDefault();
+    gestureLastScale = e.scale;
+  });
+  viewportEl.addEventListener("gesturechange", (e) => {
+    e.preventDefault();
+    const factor = e.scale / gestureLastScale;
+    gestureLastScale = e.scale;
+    zoomAtViewportPoint(e.clientX, e.clientY, factor);
+  });
+  viewportEl.addEventListener("gestureend", (e) => {
+    e.preventDefault();
+  });
+
   // ---- Pointer Events : un doigt/clic = pan, deux doigts = pincement ----
   const activePointers = new Map();
   let dragLastPoint = null;
