@@ -25944,14 +25944,6 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.35s ease;
-  /* <button> impose une taille minimale intrinsèque (~16px) qui écrasait la largeur/hauteur
-     explicite (inline, cf. createBubbleEl) dès qu'un monde très zoomé demande une bulle plus
-     petite que ça en unités "monde" (avant multiplication par le zoom de la caméra) — une
-     étoile parmi d'autres se retrouvait alors bien plus grosse que calculé une fois le zoom
-     appliqué, jusqu'à remplir tout le cadre (constaté le 13/08/2026 : cadre rempli d'un flou
-     uni malgré des étoiles bien révélées dans le DOM). */
-  min-width: 0;
-  min-height: 0;
 }
 .universe-zoom-bubble.is-revealed {
   opacity: 1;

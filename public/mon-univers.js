@@ -220,17 +220,25 @@ function getSolarSystemById(galaxy, id) {
 // grosse/plus riche se révèle avant une petite, indépendamment d'où pointe la caméra.
 const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
 
-// Rayon à l'écran visé par un clic (focusOn) : posé au montage (mountUniverse), proportionnel à
-// la taille réelle du viewport plutôt qu'une constante en pixels absolue — sans ça, un nœud
-// ciblé pouvait déborder largement du cadre visible (viewport plus petit que prévu), laissant
-// voir seulement un gros aplat de son propre dégradé plutôt que ses enfants (constaté le
-// 13/08/2026 : cadre rempli d'un flou uni après un clic sur un système solaire, alors que ses
-// étoiles étaient bien révélées dans le DOM — simplement hors-cadre ou trop proches du bord).
-let focusFillRadiusPx = 150;
+// Rayon à l'écran visé, pour le plus gros enfant d'un nœud, une fois ce nœud ciblé par un clic
+// (focusOn) — comfortablement au-dessus de REVEAL_PX_SELF pour qu'il apparaisse net, pas
+// seulement pile au seuil. Cibler "remplir le cadre à X%" (essayé d'abord) ne suffisait pas :
+// un nœud à beaucoup d'enfants (le disque se subdivise davantage) peut remplir le cadre sans
+// qu'aucun enfant individuel ne dépasse le seuil de révélation — constaté le 13/08/2026, cadre
+// rempli d'un flou uni après un clic, alors que le nœud ciblé lui-même était bien assez zoomé.
+// Cibler explicitement le plus gros enfant (node.maxChildR, posé après layoutUniverseWorld,
+// cf. mountUniverse) garantit qu'au moins lui devient net, quelle que soit la répartition.
+const FOCUS_CHILD_TARGET_PX = 58;
 
 function focusScaleFor(node) {
-  return focusFillRadiusPx / node.r;
+  const targetR = node.maxChildR || node.r * 0.3;
+  return FOCUS_CHILD_TARGET_PX / targetR;
 }
+// Seuil (rayon à l'écran) au-delà duquel un nœud est considéré comme le contexte courant de la
+// caméra pour le fil d'Ariane/bouton retour (cf. computeFocusInfo) — indépendant de
+// focusScaleFor, un simple repère "on est visiblement dedans", pas un seuil de netteté des
+// enfants.
+const FOCUS_CONTAINMENT_PX = 70;
 
 function pluralize(n, word) { return `${n} ${word}${n > 1 ? "s" : ""}`; }
 
@@ -299,8 +307,17 @@ function addMoonsAndSparklesAroundStar(star) {
 
 // ---- Construction d'une bulle (élément DOM) pour un nœud positionné ----
 function createBubbleEl(kind, node, background, glowColor, extraClass) {
-  const btn = document.createElement("button");
-  btn.type = "button";
+  // <div role="button"> plutôt qu'un vrai <button> : un <button> impose une taille minimale
+  // intrinsèque (~16px, liée à padding+border même sous box-sizing:border-box) qui écrase une
+  // largeur/hauteur explicite plus petite — confirmé empiriquement le 13/08/2026, un <button>
+  // nu avec style.width="6px" calcule quand même 16px, alors qu'un <div> respecte la valeur
+  // demandée. Comme les coordonnées "monde" (avant zoom caméra) sont souvent bien en-dessous de
+  // 16px pour une étoile, ce plancher gonflait la taille RÉELLE à l'écran une fois le zoom de
+  // la caméra appliqué (jusqu'à remplir tout le cadre). tabindex + gestion clavier (Entrée/
+  // Espace) reproduisent l'activation native d'un bouton, perdue avec <div>.
+  const btn = document.createElement("div");
+  btn.setAttribute("role", "button");
+  btn.tabIndex = 0;
   btn.className = `agon-tag-bubble universe-zoom-bubble${extraClass ? " " + extraClass : ""}`;
   btn.dataset.kind = kind;
   btn.dataset.nodeId = node.id;
@@ -315,6 +332,12 @@ function createBubbleEl(kind, node, background, glowColor, extraClass) {
   if (background) btn.style.background = background;
   if (glowColor) btn.style.setProperty("--agon-tag-bubble-glow", glowColor);
   btn.setAttribute("aria-label", ariaLabelFor(kind, node));
+  btn.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      btn.click();
+    }
+  });
 
   const label = document.createElement("span");
   label.className = "universe-zoom-bubble-label";
@@ -351,6 +374,22 @@ function mountUniverse() {
   const worldRadius = Math.min(vw, vh) * 0.46;
 
   worldLayout = layoutUniverseWorld(universeData.galaxies, worldRadius);
+
+  // maxChildR : le rayon du plus gros enfant direct de chaque galaxie/système, posé après coup
+  // (layoutUniverseWorld ne le calcule pas lui-même) — sert de cible à focusScaleFor pour
+  // garantir qu'au moins un enfant devienne net après un clic, quelle que soit la répartition
+  // des tailles à l'intérieur du disque.
+  const maxChildRByGalaxy = new Map();
+  worldLayout.solarSystems.forEach((s) => {
+    maxChildRByGalaxy.set(s.galaxyId, Math.max(maxChildRByGalaxy.get(s.galaxyId) || 0, s.r));
+  });
+  worldLayout.galaxies.forEach((g) => { g.maxChildR = maxChildRByGalaxy.get(g.id) || g.r * 0.3; });
+
+  const maxChildRBySystem = new Map();
+  worldLayout.stars.forEach((star) => {
+    maxChildRBySystem.set(star.solarSystemId, Math.max(maxChildRBySystem.get(star.solarSystemId) || 0, star.r));
+  });
+  worldLayout.solarSystems.forEach((s) => { s.maxChildR = maxChildRBySystem.get(s.id) || s.r * 0.3; });
 
   worldLayout.galaxies.forEach((g) => {
     const visual = galaxyBubbleVisual(g.name);
@@ -450,13 +489,13 @@ function onCameraChange(state) {
 function computeFocusInfo(state) {
   let galaxy = null;
   for (const g of worldLayout.galaxies) {
-    if (Math.hypot(state.x - g.x, state.y - g.y) <= g.r && g.r * state.scale >= CHILD_HINT_PX) { galaxy = g; break; }
+    if (Math.hypot(state.x - g.x, state.y - g.y) <= g.r && g.r * state.scale >= FOCUS_CONTAINMENT_PX) { galaxy = g; break; }
   }
   if (!galaxy) return { galaxy: null, solarSystem: null };
   let solarSystem = null;
   for (const s of worldLayout.solarSystems) {
     if (s.galaxyId !== galaxy.id) continue;
-    if (Math.hypot(state.x - s.x, state.y - s.y) <= s.r && s.r * state.scale >= CHILD_HINT_PX) { solarSystem = s; break; }
+    if (Math.hypot(state.x - s.x, state.y - s.y) <= s.r && s.r * state.scale >= FOCUS_CONTAINMENT_PX) { solarSystem = s; break; }
   }
   return { galaxy, solarSystem };
 }
@@ -890,9 +929,9 @@ function showStatus(kind) {
     message.style.cssText = "position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:clamp(20px,6vw,46px);text-align:center;color:#fff;pointer-events:none;opacity:1;visibility:visible;transform:none;";
     message.innerHTML = '<div style="width:min(100%,520px);box-sizing:border-box;padding:clamp(22px,5vw,34px);border:1px solid rgba(255,255,255,.2);border-radius:22px;background:linear-gradient(145deg,rgba(18,29,38,.88),rgba(27,42,52,.76));box-shadow:0 18px 48px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08);">' +
       '<div style="width:48px;height:48px;margin:0 auto 15px;border:1px solid rgba(255,255,255,.24);border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);box-shadow:0 0 24px rgba(160,198,212,.18);"><i class="fa-solid fa-diagram-project" style="font-size:19px;color:#c9dce5;"></i></div>' +
-      '<p style="margin:0;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:clamp(20px,4.5vw,27px);font-weight:600;line-height:1.2;letter-spacing:.01em;color:#f4f7f8;text-shadow:0 2px 8px rgba(0,0,0,.4);">Ton réseau neuronal artificiel de la mémoire est encore vide.</p>' +
+      '<p style="margin:0;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:clamp(20px,4.5vw,27px);font-weight:600;line-height:1.2;letter-spacing:.01em;color:#f4f7f8;text-shadow:0 2px 8px rgba(0,0,0,.4);">Ton réseau mnésique artificiel de ta mémoire est encore vide.</p>' +
       '<span style="display:block;width:54px;height:1px;margin:18px auto;background:linear-gradient(90deg,transparent,rgba(201,220,229,.8),transparent);"></span>' +
-      '<p style="margin:0;font:600 clamp(14px,2.9vw,16px)/1.5 Arial,Helvetica,sans-serif;color:#f2f6f8;text-shadow:0 1px 3px rgba(0,0,0,.72);">Commence la mémorisation en cliquant sur <a href="/apprentissage" class="universe-empty-learning-link" aria-label="Ouvrir Mes apprentissages" style="display:inline-block;margin:0 2px;padding:2px 8px;border:1px solid rgba(201,220,229,.48);border-radius:999px;background:rgba(201,220,229,.18);color:#ffffff;font-weight:800;text-decoration:none;pointer-events:auto;cursor:pointer;">Apprentissage</a> (bandeau du bas)&nbsp;: ton réseau neuronal commencera sa formation.</p>' +
+      '<p style="margin:0;font:600 clamp(14px,2.9vw,16px)/1.5 Arial,Helvetica,sans-serif;color:#f2f6f8;text-shadow:0 1px 3px rgba(0,0,0,.72);">Commence la mémorisation en cliquant sur <a href="/apprentissage" class="universe-empty-learning-link" aria-label="Ouvrir Mes apprentissages" style="display:inline-block;margin:0 2px;padding:2px 8px;border:1px solid rgba(201,220,229,.48);border-radius:999px;background:rgba(201,220,229,.18);color:#ffffff;font-weight:800;text-decoration:none;pointer-events:auto;cursor:pointer;">Apprentissage</a> (bandeau du bas)&nbsp;: ton réseau mnésique artificiel de ta mémoire commencera sa formation.</p>' +
       '</div>';
     const learningLink = message.querySelector(".universe-empty-learning-link");
     learningLink?.addEventListener("click", (event) => {
