@@ -19653,7 +19653,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260813-connectors-noframe').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260813-connector-fixedpx').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -25413,11 +25413,15 @@ function showDebateNotionMemorizeExplainer(notionName) {
 // Niveaux d'approfondissement proposés avant toute génération de QCM de
 // notion (débat ou sujet libre, cf. server.js NOTION_QUIZ_LEVELS) — demande
 // du 12/08/2026 : toujours demander le niveau avant de lancer l'appel IA,
-// jamais de génération silencieuse à un niveau devinné.
+// jamais de génération silencieuse à un niveau devinné. 4e niveau ajouté le
+// 13/08/2026 : "expert" redevient un palier normal (~20 questions), seul
+// "exhaustif" déclenche désormais la couverture complète d'une liste
+// énumérable (jusqu'à NOTION_QUIZ_ENUMERABLE_MAX_ITEMS côté serveur).
 const NOTION_QUIZ_LEVEL_OPTIONS = [
   { level: "elementaire", name: "Élémentaire", desc: "3 à 6 questions" },
   { level: "avance", name: "Avancé", desc: "8 à 12 questions" },
-  { level: "expert", name: "Expert", desc: "Une vingtaine de questions, bien plus pour les listes à mémoriser (capitales, vocabulaire...)" }
+  { level: "expert", name: "Expert", desc: "Une vingtaine de questions" },
+  { level: "exhaustif", name: "Exhaustif", desc: "Couvre la liste en entier si le sujet s'y prête (capitales, vocabulaire...), bien plus de questions" }
 ];
 
 // Modale de choix de niveau — `onSelect(level)` n'est appelé que si

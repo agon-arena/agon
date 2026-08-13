@@ -1,0 +1,17 @@
+-- Déjà appliqué en direct via l'API Management Supabase (SQL editor), pas
+-- via ce fichier — versionné rétroactivement le 13/08/2026 pour documenter
+-- le schéma réel (cf. audit mémorisation du 12/08/2026, point "drift DB").
+-- Ressenti Facile/Moyen/Difficile collecté avant affichage de la correction
+-- (cf. POST /api/daily-quiz/answer, renderDifficultyButtonsHtml côté client)
+-- et utilisé pour moduler l'intervalle de repasse
+-- (DAILY_QUIZ_DIFFICULTY_INTERVAL_MULTIPLIER, isCultureGeneraleReviewDueToday).
+--
+-- Note (schéma réel constaté le 13/08/2026, pas ajouté ici pour ne pas
+-- diverger silencieusement de ce qui tourne en prod) : aucune contrainte
+-- CHECK ne restreint difficulty aux valeurs 'facile'/'moyen'/'difficile' —
+-- la validation est uniquement côté application
+-- (server.js, POST /api/daily-quiz/answer). NULL = réponse antérieure à
+-- l'ajout de la fonctionnalité (date exacte non tracée : appliqué en direct
+-- sur Supabase sans passer par un fichier de migration versionné à l'époque),
+-- jamais réponse "sans avis".
+ALTER TABLE daily_quiz_answers ADD COLUMN IF NOT EXISTS difficulty TEXT;

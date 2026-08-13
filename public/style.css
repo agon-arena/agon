@@ -25898,8 +25898,9 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
 
 /* Lunes autour d'une galaxie (cf. addMoonsAroundGalaxy, mon-univers.js) : demande du 13/08/2026,
    leur nombre correspond exactement au nombre de systèmes solaires de la galaxie — même famille
-   lumineuse (glow blanc/or) que .universe-mini-star ci-dessus plutôt que la lune terne
-   .universe-star-moon plus bas (demande explicite "lunes lumineuses"). */
+   lumineuse (glow blanc/or) que .universe-mini-star ci-dessus (demande explicite "lunes
+   lumineuses") ; l'équivalent terne autour des étoiles (.universe-star-moon) a depuis été retiré
+   (demande du 13/08/2026, "point noir... je n'en veux pas", cf. mon-univers.js). */
 .universe-galaxy-moon {
   position: absolute;
   border-radius: 50%;
@@ -25919,20 +25920,6 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
 }
 .universe-galaxy-moon.is-revealed {
   opacity: var(--moon-twinkle, 1);
-}
-
-/* Petite lune (cf. drawMoonsForStars, mon-univers.js) : disque ombré simple (dégradé clair en
-   haut-gauche, plus sombre en bas-droite) façon sphère éclairée d'un côté — décoration subtile
-   supplémentaire, demande du 07/08/2026. Teinte bleutée (demande du 13/08/2026, à distinguer des
-   lunes de galaxie ci-dessus, chaudes/lumineuses) : mêmes 3 paliers clair→sombre, virés du
-   gris-beige d'origine (#e8e4dc/#b8b2a4/#746e62) vers un bleu-gris. */
-.universe-star-moon {
-  position: absolute;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #dce8f0 0%, #8fa8bc 55%, #4a5a68 100%);
-  box-shadow: 0 0 2px rgba(0,0,0,0.4);
-  pointer-events: none;
-  z-index: -1;
 }
 
 /* Scintillement ponctuel (cf. drawSparklesForStars, mon-univers.js) : croix fine en dégradé,
@@ -25972,15 +25959,60 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   inset: var(--bubble-frame-top) 30px 23px;
   overflow: hidden;
   touch-action: none;
+}
+/* Panoramique possible uniquement une fois zoomé au-delà de la vue d'ensemble (cf.
+   universe-zoom.js apply()/pointermove) — curseur "main" seulement dans ce cas, jamais à la
+   vue d'ensemble où glisser ne fait rien. */
+.universe-zoom-can-pan {
   cursor: grab;
+}
+.universe-zoom-can-pan:active {
+  cursor: grabbing;
 }
 @media (max-width: 640px) {
   .universe-zoom-viewport {
     inset: var(--bubble-frame-top) 30px 78px;
   }
 }
-.universe-zoom-viewport:active {
-  cursor: grabbing;
+/* Fond étoilé zoomable ET panoramique (demande du 13/08/2026) : même image que le cadre
+   décoratif fixe (#agon-universe-cloud::after, laissé tel quel — reste visible dessous,
+   recouvert par celui-ci). Son transform (translate + scale) est posé directement en JS par
+   universe-zoom.js (apply()), avec le MÊME décalage relatif que le monde des bulles (worldEl)
+   — pas seulement le scale via une variable CSS (essayé d'abord) : un panoramique déplaçait
+   alors les bulles sans bouger le fond, donnant l'impression de bulles flottant sur un
+   arrière-plan figé au lieu d'un même espace qui bouge ensemble. Rogné par overflow:hidden de
+   .universe-zoom-viewport (son parent) : jamais de débordement visible hors du cadre malgré
+   l'agrandissement/déplacement. transform-origin centré par défaut (50% 50%, cohérent avec le
+   calcul JS qui décale depuis ce centre plutôt que depuis (0,0) comme worldEl). */
+.universe-zoom-background {
+  position: absolute;
+  /* Bien plus grand que le cadre (400% dans chaque dimension, centré) : une fois le
+     panoramique possible (cf. universe-zoom.js), déplacer ce fond (translate) avec un bord
+     calé pile sur le cadre (inset:0, essayé d'abord) finissait par révéler ce bord — et
+     dessous, le cadre décoratif statique (#agon-universe-cloud::after, jamais déplacé)
+     apparaissait, tranché net (signalé le 13/08/2026 par capture d'écran). Cette marge
+     généreuse absorbe un déplacement raisonnable sans jamais montrer son propre bord.
+     ATTENTION : "background-size: cover" (et de même 100vw/100vh, essayés tous les deux) se
+     recadre sur la taille de CETTE boîte agrandie (ou du viewport navigateur, lui aussi plus
+     grand que le cadre) et non sur le cadre visible lui-même — l'image apparaissait alors bien
+     plus zoomée qu'avant ce correctif à chaque fois (signalé le 13/08/2026, captures d'écran).
+     La taille exacte (px, équivalent à "cover" mais calculé sur le cadre réel, pas cette boîte)
+     est donc posée en JS (sizeUniverseBackground, mon-univers.js) juste après le montage — ceci
+     n'est qu'un filet de secours au cas où ce calcul JS échouerait.
+     background-repeat: repeat (pas no-repeat, essayé d'abord) : à taille fixe, l'image ne
+     déborde du cadre que de la marge naturelle laissée par "cover" (quelques centaines de px) —
+     largement dépassée par un panoramique une fois zoomé, ce qui révélait alors une zone plate
+     background-color au lieu du champ d'étoiles (signalé le 13/08/2026 par capture d'écran, "le
+     fond doit rester accroché au cadre"). La répétition en tuile garantit que tout panoramique,
+     même lointain, continue de montrer du champ d'étoiles plutôt qu'un vide uni — la reprise
+     entre tuiles n'est pas parfaitement invisible mais reste bien moins gênante qu'un aplat. */
+  inset: -150%;
+  background-color: #020610;
+  background-image: url("/universe-bg.jpg?v=2");
+  background-size: cover;
+  background-position: center;
+  background-repeat: repeat;
+  will-change: transform;
 }
 .universe-zoom-world {
   position: absolute;
@@ -25996,10 +26028,12 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
    jusqu'à l'étoile, rotate = angle vers elle (transform-origin sur le point de départ, pas le
    centre). Dégradé qui s'estompe vers l'étoile : lisible comme "part du système solaire", pas
    une simple barre. Même état de révélation que l'étoile qu'il rejoint (cf. onCameraChange) —
-   jamais affiché seul ni en avance sur elle. */
+   jamais affiché seul ni en avance sur elle. Épaisseur posée en JS (createConnectorEl), pas ici
+   : un "1px" fixe ici grossissait avec le zoom (enfant mis à l'échelle) jusqu'à 140px, un pavé
+   pivotant au centre de la bulle système — vu comme "un point noir qui apparait et disparait
+   très vite" à l'arrivée de l'étoile (signalé le 13/08/2026). */
 .universe-zoom-connector {
   position: absolute;
-  height: 1px;
   transform-origin: 0 50%;
   background: linear-gradient(to right, rgba(255,255,255,0.65), rgba(255,255,255,0.15));
   opacity: 0;

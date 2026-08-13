@@ -8,7 +8,7 @@
 // quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-satellite-size-decoupled";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-pan-clamped";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -211,6 +211,9 @@ let viewportEl = null;
 // (le compositeur recompose un bitmap agrandi puis rétréci au lieu de re-rasteriser le texte à
 // sa taille finale) — signalé le 13/08/2026 par capture d'écran, très net à ×20-40.
 let labelsOverlayEl = null;
+// Recalcule sizeUniverseBackground() au redimensionnement du cadre (rotation mobile, fenêtre
+// redimensionnée) : sa taille en dur (px) ne suit sinon plus le cadre réel, cf. mountUniverse.
+let universeBgResizeObserver = null;
 const labelElByNodeId = new Map();
 // Traits connecteurs étoile -> système solaire (demande du 13/08/2026) : enfants de worldEl
 // (pas de la couche des libellés), donc mis à l'échelle avec la scène comme les bulles — pas
@@ -242,6 +245,36 @@ function getSolarSystemById(galaxy, id) {
 // taille aux 3 niveaux en même temps dès la vue d'ensemble — les étoiles, peintes en dernier
 // donc par-dessus, masquaient alors visuellement galaxies/systèmes en dessous.
 const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
+
+// Dimensions réelles de public/universe-bg.jpg (1536x1024, vérifié via `sips`) — nécessaires pour
+// reproduire à la main le calcul de "background-size: cover" (cf. sizeUniverseBackground). Fixe
+// : ne varie que si le fichier image est remplacé (bumper alors aussi son ?v=).
+const UNIVERSE_BG_NATURAL_W = 1536;
+const UNIVERSE_BG_NATURAL_H = 1024;
+
+// .universe-zoom-background est volontairement bien plus grand que le cadre visible (cf.
+// style.css, inset:-150%) pour absorber le panoramique sans jamais révéler son propre bord.
+// Problème : "background-size: cover" pur se recalcule sur CETTE boîte agrandie, pas sur le
+// cadre — l'image apparaissait alors bien plus zoomée qu'avant (signalé le 13/08/2026, capture
+// d'écran, à deux reprises : une 1ère fois avec cover sur la boîte agrandie, une 2e avec
+// background-size:100vw/100vh — plus grand que le cadre lui-même, donc encore trop zoomé). On
+// calcule donc ICI, à la main, la taille que "cover" donnerait pour une boîte de la taille RÉELLE
+// du cadre (viewportEl, pas la boîte agrandie), puis on pose cette taille en dur (px) sur la
+// boîte agrandie : le rendu au repos est alors identique pixel pour pixel à l'ancien fond fixe
+// (#agon-universe-cloud::after). Retourne ces dimensions (plutôt que de les garder locales) :
+// camera.setBackgroundSize (universe-zoom.js) en a besoin pour plafonner le panoramique pile là
+// où ce fond cesse de couvrir le cadre (demande du 13/08/2026, "le déplacement doit s'arrêter au
+// bord du cadre" — jamais de zone vide ni de reprise en tuile visible).
+function sizeUniverseBackground(backgroundEl, viewportEl) {
+  const frameW = viewportEl.clientWidth;
+  const frameH = viewportEl.clientHeight;
+  if (!frameW || !frameH) return null;
+  const coverScale = Math.max(frameW / UNIVERSE_BG_NATURAL_W, frameH / UNIVERSE_BG_NATURAL_H);
+  const renderedW = Math.ceil(UNIVERSE_BG_NATURAL_W * coverScale);
+  const renderedH = Math.ceil(UNIVERSE_BG_NATURAL_H * coverScale);
+  backgroundEl.style.backgroundSize = `${renderedW}px ${renderedH}px`;
+  return { renderedW, renderedH };
+}
 
 // Rayon à l'écran visé, pour le plus gros enfant d'un nœud, une fois ce nœud ciblé par un clic
 // (focusOn) — comfortablement au-dessus de REVEAL_PX_SELF pour qu'il apparaisse net, pas
@@ -332,25 +365,15 @@ function addMiniStarsAroundSolarSystem(system) {
   }
 }
 
-const STAR_MOON_CHANCE = 0.35;
 const STAR_SPARKLE_CHANCE = 0.22;
 
-function addMoonsAndSparklesAroundStar(star) {
-  if (Math.random() <= STAR_MOON_CHANCE) {
-    const moonCount = Math.random() < 0.28 ? 2 : 1;
-    for (let m = 0; m < moonCount; m += 1) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = star.r + 9 + Math.random() * 9;
-      const moonSize = 3.5 + Math.random() * 3;
-      const moon = document.createElement("span");
-      moon.className = "universe-star-moon";
-      moon.style.left = Math.round(star.x + Math.cos(angle) * dist - moonSize / 2) + "px";
-      moon.style.top = Math.round(star.y + Math.sin(angle) * dist - moonSize / 2) + "px";
-      moon.style.width = moonSize + "px";
-      moon.style.height = moonSize + "px";
-      worldEl.appendChild(moon);
-    }
-  }
+// Lunes ternes autour des étoiles retirées (demande du 13/08/2026, "point noir qui apparait sur
+// la bulle solar dès que l'étoile apparait, je n'en veux pas") : leur dégradé bleu-gris foncé
+// (#4a5a68), pensé comme une sphère ombrée discrète à taille fixe, devenait un gros disque sombre
+// bien visible une fois mis à l'échelle avec le reste de la scène (même mécanisme que les bulles,
+// volontaire pour elles mais pas prévu ici) — repéré au moment même où les étoiles satellites se
+// révèlent, puisque montées en même temps qu'elles (cf. worldLayout.stars.forEach, ci-dessous).
+function addSparklesAroundStar(star) {
   if (Math.random() <= STAR_SPARKLE_CHANCE) {
     const angle = Math.random() * Math.PI * 2;
     const dist = star.r + 14 + Math.random() * 14;
@@ -416,6 +439,8 @@ function createBubbleEl(kind, node, background, glowColor, extraClass) {
 // ---- Montage complet de la scène (une seule fois par chargement de données) ----
 function destroyUniverseScene() {
   camera = null;
+  if (universeBgResizeObserver) universeBgResizeObserver.disconnect();
+  universeBgResizeObserver = null;
   if (viewportEl) viewportEl.remove();
   viewportEl = null;
   worldEl = null;
@@ -428,6 +453,12 @@ function destroyUniverseScene() {
 // Trait lumineux reliant une étoile à son système solaire (satellite, cf.
 // packSatellitesAroundPoint, universe-zoom.js) — un simple <div> tourné/étiré entre les deux
 // points, dans l'espace "monde" (enfant de worldEl, mis à l'échelle avec le reste de la scène).
+// Épaisseur visée à l'écran (px), quel que soit le niveau de zoom — cf. onCameraChange, qui pose
+// height = CONNECTOR_SCREEN_PX / state.scale à chaque frame (jamais une valeur fixe posée ici à
+// la création : un enfant de worldEl voit sa taille multipliée par state.scale comme le reste de
+// la scène, cf. son commentaire).
+const CONNECTOR_SCREEN_PX = 2;
+
 function createConnectorEl(fromX, fromY, toX, toY) {
   const dx = toX - fromX;
   const dy = toY - fromY;
@@ -448,15 +479,30 @@ function mountUniverse() {
 
   viewportEl = document.createElement("div");
   viewportEl.className = "universe-zoom-viewport";
+  // Fond étoilé zoomable (demande du 13/08/2026, "que le fond s'avance aussi") : posé AVANT
+  // worldEl (donc dessous), à l'intérieur de viewportEl pour profiter de son overflow:hidden
+  // (le cadre décoratif existant, #agon-universe-cloud::after, reste fixe — non affecté, cette
+  // couche vient juste se superposer par-dessus). Mis à l'échelle via --universe-cam-scale (CSS),
+  // pas manipulé en JS ici.
+  const backgroundEl = document.createElement("div");
+  backgroundEl.className = "universe-zoom-background";
   worldEl = document.createElement("div");
   worldEl.className = "universe-zoom-world";
   // Sibling de worldEl (pas un enfant) : reste en dehors de son transform:scale, cf. le
   // commentaire sur labelsOverlayEl plus haut.
   labelsOverlayEl = document.createElement("div");
   labelsOverlayEl.className = "universe-zoom-labels-overlay";
+  viewportEl.appendChild(backgroundEl);
   viewportEl.appendChild(worldEl);
   viewportEl.appendChild(labelsOverlayEl);
   cloudEl.appendChild(viewportEl);
+  let lastBgSize = sizeUniverseBackground(backgroundEl, viewportEl);
+  if (universeBgResizeObserver) universeBgResizeObserver.disconnect();
+  universeBgResizeObserver = new ResizeObserver(() => {
+    lastBgSize = sizeUniverseBackground(backgroundEl, viewportEl);
+    if (lastBgSize && camera) camera.setBackgroundSize(lastBgSize.renderedW, lastBgSize.renderedH);
+  });
+  universeBgResizeObserver.observe(viewportEl);
 
   // Rayon du monde dérivé de la taille réelle du cadre au montage : scale=1 (vue d'ensemble)
   // montre alors tout de suite toutes les galaxies confortablement.
@@ -511,7 +557,7 @@ function mountUniverse() {
       null,
       "agon-tag-bubble-star"
     );
-    addMoonsAndSparklesAroundStar(star);
+    addSparklesAroundStar(star);
     const parentSystem = nodeById.get(star.solarSystemId);
     if (parentSystem) {
       connectorElByNodeId.set(star.id, createConnectorEl(parentSystem.x, parentSystem.y, star.x, star.y));
@@ -539,30 +585,35 @@ function mountUniverse() {
     nodeById.set(unclassifiedNode.id, unclassifiedNode);
   }
 
-  // Plafond dérivé de la lisibilité réelle des étoiles plutôt qu'une valeur fixe arbitraire —
-  // demande du 13/08/2026 ("une fois que les étoiles sont assez grosses et que le nom apparaît,
-  // on arrête la possibilité de zoomer encore") : au-delà du zoom qui rend déjà les étoiles
-  // nettes, continuer à zoomer n'apporte plus rien (aucun niveau sous l'étoile) et ne fait
-  // qu'agrandir le grain du fond étoilé. 85e centile des focusScaleFor de systèmes solaires
-  // (pas le max ni la moyenne) : un seul système avec très peu d'étoiles peut avoir un rayon
-  // minuscule, poussant SON focusScaleFor très haut — un plafond aligné sur le max, essayé
+  // Plafond dérivé de la révélation réelle des étoiles plutôt qu'une valeur fixe arbitraire —
+  // demande du 13/08/2026, resserrée le même jour ("une fois que les étoiles apparaissent, le
+  // zoom ne puisse plus aller plus loin") : le plafond correspond au moment où le plus gros
+  // enfant de chaque système franchit REVEAL_PX_SELF (son seuil d'apparition, cf.
+  // childrenCanShow), pas un objectif de confort au-delà (essayé d'abord avec focusScaleFor,
+  // qui vise 58px — trop de marge, on pouvait continuer à zoomer après l'apparition). 85e
+  // centile (pas le max ni la moyenne) : un seul système avec très peu d'étoiles peut avoir un
+  // rayon minuscule, poussant SON seuil très haut — un plafond aligné sur le max, essayé
   // d'abord, laissait alors quelques crans de molette suffire à dépasser toute zone utile pour
   // les AUTRES systèmes et à se retrouver "dans" une bulle sans plus rien voir (constaté le
-  // 13/08/2026). Le centile ignore ces cas extrêmes isolés ; marge de 1.15x en plus pour ne pas
-  // couper le zoom pile au seuil de netteté.
-  const systemFocusScales = worldLayout.solarSystems.map((s) => focusScaleFor(s)).sort((a, b) => a - b);
-  const percentileScale = systemFocusScales.length
-    ? systemFocusScales[Math.floor(systemFocusScales.length * 0.85)] ?? systemFocusScales[systemFocusScales.length - 1]
+  // 13/08/2026). Marge de 1.05x seulement (pas 1.15x) : juste de quoi laisser l'étoile
+  // fraîchement apparue finir son fondu, pas au point de pouvoir zoomer beaucoup plus loin.
+  const systemRevealScales = worldLayout.solarSystems
+    .map((s) => REVEAL_PX_SELF / (s.maxChildR || s.r * 0.3))
+    .sort((a, b) => a - b);
+  const percentileScale = systemRevealScales.length
+    ? systemRevealScales[Math.floor(systemRevealScales.length * 0.85)] ?? systemRevealScales[systemRevealScales.length - 1]
     : 12;
-  const maxScale = Math.min(35, Math.max(8, percentileScale * 1.15));
+  const maxScale = Math.min(35, Math.max(8, percentileScale * 1.05));
 
   camera = createUniverseCamera({
     viewportEl,
     worldEl,
+    backgroundEl,
     minScale: 1,
     maxScale,
     onChange: onCameraChange
   });
+  if (lastBgSize) camera.setBackgroundSize(lastBgSize.renderedW, lastBgSize.renderedH);
   camera.setState({ x: 0, y: 0, scale: 1 }, false);
   onCameraChange(camera.getState());
 }
@@ -636,8 +687,18 @@ function onCameraChange(state) {
       label.classList.toggle("is-revealed", revealed);
     }
     // Trait connecteur (étoiles uniquement, cf. createConnectorEl) : même état que l'étoile
-    // elle-même, jamais affiché seul ni en avance sur elle.
-    connectorElByNodeId.get(nodeId)?.classList.toggle("is-revealed", revealed);
+    // elle-même, jamais affiché seul ni en avance sur elle. Épaisseur RECALCULÉE ici à chaque
+    // frame (CONNECTOR_SCREEN_PX / state.scale), pas fixée une fois pour toutes à la création :
+    // un enfant de worldEl voit sa taille multipliée par state.scale comme tout le reste de la
+    // scène — même une épaisseur "proportionnelle au système" (essayé d'abord) continue de
+    // grossir avec le zoom sans jamais se stabiliser, tant que la caméra n'a pas atteint son
+    // maxScale global. Diviser par state.scale ici annule exactement cette multiplication :
+    // l'épaisseur RENDUE reste ~constante à l'écran, quel que soit le niveau de zoom.
+    const connector = connectorElByNodeId.get(nodeId);
+    if (connector) {
+      connector.style.height = Math.max(0.4, CONNECTOR_SCREEN_PX / state.scale) + "px";
+      connector.classList.toggle("is-revealed", revealed);
+    }
 
     el.classList.toggle("is-revealed", revealed);
   });

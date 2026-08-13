@@ -222,17 +222,46 @@ function layoutUniverseWorld(galaxies, worldRadius) {
   return { galaxies: outGalaxies, solarSystems: outSolarSystems, stars: outStars, worldRadius };
 }
 
-// ---- Caméra : pan/zoom continu sur #universe-world à l'intérieur de #universe-viewport -------
+// ---- Caméra : zoom continu sur #universe-world à l'intérieur de #universe-viewport ------------
 // État { x, y, scale } : (x,y) = point du monde actuellement au CENTRE du viewport, scale =
 // facteur de zoom (1 = vue d'ensemble telle que dimensionnée par worldRadius au chargement).
-// Molette (desktop) et pincement (mobile) zooment en gardant fixe le point du monde sous le
-// curseur/les doigts ; un doigt ou un cliquer-glisser souris fait un panoramique. jamais
-// d'animation transform pendant un geste continu (réactivité), seulement lors d'un zoom
-// programmatique (clic sur une bulle, cf. focusOn) — transform seul (jamais box-shadow), cf.
-// historique de tremblement visuel sur mobile Safari documenté ailleurs sur cette page.
-function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40, onChange }) {
+// Jamais de panoramique libre (glisser-déposer) : demande du 13/08/2026, "les galaxies restent
+// fixes sur l'écran, comme accrochées au fond" — la molette/le pincement changent uniquement le
+// scale, x/y ne bougent QUE via un clic sur une bulle (focusOn, qui recentre délibérément sur
+// le nœud ciblé) ou le retour en arrière (zoomOutTo/setState explicite), jamais par un geste de
+// zoom libre ni par un cliquer-glisser. jamais d'animation transform pendant un geste continu
+// (réactivité), seulement lors d'un zoom programmatique (focusOn) — transform seul (jamais
+// box-shadow), cf. historique de tremblement visuel sur mobile Safari documenté ailleurs sur
+// cette page.
+function createUniverseCamera({ viewportEl, worldEl, backgroundEl, minScale = 1, maxScale = 40, onChange }) {
   let state = { x: 0, y: 0, scale: minScale };
   let raf = null;
+  // Taille (px, cf. sizeUniverseBackground côté mon-univers.js) du fond étoilé une fois ajusté
+  // au cadre — sert à plafonner le panoramique pile à l'endroit où ce fond cesse de le couvrir
+  // (demande du 13/08/2026, "le déplacement doit s'arrêter au bord du cadre" — pas de zone vide
+  // ni de reprise en tuile visible, cf. clampPan ci-dessous).
+  let bgRenderedW = 0;
+  let bgRenderedH = 0;
+  function setBackgroundSize(renderedW, renderedH) {
+    bgRenderedW = renderedW;
+    bgRenderedH = renderedH;
+  }
+  // Demi-marge (unités "monde", cf. state.x/y) disponible de part et d'autre du centre avant que
+  // le fond (mis à l'échelle avec la scène, comme worldEl) ne cesse de couvrir le cadre. Croît
+  // avec le zoom (à un scale donné, le fond rendu grandit avec la scène alors que la fenêtre du
+  // cadre reste fixe) — jamais négative par construction (le fond couvre toujours le cadre au
+  // repos, cf. sizeUniverseBackground : cover garantit renderedW/H >= largeur/hauteur du cadre).
+  function clampPan(x, y, scale) {
+    if (!bgRenderedW || !bgRenderedH) return { x, y };
+    const vw = viewportEl.clientWidth;
+    const vh = viewportEl.clientHeight;
+    const halfSlackX = bgRenderedW / 2 - vw / (2 * scale);
+    const halfSlackY = bgRenderedH / 2 - vh / (2 * scale);
+    return {
+      x: Math.min(halfSlackX, Math.max(-halfSlackX, x)),
+      y: Math.min(halfSlackY, Math.max(-halfSlackY, y)),
+    };
+  }
 
   function apply() {
     const vw = viewportEl.clientWidth;
@@ -240,6 +269,20 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
     const tx = vw / 2 - state.x * state.scale;
     const ty = vh / 2 - state.y * state.scale;
     worldEl.style.transform = `translate(${tx}px, ${ty}px) scale(${state.scale})`;
+    // Fond étoilé "accroché" aux bulles (demande du 13/08/2026) : même décalage relatif que
+    // worldEl (-state.x/-state.y à l'échelle courante), mais depuis son propre centre
+    // (transform-origin:center, cf. style.css — il n'a pas de repère (0,0) façon monde, juste
+    // une image de fond centrée) plutôt que le calcul vw/2-tx de worldEl : sans ce décalage, le
+    // fond ne faisait QUE zoomer sur place pendant qu'un panoramique déplaçait les bulles à
+    // côté, donnant l'impression de bulles flottant sur un arrière-plan figé au lieu d'un même
+    // espace qui bouge ensemble.
+    if (backgroundEl) {
+      backgroundEl.style.transform = `translate(${-state.x * state.scale}px, ${-state.y * state.scale}px) scale(${state.scale})`;
+    }
+    // Curseur "main" uniquement quand le panoramique est réellement possible (state.scale >
+    // minScale, cf. le pointermove plus bas) — jamais à la vue d'ensemble, où glisser ne fait
+    // rien (indice visuel cohérent avec le comportement réel).
+    viewportEl.classList.toggle("universe-zoom-can-pan", state.scale > minScale);
   }
 
   function scheduleChange() {
@@ -253,6 +296,9 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
   function setState(next, animate = false) {
     state = { ...state, ...next };
     state.scale = Math.min(maxScale, Math.max(minScale, state.scale));
+    const clamped = clampPan(state.x, state.y, state.scale);
+    state.x = clamped.x;
+    state.y = clamped.y;
     if (animate) {
       worldEl.style.transition = "transform 550ms cubic-bezier(.2,.7,.3,1)";
       const clearTransition = () => { worldEl.style.transition = ""; worldEl.removeEventListener("transitionend", clearTransition); };
@@ -264,28 +310,13 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
     scheduleChange();
   }
 
-  // Convertit un point en pixels VIEWPORT (ex. event.clientX/Y relatif au viewport) en
-  // coordonnées MONDE, à l'état caméra courant.
-  function viewportPointToWorld(px, py) {
-    const rect = viewportEl.getBoundingClientRect();
-    const vx = px - rect.left;
-    const vy = py - rect.top;
-    return {
-      x: state.x + (vx - viewportEl.clientWidth / 2) / state.scale,
-      y: state.y + (vy - viewportEl.clientHeight / 2) / state.scale
-    };
-  }
-
-  function zoomAtViewportPoint(px, py, factor) {
-    const worldPt = viewportPointToWorld(px, py);
+  // Zoom SUR PLACE : seul le scale change, x/y restent tels quels — jamais de recentrage sur le
+  // curseur/point de pincement (essayé d'abord, cf. git blame) : la demande du 13/08/2026 est
+  // justement qu'aucun geste de zoom ne déplace jamais la scène, "les galaxies restent fixes,
+  // comme accrochées au fond".
+  function zoomInPlace(factor) {
     const newScale = Math.min(maxScale, Math.max(minScale, state.scale * factor));
-    // Repositionne pour que worldPt reste sous le curseur/point de pincement après le zoom.
-    const rect = viewportEl.getBoundingClientRect();
-    const vx = px - rect.left;
-    const vy = py - rect.top;
-    const newX = worldPt.x - (vx - viewportEl.clientWidth / 2) / newScale;
-    const newY = worldPt.y - (vy - viewportEl.clientHeight / 2) / newScale;
-    setState({ x: newX, y: newY, scale: newScale }, false);
+    setState({ scale: newScale }, false);
   }
 
   function focusOn(node, targetScale) {
@@ -299,11 +330,11 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
   // ---- Molette (desktop) ----
   // 0.0009 (pas 0.0016, trop sensible : quelques crans suffisaient à dépasser toute la plage
   // utile et à se retrouver "dans" une bulle sans plus rien voir, constaté le 13/08/2026) —
-  // zoom plus progressif, contrôlable sur toute la plage min/max.
+  // zoom plus progressif, contrôlable sur toute la plage min/max. zoomInPlace (pas de suivi du
+  // curseur) : demande du 13/08/2026, jamais de déplacement de la scène par un geste de zoom.
   viewportEl.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const factor = Math.exp(-e.deltaY * 0.0009);
-    zoomAtViewportPoint(e.clientX, e.clientY, factor);
+    zoomInPlace(Math.exp(-e.deltaY * 0.0009));
   }, { passive: false });
 
   // ---- Pincement trackpad Mac dans Safari ----
@@ -312,9 +343,8 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
   // WebKit, jamais wheel+ctrlKey pour ce geste précis) — sans ces écouteurs, pincer sur le
   // trackpad dans Safari ne faisait rien du tout (constaté le 13/08/2026). event.scale est
   // cumulé depuis gesturestart, jamais un delta : gestureLastScale retient la valeur précédente
-  // pour en tirer un facteur incrémental, même principe que le pincement tactile (pointerdown/
-  // pointermove à deux doigts) juste en dessous. no-zoom.js bloque déjà le zoom natif de la
-  // page sur ces mêmes événements (document, sans stopPropagation) : ces écouteurs, posés sur
+  // pour en tirer un facteur incrémental. no-zoom.js bloque déjà le zoom natif de la page sur
+  // ces mêmes événements (document, sans stopPropagation) : ces écouteurs, posés sur
   // viewportEl, se déclenchent avant lui dans l'ordre de bouillonnement et pilotent la caméra à
   // la place.
   let gestureLastScale = 1;
@@ -324,19 +354,24 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
   });
   viewportEl.addEventListener("gesturechange", (e) => {
     e.preventDefault();
-    const factor = e.scale / gestureLastScale;
+    zoomInPlace(e.scale / gestureLastScale);
     gestureLastScale = e.scale;
-    zoomAtViewportPoint(e.clientX, e.clientY, factor);
   });
   viewportEl.addEventListener("gestureend", (e) => {
     e.preventDefault();
   });
 
-  // ---- Pointer Events : un doigt/clic = pan, deux doigts = pincement ----
+  // ---- Pointer Events : un doigt/clic-glisser = panoramique, deux doigts = pincement ----------
+  // Panoramique actif UNIQUEMENT une fois zoomé au-delà de la vue d'ensemble (state.scale >
+  // minScale) — demande du 13/08/2026, en deux temps : d'abord "les galaxies restent fixes à
+  // la vue d'ensemble, je ne peux pas aller à droite/gauche" (panoramique retiré), puis "une
+  // fois que je zoome, je veux pouvoir aller dans toutes les directions" (panoramique remis,
+  // mais seulement une fois zoomé — sinon on retombe dans le premier problème signalé). Le
+  // pincement à deux doigts, lui, reste un zoom sur place à tout niveau (jamais de panoramique
+  // via son point médian, cf. zoomInPlace).
   const activePointers = new Map();
   let dragLastPoint = null;
   let pinchStartDist = null;
-  let pinchStartMid = null;
 
   function midpoint() {
     const pts = [...activePointers.values()];
@@ -356,7 +391,6 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
     } else if (activePointers.size === 2) {
       dragLastPoint = null;
       pinchStartDist = distance();
-      pinchStartMid = midpoint();
     }
   });
 
@@ -365,19 +399,18 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (activePointers.size === 1 && dragLastPoint) {
-      const dx = e.clientX - dragLastPoint.x;
-      const dy = e.clientY - dragLastPoint.y;
+      if (state.scale > minScale) {
+        const dx = e.clientX - dragLastPoint.x;
+        const dy = e.clientY - dragLastPoint.y;
+        setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+      }
       dragLastPoint = { x: e.clientX, y: e.clientY };
-      setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
     } else if (activePointers.size === 2) {
       const dist = distance();
-      const mid = midpoint();
       if (pinchStartDist) {
-        const factor = dist / pinchStartDist;
-        zoomAtViewportPoint(mid.x, mid.y, factor);
+        zoomInPlace(dist / pinchStartDist);
         pinchStartDist = dist;
       }
-      pinchStartMid = mid;
     }
   });
 
@@ -402,6 +435,7 @@ function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40
     setState,
     focusOn,
     zoomOutTo,
+    setBackgroundSize,
     destroy() {
       // Pas de removeEventListener détaillé (le conteneur est recréé côté appelant à chaque
       // ré-init, cf. mon-univers.js loadUniverse) — documenté pour un futur ajout si besoin.

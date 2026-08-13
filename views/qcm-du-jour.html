@@ -1415,6 +1415,51 @@
       font-weight: 700;
       letter-spacing: 0.02em;
     }
+    /* Boutons Facile/Moyen/Difficile (cf. wireDifficultyButtons, demande du
+       13/08/2026) : remplacent "Valider" — valider et noter la difficulté
+       ressentie en un seul geste, obligatoire pour passer à la suite.
+       "Moyen" mis en avant visuellement (plus grand, couleur pleine) comme
+       choix par défaut/neutre ; Facile/Difficile en retrait de part et
+       d'autre. */
+    .qcm-difficulty-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0 0;
+    }
+    .qcm-difficulty-btn {
+      flex: 1;
+      padding: 10px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: #f9fafb;
+      color: #516776;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .qcm-difficulty-btn:hover:not(:disabled) {
+      border-color: #b8c2ca;
+      background: #eef3f6;
+    }
+    .qcm-difficulty-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .qcm-difficulty-btn-moyen {
+      flex: 1.3;
+      padding: 12px 8px;
+      border: none;
+      background: #243038;
+      color: #ffffff;
+      font-size: 15px;
+    }
+    .qcm-difficulty-btn-moyen:hover:not(:disabled) {
+      background: #384852;
+    }
     /* Bouton "Ne plus me la demander" (cf. wireExcludeButton) : discret,
        en bas de carte sous "Valider ma réponse"/les propositions (jamais en
        haut, cf. demande du 13/08/2026 — pour ne pas laisser deviner qu'une
@@ -1647,7 +1692,7 @@
     <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260813-level-picker-close" defer></script>
+<script src="/script.min.js?v=20260813-4-levels" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -1661,6 +1706,13 @@
   var exploreBtn = document.getElementById('qcm-explore-btn');
   var voterKey = null;
   var questions = [];
+  // Référence stable du QCM complet (demande du 13/08/2026, "Refaire les
+  // questions loupées") — jamais mutée après le chargement, contrairement à
+  // `questions` (l'ensemble affiché à l'instant, qui peut devenir un
+  // sous-ensemble des seules questions loupées, ou un ordre mélangé). Sert de
+  // socle pour un "Refaire" complet même après un ou plusieurs passages en
+  // mode "questions loupées uniquement".
+  var originalQuestions = [];
   var answeredByQuestionId = {};
   var currentIndex = 0;
   var currentSlot = null;
@@ -2010,6 +2062,35 @@
     });
   }
 
+  // Boutons Facile/Moyen/Difficile (demande du 13/08/2026) : remplacent le
+  // bouton "Valider" — cliquer dessus valide la réponse ET note la
+  // difficulté ressentie en un seul geste, obligatoire pour passer à la
+  // question suivante. Toujours au-dessus du bouton "Ne plus me la demander"
+  // (cf. l'ordre d'insertion dans chaque renderXQuestion). Désactivés tant
+  // que la réponse n'est pas prête à être soumise (mêmes conditions que
+  // l'ancien bouton "Valider" : option sélectionnée, paires toutes
+  // renseignées, etc.) — cf. setDifficultyButtonsEnabled.
+  function renderDifficultyButtonsHtml(idPrefix, hidden) {
+    return '<div class="qcm-difficulty-buttons" id="' + idPrefix + '-difficulty"' + (hidden ? ' hidden' : '') + '>' +
+      '<button type="button" class="qcm-difficulty-btn" data-difficulty="facile" disabled>Facile</button>' +
+      '<button type="button" class="qcm-difficulty-btn qcm-difficulty-btn-moyen" data-difficulty="moyen" disabled>Moyen</button>' +
+      '<button type="button" class="qcm-difficulty-btn" data-difficulty="difficile" disabled>Difficile</button>' +
+      '</div>';
+  }
+  // `onSubmit(difficulty)` appelé au clic sur l'un des 3 boutons. Retourne
+  // une fonction `setEnabled(bool)` à appeler quand la réponse devient
+  // prête/plus prête à soumettre (remplace submitBtn.disabled = ...).
+  function wireDifficultyButtons(idPrefix, onSubmit) {
+    var container = document.getElementById(idPrefix + '-difficulty');
+    var buttons = container ? container.querySelectorAll('.qcm-difficulty-btn') : [];
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () { onSubmit(btn.getAttribute('data-difficulty')); });
+    });
+    return function setEnabled(enabled) {
+      buttons.forEach(function (btn) { btn.disabled = !enabled; });
+    };
+  }
+
   function wireExcludeButton(question) {
     var btn = document.getElementById('qcm-exclude-btn');
     if (!btn || !voterKey) return;
@@ -2090,17 +2171,20 @@
     var gated = needsRevealGate(type, answer, question);
     if (gated) html += renderRevealGateHtml();
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
-    html += '<button type="button" class="qcm-next-btn visible" id="qcm-choice-submit-btn" disabled' + (gated ? ' hidden' : '') + '>Valider ma réponse</button>';
+    html += renderDifficultyButtonsHtml('qcm-choice', gated);
     html += renderExcludeButtonHtml();
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
     wireExcludeButton(question);
-    if (gated) wireRevealGate(['qcm-options', 'qcm-choice-submit-btn']);
+    if (gated) wireRevealGate(['qcm-options', 'qcm-choice-difficulty']);
 
     var optionsEl = document.getElementById('qcm-options');
     var selectedOptionIndex = null;
-    var submitBtn = document.getElementById('qcm-choice-submit-btn');
+    var setDifficultyEnabled = wireDifficultyButtons('qcm-choice', function (difficulty) {
+      if (selectedOptionIndex === null) return;
+      submitChoiceAnswer(question, selectedOptionIndex, difficulty);
+    });
     question.options.forEach(function (optionText, index) {
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -2117,15 +2201,10 @@
           optionBtn.classList.remove('is-selected');
         });
         btn.classList.add('is-selected');
-        submitBtn.disabled = false;
+        setDifficultyEnabled(true);
       });
       optionsEl.appendChild(btn);
     });
-
-    submitBtn.onclick = function () {
-      if (selectedOptionIndex === null) return;
-      submitChoiceAnswer(question, selectedOptionIndex);
-    };
 
     if (answer) applyChoiceAnswerState(question, answer);
   }
@@ -2134,8 +2213,8 @@
     var optionsEl = document.getElementById('qcm-options');
     var buttons = optionsEl.querySelectorAll('.qcm-option-btn');
     var total = answer.totalAnswers || 0;
-    var submitBtn = document.getElementById('qcm-choice-submit-btn');
-    if (submitBtn) submitBtn.className = 'qcm-next-btn';
+    var difficultyContainer = document.getElementById('qcm-choice-difficulty');
+    if (difficultyContainer) difficultyContainer.hidden = true;
     buttons.forEach(function (btn, index) {
       btn.disabled = true;
       btn.classList.add('answered');
@@ -2155,16 +2234,16 @@
     wireNextButton(document.getElementById('qcm-next-btn'));
   }
 
-  function submitChoiceAnswer(question, optionIndex) {
+  function submitChoiceAnswer(question, optionIndex, difficulty) {
     var optionsEl = document.getElementById('qcm-options');
-    var submitBtn = document.getElementById('qcm-choice-submit-btn');
-    if (submitBtn) submitBtn.disabled = true;
+    var difficultyContainer = document.getElementById('qcm-choice-difficulty');
+    if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = true; });
     optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = true; });
 
     fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex, slot: currentSlot, quizDate: currentQuizDate })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex, difficulty: difficulty, slot: currentSlot, quizDate: currentQuizDate })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -2174,7 +2253,7 @@
       })
       .catch(function () {
         optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = false; });
-        if (submitBtn) submitBtn.disabled = false;
+        if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = false; });
       });
   }
 
@@ -2190,7 +2269,7 @@
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     html += '<div id="qcm-assoc-rows"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
-    html += '<button type="button" class="qcm-next-btn visible" id="qcm-assoc-submit-btn" disabled>Valider</button>';
+    html += renderDifficultyButtonsHtml('qcm-assoc', false);
     html += renderExcludeButtonHtml();
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
@@ -2223,19 +2302,18 @@
       return select;
     });
 
-    var submitBtn = document.getElementById('qcm-assoc-submit-btn');
+    var setDifficultyEnabled = wireDifficultyButtons('qcm-assoc', function (difficulty) {
+      var pairsGuess = lefts.map(function (leftText, index) {
+        return { left: leftText, right: selects[index].value };
+      });
+      submitAssociationAnswer(question, pairsGuess, selects, difficulty);
+    });
     function updateSubmitEnabled() {
-      submitBtn.disabled = selects.some(function (s) { return !s.value; });
+      setDifficultyEnabled(!selects.some(function (s) { return !s.value; }));
     }
     selects.forEach(function (select) {
       select.addEventListener('change', updateSubmitEnabled);
     });
-    submitBtn.onclick = function () {
-      var pairsGuess = lefts.map(function (leftText, index) {
-        return { left: leftText, right: selects[index].value };
-      });
-      submitAssociationAnswer(question, pairsGuess, selects, submitBtn);
-    };
 
     // Reprise de session (page rechargée après une réponse déjà envoyée) :
     // le serveur ne connaît que le verdict global (tout correct ou non, cf.
@@ -2246,14 +2324,15 @@
     if (answer) applyAssociationAnswerState(question, answer, selects);
   }
 
-  function submitAssociationAnswer(question, pairsGuess, selects, submitBtn) {
+  function submitAssociationAnswer(question, pairsGuess, selects, difficulty) {
     selects.forEach(function (s) { s.disabled = true; });
-    submitBtn.disabled = true;
+    var difficultyContainer = document.getElementById('qcm-assoc-difficulty');
+    if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = true; });
 
     fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, associationAnswer: pairsGuess })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, associationAnswer: pairsGuess, difficulty: difficulty })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -2263,7 +2342,7 @@
       })
       .catch(function () {
         selects.forEach(function (s) { s.disabled = false; });
-        submitBtn.disabled = false;
+        if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = false; });
       });
   }
 
@@ -2299,8 +2378,8 @@
       }
     });
 
-    var submitBtn = document.getElementById('qcm-assoc-submit-btn');
-    if (submitBtn) submitBtn.remove();
+    var difficultyContainer = document.getElementById('qcm-assoc-difficulty');
+    if (difficultyContainer) difficultyContainer.remove();
 
     var feedback = document.getElementById('qcm-feedback');
     feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
@@ -2325,16 +2404,18 @@
     html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
-    html += '<button type="button" class="qcm-next-btn visible" id="qcm-multi-submit-btn" disabled' + (gated ? ' hidden' : '') + '>Valider</button>';
+    html += renderDifficultyButtonsHtml('qcm-multi', gated);
     html += renderExcludeButtonHtml();
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
     wireExcludeButton(question);
-    if (gated) wireRevealGate(['qcm-options', 'qcm-multi-submit-btn']);
+    if (gated) wireRevealGate(['qcm-options', 'qcm-multi-difficulty']);
 
     var optionsEl = document.getElementById('qcm-options');
-    var submitBtn = document.getElementById('qcm-multi-submit-btn');
     var selected = {};
+    var setDifficultyEnabled = wireDifficultyButtons('qcm-multi', function (difficulty) {
+      submitMultiChoiceAnswer(question, Object.keys(selected).map(Number), buttons, difficulty);
+    });
     var buttons = question.options.map(function (optionText, index) {
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -2347,27 +2428,24 @@
       btn.addEventListener('click', function () {
         if (selected[index]) { delete selected[index]; btn.classList.remove('is-selected'); }
         else { selected[index] = true; btn.classList.add('is-selected'); }
-        submitBtn.disabled = !Object.keys(selected).length;
+        setDifficultyEnabled(!!Object.keys(selected).length);
       });
       optionsEl.appendChild(btn);
       return btn;
     });
 
-    submitBtn.onclick = function () {
-      submitMultiChoiceAnswer(question, Object.keys(selected).map(Number), buttons, submitBtn);
-    };
-
     if (answer) applyMultiChoiceAnswerState(answer, buttons);
   }
 
-  function submitMultiChoiceAnswer(question, optionIndexes, buttons, submitBtn) {
+  function submitMultiChoiceAnswer(question, optionIndexes, buttons, difficulty) {
     buttons.forEach(function (btn) { btn.disabled = true; });
-    submitBtn.disabled = true;
+    var difficultyContainer = document.getElementById('qcm-multi-difficulty');
+    if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = true; });
 
     fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, optionIndexes: optionIndexes })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, optionIndexes: optionIndexes, difficulty: difficulty })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -2377,7 +2455,7 @@
       })
       .catch(function () {
         buttons.forEach(function (btn) { btn.disabled = false; });
-        submitBtn.disabled = false;
+        if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = false; });
       });
   }
 
@@ -2396,8 +2474,8 @@
       else if (btn.classList.contains('is-selected')) btn.classList.add('is-wrong-picked');
     });
 
-    var submitBtn = document.getElementById('qcm-multi-submit-btn');
-    if (submitBtn) submitBtn.remove();
+    var difficultyContainer = document.getElementById('qcm-multi-difficulty');
+    if (difficultyContainer) difficultyContainer.remove();
 
     var feedback = document.getElementById('qcm-feedback');
     feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
@@ -2422,7 +2500,7 @@
     html += '<div class="qcm-order-chosen" id="qcm-order-chosen"></div>';
     html += '<div class="qcm-order-pool" id="qcm-order-pool"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
-    html += '<button type="button" class="qcm-next-btn visible" id="qcm-order-submit-btn" disabled>Valider</button>';
+    html += renderDifficultyButtonsHtml('qcm-order', false);
     html += renderExcludeButtonHtml();
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
@@ -2430,9 +2508,11 @@
 
     var poolEl = document.getElementById('qcm-order-pool');
     var chosenEl = document.getElementById('qcm-order-chosen');
-    var submitBtn = document.getElementById('qcm-order-submit-btn');
     var items = question.items || [];
     var chosenOrder = [];
+    var setDifficultyEnabled = wireDifficultyButtons('qcm-order', function (difficulty) {
+      submitOrderAnswer(question, chosenOrder.slice(), poolEl, chosenEl, difficulty);
+    });
 
     function renderChosen() {
       chosenEl.innerHTML = '';
@@ -2448,7 +2528,7 @@
         });
         chosenEl.appendChild(chip);
       });
-      submitBtn.disabled = chosenOrder.length !== items.length;
+      setDifficultyEnabled(chosenOrder.length === items.length);
     }
 
     function renderPool() {
@@ -2470,31 +2550,28 @@
     renderPool();
     renderChosen();
 
-    submitBtn.onclick = function () {
-      submitOrderAnswer(question, chosenOrder.slice(), poolEl, chosenEl, submitBtn);
-    };
-
-    if (answer) applyOrderAnswerState(answer, poolEl, chosenEl, submitBtn, items);
+    if (answer) applyOrderAnswerState(answer, poolEl, chosenEl, items);
   }
 
-  function submitOrderAnswer(question, orderedItems, poolEl, chosenEl, submitBtn) {
-    submitBtn.disabled = true;
+  function submitOrderAnswer(question, orderedItems, poolEl, chosenEl, difficulty) {
+    var difficultyContainer = document.getElementById('qcm-order-difficulty');
+    if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = true; });
     poolEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = true; });
     chosenEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = true; });
 
     fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, orderedItems: orderedItems })
+      body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, orderedItems: orderedItems, difficulty: difficulty })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
         recordAnsweredQuestion(question.id, data);
-        applyOrderAnswerState(data, poolEl, chosenEl, submitBtn, question.items);
+        applyOrderAnswerState(data, poolEl, chosenEl, question.items);
       })
       .catch(function () {
-        submitBtn.disabled = false;
+        if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = false; });
         poolEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = false; });
         chosenEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = false; });
       });
@@ -2504,8 +2581,9 @@
   // seule plutôt que de comparer élément par élément à ce qui avait été
   // choisi — même limite de reprise de session que "association"/"qcm_multi" :
   // seul le verdict global est connu après un rechargement de page.
-  function applyOrderAnswerState(answer, poolEl, chosenEl, submitBtn, fallbackItems) {
-    if (submitBtn) submitBtn.remove();
+  function applyOrderAnswerState(answer, poolEl, chosenEl, fallbackItems) {
+    var difficultyContainer = document.getElementById('qcm-order-difficulty');
+    if (difficultyContainer) difficultyContainer.remove();
     var correctItems = answer.items || fallbackItems || [];
     poolEl.innerHTML = '';
     chosenEl.innerHTML = '<p class="qcm-order-correct-label">Bon ordre :</p>';
@@ -2530,9 +2608,11 @@
     var answers = practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId;
     var total = questions.length;
     var correct = 0;
+    var missedQuestions = [];
     questions.forEach(function (q) {
       var a = answers[q.id];
       if (a && a.correct) correct += 1;
+      else missedQuestions.push(q);
     });
     // Les repasses de "Renforcement" ne comptent jamais pour le score
     // Gnosis (cf. server.js DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES) :
@@ -2554,6 +2634,7 @@
       '<p class="qcm-final-score-hint">' + scoreHint + '</p>' +
       '<div class="qcm-final-actions">' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-review-btn">Refaire</button>' +
+      (missedQuestions.length ? '<button type="button" class="qcm-next-btn visible" id="qcm-review-missed-btn">Refaire les questions loupées (' + missedQuestions.length + ')</button>' : '') +
       '<button type="button" class="qcm-next-btn visible" id="qcm-back-to-mesqcm-btn">Retour à mes apprentissages</button>' +
       '</div>';
 
@@ -2562,17 +2643,36 @@
     // bascule submitXAnswer sur POST /api/daily-quiz/practice-answer (jamais
     // écrit en base) et le résultat dans practiceAnsweredByQuestionId, à
     // part des vraies réponses du jour (cf. quizAnswerEndpoint/
-    // recordAnsweredQuestion). Repart toujours d'un essai vierge.
+    // recordAnsweredQuestion). Repart toujours de l'ensemble COMPLET
+    // (originalQuestions, jamais `questions` qui peut déjà être un
+    // sous-ensemble des seules questions loupées d'un tour précédent).
     document.getElementById('qcm-review-btn').onclick = function () {
       showQuizOrderPicker(function (shuffled) {
         practiceMode = true;
         practiceAnsweredByQuestionId = {};
-        if (shuffled) questions = shuffleArrayCopy(questions);
+        questions = shuffled ? shuffleArrayCopy(originalQuestions) : originalQuestions.slice();
         currentIndex = 0;
         setPanelCloseVisible(true);
         renderQuestion();
       });
     };
+    // "Refaire les questions loupées" (demande du 13/08/2026) : ne reprend
+    // que celles ratées (ou non répondues) dans le passage qui vient de se
+    // terminer — enchaînable plusieurs fois de suite pour resserrer
+    // progressivement sur ce qui reste mal su, même logique practiceMode que
+    // "Refaire" (jamais compté pour l'ancrage).
+    if (missedQuestions.length) {
+      document.getElementById('qcm-review-missed-btn').onclick = function () {
+        showQuizOrderPicker(function (shuffled) {
+          practiceMode = true;
+          practiceAnsweredByQuestionId = {};
+          questions = shuffled ? shuffleArrayCopy(missedQuestions) : missedQuestions.slice();
+          currentIndex = 0;
+          setPanelCloseVisible(true);
+          renderQuestion();
+        });
+      };
+    }
     document.getElementById('qcm-back-to-mesqcm-btn').onclick = function () {
       practiceMode = false;
       if (currentSlot) window.history.replaceState({}, '', window.location.pathname);
@@ -2815,7 +2915,7 @@
       customSearchBtn.disabled = true;
       customSearchInput.disabled = true;
       setCustomSearchStatus(
-        level === 'expert'
+        level === 'exhaustif'
           ? 'Génération en cours, jusqu’à quelques minutes pour une liste à mémoriser en entier…'
           : 'Génération de la fiche en cours…',
         false
@@ -3594,6 +3694,7 @@
       .then(function (data) {
         if (myToken !== loadToken) return;
         questions = Array.isArray(data.questions) ? data.questions : [];
+        originalQuestions = questions.slice();
         if (shuffled) questions = shuffleArrayCopy(questions);
         if (data.label && !label) titleText.textContent = data.label;
         if (!questions.length) {

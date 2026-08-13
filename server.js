@@ -8592,93 +8592,14 @@ if (AUTO_VOTE_SCHEDULERS_ENABLED) {
 /* =========================
    PURGE DE RÉTENTION (page_visits / notification_events)
 ========================= */
-// Ces deux tables ne reçoivent que des inserts (un visiteur de page, un push
-// envoyé) et n'avaient jusqu'ici aucune purge : elles grossissent indéfiniment
-// depuis le lancement du site, probable cause principale de l'épuisement de
-// quota/ressources Supabase constaté le 20/06/2026. page_visits n'est lue que
-// pour les stats du jour (/api/admin/visits/today) ; notification_events n'a
-// plus d'utilité une fois le push traité, hormis pour du débogage récent.
-const PAGE_VISITS_RETENTION_DAYS = 90;
-const NOTIFICATION_EVENTS_RETENTION_DAYS = 30;
-// Volume élevé (jusqu'à ~300-600 lignes/jour depuis qu'Autres sources couvre tous les articles
-// non encore publiés en débat, pas seulement la presse d'opinion) et sans intérêt passé
-// quelques jours — GET /api/opinion-articles ne montre de toute façon que les 200 plus
-// récentes.
-// Passé de 2 à 7 jours le 19/07/2026 (demande : plus de cartes consultables sur
-// Autres actus), sans rapport avec l'incident de quota du 20/06/2026 (tables
-// sans purge). L'estimation initiale de volume (~2000-4000 lignes en base)
-// est dépassée : 7 880 lignes mesurées le 12/08/2026, OPINION_ARTICLES_SELECTION_SCAN_LIMIT
-// étant passé à 10 000 entretemps (27/07/2026) — la passe légère de
-// buildFreshOpinionArticlesSelection couvre donc désormais la table entière à
-// chaque reconstruction plutôt qu'une fenêtre bornée. Coût egress compensé en
-// espaçant les reconstructions (cf. OPINION_ARTICLES_CACHE_TTL_MS, relevé à 15
-// min le même jour) plutôt qu'en réduisant la limite de scan, qui pénaliserait
-// la diversité de la sélection (orientations peu représentées).
-const OPINION_ARTICLES_RETENTION_DAYS = 7;
-// Un QCM par jour : 30 jours suffisent largement pour les stats/debug, sans
-// accumuler indéfiniment (même logique que les autres tables purgées ici).
-const DAILY_QUIZ_RETENTION_DAYS = 30;
-// Clics sur les cartes Autres actus (cf. /api/opinion-articles/recommended) : doit survivre
-// nettement plus longtemps que opinion_articles (7j) pour garder un profil d'affinité
-// exploitable sur un visiteur qui revient occasionnellement, sans grossir indéfiniment.
-const OPINION_ARTICLE_CLICKS_RETENTION_DAYS = 45;
-const RETENTION_DELETE_BATCH_SIZE = 500;
-const RETENTION_DELETE_MAX_BATCHES_PER_RUN = 20; // plafonne à 10 000 lignes/table/jour : purge progressive plutôt qu'un DELETE massif sur une base déjà sous tension.
+// Config + logique extraites dans lib/data-retention.js (testable avec un
+// client Supabase injecté, cf. test/data-retention.test.js pour la
+// régression du bug F1 : purge des repasses "cgreview-*").
+const { runDataRetentionCleanup } = require("./lib/data-retention");
 
-// excludeLikeColumn/excludeLikePattern : un QCM de notion doit survivre tant
-// qu'il reste dans la liste "Mes QCM" de quelqu'un (cf. user_notion_quizzes),
-// indépendamment de son âge — jamais purgé comme le reste, contrairement au
-// QCM actu d'avant (éphémère par nature). daily_quiz.slot et
-// daily_quiz_answers.question_id sont tous deux préfixés "notion:..." pour
-// ces lignes (cf. buildNotionQuestions), d'où l'exclusion par LIKE sur la
-// colonne concernée plutôt qu'une jointure.
-async function pruneOldRows(table, retentionDays, excludeLikeColumn = null, excludeLikePattern = null) {
-  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-  let totalDeleted = 0;
-
-  for (let batch = 0; batch < RETENTION_DELETE_MAX_BATCHES_PER_RUN; batch++) {
-    let query = supabase
-      .from(table)
-      .select("id")
-      .lt("created_at", cutoff);
-    if (excludeLikeColumn) query = query.not(excludeLikeColumn, "like", excludeLikePattern);
-    const { data: staleRows, error: selectError } = await query.limit(RETENTION_DELETE_BATCH_SIZE);
-
-    if (selectError) {
-      console.error(`[retention] ${table} lecture :`, selectError.message);
-      break;
-    }
-
-    const staleIds = (staleRows || []).map((row) => row.id);
-    if (!staleIds.length) break;
-
-    const { error: deleteError } = await supabase.from(table).delete().in("id", staleIds);
-    if (deleteError) {
-      console.error(`[retention] ${table} suppression :`, deleteError.message);
-      break;
-    }
-
-    totalDeleted += staleIds.length;
-    if (staleIds.length < RETENTION_DELETE_BATCH_SIZE) break;
-  }
-
-  if (totalDeleted > 0) {
-    console.log(`[retention] ${table} : ${totalDeleted} ligne(s) de plus de ${retentionDays}j supprimée(s).`);
-  }
-}
-
-async function runDataRetentionCleanup() {
-  await pruneOldRows("page_visits", PAGE_VISITS_RETENTION_DAYS);
-  await pruneOldRows("notification_events", NOTIFICATION_EVENTS_RETENTION_DAYS);
-  await pruneOldRows("opinion_articles", OPINION_ARTICLES_RETENTION_DAYS);
-  await pruneOldRows("daily_quiz", DAILY_QUIZ_RETENTION_DAYS, "slot", "notion:%");
-  await pruneOldRows("daily_quiz_answers", DAILY_QUIZ_RETENTION_DAYS, "question_id", "notion:%");
-  await pruneOldRows("opinion_article_clicks", OPINION_ARTICLE_CLICKS_RETENTION_DAYS);
-}
-
-runDataRetentionCleanup().catch((err) => console.error("[retention] purge initiale :", err.message));
+runDataRetentionCleanup(supabase).catch((err) => console.error("[retention] purge initiale :", err.message));
 setInterval(() => {
-  runDataRetentionCleanup().catch((err) => console.error("[retention] purge planifiée :", err.message));
+  runDataRetentionCleanup(supabase).catch((err) => console.error("[retention] purge planifiée :", err.message));
 }, 24 * 60 * 60 * 1000).unref();
 
 /* =========================
@@ -12245,12 +12166,36 @@ const DAILY_QUIZ_FORMAT_ROTATION_POOL = [
   "qcm", "ordre", "vrai_faux", "qcm", "intrus"
 ];
 
-function buildFormatAssignments(count) {
-  const shuffled = shuffleArray(DAILY_QUIZ_FORMAT_ROTATION_POOL);
+// `excludeTypes` (demande du 13/08/2026) : retire un ou plusieurs formats de
+// la rotation — utilisé pour bannir "intrus" des QCM sur liste énumérable
+// (cf. buildEnumerableQuizChunkPrompt), où il dérive systématiquement en
+// "lequel de ces éléments ne fait PAS partie de la liste ?" — injouable dès
+// que la liste complète peut monter jusqu'à NOTION_QUIZ_ENUMERABLE_MAX_ITEMS
+// (200) éléments, que le lecteur n'a évidemment jamais tous en tête.
+function buildFormatAssignments(count, excludeTypes) {
+  const pool = excludeTypes && excludeTypes.length
+    ? DAILY_QUIZ_FORMAT_ROTATION_POOL.filter((f) => !excludeTypes.includes(f))
+    : DAILY_QUIZ_FORMAT_ROTATION_POOL;
+  const shuffled = shuffleArray(pool);
   const assignments = [];
   for (let i = 0; i < count; i++) assignments.push(shuffled[i % shuffled.length]);
   return assignments;
 }
+
+// Un {type, desc} par format possible plutôt qu'une liste de chaînes brutes :
+// permet de retirer un format (cf. excludeTypes) à la fois de la description
+// et de l'énumération JSON finale, pas seulement de la rotation suggérée
+// (qui ne fait qu'orienter l'IA, jamais l'empêcher de choisir un format
+// décrit plus haut si elle le juge plus adapté).
+const QUESTION_FORMAT_DEFS = [
+  { type: "qcm", desc: "\"qcm\" : question à 4 options, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte." },
+  { type: "vrai_faux", desc: "\"vrai_faux\" : une affirmation à trancher, avec exactement 2 options [\"Vrai\",\"Faux\"] (dans cet ordre) et correctIndex 0 ou 1." },
+  { type: "texte_a_trous", desc: "\"texte_a_trous\" : une phrase tirée du texte où un mot ou groupe de mots est remplacé par le marqueur exact \"___\" (le champ \"question\" doit contenir ce marqueur), avec 4 options pour le compléter, une seule correcte." },
+  { type: "association", desc: "\"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 éléments distincts et non ambigus à apparier entre eux (jamais en combinant plusieurs sujets différents) ; sinon préfère un autre format." },
+  { type: "intrus", desc: "\"intrus\" : 4 options dont une seule ne va pas avec les 3 autres (qui partagent un point commun clair au vu du texte) — la question formule ce qu'ont en commun les 3 bonnes et demande de trouver l'intrus ; correctIndex pointe vers l'intrus." },
+  { type: "qcm_multi", desc: "\"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\" ; n'utilise ce format QUE si le sujet offre naturellement plusieurs bonnes réponses distinctes et sans ambiguïté au vu du texte." },
+  { type: "ordre", desc: "\"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents et ordonnés DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents, ni un ordre déduit de connaissances extérieures au texte fourni ; n'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte, sinon préfère un autre format." }
+];
 
 // `includeAltVariant` (demande du 12/08/2026) : demande en plus, pour
 // chaque question, une SECONDE façon de tester exactement le même fait —
@@ -12261,22 +12206,28 @@ function buildFormatAssignments(count) {
 // Restreint à qcm/vrai_faux/texte_a_trous : les autres formats (association/
 // intrus/qcm_multi/ordre) ont besoin d'éléments supplémentaires qui
 // n'existent pas pour une simple reformulation d'un seul fait isolé.
-function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAltVariant) {
-  const assignments = buildFormatAssignments(questionCount);
+function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAltVariant, excludeTypes) {
+  const assignments = buildFormatAssignments(questionCount, excludeTypes);
+  const availableDefs = excludeTypes && excludeTypes.length
+    ? QUESTION_FORMAT_DEFS.filter((d) => !excludeTypes.includes(d.type))
+    : QUESTION_FORMAT_DEFS;
+  const availableTypes = availableDefs.map((d) => d.type);
   return [
     "=== Formats de question possibles ===",
-    "- \"qcm\" : question à 4 options, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte.",
-    "- \"vrai_faux\" : une affirmation à trancher, avec exactement 2 options [\"Vrai\",\"Faux\"] (dans cet ordre) et correctIndex 0 ou 1.",
-    "- \"texte_a_trous\" : une phrase tirée du texte où un mot ou groupe de mots est remplacé par le marqueur exact \"___\" (le champ \"question\" doit contenir ce marqueur), avec 4 options pour le compléter, une seule correcte.",
-    "- \"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 éléments distincts et non ambigus à apparier entre eux (jamais en combinant plusieurs sujets différents) ; sinon préfère un autre format.",
-    "- \"intrus\" : 4 options dont une seule ne va pas avec les 3 autres (qui partagent un point commun clair au vu du texte) — la question formule ce qu'ont en commun les 3 bonnes et demande de trouver l'intrus ; correctIndex pointe vers l'intrus.",
-    "- \"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\" ; n'utilise ce format QUE si le sujet offre naturellement plusieurs bonnes réponses distinctes et sans ambiguïté au vu du texte.",
-    "- \"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents et ordonnés DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents, ni un ordre déduit de connaissances extérieures au texte fourni ; n'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte, sinon préfère un autre format.",
+    ...availableDefs.map((d) => "- " + d.desc),
     "",
+    // "intrus" banni (cf. excludeTypes) : rappel explicite plutôt que de
+    // compter sur sa seule absence ci-dessus — sans cette ligne, rien
+    // n'empêche l'IA de choisir "intrus" quand même en se référant au nom
+    // du format qu'elle connaît par ailleurs.
+    ...(excludeTypes && excludeTypes.includes("intrus") ? [
+      "Le format \"intrus\" est INTERDIT pour ce quiz : n'demande jamais lequel de ces éléments ne fait PAS partie de la liste globale du sujet — la liste complète peut compter jusqu'à " + NOTION_QUIZ_ENUMERABLE_MAX_ITEMS + " éléments, le lecteur ne peut objectivement pas le savoir sans l'avoir mémorisée en entier. Injouable, donc jamais posé.",
+      ""
+    ] : []),
     "=== Format suggéré, question par question (dans l'ordre) ===",
     "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions :",
     assignments.map((f, i) => (i + 1) + ". " + f).join(" · "),
-    "Respecte cette suggestion. Exception : si le sujet retenu pour UNE question précise ne se prête vraiment pas au format suggéré (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée), utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet.",
+    "Respecte cette suggestion. Exception : si le sujet retenu pour UNE question précise ne se prête vraiment pas au format suggéré (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée), utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet" + (excludeTypes && excludeTypes.length ? ", et jamais l'un des formats interdits ci-dessus" : "") + ".",
     "",
     "=== Répondable sans voir les propositions ? ===",
     "Pour chaque question de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) : l'interface l'utilise pour proposer ou non de réfléchir à la réponse avant d'afficher les propositions — une décision qui dépend du CONTENU de la question, jamais de son seul type.",
@@ -12291,7 +12242,7 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAl
       "Aucun champ \"" + sourceIdField + "\" à l'intérieur de \"altVariant\" (implicite, le même que la question principale).",
       ""
     ] : []),
-    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"qcm|vrai_faux|texte_a_trous|association|intrus|qcm_multi|ordre","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"${includeAltVariant ? ',"altVariant":{"type":"qcm|vrai_faux|texte_a_trous","question":"...","options":[...],"correctIndex":0,"explanation":"...","selfContained":true|false}' : ""}}]}.`
+    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"${availableTypes.join("|")}","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"${includeAltVariant ? ',"altVariant":{"type":"qcm|vrai_faux|texte_a_trous","question":"...","options":[...],"correctIndex":0,"explanation":"...","selfContained":true|false}' : ""}}]}.`
   ];
 }
 
@@ -12537,6 +12488,22 @@ const NOTION_QUIZ_LEVELS = {
     label: "Expert",
     target: 20, max: 22, min: 15,
     instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet (origine, mécanismes précis, controverses ou nuances, chiffres et exemples précis, conséquences, comparaisons) pour vérifier une maîtrise fine et complète — chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée.",
+    sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
+    lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
+  },
+  // 4e niveau (demande du 13/08/2026) : seul celui-ci déclenche la détection
+  // de sujet énumérable et le quiz par lots jusqu'à
+  // NOTION_QUIZ_ENUMERABLE_MAX_ITEMS (cf. scopeCustomTopic/
+  // fetchEnumerableItems/buildEnumerableCustomTopicQuiz, gardés sur
+  // level === "exhaustif" désormais, plus "expert") — "expert" redevient un
+  // palier normal borné à une vingtaine de questions. Pour un sujet non
+  // énumérable (repli sur le flux standard), mêmes chiffres qu'"expert" :
+  // la vraie différence de ce niveau est la couverture complète d'une liste,
+  // pas un nombre de questions plus élevé par défaut sur un sujet narratif.
+  exhaustif: {
+    label: "Exhaustif",
+    target: 20, max: 22, min: 15,
+    instruction: "Niveau exhaustif : vise la couverture la plus complète possible du sujet — s'il s'agit d'une vraie liste d'éléments à mémoriser un par un, couvre-la en entier ; sinon, couvre un maximum de facettes et de détails précis et vérifiables du sujet, sans jamais sacrifier l'exactitude à la quantité.",
     sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
     lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
   }
@@ -12785,7 +12752,7 @@ function buildCultureGeneraleQuizPrompt(items, quotaByItemId, levelInstruction) 
     `Tu écris un QCM de culture générale en français à partir des éléments ci-dessous — des événements "Ce jour dans l'Histoire" et des éclairages (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal, une citation d'auteur, une œuvre d'art ou un mot latin).`,
     "Règles strictes :",
     "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien. En cas de doute sur l'exactitude d'un fait du texte (chiffre, date, nom), préfère une formulation plus générale plutôt qu'une précision incertaine présentée comme certaine.",
-    "- Ne retiens que les faits qui méritent vraiment d'être sus et retenus sur le sujet — l'essentiel structurant — jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet et à comprendre ses enjeux réels. Un fait étonnant ou curieux est un plus s'il est vrai et pertinent, mais jamais au détriment de l'utilité — ne choisis jamais un détail insolite à la place d'un fait structurant.",
+    "- Ne retiens que les faits qui méritent vraiment d'être sus — utiles en culture générale, ceux qu'une personne cultivée retiendrait — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir les grands enjeux et les grandes caractéristiques du sujet. Un fait étonnant ou curieux est un plus s'il est vrai et pertinent, mais jamais au détriment de l'utilité — ne choisis jamais un détail insolite à la place d'un fait structurant.",
     "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
     "- Pour un élément \"mot latin du jour\" dont la provenance indiquée est \"traduction composée pour l'occasion\" : ne le présente JAMAIS comme une expression latine ancienne, un proverbe ou une citation historique — les questions ne peuvent porter que sur sa grammaire (cas, déclinaison, conjugaison, sens des mots), jamais sur une prétendue origine ou un prétendu auteur.",
     "- Pour un élément \"Ce jour dans l'Histoire\", les questions portent sur les faits de l'événement lui-même — pas de détails insignifiants (dates exactes au jour près, chiffres secondaires).",
@@ -12874,7 +12841,7 @@ function buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, r
   }
   lines.push("1. Une fiche de mémorisation synthétique et strictement factuelle en français (esprit fiche de révision : dense, claire, sans blabla, aucune approximation présentée comme un fait établi, aucune invention) — elle doit contenir tous les faits nécessaires pour répondre seule à chacune des questions du quiz ci-dessous : chaque réponse doit être vérifiable en la relisant.");
   lines.push(`2. Un quiz de ${target} questions permettant de vérifier la compréhension de cette fiche — chaque question et sa réponse doivent être intégralement fondées sur le contenu de la fiche que tu rédiges, jamais sur un fait absent de cette fiche.`);
-  lines.push("3. Ne retiens, pour la fiche comme pour les questions, que les faits qui méritent vraiment d'être sus et retenus sur ce sujet — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir ce qu'il faut retenir du sujet et à comprendre les enjeux réels du sujet (pourquoi il compte, ce qui s'y joue), pas seulement des dates ou des noms isolés.");
+  lines.push("3. Ne retiens, pour la fiche comme pour les questions, que les faits qui méritent vraiment d'être sus — utiles en culture générale, ceux qu'une personne cultivée retiendrait sur ce sujet — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir les grands enjeux et les grandes caractéristiques du sujet (pourquoi il compte, ce qui s'y joue, ce qui le définit), pas seulement des dates ou des noms isolés.");
   lines.push("4. Priorité à l'utilité, jamais au simple effet : un fait étonnant, curieux ou peu connu est un vrai plus s'il est réellement vrai et aide à comprendre le sujet, mais ne remplace jamais un fait utile et structurant par un détail choisi seulement parce qu'il est original ou insolite.");
   lines.push("5. Vérifie l'exactitude de chaque fait avant de l'utiliser (dates, chiffres, noms, mécanismes) — en cas de doute réel sur un fait précis, écarte-le ou reste plus général plutôt que de risquer une erreur présentée comme certaine. Aucune approximation, aucune invention, même partielle.");
   if (instruction) lines.push(`6. ${instruction}`);
@@ -13145,6 +13112,7 @@ function buildEnumerableItemsChunkPrompt(subject, alreadyCovered, count) {
   }
   lines.push("");
   lines.push(`Donne ${count} éléments NOUVEAUX et DISTINCTS de cette liste (jamais déjà couverts ci-dessus), chacun sous une forme courte et autonome qui donne à la fois l'élément ET sa réponse (ex. "France – Paris", "go – went – gone", "la mela – la pomme").`);
+  lines.push("Priorise les éléments les plus utiles/représentatifs/couramment enseignés du sujet (ex. les capitales les plus connues avant les plus rares, les verbes irréguliers les plus fréquents avant les plus rares) — utile en culture générale, jamais un choix arbitraire ou anecdotique quand plusieurs éléments restent possibles pour ce lot.");
   lines.push("Chaque élément doit être réellement exact et vérifiable — en cas de doute réel sur un élément précis (orthographe, forme, association), écarte-le plutôt que de l'inclure avec une réponse incertaine.");
   lines.push("Si le sujet ne compte plus assez d'éléments réellement distincts et non déjà couverts pour ce lot, donne-en le maximum possible sans jamais répéter ou inventer, et indique \"exhausted\":true.");
   lines.push("");
@@ -13199,7 +13167,11 @@ function buildEnumerableFicheSections(items) {
 
 function buildEnumerableQuizChunkPrompt(subject, itemsChunk, id) {
   const count = itemsChunk.length;
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count, true).slice(0, -1);
+  // "intrus" banni ici (demande du 13/08/2026) : sur une liste énumérable
+  // (jusqu'à NOTION_QUIZ_ENUMERABLE_MAX_ITEMS éléments), il dérivait
+  // systématiquement en "lequel de ces éléments ne fait pas partie de la
+  // liste ?" — injouable, personne ne mémorise 200 éléments comme un tout.
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count, true, ["intrus"]).slice(0, -1);
   return [
     `Tu écris un quiz de mémorisation en français sur : "${subject}".`,
     "Éléments à couvrir dans ce lot (base-toi UNIQUEMENT sur ceux-ci, ne les modifie pas, n'en invente aucun autre) :",
@@ -13251,14 +13223,14 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
   );
 
   const questions = validated.map((q, index) => ({
-    id: `notion:custom:${id}-expert-q${index + 1}`,
+    id: `notion:custom:${id}-exhaustif-q${index + 1}`,
     ...q,
     sourceType: "custom",
     sourceScope: null,
     sourceName: finalSourceName,
     sourceDetail,
     sourceThemes,
-    level: "expert",
+    level: "exhaustif",
     sourceDebateId: id
   }));
   return { questions };
@@ -13272,12 +13244,14 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   const levelConfig = resolveNotionQuizLevel(rawLevel);
   const { level } = levelConfig;
 
-  // Niveau Expert : un sujet qui désigne une véritable liste énumérable
+  // Niveau Exhaustif : un sujet qui désigne une véritable liste énumérable
   // (capitales, verbes irréguliers, vocabulaire...) mérite un quiz qui
-  // couvre chaque élément plutôt que d'être plafonné au palier expert
-  // habituel (demande du 12/08/2026) — détecté par un appel IA de repérage
-  // avant de partir sur la génération standard sinon.
-  if (level === "expert") {
+  // couvre chaque élément plutôt que d'être plafonné à une vingtaine de
+  // questions comme "expert" (demande du 12/08/2026, "expert" redevenu un
+  // palier normal le 13/08/2026 lors de l'ajout de ce 4e niveau) — détecté
+  // par un appel IA de repérage avant de partir sur la génération standard
+  // sinon.
+  if (level === "exhaustif") {
     const scope = await scopeCustomTopic(apiKey, topic);
     if (scope.rejected) return { error: "rejected", reason: scope.reason };
     if (scope.enumerable) {
@@ -13496,7 +13470,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
 
   const { data: answerRows, error: answersError } = await fetchAllSupabaseRows(() =>
     supabase.from("daily_quiz_answers")
-      .select("quiz_date, question_id, option_index")
+      .select("quiz_date, question_id, option_index, difficulty")
       .eq("voter_key", key));
   if (answersError) throw new Error(answersError.message);
 
@@ -13505,7 +13479,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   for (const row of answerRows || []) {
     const qid = String(row.question_id || "");
     if (qid.startsWith("culture_generale-") || qid.startsWith("notion:")) {
-      originalAnswers.push({ quizDate: row.quiz_date, questionId: qid, optionIndex: row.option_index });
+      originalAnswers.push({ quizDate: row.quiz_date, questionId: qid, optionIndex: row.option_index, difficulty: row.difficulty });
     } else if (qid.startsWith("cgreview-")) {
       // Le ref porté par "cgreview-{ref}" est un questionId depuis le
       // 10/08/2026 (avant : un sourceDebateId, une seule repasse par notion
@@ -13516,7 +13490,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
       // perdu sur les tout premiers acquis, sans impact sur les nouvelles
       // notions).
       const ref = parseCultureGeneraleReviewRef(qid);
-      if (ref) reviewAnswers.push({ quizDate: row.quiz_date, ref, optionIndex: row.option_index });
+      if (ref) reviewAnswers.push({ quizDate: row.quiz_date, ref, optionIndex: row.option_index, difficulty: row.difficulty });
     }
   }
   if (!originalAnswers.length && !reviewAnswers.length) return empty();
@@ -13573,7 +13547,8 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
       sourceDebateId: question.sourceDebateId,
       questionId: question.id,
       quizDate: a.quizDate,
-      correct: Number(a.optionIndex) === Number(question.correctIndex)
+      correct: Number(a.optionIndex) === Number(question.correctIndex),
+      difficulty: a.difficulty || null
     });
   }
   for (const a of reviewAnswers) {
@@ -13583,7 +13558,8 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
       sourceDebateId: question.sourceDebateId,
       questionId: a.ref,
       quizDate: a.quizDate,
-      correct: Number(a.optionIndex) === Number(question.correctIndex)
+      correct: Number(a.optionIndex) === Number(question.correctIndex),
+      difficulty: a.difficulty || null
     });
   }
   events.sort((x, y) => (x.quizDate < y.quizDate ? -1 : x.quizDate > y.quizDate ? 1 : 0));
@@ -13616,17 +13592,27 @@ function computeStreaksGroupedBy(events, keyField) {
     // computeQuestionStreaks (questionId), où l'unicité (quiz_date, voter_key,
     // question_id) en base garantit déjà au plus un événement par jour.
     const byDate = new Map();
+    // difficultyByDate (demande du 13/08/2026) : la difficulté ressentie par
+    // l'utilisateur (facile/moyen/difficile, cf. POST /answer) influence
+    // l'intervalle avant la prochaine repasse (cf. isCultureGeneraleReviewDueToday)
+    // — on retient celle du DERNIER événement de chaque jour (même logique
+    // que `correct` ci-dessus : plusieurs événements le même jour sont rares,
+    // le plus récent l'emporte).
+    const difficultyByDate = new Map();
     for (const e of list) {
       const previous = byDate.get(e.quizDate);
       byDate.set(e.quizDate, previous === undefined ? e.correct : previous && e.correct);
+      if (e.difficulty) difficultyByDate.set(e.quizDate, e.difficulty);
     }
     const dailyEvents = [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
     let streak = 0;
     let everCorrect = false;
     let lastQuizDate = null;
+    let lastDifficulty = null;
     for (const [quizDate, correct] of dailyEvents) {
       lastQuizDate = quizDate;
+      lastDifficulty = difficultyByDate.get(quizDate) || null;
       if (correct) {
         streak = Math.min(streak + 1, DAILY_QUIZ_ACQUIS_VALIDATION_STREAK);
         everCorrect = true;
@@ -13638,6 +13624,7 @@ function computeStreaksGroupedBy(events, keyField) {
       streak,
       everCorrect,
       lastQuizDate,
+      lastDifficulty,
       validated: streak >= DAILY_QUIZ_ACQUIS_VALIDATION_STREAK
     });
   }
@@ -13666,10 +13653,20 @@ function computeQuestionStreaks(events) {
 // pourrait donc jamais être validée. Streak à 0 (jamais réussie, ou remise à
 // 0 après un échec en repasse) utilise le plus court délai (index 0),
 // exactement comme un échec en repasse.
+// Difficulté ressentie déclarée par l'utilisateur au moment de répondre
+// (demande du 13/08/2026, cf. POST /answer + boutons Facile/Moyen/Difficile
+// avant validation côté client) : raccourcit ou allonge l'intervalle avant
+// la prochaine repasse — "difficile" revient plus vite, "facile" plus tard.
+// "moyen" et l'absence de valeur (réponses antérieures à cette fonctionnalité)
+// gardent l'intervalle de base inchangé (×1), un choix neutre par défaut.
+const DAILY_QUIZ_DIFFICULTY_INTERVAL_MULTIPLIER = { facile: 1.5, moyen: 1, difficile: 0.5 };
+
 function isCultureGeneraleReviewDueToday(state, todayKey) {
   if (state.validated || !state.lastQuizDate) return false;
   const intervalIndex = Math.min(Math.max(state.streak - 1, 0), DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS.length - 1);
-  const intervalDays = DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS[intervalIndex];
+  const baseIntervalDays = DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS[intervalIndex];
+  const multiplier = DAILY_QUIZ_DIFFICULTY_INTERVAL_MULTIPLIER[state.lastDifficulty] || 1;
+  const intervalDays = Math.max(1, Math.round(baseIntervalDays * multiplier));
   const dueDateKey = parisDateKey(new Date(new Date(`${state.lastQuizDate}T00:00:00Z`).getTime() + intervalDays * 24 * 60 * 60 * 1000));
   return todayKey >= dueDateKey;
 }
@@ -16360,6 +16357,14 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     const questionType = question.type || "qcm";
     const optionIndex = gradeQuizSubmissionOptionIndex(question, req.body);
     if (optionIndex === null) return res.status(400).json({ error: "Requête invalide." });
+    // Difficulté ressentie (demande du 13/08/2026, boutons Facile/Moyen/
+    // Difficile qui remplacent "Valider ma réponse" côté client — validation
+    // et notation de la difficulté en un seul geste) : influence l'intervalle
+    // de la prochaine repasse, cf. isCultureGeneraleReviewDueToday. Absente
+    // ou invalide (ancien client, "Renforcement" pas encore mis à jour...) :
+    // null, jamais bloquant, traité comme "moyen" (neutre) au calcul.
+    const rawDifficulty = String(req.body?.difficulty || "").trim();
+    const difficulty = ["facile", "moyen", "difficile"].includes(rawDifficulty) ? rawDifficulty : null;
 
     let finalOptionIndex = optionIndex;
     if (existingAnswer) {
@@ -16369,7 +16374,8 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
         quiz_date: todayKey,
         voter_key: voterKey,
         question_id: questionId,
-        option_index: optionIndex
+        option_index: optionIndex,
+        difficulty
       });
       if (insertError) {
         if (insertError.code === "23505") {
