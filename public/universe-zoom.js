@@ -1,0 +1,319 @@
+// Moteur de scène + caméra pour "Ma mémoire" (public/mon-univers.js) : zoom spatial réel
+// (galaxies -> systèmes solaires -> étoiles positionnés les uns DANS les autres, dans un seul
+// espace de coordonnées persistant), demande du 13/08/2026 — remplace l'ancien modèle "un
+// niveau = tout l'écran" (goToLevel/renderLevelNow, réinitialisant tagTrendCloud.js à chaque
+// clic). Volontairement séparé de tagTrendCloud.js plutôt que d'y toucher : ce moteur partagé
+// est aussi utilisé par les bulles Agôn/Actu (public/script.js), qui n'ont rien à voir avec un
+// zoom spatial et ne doivent jamais être affectées par ce chantier.
+//
+// Deux exports : layoutUniverseWorld (placement géométrique pur, aucun DOM) et createUniverseCamera
+// (interaction caméra sur un conteneur DOM déjà peuplé par l'appelant).
+
+// ---- Placement : recherche en spirale à l'intérieur d'un disque -----------------------------
+// Même principe que l'algorithme de tagTrendCloud.js (recherche en spirale, plus grosses bulles
+// en premier, repli si aucune place exacte) mais réécrit ici sans aucun couplage au DOM/à un
+// conteneur : les bornes sont un disque explicite (cx, cy, maxR), pas container.clientWidth/Height
+// — condition nécessaire pour calculer une position UNE SEULE FOIS dans un espace de coordonnées
+// persistant plutôt qu'à chaque rendu.
+function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
+  const minRatio = opts.minRatio ?? 0.16;
+  const maxRatio = opts.maxRatio ?? 0.38;
+  const fillRatio = opts.fillRatio ?? 0.62;
+  if (!items.length) return [];
+
+  const weights = items.map((it) => Math.max(0, Number(it.weight) || 0));
+  const maxWeight = Math.max(...weights, 1e-6);
+  const normalized = weights.map((w) => 0.35 + 0.65 * Math.pow(w / maxWeight, 0.6));
+
+  let sizeScale = 1;
+  const baseRadii = () => normalized.map((w) => sizeScale * (minRatio + (maxRatio - minRatio) * w) * maxR);
+
+  // Réduit l'échelle globale si la somme des aires dépasse l'aire utile du disque — même
+  // logique que computeAutoScale (tagTrendCloud.js) mais ciblant un disque plutôt qu'un
+  // rectangle de conteneur.
+  const usableArea = Math.PI * maxR * maxR * fillRatio;
+  const totalArea = () => baseRadii().reduce((sum, r) => sum + Math.PI * r * r, 0);
+  if (totalArea() > usableArea) {
+    sizeScale = Math.sqrt(usableArea / totalArea());
+    sizeScale = Math.max(sizeScale, 0.4);
+  }
+
+  const order = items.map((_, i) => i).sort((a, b) => normalized[b] - normalized[a]);
+  const golden = 137.5;
+
+  function tryPlace(radii) {
+    const placed = [];
+    const positions = new Array(items.length);
+    for (let k = 0; k < order.length; k += 1) {
+      const i = order[k];
+      const r = radii[i];
+      const prefAngle = (k * golden) % 360;
+      let best = null;
+      for (let dist = 0; dist <= maxR - r + 1 && !best; dist += Math.max(2, maxR * 0.012)) {
+        for (let step = 0; step < 24 && !best; step += 1) {
+          const angle = ((prefAngle + (step % 2 === 0 ? step / 2 : -((step + 1) / 2)) * 22) * Math.PI) / 180;
+          const x = cx + Math.cos(angle) * dist;
+          const y = cy + Math.sin(angle) * dist;
+          if (Math.hypot(x - cx, y - cy) + r > maxR) continue;
+          const collides = placed.some((p) => Math.hypot(x - p.x, y - p.y) < r + p.r - 2);
+          if (!collides) best = { x, y };
+        }
+      }
+      if (!best) {
+        // Repli : le centre du disque minimise la distance aux bords, toujours dans les
+        // bornes (rare — disque très encombré après réduction d'échelle).
+        best = { x: cx, y: cy };
+      }
+      placed.push({ x: best.x, y: best.y, r });
+      positions[i] = { x: best.x, y: best.y, r };
+    }
+    return positions;
+  }
+
+  let radii = baseRadii();
+  let positions = tryPlace(radii);
+  // Filet de sécurité : si le repli au centre a dû être utilisé plusieurs fois (paquet très
+  // dense), réduit encore l'échelle et retente, jusqu'à 4 fois — même esprit que la boucle de
+  // computeAutoScale, jamais plus qu'un nombre borné d'essais.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const centerFallbacks = positions.filter((p) => p.x === cx && p.y === cy).length;
+    if (centerFallbacks <= 1) break;
+    sizeScale *= 0.88;
+    radii = baseRadii();
+    positions = tryPlace(radii);
+  }
+
+  return positions;
+}
+
+// ---- Layout complet : galaxies -> systèmes solaires -> étoiles, un seul espace persistant ---
+// `universeData` : même forme que la réponse de GET /api/users/intellectual-universe
+// (cf. server.js /api/users/intellectual-universe, mon-univers.js universeData). `worldRadius`
+// est choisi par l'appelant (typiquement dérivé de la taille du viewport au chargement).
+function layoutUniverseWorld(galaxies, worldRadius) {
+  const galaxyItems = galaxies.map((g) => ({
+    weight: g.solarSystems.reduce((sum, s) => sum + s.articleCount, 0) || 1,
+    ref: g
+  }));
+  const galaxyPositions = packCirclesInDisk(galaxyItems, 0, 0, worldRadius, {
+    minRatio: 0.14,
+    maxRatio: 0.34,
+    fillRatio: 0.58
+  });
+
+  const outGalaxies = [];
+  const outSolarSystems = [];
+  const outStars = [];
+
+  galaxies.forEach((g, gi) => {
+    const gp = galaxyPositions[gi];
+    const galaxyNode = { id: `galaxy:${g.name}`, name: g.name, x: gp.x, y: gp.y, r: gp.r, weight: galaxyItems[gi].weight, ref: g };
+    outGalaxies.push(galaxyNode);
+
+    const systemItems = g.solarSystems.map((s) => ({ weight: s.articleCount || 1, ref: s }));
+    const systemPositions = packCirclesInDisk(systemItems, gp.x, gp.y, gp.r * 0.8, {
+      minRatio: 0.18,
+      maxRatio: 0.4,
+      fillRatio: 0.6
+    });
+
+    g.solarSystems.forEach((s, si) => {
+      const sp = systemPositions[si];
+      const systemNode = {
+        id: `solarSystem:${g.name}:${s.id}`,
+        name: s.name,
+        x: sp.x,
+        y: sp.y,
+        r: sp.r,
+        weight: systemItems[si].weight,
+        galaxyId: galaxyNode.id,
+        ref: s
+      };
+      outSolarSystems.push(systemNode);
+
+      const starItems = s.stars.map((star) => ({ weight: star.articleCount || 1, ref: star }));
+      const starPositions = packCirclesInDisk(starItems, sp.x, sp.y, sp.r * 0.78, {
+        minRatio: 0.22,
+        maxRatio: 0.46,
+        fillRatio: 0.6
+      });
+
+      s.stars.forEach((star, sti) => {
+        const stp = starPositions[sti];
+        outStars.push({
+          id: `star:${g.name}:${s.id}:${star.id}`,
+          name: star.name,
+          x: stp.x,
+          y: stp.y,
+          r: stp.r,
+          weight: starItems[sti].weight,
+          solarSystemId: systemNode.id,
+          galaxyId: galaxyNode.id,
+          ref: star
+        });
+      });
+    });
+  });
+
+  return { galaxies: outGalaxies, solarSystems: outSolarSystems, stars: outStars, worldRadius };
+}
+
+// ---- Caméra : pan/zoom continu sur #universe-world à l'intérieur de #universe-viewport -------
+// État { x, y, scale } : (x,y) = point du monde actuellement au CENTRE du viewport, scale =
+// facteur de zoom (1 = vue d'ensemble telle que dimensionnée par worldRadius au chargement).
+// Molette (desktop) et pincement (mobile) zooment en gardant fixe le point du monde sous le
+// curseur/les doigts ; un doigt ou un cliquer-glisser souris fait un panoramique. jamais
+// d'animation transform pendant un geste continu (réactivité), seulement lors d'un zoom
+// programmatique (clic sur une bulle, cf. focusOn) — transform seul (jamais box-shadow), cf.
+// historique de tremblement visuel sur mobile Safari documenté ailleurs sur cette page.
+function createUniverseCamera({ viewportEl, worldEl, minScale = 1, maxScale = 40, onChange }) {
+  let state = { x: 0, y: 0, scale: minScale };
+  let raf = null;
+
+  function apply() {
+    const vw = viewportEl.clientWidth;
+    const vh = viewportEl.clientHeight;
+    const tx = vw / 2 - state.x * state.scale;
+    const ty = vh / 2 - state.y * state.scale;
+    worldEl.style.transform = `translate(${tx}px, ${ty}px) scale(${state.scale})`;
+  }
+
+  function scheduleChange() {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      onChange?.(state);
+    });
+  }
+
+  function setState(next, animate = false) {
+    state = { ...state, ...next };
+    state.scale = Math.min(maxScale, Math.max(minScale, state.scale));
+    if (animate) {
+      worldEl.style.transition = "transform 550ms cubic-bezier(.2,.7,.3,1)";
+      const clearTransition = () => { worldEl.style.transition = ""; worldEl.removeEventListener("transitionend", clearTransition); };
+      worldEl.addEventListener("transitionend", clearTransition);
+    } else {
+      worldEl.style.transition = "";
+    }
+    apply();
+    scheduleChange();
+  }
+
+  // Convertit un point en pixels VIEWPORT (ex. event.clientX/Y relatif au viewport) en
+  // coordonnées MONDE, à l'état caméra courant.
+  function viewportPointToWorld(px, py) {
+    const rect = viewportEl.getBoundingClientRect();
+    const vx = px - rect.left;
+    const vy = py - rect.top;
+    return {
+      x: state.x + (vx - viewportEl.clientWidth / 2) / state.scale,
+      y: state.y + (vy - viewportEl.clientHeight / 2) / state.scale
+    };
+  }
+
+  function zoomAtViewportPoint(px, py, factor) {
+    const worldPt = viewportPointToWorld(px, py);
+    const newScale = Math.min(maxScale, Math.max(minScale, state.scale * factor));
+    // Repositionne pour que worldPt reste sous le curseur/point de pincement après le zoom.
+    const rect = viewportEl.getBoundingClientRect();
+    const vx = px - rect.left;
+    const vy = py - rect.top;
+    const newX = worldPt.x - (vx - viewportEl.clientWidth / 2) / newScale;
+    const newY = worldPt.y - (vy - viewportEl.clientHeight / 2) / newScale;
+    setState({ x: newX, y: newY, scale: newScale }, false);
+  }
+
+  function focusOn(node, targetScale) {
+    setState({ x: node.x, y: node.y, scale: targetScale }, true);
+  }
+
+  function zoomOutTo(scale) {
+    setState({ ...state, scale: Math.min(state.scale, scale) }, true);
+  }
+
+  // ---- Molette (desktop) ----
+  viewportEl.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.0016);
+    zoomAtViewportPoint(e.clientX, e.clientY, factor);
+  }, { passive: false });
+
+  // ---- Pointer Events : un doigt/clic = pan, deux doigts = pincement ----
+  const activePointers = new Map();
+  let dragLastPoint = null;
+  let pinchStartDist = null;
+  let pinchStartMid = null;
+
+  function midpoint() {
+    const pts = [...activePointers.values()];
+    return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+  }
+  function distance() {
+    const pts = [...activePointers.values()];
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+
+  viewportEl.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button, a")) return;
+    viewportEl.setPointerCapture(e.pointerId);
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size === 1) {
+      dragLastPoint = { x: e.clientX, y: e.clientY };
+    } else if (activePointers.size === 2) {
+      dragLastPoint = null;
+      pinchStartDist = distance();
+      pinchStartMid = midpoint();
+    }
+  });
+
+  viewportEl.addEventListener("pointermove", (e) => {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.size === 1 && dragLastPoint) {
+      const dx = e.clientX - dragLastPoint.x;
+      const dy = e.clientY - dragLastPoint.y;
+      dragLastPoint = { x: e.clientX, y: e.clientY };
+      setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+    } else if (activePointers.size === 2) {
+      const dist = distance();
+      const mid = midpoint();
+      if (pinchStartDist) {
+        const factor = dist / pinchStartDist;
+        zoomAtViewportPoint(mid.x, mid.y, factor);
+        pinchStartDist = dist;
+      }
+      pinchStartMid = mid;
+    }
+  });
+
+  function releasePointer(e) {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 1) {
+      const [pt] = activePointers.values();
+      dragLastPoint = { x: pt.x, y: pt.y };
+      pinchStartDist = null;
+    } else if (activePointers.size === 0) {
+      dragLastPoint = null;
+      pinchStartDist = null;
+    }
+  }
+  viewportEl.addEventListener("pointerup", releasePointer);
+  viewportEl.addEventListener("pointercancel", releasePointer);
+
+  apply();
+
+  return {
+    getState: () => state,
+    setState,
+    focusOn,
+    zoomOutTo,
+    destroy() {
+      // Pas de removeEventListener détaillé (le conteneur est recréé côté appelant à chaque
+      // ré-init, cf. mon-univers.js loadUniverse) — documenté pour un futur ajout si besoin.
+    }
+  };
+}
+
+export { layoutUniverseWorld, createUniverseCamera };

@@ -1,7 +1,14 @@
-// Page "Mon univers" : réutilise le moteur de bulles existant (tagTrendCloud.js), jamais
-// dupliqué. Volontairement léger — pas de chargement de script.js (qui alourdirait la page
-// pour un seul besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { renderTagTrendCloud } from "/tagTrendCloud.js?v=20260812-orbit-line-gradient";
+// Page "Mon univers" : zoom spatial réel (demande du 13/08/2026) — galaxies, systèmes solaires
+// et étoiles sont positionnés une seule fois dans un même espace de coordonnées persistant
+// (cf. /universe-zoom.js, layoutUniverseWorld), et une caméra (pan/zoom continu, molette,
+// pincement, glisser-déposer) parcourt cette scène plutôt que de remplacer tout l'écran à
+// chaque clic. Remplace l'ancien modèle "un niveau = tout l'écran" qui réutilisait
+// tagTrendCloud.js (recalculait les positions à chaque clic, sans mémoire spatiale entre
+// niveaux) — tagTrendCloud.js n'est plus utilisé ici, jamais touché : il reste utilisé tel
+// quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
+// Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
+// besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-real-zoom";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -59,27 +66,18 @@ function hueForGalaxy(name) {
   return offset <= (181 - 25) ? 25 + offset : 256 + (offset - (181 - 25));
 }
 
-// Saturation commune, luminosité des 3 arrêts du dégradé (40%/70%/100%, cf. structure existante
-// de .agon-tag-bubble) — jamais recalculée par galaxie. Pastel sobre : clair (comme la toute
-// première version) mais nettement désaturé (18% contre 68% à l'origine, encore abaissé depuis
-// 32% le 07/08/2026 — "couleurs moins criardes et plus pastel") pour éviter le rendu "bonbon"
-// criard — corrigé une première fois vers des tons sombres façon "planète"
-// (06/08/2026), jugés finalement trop sombres. Système solaire nettement plus lumineux que
-// l'étoile (demande du 06/08/2026, inversé par rapport à l'ordre "de plus en plus clair en
-// zoomant" d'avant) : le système est la bulle centrale/hub, l'étoile une simple bulle satellite
-// — cf. aussi le halo dédié .agon-tag-bubble-solarsystem (style.css) pour accentuer l'écart.
+// Saturation commune, luminosité des 3 arrêts du dégradé — jamais recalculée par galaxie.
+// Système solaire nettement plus lumineux que l'étoile : le système reste le conteneur visuel
+// de ses étoiles dans le nouveau modèle imbriqué, l'étoile une simple bulle satellite à
+// l'intérieur.
 const GALAXY_GRADIENT_LEVELS = {
   galaxy: [82, 72, 60],
   solarSystem: [95, 91, 85],
   star: [76, 66, 54]
 };
-// fadeEdge (étoiles uniquement, demande du 07/08/2026) : les 2 derniers arrêts perdent
-// progressivement leur opacité au lieu de rester pleins jusqu'à 100% — sans lui, même en
-// retirant le contour (.agon-tag-bubble-star, style.css), le dégradé plein s'arrêtait net à la
-// même place, donnant l'impression d'une "rupture" à peine moins visible qu'un vrai contour.
-// Plusieurs paliers d'opacité (pas juste un dernier arrêt à alpha 0) : un seul palier créait un
-// "coude" perceptible à l'endroit où l'estompage commençait (le fondu du soleil, même souci,
-// cf. sunVisual) — ici étalé sur 3 arrêts pour une courbe plus progressive.
+// fadeEdge : les 2 derniers arrêts perdent progressivement leur opacité au lieu de rester
+// pleins jusqu'à 100% — sans lui, même en retirant le contour, le dégradé plein s'arrêtait net
+// à la même place, donnant l'impression d'une "rupture".
 function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
   const hue = hueForGalaxy(galaxyName);
   const stops = GALAXY_GRADIENT_LEVELS[level];
@@ -88,57 +86,33 @@ function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
     ? `hsla(${hue}, ${s}%, ${stops[1]}%, 0.75) 78%, hsla(${hue}, ${s}%, ${stops[2]}%, 0.35) 90%, hsla(${hue}, ${s}%, ${stops[2]}%, 0) 100%`
     : `hsl(${hue} ${s}% ${stops[2]}%) 100%`;
   // closest-side (seulement quand fadeEdge) : sans mot-clé de taille, un radial-gradient prend
-  // par défaut farthest-corner — pour un cercle de rayon R inscrit dans une boîte carrée, ça
-  // place 100% du dégradé au coin (R×√2), bien au-delà du bord réellement visible (coupé par
-  // border-radius:50% à R, soit seulement ~71% du dégradé). Résultat sans closest-side : le
-  // dernier arrêt (alpha 0) n'était jamais atteint à l'endroit où la bulle est coupée, donc
-  // encore ~55% d'opacité pile à la découpe — rupture nette malgré le dégradé (confirmé par
-  // capture d'écran le 07/08/2026). closest-side cale 100% exactement sur le bord visible. Le
-  // dégradé par défaut (non fadeEdge, systèmes/galaxies) garde farthest-corner : il finit sur
-  // une couleur pleine de toute façon, aucune raison de changer un rendu déjà validé.
-  // circle (pas ellipse) centré à 50%/50% quand fadeEdge : une ellipse hors-centre (38%/32%,
-  // gardée pour le rendu "planète éclairée" par défaut) calcule closest-side indépendamment sur
-  // chaque axe depuis un point qui n'est PAS le centre — la distance au bord réel du cercle
-  // varie donc selon la direction, et le dégradé ne finissait toujours pas exactement sur le
-  // bord visible dans toutes les directions (contour encore net par endroits, confirmé par
-  // retour direct le 07/08/2026). Un cercle centré garantit un rayon identique dans toutes les
-  // directions, donc un alpha 0 pile sur le bord partout, sans exception.
+  // par défaut farthest-corner, bien au-delà du bord réellement visible (coupé par
+  // border-radius:50%) — closest-side cale 100% exactement sur le bord visible.
+  // circle (pas ellipse) centré à 50%/50% quand fadeEdge : garantit un rayon identique dans
+  // toutes les directions, donc un alpha 0 pile sur le bord partout.
   const shape = fadeEdge ? "circle closest-side at 50% 50%" : "ellipse at 38% 32%";
   return `radial-gradient(${shape}, rgba(255,255,255,1) 0%, hsl(${hue} ${s}% ${stops[0]}%) 40%, hsl(${hue} ${s}% ${stops[1]}%) 70%, ${tail})`;
 }
 
-// "À classer" et ses articles (aucune galaxie à colorer, cf. buildTrendsForItems) : même bleuté
-// que le dégradé par défaut de .agon-tag-bubble (cf. style.css), mais avec le même fondu en
-// alpha vers le bord que les autres niveaux — demande du 07/08/2026 ("plus de contours nettes,
-// je veux contours dégradés"), ces deux types étaient restés sur le rendu par défaut (contour
-// dur inclus) alors que tous les autres niveaux avaient déjà été corrigés.
+// "À classer" (aucune galaxie à colorer) : même bleuté que le dégradé par défaut de
+// .agon-tag-bubble, avec le même fondu en alpha vers le bord que les autres niveaux.
 const UNCLASSIFIED_BUBBLE_BACKGROUND = `radial-gradient(circle closest-side at 50% 50%, rgba(255,255,255,1) 0%, rgba(235,242,255,1) 40%, rgba(210,225,248,0.85) 70%, rgba(185,208,240,0.35) 88%, rgba(185,208,240,0) 100%)`;
 
-// Liaison étoile → système solaire : reprend la teinte dont l'étoile hérite déjà.
-// Le dégradé reste lumineux près du soleil et s'adoucit à l'approche de l'étoile.
-function starConnectorBackgroundFor(galaxyName) {
-  const hue = hueForGalaxy(galaxyName);
-  return `linear-gradient(to right, hsla(${hue}, 12%, 76%, 0.95), hsla(${hue}, 12%, 54%, 0.78))`;
-}
-
-// Bulles galaxie (niveau racine uniquement) : rendu "nœud de neurone" très lumineux plutôt qu'un
-// simple disque pastel — cœur très brillant + fines lignes rayonnantes façon synapses/dendrites,
-// halo qui déborde du cercle (cf. .agon-tag-bubble-galaxy, style.css). Remplace l'ancien visuel
-// "galaxie spiralée" (demande du 09/08/2026, "supprimer le visuel galaxie et le remplacer par un
-// visuel de nœud de neurone très brillant"). Le dégradé de base (bubbleBackgroundFor) reste
-// identique en dessous pour garder la même teinte que les systèmes/étoiles filles ; ces couches
-// viennent seulement s'ajouter par-dessus.
+// Bulles galaxie : rendu "nœud de neurone" très lumineux plutôt qu'un simple disque pastel —
+// cœur très brillant + fines lignes rayonnantes façon synapses/dendrites, halo qui déborde du
+// cercle (cf. .agon-tag-bubble-galaxy, style.css). Le dégradé de base (bubbleBackgroundFor)
+// reste identique en dessous pour garder la même teinte que les systèmes/étoiles filles ; ces
+// couches viennent seulement s'ajouter par-dessus.
 
 function pointsToPathD(points) {
   return points.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
 }
 
-// Découpe chaque ligne en paliers de largeur décroissante (base épaisse près du
-// centre → pointe fine en bout de queue, demande du 07/08/2026 "que l'extrémité devienne plus
-// fin") — un <path> SVG a une seule stroke-width fixe sur toute sa longueur, impossible de la
-// faire varier autrement qu'en dessinant plusieurs segments avec des largeurs différentes.
-// Chevauchement d'1 point entre segments consécutifs : sans lui, une micro-coupure apparaîtrait
-// à chaque jonction (stroke-linecap="round" comble l'écart si les segments se touchent pile).
+// Découpe chaque ligne en paliers de largeur décroissante (base épaisse près du centre ->
+// pointe fine en bout de queue) — un <path> SVG a une seule stroke-width fixe sur toute sa
+// longueur, impossible de la faire varier autrement qu'en dessinant plusieurs segments avec des
+// largeurs différentes. Chevauchement d'1 point entre segments consécutifs : sans lui, une
+// micro-coupure apparaîtrait à chaque jonction.
 function buildTaperedPathSegments(points, baseWidth, tipFactor, segmentCount, attrs) {
   const segLen = Math.ceil((points.length - 1) / segmentCount);
   let out = "";
@@ -154,13 +128,10 @@ function buildTaperedPathSegments(points, baseWidth, tipFactor, segmentCount, at
   return out;
 }
 
-// Points d'une "synapse" (ligne rayonnant depuis le centre) : angle fixe (réparti en angle d'or,
-// même principe que les satellites Agôn, cf. tagTrendCloud.js AGON_SATELLITE_GOLDEN_ANGLE — non
-// réutilisé directement, module séparé, mais même logique) et longueur variée selon l'angle lui-
-// même (déterministe, jamais Math.random, pour un rendu stable d'un re-render à l'autre) — pas de
-// coordonnées à la main comme l'ancienne spirale, chaque nœud calcule sa propre géométrie. Léger
-// arc (composante perpendiculaire en sin(t·π)) plutôt qu'une ligne parfaitement droite, pour une
-// allure de dendrite qui ondule légèrement plutôt qu'un trait au cordeau.
+// Points d'une "synapse" (ligne rayonnant depuis le centre) : angle fixe (angle d'or) et
+// longueur variée selon l'angle lui-même (déterministe, jamais Math.random, pour un rendu
+// stable). Léger arc plutôt qu'une ligne parfaitement droite, pour une allure de dendrite qui
+// ondule légèrement plutôt qu'un trait au cordeau.
 const NEURON_LINE_COUNT = 7;
 const NEURON_GOLDEN_ANGLE = 137.508;
 
@@ -186,15 +157,11 @@ function buildNeuronLinePoints(seed) {
   return sets;
 }
 
-// Nœud de neurone : synapses rayonnantes (même moteur de rendu que l'ancienne spirale — segments
-// effilés + triple flou SVG, cf. buildTaperedPathSegments juste au-dessus — pour la même qualité
-// de lueur diffuse plutôt qu'un trait net) émanant d'un cœur très lumineux (cf. galaxyBubbleVisual
+// Nœud de neurone : synapses rayonnantes émanant d'un cœur très lumineux (cf. galaxyBubbleVisual
 // juste en dessous, qui superpose ce cœur par-dessus).
 function neuronLinesBackground(hue) {
   const linePointSets = buildNeuronLinePoints(hue);
   const stroke = `hsl(${hue}, 20%, 85%)`;
-  // Opacités légèrement réduites (demande du 09/08/2026, "les nœuds doivent être légèrement moins
-  // brillants") : 0.4/0.6/0.85 → 0.3/0.47/0.68.
   const outerGlowPaths = linePointSets
     .map((points) => buildTaperedPathSegments(points, 20, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.3" filter="url(#neuronGlowOuter)"`))
     .join("");
@@ -205,556 +172,360 @@ function neuronLinesBackground(hue) {
   const corePaths = linePointSets
     .map((points) => buildTaperedPathSegments(points, 6, 0.2, 5, `stroke="${coreStroke}" stroke-linecap="round" opacity="0.68" filter="url(#neuronGlowCore)"`))
     .join("");
-  // preserveAspectRatio="none" : cf. commentaire équivalent conservé sur bubbleBackgroundFor plus
-  // haut — sans lui, le SVG garde son ratio 1:1 par défaut au lieu de remplir le rectangle donné
-  // par background-size.
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><defs>`
     + `<filter id="neuronGlowOuter" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="5.5"/></filter>`
     + `<filter id="neuronGlowInner" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="2.8"/></filter>`
     + `<filter id="neuronGlowCore" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.4"/></filter>`
     + `</defs>${outerGlowPaths}${innerGlowPaths}${corePaths}</svg>`;
-  // 45% (pas 74%, demande du 09/08/2026 "le nœud de neurone doit être plus petit") : la géométrie
-  // interne (angles/longueurs des synapses) reste inchangée, seule la taille d'affichage du SVG
-  // dans la bulle est réduite — reste bien à l'intérieur du cercle (marge de sécurité déjà large
-  // à 74%, donc à plus forte raison ici).
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center / 45% 45% no-repeat`;
 }
 
 function galaxyBubbleVisual(galaxyName) {
   const hue = hueForGalaxy(galaxyName);
   const lines = neuronLinesBackground(hue);
-  // Cœur TRÈS lumineux (demande du 09/08/2026, "nœud de neurone très brillant") : quasi blanc pur,
-  // contrairement au petit cœur discret de l'ancien visuel galaxie — évoque le corps cellulaire du
-  // neurone d'où rayonnent les synapses. Taille réduite (42% → 24%, demande du 09/08/2026 "le
-  // nœud de neurone doit être plus petit") : les pourcentages des arrêts de couleur (26/50/68/84%)
-  // restent relatifs au rayon de CE dégradé, donc la même courbe de luminosité, juste ramassée sur
-  // une zone plus petite. ellipse (pas circle) : les pourcentages de rayon ne sont valides en CSS
-  // que sur ellipse, valeurs quasi égales pour rester circulaire.
-  // Alphas légèrement réduits (demande du 09/08/2026, "légèrement moins brillants") : 1/0.92 →
-  // 0.85/0.78.
   const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.78) 26%, hsl(${hue} 22% 90%) 50%, hsla(${hue}, 20%, 85%, 0.3) 68%, transparent 84%)`;
   return {
     background: `${core}, ${lines}`,
-    // Halo ::before (style.css .agon-tag-bubble-galaxy::before, --agon-tag-bubble-glow) : alpha
-    // ramené 0.85 → 0.72, un peu moins brillant qu'avant tout en restant plus lumineux que
-    // l'ancien visuel galaxie (0.7).
     glowColor: `hsla(${hue}, 25%, 85%, 0.72)`
   };
 }
 
-// ---- État local : un seul appel API, tout le reste se déduit de navPath ----
+// ---- État local : un seul appel API, puis un seul calcul de scène (jamais recalculé à la
+// navigation, seule la caméra bouge) ----
 let universeData = null;
-let navPath = []; // [] = galaxies ; [galaxyName] = systèmes ; [galaxyName, solarSystemId] = étoiles
-let currentLevelItems = []; // objets métier dans le même ordre que les bulles actuellement affichées
-const UNCLASSIFIED_KEY = "__unclassified__"; // sentinelle locale, jamais envoyée à l'API ni stockée
+let worldLayout = null; // { galaxies, solarSystems, stars, worldRadius } — cf. layoutUniverseWorld
+let camera = null;
+let worldEl = null;
+let viewportEl = null;
+const nodeById = new Map(); // id (cf. layoutUniverseWorld) -> nœud positionné, reconstruit à chaque scène
 
-// Repli sur #agon-tag-trends-cloud (demande du 08/08/2026 : bulles "Ma mémoire" directement
-// sur l'accueil, embarquées dans le même cadre que Bulles Actu/Bulles Agôn plutôt que sur une
-// page à part) — la page /mon-univers autonome a bien son propre #agon-universe-cloud, jamais
-// affecté par ce repli.
+// Repli sur #agon-tag-trends-cloud (bulles "Ma mémoire" embarquées sur l'accueil, même cadre
+// que Bulles Actu/Bulles Agôn) — la page /mon-univers autonome a bien son propre
+// #agon-universe-cloud, jamais affecté par ce repli.
 const cloudEl = document.getElementById("agon-universe-cloud") || document.getElementById("agon-tag-trends-cloud");
 const breadcrumbEl = document.getElementById("universe-breadcrumb");
 const statusEl = document.getElementById("universe-status");
 const backBtn = document.getElementById("universe-back-btn");
 
-// ---- Normalisation des poids (0..1) avant de les confier au moteur existant ----
-// Le moteur (computeBubblePxSize) amplifie déjà la différence via une courbe (^1.75) — cette
-// fonction ne fait que fournir une plage raisonnable en entrée : jamais un poids si bas que la
-// bulle devient illisible, jamais un poids si haut qu'une bulle écrase toutes les autres, et un
-// palier commun si tout le monde a le même poids (ex. les étoiles, poids brut uniforme).
-// Plancher remonté (0.30 → 0.42, 06/08/2026) : à 0.30, computeBubblePxSize (courbe ^1.75)
-// produit une bulle proche de son minimum (83px desktop) — trop peu de place pour
-// fitLabelInBubble (tagTrendCloud.js, inchangé) sur un libellé de 3-4 mots (ex. "Espace et
-// technologies spatiales"), qui retombe alors sur une police minuscule pour tenir.
-const UNIVERSE_MIN_WEIGHT = 0.42;
-const UNIVERSE_MAX_WEIGHT = 0.95;
-
-function normalizeUniverseWeights(items, getRawWeight, minWeight = UNIVERSE_MIN_WEIGHT, maxWeight = UNIVERSE_MAX_WEIGHT) {
-  const raws = items.map((item) => Math.max(0, Number(getRawWeight(item)) || 0));
-  const max = raws.length ? Math.max(...raws) : 0;
-  const min = raws.length ? Math.min(...raws) : 0;
-  if (max === min) {
-    const common = (minWeight + maxWeight) / 2;
-    return items.map(() => common);
-  }
-  return raws.map((raw) => minWeight + ((raw - min) / (max - min)) * (maxWeight - minWeight));
-}
-
 function getGalaxyByName(name) {
   return (universeData?.galaxies || []).find((g) => g.name === name) || null;
-}
-
-// Centre "trou noir" (niveau systèmes solaires d'une galaxie, demande du 07/08/2026 : la bulle
-// centrale ne doit plus ressembler à une bulle pastel comme les autres) : cœur noir + anneau
-// (disque d'accrétion) teinté selon la galaxie ouverte, même hue que galaxyBubbleVisual/
-// bubbleBackgroundFor pour rester cohérent d'un niveau à l'autre. glowColor alimente le halo
-// (box-shadow, cf. .agon-tag-center-btn-blackhole, style.css) posé via renderTagTrendCloud.
-function blackHoleVisual(galaxyName) {
-  const hue = hueForGalaxy(galaxyName);
-  // Même correctif que sunVisual juste en dessous, même raison : un seul dégradé continu
-  // (cœur noir + halo), posé en entier sur ::before (plus grand que le cercle du bouton), pas
-  // deux calques séparés (fond du bouton + halo à part) — deux courbes indépendantes ne se
-  // raccordent jamais pile, un anneau restait visible à leur jonction (demande du 07/08/2026,
-  // "fais la même chose pour les bulles trous noirs" après le même correctif sur le soleil).
-  // Saturation abaissée (75/70/65% → 30/28/25%, demande du 07/08/2026 "couleurs plus pastel").
-  return `radial-gradient(circle closest-side, #000 0%, #030304 20%, hsla(${hue},20%,60%,0.9) 36%, hsla(${hue},18%,55%,0.5) 49%, hsla(${hue},16%,50%,0) 100%)`;
 }
 function getSolarSystemById(galaxy, id) {
   return (galaxy?.solarSystems || []).find((s) => String(s.id) === String(id)) || null;
 }
 
-// Centre "soleil" (niveau étoiles d'un système solaire, demande du 07/08/2026, même logique que
-// blackHoleVisual pour le niveau au-dessus) : cœur blanc-jaune rayonnant + fines aigrettes de
-// lumière, teinté par la galaxie (hue) pour rester cohérent d'un niveau à l'autre. glowColor
-// alimente le halo chaud (box-shadow, cf. .agon-tag-center-btn-sun, style.css).
-function sunVisual(galaxyName) {
-  const hue = hueForGalaxy(galaxyName);
-  // Un seul dégradé continu couvrant TOUTE la zone visible (cœur + halo), posé sur ::before —
-  // pas deux dégradés séparés (fond du bouton + halo) : recaler deux courbes indépendantes
-  // l'une sur l'autre pour qu'elles se raccordent pile ne marche jamais vraiment (confirmé deux
-  // fois par capture d'écran le 07/08/2026 — un anneau restait visible à leur jonction, même une
-  // fois chacune "fondue" de son côté). Un seul gradient élimine le problème à la racine : plus
-  // de jonction du tout, juste une courbe qui descend jusqu'à alpha 0. closest-side sur la boîte
-  // du halo (::before, cf. style.css, plus grande que le cercle du bouton lui-même) : 100% du
-  // dégradé tombe exactement sur son bord à elle, jamais au-delà.
-  // Saturation abaissée sur la partie teintée par galaxie (70/68/60% → 30/28/25%, demande du
-  // 07/08/2026 "couleurs plus pastel") — le cœur blanc-doré (hsl(42,100%,72%)) reste inchangé,
-  // il n'est pas teinté par galaxie et n'a jamais été signalé comme criard.
-  // Blanc très lumineux (pas jaune) : demande du 07/08/2026 "au lieu du jaune actuel, met du
-  // blanc très lumineux" — les 3 premiers arrêts (cœur + halo proche) restent blanc pur au lieu
-  // de descendre vers #fff6d8 (crème) puis hsl(42,100%,72%) (jaune doré) ; seule la teinte de la
-  // galaxie prend le relais plus loin (40%+), inchangée.
-  return `radial-gradient(circle closest-side, #fff 0%, #fff 10%, #fff 22%, hsla(${hue}, 20%, 62%, 0.95) 40%, hsla(${hue}, 18%, 60%, 0.85) 65%, hsla(${hue}, 16%, 50%, 0) 100%)`;
+// ---- Seuils de révélation : une bulle n'apparaît (et ne devient cliquable) que lorsque son
+// rayon À L'ÉCRAN dépasse ce seuil — pas de dépendance à "quel niveau est ouvert" (il n'y a plus
+// de niveau, juste une caméra continue) : exactement comme un zoom de carte, une bulle plus
+// grosse/plus riche se révèle avant une petite, indépendamment d'où pointe la caméra.
+const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
+const CHILD_HINT_PX = 118; // rayon à l'écran à partir duquel un système commence à laisser deviner ses étoiles (indicatif, la révélation réelle suit REVEAL_PX_SELF ci-dessus)
+
+function revealScaleFor(node) {
+  return REVEAL_PX_SELF / node.r;
 }
-
-// ---- Construit les objets métier du niveau courant (déduit de navPath, aucun appel réseau) ----
-function buildLevelItems() {
-  if (!navPath.length) {
-    const items = universeData.galaxies.map((g) => ({
-      universeType: "galaxy",
-      label: g.name,
-      // Systèmes ET étoiles (demande du 07/08/2026 "plus il y a d'éléments dans la galaxie,
-      // solar ET étoile, plus elle va être grosse") — avant, seul le nombre de systèmes solaires
-      // comptait (g.solarSystems.length), une galaxie à 2 systèmes très riches en étoiles n'était
-      // pas plus grosse qu'une galaxie à 2 systèmes vides. La police suit déjà automatiquement
-      // (fitLabelInBubble, tagTrendCloud.js, calcule la taille du texte à partir de la largeur
-      // réelle de la bulle) : aucun changement nécessaire de ce côté, juste ce poids d'entrée.
-      rawWeight: g.solarSystems.length + g.solarSystems.reduce((sum, s) => sum + s.stars.length, 0),
-      ref: g
-    }));
-    if (universeData.unclassified.length) {
-      items.push({
-        universeType: "unclassifiedGroup",
-        label: "À classer",
-        rawWeight: universeData.unclassified.length,
-        ref: universeData.unclassified
-      });
-    }
-    return items;
-  }
-
-  if (navPath[0] === UNCLASSIFIED_KEY) {
-    return universeData.unclassified.map((article) => ({ universeType: "article", label: article.title || "Article", rawWeight: 1, ref: article }));
-  }
-
-  const galaxy = getGalaxyByName(navPath[0]);
-  if (!galaxy) return [];
-
-  // Navigation en 3 clics (revenu en arrière le 07/08/2026 : les étoiles affichées aux côtés de
-  // leur système, essayées la veille, sont retirées) : une galaxie ouverte montre uniquement
-  // ses systèmes ; les étoiles n'apparaissent qu'après un clic sur le système concerné (cf.
-  // handleItemActivate, navPath peut de nouveau atteindre 2 niveaux de profondeur).
-  if (navPath.length === 1) {
-    return galaxy.solarSystems.map((s) => ({
-      universeType: "solarSystem",
-      label: s.name,
-      rawWeight: s.stars.length,
-      ref: s
-    }));
-  }
-
-  const solarSystem = getSolarSystemById(galaxy, navPath[1]);
-  if (!solarSystem) return [];
-  return solarSystem.stars.map((star) => ({ universeType: "star", label: star.name, rawWeight: star.articleCount, ref: star }));
-}
-
-// Couleur de bulle pour l'item courant, selon son niveau dans navPath — null pour les galaxies
-// elles-mêmes au niveau racine (chacune porte sa propre teinte, cf. galaxyBubbleBackgroundFor
-// plus bas) et pour "À classer"/les articles non classés (aucune galaxie à colorer).
-function galaxyNameForCurrentLevel() {
-  if (!navPath.length || navPath[0] === UNCLASSIFIED_KEY) return null;
-  return navPath[0];
-}
-
-// Adapte chaque item métier au format attendu par renderTagTrendCloud. subjectId volontairement
-// toujours vide : le laisser vide (jamais détourné) évite toute interaction avec le code Agôn
-// existant (handleBubbleTagClick, cf. gestion du clic plus bas). dataset.bubbleIndex, déjà posé
-// par le moteur pour son propre usage interne, sert ici à retrouver l'objet métier après coup.
-// bubbleBackground : une teinte par galaxie, la même à travers les 3 niveaux de zoom mais de
-// plus en plus claire (cf. bubbleBackgroundFor) — absent (undefined) pour "À classer" et les
-// articles non classés, qui gardent le dégradé par défaut de .agon-tag-bubble.
-function buildTrendsForItems(items) {
-  // Un seul type d'item par niveau désormais (galaxies+"À classer" à la racine, systèmes seuls
-  // dans une galaxie, étoiles seules dans un système, cf. buildLevelItems) : plus besoin de
-  // séparer étoiles/systèmes dans deux plages de poids distinctes, ni de connectToIndex vers un
-  // système précis — chaque bulle fille se relie simplement au centre courant (cf.
-  // renderTagTrendCloud / drawOrbitLines, tagTrendCloud.js).
-  const weights = normalizeUniverseWeights(items, (item) => item.rawWeight);
-
-  const currentGalaxyName = galaxyNameForCurrentLevel();
-  return items.map((item, i) => {
-    let bubbleBackground;
-    let bubbleGlowColor;
-    let bubbleExtraClass;
-    if (item.universeType === "galaxy") {
-      const visual = galaxyBubbleVisual(item.ref.name);
-      bubbleBackground = visual.background;
-      bubbleGlowColor = visual.glowColor;
-      bubbleExtraClass = "agon-tag-bubble-galaxy";
-    } else if (item.universeType === "solarSystem" && currentGalaxyName) {
-      bubbleBackground = bubbleBackgroundFor(currentGalaxyName, "solarSystem", true);
-      // Saturation abaissée (55% → 26%, demande du 07/08/2026 "couleurs plus pastel").
-      bubbleGlowColor = `hsla(${hueForGalaxy(currentGalaxyName)}, 18%, 85%, 0.6)`;
-      bubbleExtraClass = "agon-tag-bubble-solarsystem";
-    } else if (item.universeType === "star" && currentGalaxyName) {
-      bubbleBackground = bubbleBackgroundFor(currentGalaxyName, "star", true);
-      bubbleExtraClass = "agon-tag-bubble-star";
-    } else if (item.universeType === "unclassifiedGroup" || item.universeType === "article") {
-      // "À classer" et ses articles : aucune galaxie à colorer, gardent le dégradé bleuté par
-      // défaut de .agon-tag-bubble — mais avec le même traitement contour/fondu que les autres
-      // niveaux (demande du 07/08/2026 : plus AUCUNE bulle de "Ma mémoire" avec un contour net).
-      bubbleBackground = UNCLASSIFIED_BUBBLE_BACKGROUND;
-      bubbleExtraClass = "agon-tag-bubble-unclassified";
-    }
-    const orbitLineBackground = item.universeType === "star" && currentGalaxyName
-      ? starConnectorBackgroundFor(currentGalaxyName)
-      : undefined;
-    return { tag: item.label, sizeWeight: weights[i], subjectId: "", bubbleBackground, bubbleGlowColor, bubbleExtraClass, orbitLineBackground };
-  });
+// Seuil visé par un clic (focusOn) : assez zoomé pour que les enfants soient confortablement
+// lisibles, pas seulement au ras du seuil de révélation.
+function focusScaleFor(node) {
+  return (CHILD_HINT_PX * 1.7) / node.r;
 }
 
 function pluralize(n, word) { return `${n} ${word}${n > 1 ? "s" : ""}`; }
 
-function ariaLabelFor(item) {
-  if (item.universeType === "galaxy") return `Ouvrir la galaxie ${item.label}, ${pluralize(item.ref.solarSystems.length, "système solaire")}`;
-  if (item.universeType === "unclassifiedGroup") return `Ouvrir le groupe À classer, ${pluralize(item.ref.length, "article")}`;
-  if (item.universeType === "solarSystem") return `Ouvrir le système solaire ${item.label}, ${pluralize(item.ref.stars.length, "étoile")}`;
-  if (item.universeType === "star") return `Voir la liste de ${pluralize(item.ref.articleCount, "article")} sous ${item.label}`;
-  if (item.universeType === "article") return `Ouvrir l'article ${item.label}`;
-  return item.label;
+function ariaLabelFor(kind, node) {
+  if (kind === "galaxy") return `Ouvrir la galaxie ${node.name}, ${pluralize(node.ref.solarSystems.length, "système solaire")}`;
+  if (kind === "solarSystem") return `Ouvrir le système solaire ${node.name}, ${pluralize(node.ref.stars.length, "étoile")}`;
+  if (kind === "star") return `Voir la liste de ${pluralize(node.ref.articleCount, "article")} sous ${node.name}`;
+  if (kind === "unclassified") return `Ouvrir le groupe À classer, ${pluralize(node.ref.length, "article")}`;
+  return node.name;
 }
 
-function applyAriaLabels(items) {
-  cloudEl.querySelectorAll(".agon-tag-bubble").forEach((bubble) => {
-    const item = items[Number(bubble.dataset.bubbleIndex)];
-    if (item) bubble.setAttribute("aria-label", ariaLabelFor(item));
-  });
-}
-
-// Centre du nuage pour le niveau courant : null au niveau racine et pour "À classer" (bulles
-// serrées les unes aux autres, sans trou central, cf. renderTagTrendCloud centerLabel). Niveau
-// systèmes solaires (navPath = [galaxie]) : centre "trou noir" plutôt qu'une bulle pastel comme
-// les autres (demande du 07/08/2026) — cf. blackHoleVisual. Niveau étoiles (navPath = [galaxie,
-// systemId]) : centre = le système solaire lui-même, rendu "soleil" (cf. sunVisual, même demande),
-// pour que ses étoiles gravitent visuellement autour d'un vrai astre lumineux.
-function centerLabelForCurrentLevel() {
-  if (!navPath.length || navPath[0] === UNCLASSIFIED_KEY) return null;
-  if (navPath.length >= 2) {
-    const solarSystem = getSolarSystemById(getGalaxyByName(navPath[0]), navPath[1]);
-    // Pas de `background` ici : le bouton lui-même reste transparent, tout le rendu (cœur +
-    // halo, un seul dégradé continu) est posé sur son ::before via --center-glow-color (cf.
-    // tagTrendCloud.js/style.css .agon-tag-center-btn-sun) — voir sunVisual pour le pourquoi.
-    return { label: solarSystem?.name || "Système", sun: true, glowColor: sunVisual(navPath[0]) };
-  }
-  // Même principe que ci-dessus (voir blackHoleVisual) : pas de `background`, tout passe par
-  // --center-glow-color sur ::before (.agon-tag-center-btn-blackhole, style.css).
-  return { label: navPath[0], blackHole: true, glowColor: blackHoleVisual(navPath[0]) };
-}
-
-// ---- Poussière d'étoiles autour des bulles système (niveau systèmes uniquement, demande du
-// 07/08/2026) : petits points sans nom, en couronne autour de chaque bulle système, dont le
-// nombre dépend du nombre d'étoiles qu'il contient (item.ref.stars.length) — jamais interactifs,
-// jamais gérés par tagTrendCloud.js (générique) : une simple couche décorative ajoutée par-dessus
-// une fois le placement des bulles terminé (positions déjà finalisées, mêmes coordonnées que
-// drawOrbitLines). Bornée (2 à 10) pour rester lisible même pour un système à 1 ou à 40 étoiles.
+// ---- Décorations : calculées une seule fois par nœud lors du montage (positions déjà connues
+// en coordonnées monde, contrairement à l'ancien modèle qui devait relire le DOM après coup) ----
 const MINI_STAR_MIN = 2;
 const MINI_STAR_MAX = 10;
 
-function clearMiniStars() {
-  cloudEl.querySelectorAll(".universe-mini-star").forEach((el) => el.remove());
+function addMiniStarsAroundSolarSystem(system) {
+  const count = Math.max(MINI_STAR_MIN, Math.min(MINI_STAR_MAX, system.ref.stars.length));
+  for (let s = 0; s < count; s += 1) {
+    const angle = (s / count) * Math.PI * 2 + (system.x + system.y) * 0.01;
+    const dist = system.r + 10 + Math.random() * 16;
+    const dotSize = 10 + Math.random() * 8;
+    const dot = document.createElement("span");
+    dot.className = "universe-mini-star";
+    dot.style.left = Math.round(system.x + Math.cos(angle) * dist - dotSize / 2) + "px";
+    dot.style.top = Math.round(system.y + Math.sin(angle) * dist - dotSize / 2) + "px";
+    dot.style.width = dotSize + "px";
+    dot.style.height = dotSize + "px";
+    dot.style.opacity = String(0.7 + Math.random() * 0.3);
+    worldEl.appendChild(dot);
+  }
 }
 
-// Obstacle "trou noir" (centre personnalisé du niveau systèmes, cf. tagTrendCloud.js
-// applyCompactBubbleLayout — même calcul de centerX/centerY/rayon reproduit ici à l'identique)
-// : sert à écarter la poussière d'étoiles d'un système trop proche du centre pour qu'aucun
-// point ne se retrouve superposé au trou noir (demande du 07/08/2026).
-function getCenterObstacle() {
-  const centerBtnEl = cloudEl.querySelector(".agon-tag-center-btn-custom");
-  const r = centerBtnEl ? (parseFloat(centerBtnEl.dataset.centerRadius) || 0) : 0;
-  if (!centerBtnEl || !r) return null;
-  const containerW = cloudEl.clientWidth || 0;
-  const containerH = cloudEl.clientHeight || 0;
-  if (!containerW || !containerH) return null;
-  const frameTopRaw = getComputedStyle(cloudEl).getPropertyValue("--bubble-frame-top").trim();
-  const frameTop = parseFloat(frameTopRaw) || 55;
-  const isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
-  const frameBottomInset = isMobile ? 78 : 23;
-  return {
-    x: containerW / 2,
-    y: (frameTop + (containerH - frameBottomInset)) / 2,
-    r
-  };
-}
-
-function drawMiniStarsForSystems(items) {
-  clearMiniStars();
-  // Uniquement au niveau systèmes (navPath = [galaxie]) : au niveau galaxies/étoiles/articles,
-  // ces bulles ne sont pas des systèmes solaires, rien à faire graviter autour.
-  if (navPath.length !== 1 || navPath[0] === UNCLASSIFIED_KEY) return;
-
-  const centerObstacle = getCenterObstacle();
-  const bubbles = [...cloudEl.querySelectorAll(".agon-tag-bubble")];
-  items.forEach((item, i) => {
-    if (item.universeType !== "solarSystem") return;
-    const bubble = bubbles[i];
-    if (!bubble) return;
-    const size = parseFloat(bubble.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
-    const left = parseFloat(bubble.style.left);
-    const top = parseFloat(bubble.style.top);
-    if (!size || Number.isNaN(left) || Number.isNaN(top)) return;
-    const r = size / 2;
-    const cx = left + r;
-    const cy = top + r;
-
-    const count = Math.max(MINI_STAR_MIN, Math.min(MINI_STAR_MAX, item.ref.stars.length));
-    for (let s = 0; s < count; s += 1) {
-      // Décalage par système (i * 0.7 rad) pour que deux systèmes voisins n'affichent jamais
-      // leurs points strictement alignés les uns sur les autres.
-      const angle = (s / count) * Math.PI * 2 + i * 0.7;
-      const dist = r + 10 + Math.random() * 16;
-      // Taille encore relevée (demande du 08/08/2026, "beaucoup plus grosses/lumineuses") —
-      // déjà montée une première fois le 07/08/2026 (2-4.5px → 4.5-8.5px, invisibles à taille
-      // normale) ; cette 2e passe double encore la plage.
-      const dotSize = 10 + Math.random() * 8;
-      let dotX = cx + Math.cos(angle) * dist;
-      let dotY = cy + Math.sin(angle) * dist;
-
-      // Système placé près du trou noir (obstacle central) : un point tiré côté centre peut
-      // tomber dessus. On le repousse radialement (depuis le trou noir, pas depuis le système)
-      // juste hors de son rayon plutôt que de le supprimer, pour garder le même nombre de points.
-      if (centerObstacle) {
-        const dxCenter = dotX - centerObstacle.x;
-        const dyCenter = dotY - centerObstacle.y;
-        const distToCenter = Math.hypot(dxCenter, dyCenter);
-        const minDist = centerObstacle.r + dotSize / 2 + 6;
-        if (distToCenter < minDist) {
-          const angleFromCenter = distToCenter > 0.01 ? Math.atan2(dyCenter, dxCenter) : angle;
-          dotX = centerObstacle.x + Math.cos(angleFromCenter) * minDist;
-          dotY = centerObstacle.y + Math.sin(angleFromCenter) * minDist;
-        }
-      }
-
-      const dot = document.createElement("span");
-      dot.className = "universe-mini-star";
-      dot.style.left = Math.round(dotX - dotSize / 2) + "px";
-      dot.style.top = Math.round(dotY - dotSize / 2) + "px";
-      dot.style.width = dotSize + "px";
-      dot.style.height = dotSize + "px";
-      dot.style.opacity = String(0.7 + Math.random() * 0.3);
-      cloudEl.appendChild(dot);
-    }
-  });
-}
-
-// Redessine la poussière d'étoiles après un redimensionnement (le ResizeObserver interne de
-// tagTrendCloud.js recalcule alors les positions des bulles système, cf. layoutTagTrendCloud) —
-// délai (180ms) volontairement supérieur au sien (120ms, cf. tagTrendCloud.js) pour repartir des
-// positions déjà réactualisées plutôt que des anciennes.
-if (typeof ResizeObserver !== "undefined") {
-  let miniStarResizeTimer = null;
-  new ResizeObserver(() => {
-    if (!isMemoireEmbedActive()) return;
-    clearTimeout(miniStarResizeTimer);
-    miniStarResizeTimer = setTimeout(() => drawMiniStarsForSystems(currentLevelItems), 180);
-  }).observe(cloudEl);
-}
-
-// ---- Petites lunes en orbite autour de certaines étoiles (autre décoration subtile, demande du
-// 07/08/2026 : "met d'autres décorations subtiles en mode étoile") : 1 ou 2 disques ombrés
-// (cf. .universe-star-moon, style.css), plus près de la bulle que l'anneau — un vrai système
-// planète/lune/anneau peut avoir les deux à la fois, jamais géré par tagTrendCloud.js.
 const STAR_MOON_CHANCE = 0.35;
+const STAR_SPARKLE_CHANCE = 0.22;
 
-function clearStarMoons() {
-  cloudEl.querySelectorAll(".universe-star-moon").forEach((el) => el.remove());
-}
-
-function drawMoonsForStars(items) {
-  clearStarMoons();
-  if (navPath.length !== 2) return;
-
-  const bubbles = [...cloudEl.querySelectorAll(".agon-tag-bubble")];
-  items.forEach((item, i) => {
-    if (item.universeType !== "star") return;
-    if (Math.random() > STAR_MOON_CHANCE) return;
-    const bubble = bubbles[i];
-    if (!bubble) return;
-    const size = parseFloat(bubble.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
-    const left = parseFloat(bubble.style.left);
-    const top = parseFloat(bubble.style.top);
-    if (!size || Number.isNaN(left) || Number.isNaN(top)) return;
-    const r = size / 2;
-    const cx = left + r;
-    const cy = top + r;
-
+function addMoonsAndSparklesAroundStar(star) {
+  if (Math.random() <= STAR_MOON_CHANCE) {
     const moonCount = Math.random() < 0.28 ? 2 : 1;
     for (let m = 0; m < moonCount; m += 1) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = r + 9 + Math.random() * 9;
+      const dist = star.r + 9 + Math.random() * 9;
       const moonSize = 3.5 + Math.random() * 3;
       const moon = document.createElement("span");
       moon.className = "universe-star-moon";
-      moon.style.left = Math.round(cx + Math.cos(angle) * dist - moonSize / 2) + "px";
-      moon.style.top = Math.round(cy + Math.sin(angle) * dist - moonSize / 2) + "px";
+      moon.style.left = Math.round(star.x + Math.cos(angle) * dist - moonSize / 2) + "px";
+      moon.style.top = Math.round(star.y + Math.sin(angle) * dist - moonSize / 2) + "px";
       moon.style.width = moonSize + "px";
       moon.style.height = moonSize + "px";
-      cloudEl.appendChild(moon);
+      worldEl.appendChild(moon);
     }
-  });
-}
-
-// ---- Scintillements ponctuels près de quelques étoiles (dernière décoration subtile, même
-// demande) : petit éclat en croix (façon étoile filante/reflet d'objectif), très discret, sur
-// une minorité d'étoiles seulement pour ne jamais surcharger la vue.
-const STAR_SPARKLE_CHANCE = 0.22;
-
-function clearStarSparkles() {
-  cloudEl.querySelectorAll(".universe-star-sparkle").forEach((el) => el.remove());
-}
-
-function drawSparklesForStars(items) {
-  clearStarSparkles();
-  if (navPath.length !== 2) return;
-
-  const bubbles = [...cloudEl.querySelectorAll(".agon-tag-bubble")];
-  items.forEach((item, i) => {
-    if (item.universeType !== "star") return;
-    if (Math.random() > STAR_SPARKLE_CHANCE) return;
-    const bubble = bubbles[i];
-    if (!bubble) return;
-    const size = parseFloat(bubble.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
-    const left = parseFloat(bubble.style.left);
-    const top = parseFloat(bubble.style.top);
-    if (!size || Number.isNaN(left) || Number.isNaN(top)) return;
-    const r = size / 2;
-    const cx = left + r;
-    const cy = top + r;
-
+  }
+  if (Math.random() <= STAR_SPARKLE_CHANCE) {
     const angle = Math.random() * Math.PI * 2;
-    const dist = r + 14 + Math.random() * 14;
+    const dist = star.r + 14 + Math.random() * 14;
     const sparkleSize = 10 + Math.random() * 6;
     const sparkle = document.createElement("span");
     sparkle.className = "universe-star-sparkle";
-    sparkle.style.left = Math.round(cx + Math.cos(angle) * dist - sparkleSize / 2) + "px";
-    sparkle.style.top = Math.round(cy + Math.sin(angle) * dist - sparkleSize / 2) + "px";
+    sparkle.style.left = Math.round(star.x + Math.cos(angle) * dist - sparkleSize / 2) + "px";
+    sparkle.style.top = Math.round(star.y + Math.sin(angle) * dist - sparkleSize / 2) + "px";
     sparkle.style.width = sparkleSize + "px";
     sparkle.style.height = sparkleSize + "px";
-    cloudEl.appendChild(sparkle);
+    worldEl.appendChild(sparkle);
+  }
+}
+
+// ---- Construction d'une bulle (élément DOM) pour un nœud positionné ----
+function createBubbleEl(kind, node, background, glowColor, extraClass) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = `agon-tag-bubble universe-zoom-bubble${extraClass ? " " + extraClass : ""}`;
+  btn.dataset.kind = kind;
+  btn.dataset.nodeId = node.id;
+  btn.style.left = (node.x - node.r) + "px";
+  btn.style.top = (node.y - node.r) + "px";
+  // .agon-tag-bubble ne fixe pas width/height elle-même (ça vient normalement de
+  // .agon-tag-bubble-large/-medium/-small, un système de paliers propre à tagTrendCloud.js,
+  // non utilisé ici) : posé directement en inline, une taille continue plutôt que 3 paliers.
+  btn.style.width = node.r * 2 + "px";
+  btn.style.height = node.r * 2 + "px";
+  btn.style.setProperty("--agon-tag-bubble-size", node.r * 2 + "px");
+  if (background) btn.style.background = background;
+  if (glowColor) btn.style.setProperty("--agon-tag-bubble-glow", glowColor);
+  btn.setAttribute("aria-label", ariaLabelFor(kind, node));
+
+  const label = document.createElement("span");
+  label.className = "universe-zoom-bubble-label";
+  label.textContent = node.name;
+  btn.appendChild(label);
+
+  worldEl.appendChild(btn);
+  return btn;
+}
+
+// ---- Montage complet de la scène (une seule fois par chargement de données) ----
+function destroyUniverseScene() {
+  camera = null;
+  if (viewportEl) viewportEl.remove();
+  viewportEl = null;
+  worldEl = null;
+  nodeById.clear();
+}
+
+function mountUniverse() {
+  destroyUniverseScene();
+
+  viewportEl = document.createElement("div");
+  viewportEl.className = "universe-zoom-viewport";
+  worldEl = document.createElement("div");
+  worldEl.className = "universe-zoom-world";
+  viewportEl.appendChild(worldEl);
+  cloudEl.appendChild(viewportEl);
+
+  // Rayon du monde dérivé de la taille réelle du cadre au montage : scale=1 (vue d'ensemble)
+  // montre alors tout de suite toutes les galaxies confortablement.
+  const vw = viewportEl.clientWidth || 390;
+  const vh = viewportEl.clientHeight || 460;
+  const worldRadius = Math.min(vw, vh) * 0.46;
+
+  worldLayout = layoutUniverseWorld(universeData.galaxies, worldRadius);
+
+  worldLayout.galaxies.forEach((g) => {
+    const visual = galaxyBubbleVisual(g.name);
+    const el = createBubbleEl("galaxy", g, visual.background, visual.glowColor, "agon-tag-bubble-galaxy");
+    el.classList.add("is-revealed"); // toujours visibles, jamais soumises au seuil de révélation
+    nodeById.set(g.id, g);
   });
-}
 
-if (typeof ResizeObserver !== "undefined") {
-  let starDecorResizeTimer = null;
-  new ResizeObserver(() => {
-    if (!isMemoireEmbedActive()) return;
-    clearTimeout(starDecorResizeTimer);
-    starDecorResizeTimer = setTimeout(() => {
-      drawMoonsForStars(currentLevelItems);
-      drawSparklesForStars(currentLevelItems);
-    }, 180);
-  }).observe(cloudEl);
-}
+  worldLayout.solarSystems.forEach((s) => {
+    const hue = hueForGalaxy(getGalaxyNameFromId(s.galaxyId));
+    createBubbleEl(
+      "solarSystem",
+      s,
+      bubbleBackgroundFor(getGalaxyNameFromId(s.galaxyId), "solarSystem", true),
+      `hsla(${hue}, 18%, 85%, 0.6)`,
+      "agon-tag-bubble-solarsystem"
+    );
+    addMiniStarsAroundSolarSystem(s);
+    nodeById.set(s.id, s);
+  });
 
-// ---- Rendu du niveau courant : réutilise renderTagTrendCloud tel quel (placement compact,
-// anti-collision, auto-scale, labels — rien de tout ça n'est réimplémenté ici). maxBubbles =
-// items.length : aucune galaxie/système/étoile tronquée silencieusement. ----
-function renderLevelNow() {
-  const items = buildLevelItems();
-  currentLevelItems = items;
-  renderBreadcrumb();
-  updateBackButtonVisibility();
+  worldLayout.stars.forEach((star) => {
+    createBubbleEl(
+      "star",
+      star,
+      bubbleBackgroundFor(getGalaxyNameFromId(star.galaxyId), "star", true),
+      null,
+      "agon-tag-bubble-star"
+    );
+    addMoonsAndSparklesAroundStar(star);
+    nodeById.set(star.id, star);
+  });
 
-  if (!items.length) {
-    // Cas défensif (ex. galaxie disparue entre deux navigations locales) : retombe au niveau
-    // galaxies plutôt que d'afficher un écran vide sans issue.
-    if (navPath.length) { navPath = []; renderLevelNow(); return; }
-    showStatus("empty");
-    return;
+  // "À classer" : une bulle de plus au niveau racine, positionnée comme une galaxie
+  // supplémentaire (packée dans le même disque), ouvre directement le panneau liste (comme une
+  // étoile) plutôt qu'un niveau de zoom supplémentaire — ces articles n'ont ni système ni
+  // étoile à explorer en dessous.
+  let unclassifiedNode = null;
+  if (universeData.unclassified.length) {
+    const extra = Math.min(worldRadius * 0.3, 70);
+    const angle = Math.PI * 0.72;
+    unclassifiedNode = {
+      id: "unclassified",
+      name: "À classer",
+      x: Math.cos(angle) * worldRadius * 0.78,
+      y: Math.sin(angle) * worldRadius * 0.78,
+      r: extra,
+      ref: universeData.unclassified
+    };
+    createBubbleEl("unclassified", unclassifiedNode, UNCLASSIFIED_BUBBLE_BACKGROUND, null, "agon-tag-bubble-unclassified");
+    nodeById.set(unclassifiedNode.id, unclassifiedNode);
   }
-  showStatus("none");
 
-  const trends = buildTrendsForItems(items);
-  const centerLabel = centerLabelForCurrentLevel();
-  // Espacement supplémentaire : au niveau galaxies (racine) pour laisser voir le fond étoilé
-  // entre les bulles, cf. renderTagTrendCloud bubbleGap (demande du 06/08/2026) — et au niveau
-  // étoiles (centre "soleil" uniquement, pas le "trou noir" des systèmes, demande du 07/08/2026 :
-  // le trait de liaison ne concerne que la dernière étape) pour garder un vrai espace visible
-  // entre le soleil et ses étoiles. Sans cet espace (bubbleGap=0), le placement laisse les bulles
-  // quasiment toucher le centre (tolérance de -4px, cf. placeBubbleNear) et le trait, trop court,
-  // est alors filtré par drawOrbitLines (lineLength <= 4).
-  const bubbleGap = !navPath.length ? 16 : (centerLabel?.sun ? 14 : 0);
-  try {
-    renderTagTrendCloud(cloudEl, trends, () => {
-      applyAriaLabels(items);
-      // try/catch dédié : une couche décorative qui plante ici (ex. variable manquante) ne doit
-      // jamais empêcher le retrait de universe-cloud--transitioning juste en dessous, sinon tout
-      // le nuage reste bloqué à opacity:0 — confirmé le 07/08/2026 ("je ne vois plus d'étoiles du
-      // tout"), causé par un bug dans une décoration qui empêchait ce retrait.
-      try {
-        drawMiniStarsForSystems(items);
-        drawMoonsForStars(items);
-        drawSparklesForStars(items);
-      } catch (error) {
-        console.warn("[mon-univers] décorations interrompues :", error.message);
-      }
-      cloudEl.classList.remove("universe-cloud--transitioning");
-      if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
-    }, items.length, centerLabel, bubbleGap);
-  } catch (error) {
-    console.warn("[mon-univers] rendu du nuage interrompu :", error.message);
-    cloudEl.classList.remove("universe-cloud--transitioning");
-    if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
+  const maxChildRevealScale = worldLayout.solarSystems.length
+    ? Math.max(...worldLayout.solarSystems.map((s) => focusScaleFor(s)))
+    : (worldLayout.galaxies.length ? Math.max(...worldLayout.galaxies.map((g) => focusScaleFor(g))) : 4);
+
+  camera = createUniverseCamera({
+    viewportEl,
+    worldEl,
+    minScale: 1,
+    maxScale: Math.max(6, maxChildRevealScale * 1.6),
+    onChange: onCameraChange
+  });
+  camera.setState({ x: 0, y: 0, scale: 1 }, false);
+  onCameraChange(camera.getState());
+}
+
+function getGalaxyNameFromId(galaxyId) {
+  const node = nodeById.get(galaxyId);
+  return node ? node.name : null;
+}
+
+// ---- Réaction au changement de caméra : révèle/masque les bulles selon leur taille à l'écran,
+// contre-scale les libellés pour qu'ils restent lisibles à tout niveau de zoom, met à jour le
+// fil d'Ariane. rAF-throttled côté caméra (cf. universe-zoom.js) : jamais plus d'une fois par
+// frame pendant un geste continu.
+function onCameraChange(state) {
+  document.documentElement.style.setProperty("--universe-cam-scale", String(state.scale));
+
+  worldEl.querySelectorAll(".universe-zoom-bubble").forEach((el) => {
+    if (el.dataset.kind === "galaxy") return; // toujours révélées
+    const node = nodeById.get(el.dataset.nodeId);
+    if (!node) return;
+    const revealed = node.r * state.scale >= REVEAL_PX_SELF;
+    el.classList.toggle("is-revealed", revealed);
+  });
+
+  renderBreadcrumb(computeFocusInfo(state));
+}
+
+// Nœud "englobant" le centre courant de la caméra (le plus profond dont le cercle contient le
+// point caméra ET qui est réellement révélé à l'écran) — sert au fil d'Ariane et au bouton
+// retour, dérivé de la caméra plutôt que d'un état de navigation séparé.
+function computeFocusInfo(state) {
+  let galaxy = null;
+  for (const g of worldLayout.galaxies) {
+    if (Math.hypot(state.x - g.x, state.y - g.y) <= g.r && g.r * state.scale >= CHILD_HINT_PX) { galaxy = g; break; }
   }
+  if (!galaxy) return { galaxy: null, solarSystem: null };
+  let solarSystem = null;
+  for (const s of worldLayout.solarSystems) {
+    if (s.galaxyId !== galaxy.id) continue;
+    if (Math.hypot(state.x - s.x, state.y - s.y) <= s.r && s.r * state.scale >= CHILD_HINT_PX) { solarSystem = s; break; }
+  }
+  return { galaxy, solarSystem };
 }
 
-// Zoom léger (opacity/scale, cf. style.css #agon-universe-cloud.universe-cloud--transitioning)
-// avant de vider et re-rendre les bulles du niveau suivant.
-function goToLevel(newPath) {
-  hideStarPanel();
-  cloudEl.classList.add("universe-cloud--transitioning");
-  window.setTimeout(() => {
-    navPath = newPath;
-    renderLevelNow();
-  }, 160);
-}
+// ---- Clic (délégué sur document, un seul listener pour toute la durée de vie du module —
+// worldEl est recréé à chaque loadUniverse(), inutile de re-brancher un listener à chaque fois) ----
+document.addEventListener("click", (event) => {
+  if (!isMemoireEmbedActive() || !worldEl) return;
+  const bubble = event.target.closest(".universe-zoom-bubble");
+  if (!bubble || !worldEl.contains(bubble)) return;
+  if (!bubble.classList.contains("is-revealed")) return; // pas encore assez zoomé pour être "cliquable"
+  event.stopPropagation();
+  const node = nodeById.get(bubble.dataset.nodeId);
+  if (!node) return;
+  const kind = bubble.dataset.kind;
+  if (kind === "galaxy" || kind === "solarSystem") {
+    camera.focusOn(node, focusScaleFor(node));
+  } else if (kind === "star") {
+    showStarPanel(node.ref);
+  } else if (kind === "unclassified") {
+    showStarPanel({ name: "À classer", articles: node.ref });
+  }
+});
 
-function handleItemActivate(item) {
-  if (item.universeType === "galaxy") { goToLevel([item.ref.name]); return; }
-  if (item.universeType === "unclassifiedGroup") { goToLevel([UNCLASSIFIED_KEY]); return; }
-  // Clic sur un système solaire : zoome sur ses étoiles (navPath = [galaxie, systemId]),
-  // cf. buildLevelItems. navPath[0] est déjà la galaxie courante à ce niveau.
-  if (item.universeType === "solarSystem") { goToLevel([navPath[0], item.ref.id]); return; }
-  // Une étoile ne zoome jamais sur un niveau de bulles supplémentaire : elle peut regrouper
-  // plusieurs articles (ex. "Tour de France 2026"), affichés dans un panneau liste simple.
-  if (item.universeType === "star") { showStarPanel(item.ref); return; }
-  if (item.universeType === "article") {
-    const url = item.ref.url;
-    if (url && /^https?:\/\//i.test(String(url))) {
-      window.open(url, "_blank", "noopener,noreferrer");
+// ---- Fil d'Ariane ----
+function renderBreadcrumb(focusInfo) {
+  breadcrumbEl.innerHTML = "";
+  const crumbs = [{ label: "Ma mémoire", action: () => zoomToRoot() }];
+  if (focusInfo.galaxy) crumbs.push({ label: focusInfo.galaxy.name, action: () => camera.focusOn(focusInfo.galaxy, focusScaleFor(focusInfo.galaxy)) });
+  if (focusInfo.solarSystem) crumbs.push({ label: focusInfo.solarSystem.name, action: () => camera.focusOn(focusInfo.solarSystem, focusScaleFor(focusInfo.solarSystem)) });
+
+  crumbs.forEach((crumb, i) => {
+    const isLast = i === crumbs.length - 1;
+    if (isLast) {
+      const span = document.createElement("span");
+      span.className = "universe-breadcrumb__item universe-breadcrumb__item--current";
+      span.textContent = crumb.label;
+      span.setAttribute("aria-current", "page");
+      breadcrumbEl.appendChild(span);
+      return;
     }
-    // URL absente/invalide : aucune action, jamais d'erreur visible pour l'utilisateur.
-  }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "universe-breadcrumb__item";
+    btn.textContent = crumb.label;
+    btn.addEventListener("click", crumb.action);
+    breadcrumbEl.appendChild(btn);
+    const sep = document.createElement("span");
+    sep.className = "universe-breadcrumb__sep";
+    sep.textContent = "›";
+    sep.setAttribute("aria-hidden", "true");
+    breadcrumbEl.appendChild(sep);
+  });
+
+  updateBackButtonVisibility(crumbs.length > 1);
 }
+
+function zoomToRoot() {
+  camera?.setState({ x: 0, y: 0, scale: 1 }, true);
+}
+
+function updateBackButtonVisibility(hasCrumbs) {
+  backBtn.classList.toggle("is-visible", !!hasCrumbs);
+}
+backBtn.addEventListener("click", () => {
+  if (!camera) return;
+  const info = computeFocusInfo(camera.getState());
+  if (info.solarSystem) {
+    camera.focusOn(info.galaxy, focusScaleFor(info.galaxy));
+  } else if (info.galaxy) {
+    zoomToRoot();
+  }
+});
 
 // ---- Panneau liste (niveau étoile) ----
 const starPanelEl = document.getElementById("universe-star-panel");
@@ -1058,78 +829,16 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !starPanelEl.hidden) hideStarPanel();
 });
 
-// #agon-memoire-embed-before n'existe QUE sur l'accueil (embed "Ma mémoire", demande du
-// 08/08/2026) : absent sur la page /mon-univers autonome (donc toujours "actif" là-bas). Sur
-// l'accueil, ce même #agon-tag-trends-cloud est PARTAGÉ avec Bulles Actu/Bulles Agôn (cf.
-// cloudEl plus haut, repli sur #agon-tag-trends-cloud) — sans cette vérification, le listener
-// posé une seule fois ci-dessous resterait actif pour toujours après une seule visite en mode
-// "Ma mémoire", et stopPropagation() empêcherait alors les clics sur les vraies bulles Actu/Agôn
-// d'atteindre le listener global de script.js (plus aucune bulle Actu/Agôn cliquable).
+// #agon-memoire-embed-before n'existe QUE sur l'accueil (embed "Ma mémoire") : absent sur la
+// page /mon-univers autonome (donc toujours "actif" là-bas). Sur l'accueil, ce même
+// #agon-tag-trends-cloud est PARTAGÉ avec Bulles Actu/Bulles Agôn (cf. cloudEl plus haut) —
+// sans cette vérification, les clics posés sur worldEl resteraient actifs pour toujours après
+// une seule visite en mode "Ma mémoire", et stopPropagation() empêcherait alors les clics sur
+// les vraies bulles Actu/Agôn d'atteindre le listener global de script.js.
 function isMemoireEmbedActive() {
   const marker = document.getElementById("agon-memoire-embed-before");
   return !marker || !marker.hidden;
 }
-
-// Clic intercepté au niveau du conteneur (jamais sur document) + stopPropagation : empêche le
-// listener global de public/script.js (.agon-tag-bubble -> handleBubbleTagClick, spécifique aux
-// débats) de voir cet événement. Les bulles créées par renderTagTrendCloud sont de vrais
-// <button> : Entrée et Espace déclenchent déjà nativement ce même "click", aucun code clavier
-// supplémentaire nécessaire.
-cloudEl.addEventListener("click", (event) => {
-  if (!isMemoireEmbedActive()) return;
-  const bubble = event.target.closest(".agon-tag-bubble");
-  if (!bubble) return;
-  event.stopPropagation();
-  const item = currentLevelItems[Number(bubble.dataset.bubbleIndex)];
-  if (item) handleItemActivate(item);
-});
-
-// ---- Fil d'Ariane ----
-function renderBreadcrumb() {
-  breadcrumbEl.innerHTML = "";
-  const crumbs = [{ label: "Ma mémoire", path: [] }];
-
-  if (navPath[0] === UNCLASSIFIED_KEY) {
-    crumbs.push({ label: "À classer", path: [UNCLASSIFIED_KEY] });
-  } else if (navPath.length >= 1) {
-    crumbs.push({ label: navPath[0], path: [navPath[0]] });
-    if (navPath.length >= 2) {
-      const solarSystem = getSolarSystemById(getGalaxyByName(navPath[0]), navPath[1]);
-      crumbs.push({ label: solarSystem?.name || "Système solaire", path: [navPath[0], navPath[1]] });
-    }
-  }
-
-  crumbs.forEach((crumb, i) => {
-    const isLast = i === crumbs.length - 1;
-    if (isLast) {
-      const span = document.createElement("span");
-      span.className = "universe-breadcrumb__item universe-breadcrumb__item--current";
-      span.textContent = crumb.label;
-      span.setAttribute("aria-current", "page");
-      breadcrumbEl.appendChild(span);
-      return;
-    }
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "universe-breadcrumb__item";
-    btn.textContent = crumb.label;
-    btn.addEventListener("click", () => goToLevel(crumb.path));
-    breadcrumbEl.appendChild(btn);
-    const sep = document.createElement("span");
-    sep.className = "universe-breadcrumb__sep";
-    sep.textContent = "›";
-    sep.setAttribute("aria-hidden", "true");
-    breadcrumbEl.appendChild(sep);
-  });
-}
-
-function updateBackButtonVisibility() {
-  backBtn.classList.toggle("is-visible", navPath.length > 0);
-}
-backBtn.addEventListener("click", () => {
-  if (!navPath.length) return;
-  goToLevel(navPath.slice(0, -1));
-});
 
 // ---- États de page ----
 function showStatus(kind) {
@@ -1153,12 +862,9 @@ function showStatus(kind) {
     return;
   }
 
-  // "loading"/"empty" gardent le cadre visible (fond/bordure décorative, cf.
-  // .agon-memoire-frame.agon-tag-trends-cloud::before/::after) dès le clic sur "Ma mémoire",
-  // plutôt que d'attendre la fin du chargement (fetch + import du module) pour l'afficher —
-  // demande du 09/08/2026, "le cadre et le fond ne sont plus là directement, ils arrivent
-  // furtivement après. Je veux qu'ils soient là directement". Seul "error" masque encore le
-  // cloud (rien à montrer dans le cadre dans ce cas, le message d'erreur suffit).
+  // "loading"/"empty" gardent le cadre visible (fond/bordure décorative) dès le clic sur "Ma
+  // mémoire", plutôt que d'attendre la fin du chargement pour l'afficher. Seul "error" masque
+  // encore le cloud (rien à montrer dans le cadre dans ce cas, le message d'erreur suffit).
   cloudEl.hidden = kind === "error";
   statusEl.hidden = false;
   statusEl.innerHTML = "";
@@ -1286,21 +992,19 @@ function buildDemoUniverseData() {
 // 4G/5G, ou ici plus spécifiquement un lancement à froid de la PWA standalone dont le
 // réseau met plus longtemps à se stabiliser qu'un onglet Safari déjà actif, peut laisser
 // ce fetch sans réponse ni erreur — sans lui, "Ma mémoire" restait bloquée en chargement
-// perpétuel, seulement en standalone, jamais en navigateur mobile classique déjà "chaud"
-// (demande du 12/08/2026, "rien ne s'affiche... ça se charge sans jamais finir").
+// perpétuel, seulement en standalone, jamais en navigateur mobile classique déjà "chaud".
 const UNIVERSE_FETCH_TIMEOUT_MS = 12000;
 
-// ---- Chargement (un seul appel, jamais relancé au changement de niveau) ----
+// ---- Chargement (un seul appel réseau, jamais relancé à la navigation dans la scène) ----
 async function loadUniverse() {
   // Jeton partagé avec script.js (toggleAgonCloud/setPoliticalCloudGroup/setMemoireCloudMode) :
   // si l'utilisateur repart sur Bulles Actu/Agôn pendant que ce fetch est encore en vol (réseau
   // lent), window._agonCloudModeToken aura changé à la résolution ci-dessous — sans cette
   // vérification, le rendu de "Ma mémoire" arrivait en retard et écrasait les bulles
-  // Actu/Agôn déjà affichées entre-temps sur le conteneur partagé (demande du 09/08/2026,
-  // "ça mélange encore les univers des trois bulles", "ça le fait parfois mais pas tout le
-  // temps" — confirme une course, pas un bug systématique).
+  // Actu/Agôn déjà affichées entre-temps sur le conteneur partagé.
   const modeToken = window._agonCloudModeToken;
 
+  destroyUniverseScene();
   breadcrumbEl.innerHTML = "";
   backBtn.classList.remove("is-visible");
   showStatus("loading");
@@ -1308,9 +1012,9 @@ async function loadUniverse() {
   const isDemo = new URLSearchParams(location.search).get("demo") === "1";
   if (isDemo) {
     universeData = buildDemoUniverseData();
-    navPath = [];
     if (modeToken !== window._agonCloudModeToken) return;
-    renderLevelNow();
+    showStatus("none");
+    mountUniverse();
     return;
   }
 
@@ -1339,8 +1043,9 @@ async function loadUniverse() {
     return;
   }
 
-  navPath = [];
-  renderLevelNow();
+  showStatus("none");
+  mountUniverse();
+  if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
 }
 
 loadUniverse();
@@ -1349,15 +1054,15 @@ loadUniverse();
 // tout premier passage : l'import dynamique n'évalue ce module qu'une seule fois (mis en cache
 // via _memoireModuleLoadPromise), donc le loadUniverse() ci-dessus, en haut de fichier, ne
 // s'exécute lui aussi qu'une seule fois — sans cet export, repasser sur "Ma mémoire" après être
-// allé sur Bulles Actu/Agôn laissait leurs bulles (avec leurs propres satellites) telles quelles
-// à l'écran au lieu de les remplacer par les bulles galaxies/systèmes/étoiles (demande du
-// 09/08/2026, "ça mélange tout").
-// Reclique sur l'onglet "Ma mémoire" (script.js) alors qu'on y est déjà, à un niveau profond
-// (galaxie/système) : ramène à la racine (galaxies), comme un clic sur le premier crumb du fil
-// d'Ariane (cf. renderBreadcrumb, crumbs[0] = {label:"Ma mémoire", path:[]}) — demande du
-// 09/08/2026. Rien si déjà à la racine (évite une transition vide).
+// allé sur Bulles Actu/Agôn laissait leurs bulles telles quelles à l'écran au lieu de les
+// remplacer par la scène "Ma mémoire". destroyUniverseScene() (en tout début de loadUniverse)
+// évite d'empiler des scènes/caméras à chaque retour.
+// Reclique sur l'onglet "Ma mémoire" (script.js) alors qu'on y est déjà : ramène la caméra à la
+// vue d'ensemble, comme un clic sur le premier crumb du fil d'Ariane. Rien si déjà à la racine.
 function resetToRoot() {
-  if (navPath.length) goToLevel([]);
+  if (!camera) return;
+  const state = camera.getState();
+  if (state.x !== 0 || state.y !== 0 || state.scale !== 1) zoomToRoot();
 }
 
 export { loadUniverse as reinitMemoireEmbed, resetToRoot };

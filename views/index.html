@@ -432,6 +432,62 @@
   });
 })();
 </script>
+<script>
+(function () {
+  // TEMPORAIRE : diagnostic de la bande blanche visible en bas de l'écran pendant l'animation
+  // de démarrage/"Actualiser" en standalone (signalé le 13/08/2026). Piste la plus probable :
+  // le contournement existant du bug WebKit "le calque fixed du loader ne peint pas les
+  // ~60px du bas" (cf. règle html.agon-startup-active .home-bottom-nav/.agon-tribunes-btn/
+  // .app-floating-refresh-btn juste plus haut dans ce fichier) ne couvre PAS
+  // #agon-political-cloud-switch (switch Gauche/Tout/Droite) — absent de cette liste, ce
+  // switch resterait visible sous le loader s'il se trouve dans cette bande. Autonome, sans
+  // dépendance à script.min.js (comme le reste de ce bloc) : POST direct vers le même
+  // pipeline que __scrollJumpDiagLog (script.js), lisible ensuite via
+  // GET /api/debug/scroll-jump-sample (admin). À retirer une fois la cause confirmée.
+  if (!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches)) return;
+  var loader = document.getElementById('agon-startup-loader');
+  if (!loader) return;
+  function sample(reason) {
+    try {
+      var switchEl = document.getElementById('agon-political-cloud-switch');
+      var switchRect = switchEl ? switchEl.getBoundingClientRect() : null;
+      var switchStyle = switchEl ? window.getComputedStyle(switchEl) : null;
+      var cx = Math.round(window.innerWidth / 2);
+      var pointBottom15 = document.elementFromPoint(cx, window.innerHeight - 15);
+      var pointBottom40 = document.elementFromPoint(cx, window.innerHeight - 40);
+      var describe = function (el) { return el ? (el.id || el.className || el.tagName) : null; };
+      fetch('/api/debug/scroll-jump-sample', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: 'startup-bottom-band:' + reason,
+          href: String(location.pathname || ''),
+          innerHeight: window.innerHeight,
+          vvHeight: window.visualViewport ? Math.round(window.visualViewport.height) : null,
+          startupActive: document.documentElement.classList.contains('agon-startup-active'),
+          loaderHiding: loader.classList.contains('is-hiding'),
+          loaderInDom: !!loader.parentNode,
+          switchFound: !!switchEl,
+          switchBottom: switchRect ? Math.round(switchRect.bottom) : null,
+          switchVisibility: switchStyle ? switchStyle.visibility : null,
+          switchDisplay: switchStyle ? switchStyle.display : null,
+          elAtBottom15: describe(pointBottom15),
+          elAtBottom40: describe(pointBottom40)
+        }),
+        keepalive: true
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  // Plusieurs passages : au montage, puis pendant que l'intro joue (le bug est visuel à un
+  // instant précis, pas forcément au tout premier rendu), puis un dernier après la disparition
+  // du loader pour comparer l'état "avant/après".
+  sample('mount');
+  setTimeout(function () { sample('t500'); }, 500);
+  setTimeout(function () { sample('t1500'); }, 1500);
+  setTimeout(function () { sample('t3000'); }, 3000);
+  setTimeout(function () { sample('t6000'); }, 6000);
+})();
+</script>
 
 <header class="topbar">
   <div class="container topbar-inner topbar-home">
