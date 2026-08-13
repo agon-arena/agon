@@ -1525,6 +1525,12 @@
   // currentCategory/currentSlot changent.
   function updateCustomSearchVisibility() {
     var visible = currentCategory === 'mesqcm' && !currentSlot;
+    // .hidden (propriété DOM, retire vraiment l'attribut) en plus de la classe : depuis
+    // l'ajout de [hidden]{display:none !important} (garde-fou du 13/08/2026 plus haut dans ce
+    // fichier), l'attribut hidden posé sur ce <form> dans le HTML l'emportait sur
+    // .qcm-custom-search.visible{display:flex} (non !important) — la barre restait invisible
+    // en permanence malgré la classe correctement posée, seul l'attribut compte désormais.
+    customSearchForm.hidden = !visible;
     customSearchForm.classList.toggle('visible', visible);
     if (!visible) customSearchStatus.hidden = true;
   }

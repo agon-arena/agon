@@ -10787,6 +10787,19 @@ async function getAgonBubbleTrends() {
       agonBubbleTrendsInFlight = null;
     });
   }
+  // Stale-while-revalidate (13/08/2026) : computeAgonBubbleTrends mesuré à
+  // ~5,4s à froid (4 lectures Supabase en partie séquentielles) — plus long
+  // que le timeout de 5s côté client (fetchAgonBubbleTrends, public/script.js),
+  // qui abandonnait alors et retombait sur buildFallbackAgonBubbleTrends
+  // (titre du débat affiché à la place du tag dans les bulles Communauté,
+  // signalé le 13/08/2026). Dès qu'une valeur existe (même expirée), on la
+  // sert immédiatement pendant que le recalcul tourne en arrière-plan — seul
+  // le tout premier appel depuis le démarrage du serveur attend le calcul
+  // complet.
+  if (agonBubbleTrendsCache) {
+    agonBubbleTrendsInFlight.catch(() => {});
+    return agonBubbleTrendsCache.value;
+  }
   return agonBubbleTrendsInFlight;
 }
 
