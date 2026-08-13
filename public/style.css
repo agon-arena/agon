@@ -25682,13 +25682,15 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   border-radius: 50%;
   /* Cœur blanc en plus (0%-10%) avant la couleur de la galaxie (demande du 07/08/2026 "halo bien
      plus lumineux au centre") : sans lui, le plateau à alpha constante (0%-30%) donnait un
-     disque uniforme plutôt qu'un vrai point lumineux qui rayonne. */
+     disque uniforme plutôt qu'un vrai point lumineux qui rayonne. Cœur et opacité globale réduits
+     d'~30% le 13/08/2026 ("réduire l'intensité lumineuse des galaxies") : 0.9→0.65 sur le cœur,
+     0.65→0.45 sur l'opacité du halo entier — même structure/forme, juste moins lumineux. */
   background: radial-gradient(circle,
-    rgba(255,255,255,0.9) 0%,
+    rgba(255,255,255,0.65) 0%,
     var(--agon-tag-bubble-glow, rgba(255,255,255,0.6)) 20%,
     var(--agon-tag-bubble-glow, rgba(255,255,255,0.6)) 34%,
     transparent 74%);
-  opacity: 0.65;
+  opacity: 0.45;
   /* scaleY (pas un dégradé "ellipse" directement) : le cercle de base est déjà parfait
      (border-radius:50% sur une boîte carrée), l'aplatir après coup garde le centre inchangé —
      même aplatissement que les bras/le cœur (mon-univers.js) pour rester aligné visuellement —
@@ -25894,13 +25896,40 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   z-index: -1;
 }
 
+/* Lunes autour d'une galaxie (cf. addMoonsAroundGalaxy, mon-univers.js) : demande du 13/08/2026,
+   leur nombre correspond exactement au nombre de systèmes solaires de la galaxie — même famille
+   lumineuse (glow blanc/or) que .universe-mini-star ci-dessus plutôt que la lune terne
+   .universe-star-moon plus bas (demande explicite "lunes lumineuses"). */
+.universe-galaxy-moon {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, rgba(255,236,190,0.95) 50%, transparent 100%);
+  box-shadow: 0 0 10px 3px rgba(255,236,190,0.75);
+  pointer-events: none;
+  z-index: -1;
+  /* is-revealed (posé/retiré par onCameraChange, mon-univers.js) : ces lunes s'effacent dès que
+     les systèmes solaires de leur galaxie deviennent visibles (demande du 13/08/2026, "quand je
+     vois les solars, je ne veux plus voir ces lunes"), même bascule opacity que
+     .universe-zoom-bubble. --moon-twinkle (pas opacity direct en JS) : la variété d'éclat
+     aléatoire par lune reste posée en style inline, appliquée seulement une fois révélée — sans
+     ce détour, un opacity inline aurait toujours gagné sur cette règle de classe et empêché le
+     fondu de disparition. */
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.universe-galaxy-moon.is-revealed {
+  opacity: var(--moon-twinkle, 1);
+}
+
 /* Petite lune (cf. drawMoonsForStars, mon-univers.js) : disque ombré simple (dégradé clair en
    haut-gauche, plus sombre en bas-droite) façon sphère éclairée d'un côté — décoration subtile
-   supplémentaire, demande du 07/08/2026. */
+   supplémentaire, demande du 07/08/2026. Teinte bleutée (demande du 13/08/2026, à distinguer des
+   lunes de galaxie ci-dessus, chaudes/lumineuses) : mêmes 3 paliers clair→sombre, virés du
+   gris-beige d'origine (#e8e4dc/#b8b2a4/#746e62) vers un bleu-gris. */
 .universe-star-moon {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #e8e4dc 0%, #b8b2a4 55%, #746e62 100%);
+  background: radial-gradient(circle at 35% 30%, #dce8f0 0%, #8fa8bc 55%, #4a5a68 100%);
   box-shadow: 0 0 2px rgba(0,0,0,0.4);
   pointer-events: none;
   z-index: -1;
@@ -25960,6 +25989,41 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   transform-origin: 0 0;
   will-change: transform;
 }
+/* Trait connecteur étoile -> système solaire (satellite, cf. packSatellitesAroundPoint,
+   universe-zoom.js ; createConnectorEl, mon-univers.js) — demande du 13/08/2026. Positionné/
+   tourné en coordonnées "monde" (enfant de .universe-zoom-world, mis à l'échelle comme le
+   reste de la scène) : left/top = point de départ (le système solaire), width = distance
+   jusqu'à l'étoile, rotate = angle vers elle (transform-origin sur le point de départ, pas le
+   centre). Dégradé qui s'estompe vers l'étoile : lisible comme "part du système solaire", pas
+   une simple barre. Même état de révélation que l'étoile qu'il rejoint (cf. onCameraChange) —
+   jamais affiché seul ni en avance sur elle. */
+.universe-zoom-connector {
+  position: absolute;
+  height: 1px;
+  transform-origin: 0 50%;
+  background: linear-gradient(to right, rgba(255,255,255,0.65), rgba(255,255,255,0.15));
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.universe-zoom-connector.is-revealed {
+  opacity: 1;
+}
+/* Couche des libellés : sibling de .universe-zoom-world, JAMAIS enfant (donc jamais affectée
+   par son transform:scale) — chaque libellé est repositionné en coordonnées écran à chaque
+   frame de caméra (cf. mon-univers.js onCameraChange), pas par un contre-scale CSS imbriqué
+   dans le monde déjà mis à l'échelle. Ce contre-scale (transform:scale(1/cam-scale) sur un
+   enfant d'un ancêtre lui-même transform:scale(cam-scale)) produisait un texte flou à fort
+   zoom : le compositeur recompose un bitmap déjà agrandi puis le rétrécit plutôt que de
+   re-rasteriser le texte à sa taille finale — signalé le 13/08/2026 par capture d'écran, très
+   net à partir de ×20-30. Coordonnées écran directes = toujours rendu à sa taille native,
+   jamais de recomposition bitmap, texte net à n'importe quel niveau de zoom. */
+.universe-zoom-labels-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 
 /* Bulle : même apparence que .agon-tag-bubble (fond/bordure/ombre déjà posés par cette classe,
    cf. tagTrendCloud.js) mais dimensionnée en continu (width/height inline, cf. createBubbleEl)
@@ -25967,7 +26031,22 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
    Masquée/non cliquable tant que son rayon à l'écran n'a pas atteint le seuil de révélation
    (cf. onCameraChange, REVEAL_PX_SELF) — jamais pour les galaxies, toujours révélées. */
 .universe-zoom-bubble {
-  overflow: hidden;
+  /* Pas d'overflow:hidden (contrairement à un essai précédent) : le fond/dégradé de la bulle
+     reste de toute façon découpé en cercle par border-radius:50% (.agon-tag-bubble) sans en
+     avoir besoin — à l'époque où le libellé était encore un enfant de la bulle (plus le cas,
+     cf. .universe-zoom-labels-overlay), un overflow:hidden ici le coupait dès qu'il dépassait
+     le petit cercle, rendant les noms longs illisibles ("rognés", signalé le 13/08/2026). */
+  /* .agon-tag-bubble pose animation:agonBubbleBreatheLight (respiration d'opacité 1↔0.88 en
+     boucle, pensée pour ses bulles déjà révélées en permanence) — jamais désactivée ici, elle
+     entrait en conflit avec opacity:0 juste en dessous : une bulle "non révélée" (is-revealed
+     absente) redevenait visible par intermittence à chaque cycle de respiration (~0.88-1
+     d'opacité réelle, confirmé par getComputedStyle), rendant des étoiles/systèmes censés être
+     cachés visibles de façon aléatoire et changeante (signalé le 13/08/2026 par capture
+     d'écran, libellés d'étoiles visibles alors qu'aucune n'était censée l'être à ce niveau de
+     zoom). Ici, l'opacité est le mécanisme même de révélation/masquage : aucune animation ne
+     doit pouvoir la court-circuiter.
+  */
+  animation: none;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.35s ease;
@@ -25978,36 +26057,50 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
      "monde" est souvent bien inférieur à ça — une fois multiplié par le zoom de la caméra
      (parfois ×20-60), cette taille plancher gonflait artificiellement la bulle jusqu'à remplir
      tout le cadre (constaté le 13/08/2026 : cadre rempli d'un flou uni malgré des étoiles bien
-     révélées dans le DOM). Le label (span enfant, cf. createBubbleEl) n'a pas besoin de ce
-     padding : sa propre taille de police fixe (contre-scale, cf. .universe-zoom-bubble-label)
-     suffit à l'espacer visuellement. */
+     révélées dans le DOM). Le label (couche à part, cf. .universe-zoom-labels-overlay) n'a de
+     toute façon aucun besoin de ce padding : sa propre taille de police fixe suffit à
+     l'espacer visuellement. */
   padding: 0;
 }
 .universe-zoom-bubble.is-revealed {
   opacity: 1;
   pointer-events: auto;
 }
-/* Contre-scale : la scène entière grossit/rétrécit avec la caméra (--universe-cam-scale, posé
-   par onCameraChange à chaque frame de geste) — sans ce contre-scale, un libellé deviendrait
-   énorme en plein zoom ou minuscule en vue d'ensemble. Taille de police fixe (toujours la même
-   à l'écran, quel que soit le niveau de zoom), largeur plafonnée pour les noms longs. */
+/* Positionné en coordonnées écran (left/top posés par onCameraChange), jamais mis à l'échelle
+   avec le monde (cf. .universe-zoom-labels-overlay ci-dessus) — taille de police fixe, toujours
+   la même à l'écran quel que soit le niveau de zoom, toujours nette. translate(-50%,-50%) pour
+   centrer le libellé sur le point (left/top posés au centre du nœud, pas à son coin). */
 .universe-zoom-bubble-label {
+  position: absolute;
   display: inline-block;
   max-width: 120px;
   font-family: Oswald, Impact, "Arial Narrow", sans-serif;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Sans white-space:nowrap, text-overflow:ellipsis ne s'applique jamais (il exige une seule
-     ligne) : le texte passait à la ligne sur 2-3 lignes, débordant en hauteur du cercle de la
-     bulle et coupé net par son overflow:hidden — un nom long ("Révolution française & Empire")
-     apparaissait tronqué de façon illisible ("evolutio / française / Empir", haut ET bas du
-     texte perdus), constaté le 13/08/2026 par capture d'écran. Une seule ligne, "…" en fin si
-     ça déborde toujours à 120px, corrige les deux problèmes à la fois. */
-  white-space: nowrap;
-  transform: scale(calc(1 / var(--universe-cam-scale, 1)));
+  text-align: center;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  /* Retour à la ligne normal, jamais tronqué (ni "…" ni coupe au milieu d'un mot) : un nom
+     long ("Révolution française & Empire") doit rester entièrement lisible, quitte à déborder
+     visuellement du petit cercle de la bulle correspondante — signalé le 13/08/2026, les titres
+     système/étoile apparaissaient rognés. Blanc net (hérite sinon #1a2535 sombre de
+     .agon-tag-bubble, pensé pour l'intérieur d'une bulle claire — illisible une fois le texte
+     débordant sur le fond étoilé sombre, signalé le 13/08/2026) + ombre portée pour rester net
+     y compris sur les zones claires du fond (halos de galaxie, nuages d'étoiles). */
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.85), 0 0 10px rgba(0,0,0,0.6);
+}
+.universe-zoom-bubble-label.is-revealed {
+  opacity: 1;
+}
+/* Étoile : légèrement plus grande que les autres niveaux (14px), sans fond/cadre autour du
+   texte (essayé, retiré le 13/08/2026 à la demande — l'ombre portée héritée de
+   .universe-zoom-bubble-label suffit maintenant que le texte est rendu net en coordonnées
+   écran, cf. .universe-zoom-labels-overlay, plus besoin d'un fond opaque en complément). */
+.universe-zoom-bubble-label-star {
+  font-size: 15px;
 }
 /* Même police que les bulles de la page d'accueil (demande du 08/08/2026) : sans ce correctif,
    body.page-contributions :where(div,span,p,...) (posée pour la page "Mes contributions" fusionnée

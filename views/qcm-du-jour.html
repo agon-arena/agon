@@ -122,6 +122,31 @@
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
     }
+    /* Croix de fermeture du cadre, visible pendant "Refaire" (demande du
+       13/08/2026) : .qcm-panel n'a pas de scroll propre (c'est la page qui
+       défile), donc absolute suffit ici — contrairement à .qcm-fiche-close
+       (sticky) dont le conteneur scrollable est différent de .qcm-panel. */
+    .qcm-panel-close {
+      display: none;
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 5;
+      width: 28px;
+      height: 28px;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #243038;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.18);
+    }
+    .qcm-panel-close.visible {
+      display: flex;
+    }
     .qcm-panel h1 {
       margin: 0 0 4px;
       font-family: "Barlow Condensed", Arial, sans-serif;
@@ -341,9 +366,70 @@
       opacity: 0.6;
     }
     .qcm-explore-item-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
       font-size: 14px;
       font-weight: 700;
       color: #111827;
+    }
+    /* Nombre de questions (demande du 13/08/2026) : toujours affiché, même
+       pour un sujet déjà dans la liste personnelle du visiteur (contrairement
+       à .qcm-explore-item-meta, qui elle bascule selon cet état). */
+    .qcm-explore-item-count {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+    }
+    /* Intitulé exact tapé par le créateur (demande du 13/08/2026) : distinct
+       du titre au-dessus (item.label, reformulé par l'IA) — jamais en gras,
+       contrairement au titre, pour rester clairement secondaire. */
+    .qcm-explore-item-query {
+      font-size: 12px;
+      font-weight: 400;
+      font-style: italic;
+      color: #6b7280;
+    }
+    /* Confirmation avant génération IA (demande du 13/08/2026) : reprend le
+       sujet + niveau choisis, pour éviter une génération lancée par erreur
+       (sujet mal tapé, mauvais niveau cliqué) — même famille visuelle que les
+       autres popups de cette page (.qcm-fiche-overlay/.qcm-fiche-modal). */
+    .qcm-generate-confirm-text {
+      margin: 0 0 20px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: #111827;
+    }
+    .qcm-generate-confirm-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .qcm-generate-confirm-cancel,
+    .qcm-generate-confirm-ok {
+      flex: 1;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .qcm-generate-confirm-cancel {
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      color: #243038;
+    }
+    .qcm-generate-confirm-cancel:hover {
+      background: #eef3f6;
+    }
+    .qcm-generate-confirm-ok {
+      border: none;
+      background: #243038;
+      color: #ffffff;
+    }
+    .qcm-generate-confirm-ok:hover {
+      background: #1a262e;
     }
     .qcm-explore-item-meta {
       flex: 0 0 auto;
@@ -885,6 +971,16 @@
       flex: 0 0 auto;
       color: #516776;
     }
+    /* Nombre de questions du QCM associé à cette connaissance (demande du
+       13/08/2026) — texte simple entre parenthèses à côté du nom, jamais
+       confondu avec le badge d'ancrage (%) de la colonne suivante. */
+    .qcm-mesqcm-question-count {
+      flex: 0 0 auto;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 400;
+      white-space: nowrap;
+    }
     /* Fenêtre de choix ouverte au clic sur le nom d'un apprentissage (cf.
        openMesQcmActionMenu) : "Consulter la fiche", "Faire/refaire le QCM"
        ou "Supprimer". Une vraie fenêtre modale centrée (.qcm-fiche-overlay/
@@ -1192,22 +1288,20 @@
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }
-    /* position:fixed (pas un simple élément du flux dans .qcm-fiche-head) :
-       la croix doit rester visible en haut à droite même en scrollant une
-       fiche longue (demande du 13/08/2026) — .qcm-fiche-overlay est le
-       conteneur qui scrolle (position:fixed + overflow-y:auto), un enfant du
-       flux normal défile avec le reste de la carte. Retiré du flux par
-       position:fixed, .qcm-fiche-head n'a donc plus qu'à afficher le libellé
-       de rubrique (justify-content:space-between sans second élément reste
-       sans effet visuel). Même principe que #debate-iframe-modal-close
-       ailleurs sur le site (déjà position:fixed avec succès) — contrairement
-       à .qcm-fiche-fade-hint plus haut, aucun souci connu ici : c'est
-       position:absolute spécifiquement qui ne reste pas épinglé sur iOS
-       Safari dans ce type de conteneur, pas position:fixed. */
+    /* position:sticky (pas fixed) : la croix doit rester visible en haut à
+       droite en scrollant une fiche longue, mais ancrée au CADRE (la carte
+       blanche .qcm-fiche-modal, centrée et pas forcément pleine largeur sur
+       desktop), pas à l'écran — un position:fixed la détachait visuellement
+       de la carte sur un écran large (constaté le 13/08/2026, capture à
+       l'appui : la croix restait collée au coin de l'écran, loin de la carte
+       étroite et centrée). sticky reste dans le flux de .qcm-fiche-head
+       (justify-content:space-between la positionne donc naturellement à
+       droite du libellé de rubrique) tout en s'épinglant verticalement au
+       défilement de .qcm-fiche-overlay (le conteneur scrollable) — sans
+       jamais quitter la largeur du cadre. */
     .qcm-fiche-close {
-      position: fixed;
+      position: sticky;
       top: max(20px, env(safe-area-inset-top));
-      right: 20px;
       z-index: 1002;
       flex: 0 0 auto;
       width: 28px;
@@ -1525,6 +1619,7 @@
 </header>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
+    <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
     <h1><span id="qcm-title-text">Mes apprentissages</span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
@@ -1571,6 +1666,22 @@
   var currentSlot = null;
   var currentQuizDate = null;
   var currentCategory = null;
+  // "Refaire" (demande du 13/08/2026) : rejoue le même QCM depuis le début
+  // avec de vraies nouvelles réponses (contrairement à l'ancien "Revoir" qui
+  // ne faisait que rafficher les réponses déjà verrouillées), mais sans
+  // jamais compter pour l'ancrage/le compteur X/4 (cf. server.js POST
+  // /api/daily-quiz/practice-answer, qui grade sans jamais écrire dans
+  // daily_quiz_answers — table dont dépend tout le calcul de streak). Les
+  // vraies réponses (answeredByQuestionId) restent intactes pendant ce
+  // temps, dans une carte séparée.
+  var practiceMode = false;
+  var practiceAnsweredByQuestionId = {};
+  function quizAnswerEndpoint() {
+    return practiceMode ? '/api/daily-quiz/practice-answer' : '/api/daily-quiz/answer';
+  }
+  function recordAnsweredQuestion(questionId, data) {
+    (practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId)[questionId] = data;
+  }
   var slotsStatus = null;
   // Dernière liste "Mes apprentissages" reçue (cf. renderMesQcmList) : lue par
   // le popup "Explorer les apprentissages disponibles" pour ne pas proposer
@@ -1624,7 +1735,7 @@
   var CATEGORY_ORDER = ['mesqcm', 'renforcement'];
   var CATEGORY_LABELS = { mesqcm: 'Mes apprentissages', renforcement: 'Renforcement' };
   var QCM_SUBTITLE_BY_CATEGORY = {
-    mesqcm: "Les QCM que tu as choisi de mémoriser sur Éclairages et Ce jour dans l'Histoire — chacun alimente Ma mémoire une fois réussi.",
+    mesqcm: "Les connaissances que tu as choisi de mémoriser — chaque QCM réussi alimente « Ma mémoire ».",
     renforcement: "Les questions de culture générale déjà répondues reviennent ici pour valider tes acquis durablement (4 bonnes réponses à intervalles croissants). Ne compte pas pour le score Gnosis."
   };
   // Rubrique d'origine (sourceType, cf. server.js buildCultureGeneraleQuestionsForToday)
@@ -1728,6 +1839,90 @@
       closeButton.setAttribute('aria-hidden', visible ? 'false' : 'true');
       closeButton.tabIndex = visible ? 0 : -1;
     } catch (e) {}
+  }
+
+  // Croix propre au cadre (demande du 13/08/2026), visible pendant "Refaire" —
+  // contrairement à setParentIframeCloseVisible (bouton du parent iframe,
+  // masqué pendant tout QCM en cours), celle-ci reste ancrée en haut à droite
+  // de .qcm-panel plutôt que de l'écran.
+  function setPanelCloseVisible(visible) {
+    var btn = document.getElementById('qcm-panel-close');
+    if (btn) btn.classList.toggle('visible', visible);
+  }
+  document.getElementById('qcm-panel-close').onclick = function () {
+    practiceMode = false;
+    if (currentSlot) window.history.replaceState({}, '', window.location.pathname);
+    loadMesQcm();
+  };
+
+  function shuffleArrayCopy(arr) {
+    var copy = arr.slice();
+    for (var i = copy.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = copy[i]; copy[i] = copy[j]; copy[j] = tmp;
+    }
+    return copy;
+  }
+
+  // Choix de l'ordre avant de faire/refaire un QCM (demande du 13/08/2026,
+  // étendue le même jour au tout premier lancement, pas seulement "Refaire")
+  // — même gabarit visuel que showNotionQuizLevelPicker (public/script.js),
+  // classes .notion-level-picker-* partagées via style.min.css.
+  function showQuizOrderPicker(onSelect) {
+    var overlay = document.createElement('div');
+    overlay.className = 'notion-level-picker-overlay';
+    var modal = document.createElement('div');
+    modal.className = 'notion-level-picker-modal';
+    var closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'notion-level-picker-close';
+    closeBtn.setAttribute('aria-label', 'Fermer');
+    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    modal.appendChild(closeBtn);
+    var title = document.createElement('p');
+    title.className = 'notion-level-picker-title';
+    title.textContent = 'Dans quel ordre faire ce QCM ?';
+    modal.appendChild(title);
+
+    [
+      { shuffled: false, name: 'Ordre normal', desc: 'Les questions dans le même ordre que la première fois' },
+      { shuffled: true, name: 'Ordre aléatoire', desc: 'Les questions mélangées' }
+    ].forEach(function (opt) {
+      var optionBtn = document.createElement('button');
+      optionBtn.type = 'button';
+      optionBtn.className = 'notion-level-picker-option';
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'notion-level-picker-option-name';
+      nameSpan.textContent = opt.name;
+      var descSpan = document.createElement('span');
+      descSpan.className = 'notion-level-picker-option-desc';
+      descSpan.textContent = opt.desc;
+      optionBtn.appendChild(nameSpan);
+      optionBtn.appendChild(descSpan);
+      optionBtn.addEventListener('click', function () {
+        close();
+        onSelect(opt.shuffled);
+      });
+      modal.appendChild(optionBtn);
+    });
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'notion-level-picker-cancel';
+    cancelBtn.textContent = 'Annuler';
+    modal.appendChild(cancelBtn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function close() {
+      overlay.remove();
+      document.removeEventListener('keydown', onKeydown);
+    }
+    function onKeydown(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKeydown);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    cancelBtn.addEventListener('click', close);
+    closeBtn.addEventListener('click', close);
   }
 
   function pct(count, total) {
@@ -1834,10 +2029,12 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ legacyKey: voterKey, questionId: question.id })
-          }).catch(function () {
-            btn.disabled = false;
-            btn.textContent = 'Ne plus me la demander';
-          });
+          })
+            .then(function () { goToNextQuestion(); })
+            .catch(function () {
+              btn.disabled = false;
+              btn.textContent = 'Ne plus me la demander';
+            });
         }
       });
     };
@@ -1851,7 +2048,7 @@
   function renderQuestion() {
     signalIframeReady();
     var question = questions[currentIndex];
-    var answer = answeredByQuestionId[question.id];
+    var answer = (practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId)[question.id];
     var type = question.type || 'qcm';
     if (type === 'association') {
       renderAssociationQuestion(question, answer);
@@ -1864,16 +2061,20 @@
     }
   }
 
-  // Câblage partagé du bouton "Question suivante" / "Voir mon score",
-  // identique quel que soit le format de question qui vient d'être répondu.
+  // Partagé avec wireExcludeButton ci-dessus : après confirmation de "Ne plus
+  // me la demander", on enchaîne aussi sur la question suivante (demande du
+  // 13/08/2026 — "je reste bloqué sur la question" sans ça, contrairement au
+  // reste du parcours QCM qui avance toujours après une action sur la
+  // question en cours).
+  function goToNextQuestion() {
+    if (currentIndex === questions.length - 1) renderFinalScore();
+    else { currentIndex += 1; renderQuestion(); }
+  }
   function wireNextButton(nextBtn) {
     var isLast = currentIndex === questions.length - 1;
     nextBtn.textContent = isLast ? 'Voir mon score' : 'Question suivante';
     nextBtn.className = 'qcm-next-btn visible';
-    nextBtn.onclick = function () {
-      if (isLast) renderFinalScore();
-      else { currentIndex += 1; renderQuestion(); }
-    };
+    nextBtn.onclick = goToNextQuestion;
   }
 
   function renderChoiceQuestion(question, answer) {
@@ -1960,7 +2161,7 @@
     if (submitBtn) submitBtn.disabled = true;
     optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = true; });
 
-    fetch('/api/daily-quiz/answer', {
+    fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ voterKey: voterKey, questionId: question.id, optionIndex: optionIndex, slot: currentSlot, quizDate: currentQuizDate })
@@ -1968,7 +2169,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        answeredByQuestionId[question.id] = data;
+        recordAnsweredQuestion(question.id, data);
         applyChoiceAnswerState(question, data);
       })
       .catch(function () {
@@ -2049,7 +2250,7 @@
     selects.forEach(function (s) { s.disabled = true; });
     submitBtn.disabled = true;
 
-    fetch('/api/daily-quiz/answer', {
+    fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, associationAnswer: pairsGuess })
@@ -2057,7 +2258,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        answeredByQuestionId[question.id] = data;
+        recordAnsweredQuestion(question.id, data);
         applyAssociationAnswerState(question, data, selects);
       })
       .catch(function () {
@@ -2163,7 +2364,7 @@
     buttons.forEach(function (btn) { btn.disabled = true; });
     submitBtn.disabled = true;
 
-    fetch('/api/daily-quiz/answer', {
+    fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, optionIndexes: optionIndexes })
@@ -2171,7 +2372,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        answeredByQuestionId[question.id] = data;
+        recordAnsweredQuestion(question.id, data);
         applyMultiChoiceAnswerState(data, buttons);
       })
       .catch(function () {
@@ -2281,7 +2482,7 @@
     poolEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = true; });
     chosenEl.querySelectorAll('.qcm-order-chip').forEach(function (c) { c.disabled = true; });
 
-    fetch('/api/daily-quiz/answer', {
+    fetch(quizAnswerEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ voterKey: voterKey, questionId: question.id, slot: currentSlot, quizDate: currentQuizDate, orderedItems: orderedItems })
@@ -2289,7 +2490,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        answeredByQuestionId[question.id] = data;
+        recordAnsweredQuestion(question.id, data);
         applyOrderAnswerState(data, poolEl, chosenEl, submitBtn, question.items);
       })
       .catch(function () {
@@ -2326,19 +2527,24 @@
 
   function renderFinalScore() {
     signalIframeReady();
+    var answers = practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId;
     var total = questions.length;
     var correct = 0;
     questions.forEach(function (q) {
-      var a = answeredByQuestionId[q.id];
+      var a = answers[q.id];
       if (a && a.correct) correct += 1;
     });
     // Les repasses de "Renforcement" ne comptent jamais pour le score
     // Gnosis (cf. server.js DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES) :
     // message dédié plutôt que la promesse habituelle d'un score qui ne
-    // bougera pas.
-    var scoreHint = currentCategory === 'renforcement'
-      ? 'Ces repasses ne comptent pas pour ton score Gnosis — elles font seulement progresser tes acquis vers leur validation définitive.'
-      : 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).';
+    // bougera pas. En mode "Refaire" (practiceMode), même logique : ce
+    // score d'entraînement ne compte jamais pour l'ancrage (cf. POST
+    // /api/daily-quiz/practice-answer, qui ne persiste jamais la réponse).
+    var scoreHint = practiceMode
+      ? 'Ce score d’entraînement ne compte pas — il ne modifie jamais ton ancrage ni tes vraies réponses du jour.'
+      : (currentCategory === 'renforcement'
+        ? 'Ces repasses ne comptent pas pour ton score Gnosis — elles font seulement progresser tes acquis vers leur validation définitive.'
+        : 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).');
     body.innerHTML =
       '<div class="qcm-final-score">' +
       '<i class="fa-solid fa-trophy"></i>' +
@@ -2347,18 +2553,28 @@
       '</div>' +
       '<p class="qcm-final-score-hint">' + scoreHint + '</p>' +
       '<div class="qcm-final-actions">' +
-      '<button type="button" class="qcm-next-btn visible" id="qcm-review-btn">Revoir</button>' +
+      '<button type="button" class="qcm-next-btn visible" id="qcm-review-btn">Refaire</button>' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-back-to-mesqcm-btn">Retour à mes apprentissages</button>' +
       '</div>';
 
-    // Les réponses du jour sont verrouillées côté serveur (une seule par
-    // question et par voterKey) : "Revoir" repart de la question 1 pour les
-    // revoir, sans pouvoir les changer, plutôt qu'un vrai reset.
+    // "Refaire" : vraies nouvelles réponses possibles (contrairement à
+    // l'ancien "Revoir"), mais jamais comptées pour l'ancrage — practiceMode
+    // bascule submitXAnswer sur POST /api/daily-quiz/practice-answer (jamais
+    // écrit en base) et le résultat dans practiceAnsweredByQuestionId, à
+    // part des vraies réponses du jour (cf. quizAnswerEndpoint/
+    // recordAnsweredQuestion). Repart toujours d'un essai vierge.
     document.getElementById('qcm-review-btn').onclick = function () {
-      currentIndex = 0;
-      renderQuestion();
+      showQuizOrderPicker(function (shuffled) {
+        practiceMode = true;
+        practiceAnsweredByQuestionId = {};
+        if (shuffled) questions = shuffleArrayCopy(questions);
+        currentIndex = 0;
+        setPanelCloseVisible(true);
+        renderQuestion();
+      });
     };
     document.getElementById('qcm-back-to-mesqcm-btn').onclick = function () {
+      practiceMode = false;
       if (currentSlot) window.history.replaceState({}, '', window.location.pathname);
       loadMesQcm();
     };
@@ -2524,6 +2740,54 @@
     pieSpinnerId = setInterval(tick, 60);
   }
 
+  // Récapitule sujet + niveau choisis avant de lancer la génération IA
+  // (demande du 13/08/2026) : évite une génération partie par erreur (sujet
+  // mal tapé, mauvais niveau cliqué dans showNotionQuizLevelPicker) — coûte
+  // un appel IA (et, pour le niveau Expert, jusqu'à plusieurs minutes)
+  // impossible à annuler une fois lancé. Même famille visuelle que les
+  // autres popups de cette page (.qcm-fiche-overlay/.qcm-fiche-modal).
+  function showGenerateConfirmModal(topic, level, onConfirm) {
+    var levelMeta = (typeof NOTION_QUIZ_LEVEL_OPTIONS !== 'undefined' ? NOTION_QUIZ_LEVEL_OPTIONS : [])
+      .filter(function (o) { return o.level === level; })[0];
+    var levelName = levelMeta ? levelMeta.name : level;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML =
+      '<div class="qcm-fiche-overlay-inner">' +
+        '<div class="qcm-fiche-modal">' +
+          '<div class="qcm-fiche-head">' +
+            '<p class="qcm-fiche-rubric"><i class="fa-solid fa-wand-magic-sparkles"></i> Confirmer la génération</p>' +
+            '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+          '</div>' +
+          '<p class="qcm-generate-confirm-text">' + escapeHtml(topic) + ', niveau ' + escapeHtml(levelName) + '. Tu confirmes ?</p>' +
+          '<div class="qcm-generate-confirm-actions">' +
+            '<button type="button" class="qcm-generate-confirm-cancel">Annuler</button>' +
+            '<button type="button" class="qcm-generate-confirm-ok">Confirmer</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+    function close() {
+      overlay.remove();
+      document.removeEventListener('keydown', onKeydown);
+      try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    }
+    function onKeydown(e) { if (e.key === 'Escape') close(); }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) close();
+    });
+    document.addEventListener('keydown', onKeydown);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
+    overlay.querySelector('.qcm-generate-confirm-cancel').addEventListener('click', close);
+    overlay.querySelector('.qcm-generate-confirm-ok').addEventListener('click', function () {
+      close();
+      onConfirm();
+    });
+  }
+
   // Barre de recherche libre "Mes apprentissages" (cf. server.js POST
   // /api/users/notion-quizzes/custom) : contrairement au clic "Mémoriser"
   // sur Éclairages/Ce jour dans l'Histoire (optimiste, instantané), la fiche
@@ -2547,6 +2811,7 @@
       return;
     }
     showNotionQuizLevelPicker(function (level) {
+      showGenerateConfirmModal(topic, level, function () {
       customSearchBtn.disabled = true;
       customSearchInput.disabled = true;
       setCustomSearchStatus(
@@ -2581,6 +2846,7 @@
           customSearchInput.disabled = false;
           setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
         });
+      });
     });
   }
   customSearchForm.addEventListener('submit', submitCustomTopic);
@@ -2674,8 +2940,11 @@
       listEl.innerHTML = items.map(function (item) {
         var already = !!ownedSlots[item.slot];
         var metaText = already ? 'Déjà dans ta liste' : (item.userCount + ' visiteur' + (item.userCount > 1 ? 's' : ''));
+        var count = Number(item.questionCount) || 0;
+        var countText = count + ' question' + (count > 1 ? 's' : '');
+        var queryHtml = item.searchTopic ? '<span class="qcm-explore-item-query">' + escapeHtml(item.searchTopic) + '</span>' : '';
         return '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '"' + (already ? ' disabled' : '') + '>' +
-          '<span class="qcm-explore-item-label">' + escapeHtml(item.label) + '</span>' +
+          '<span class="qcm-explore-item-label">' + escapeHtml(item.label) + '<span class="qcm-explore-item-count">' + escapeHtml(countText) + '</span>' + queryHtml + '</span>' +
           '<span class="qcm-explore-item-meta">' + escapeHtml(metaText) + '</span>' +
         '</button>';
       }).join('');
@@ -2730,6 +2999,7 @@
   // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
   function loadMesQcm() {
     setParentIframeCloseVisible(true);
+    setPanelCloseVisible(false);
     var myToken = ++loadToken;
     currentCategory = 'mesqcm';
     currentSlot = null;
@@ -2819,8 +3089,10 @@
         ? '<span class="qcm-mesqcm-state is-realized">Réalisé</span>'
         : '<span class="qcm-mesqcm-state">En attente de réalisation</span>';
       html += '<tr>';
+      var questionCount = Number(q.questionCount) || 0;
       html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
       html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
+      if (questionCount) html += '<span class="qcm-mesqcm-question-count">(' + questionCount + (questionCount > 1 ? ' questions' : ' question') + ')</span>';
       html += '</button></td>';
       html += '<td>' + stateHtml + '</td>';
       html += '<td>' + badgeHtml + '</td>';
@@ -3244,7 +3516,11 @@
     });
     overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
       closeMesQcmActionModal();
-      loadSlot(q.slot, q.quizDate, q.label);
+      // Choix de l'ordre dès le premier lancement (demande du 13/08/2026,
+      // jusqu'ici réservé à "Refaire") — même popup, même style.
+      showQuizOrderPicker(function (shuffled) {
+        loadSlot(q.slot, q.quizDate, q.label, shuffled);
+      });
     });
     overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
       closeMesQcmActionModal();
@@ -3292,7 +3568,7 @@
   // pour "renforcement", toujours calculé sur aujourd'hui côté serveur.
   // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
   // la place de "Connaissances" générique.
-  function loadSlot(slotKey, quizDate, label) {
+  function loadSlot(slotKey, quizDate, label, shuffled) {
     setParentIframeCloseVisible(false);
     var myToken = ++loadToken;
     currentSlot = slotKey;
@@ -3301,6 +3577,12 @@
     currentIndex = 0;
     questions = [];
     answeredByQuestionId = {};
+    // Nouveau QCM chargé : jamais en mode "Refaire" hérité d'une session
+    // précédente, sinon de vraies réponses cesseraient à tort d'être
+    // enregistrées (cf. quizAnswerEndpoint).
+    practiceMode = false;
+    practiceAnsweredByQuestionId = {};
+    setPanelCloseVisible(false);
     titleText.textContent = label || 'Apprentissage';
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || '';
     renderCategorySwitcher();
@@ -3312,6 +3594,7 @@
       .then(function (data) {
         if (myToken !== loadToken) return;
         questions = Array.isArray(data.questions) ? data.questions : [];
+        if (shuffled) questions = shuffleArrayCopy(questions);
         if (data.label && !label) titleText.textContent = data.label;
         if (!questions.length) {
           renderMessage(currentCategory === 'renforcement'
@@ -3319,6 +3602,11 @@
             : 'Ce QCM est introuvable.');
           return;
         }
+        // Croix du cadre visible dès qu'un vrai QCM démarre (demande du
+        // 13/08/2026, jusqu'ici réservée à "Refaire") — pas seulement en
+        // pratique : quitter en cours de route doit être possible dès le
+        // premier passage aussi.
+        setPanelCloseVisible(true);
         if (!voterKey) {
           currentIndex = 0;
           renderQuestion();

@@ -19653,7 +19653,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260813-hierarchy-fix').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260813-connectors-noframe').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -19685,7 +19685,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // "Ma mémoire" pour Bulles Actu/Agôn : ils restaient superposés aux nouvelles bulles
     // (demande du 09/08/2026, "les bulles qui se mélangent quand on passe de bulles mémoire à
     // bulles actus").
-    cloudEl?.querySelectorAll('.universe-mini-star, .universe-star-moon, .universe-star-sparkle').forEach((el) => el.remove());
+    cloudEl?.querySelectorAll('.universe-mini-star, .universe-star-moon, .universe-star-sparkle, .universe-galaxy-moon').forEach((el) => el.remove());
     // Bulles galaxies/systèmes/étoiles de "Ma mémoire" elles-mêmes : le fond redevient Actu/Agôn
     // à l'instant (retrait de .agon-memoire-frame juste au-dessus), mais Bulles Agôn ne remplace
     // ces bulles qu'après son fetch réseau (fetchAgonBubbleTrends, pas instantané) — sans ce

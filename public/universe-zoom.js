@@ -19,6 +19,11 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
   const minRatio = opts.minRatio ?? 0.16;
   const maxRatio = opts.maxRatio ?? 0.38;
   const fillRatio = opts.fillRatio ?? 0.62;
+  // Écart minimum forcé entre deux cercles voisins (au-delà du -2px de tolérance déjà présent
+  // dans le test de collision plus bas) — 0 par défaut (comportement inchangé), demande du
+  // 13/08/2026 pour les systèmes solaires ("écarte les solars des uns des autres"), trop
+  // proches/collés les uns aux autres dans leur galaxie.
+  const gap = opts.gap ?? 0;
   if (!items.length) return [];
 
   const weights = items.map((it) => Math.max(0, Number(it.weight) || 0));
@@ -55,7 +60,7 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
           const x = cx + Math.cos(angle) * dist;
           const y = cy + Math.sin(angle) * dist;
           if (Math.hypot(x - cx, y - cy) + r > maxR) continue;
-          const collides = placed.some((p) => Math.hypot(x - p.x, y - p.y) < r + p.r - 2);
+          const collides = placed.some((p) => Math.hypot(x - p.x, y - p.y) < r + p.r - 2 + gap);
           if (!collides) best = { x, y };
         }
       }
@@ -86,6 +91,50 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
   return positions;
 }
 
+// Place des "satellites" en orbite AUTOUR d'un point (pas emboîtés dans un disque comme
+// packCirclesInDisk) — demande du 13/08/2026 : les étoiles doivent apparaître comme des petits
+// points lumineux autour du point du système solaire, pas empilées à l'intérieur de son propre
+// cercle. Répartition à angle régulier (pas en spirale golden-angle comme packCirclesInDisk :
+// un anneau régulier lit mieux comme "des satellites en orbite" qu'un nuage dispersé).
+function packSatellitesAroundPoint(items, cx, cy, orbitRadius, opts = {}) {
+  if (!items.length) return [];
+
+  // Taille basée sur sizeBasis (le rayon du système solaire lui-même), PAS sur orbitRadius —
+  // sans cette distinction, écarter l'orbite (orbitRadius plus grand, demande du 13/08/2026)
+  // grossissait aussi la taille des étoiles dans les mêmes proportions (taille = ratio ×
+  // orbitRadius), les rendant presque aussi grosses que leur système solaire et les faisant
+  // apparaître prématurément (constaté le 13/08/2026 par capture d'écran : étoiles déjà
+  // visibles au simple zoom galaxie, sans avoir cliqué sur ce système précis) — écarter (la
+  // distance) et grossir (la taille) doivent rester deux réglages indépendants.
+  const sizeBasis = opts.sizeBasis ?? orbitRadius;
+
+  // Rayon plafonné (en absolu, pas en ratio de sizeBasis) pour qu'aucun satellite ne touche son
+  // voisin sur l'anneau, quel que soit leur nombre — ils se touchaient/chevauchaient dès que
+  // plusieurs étoiles partageaient le même système. Distance entre deux satellites voisins
+  // espacés régulièrement = 2·orbitRadius·sin(π/N) ; pour ne jamais se toucher (au rayon
+  // maximal des deux), il faut rayon ≤ orbitRadius·sin(π/N) — 0.8 de marge de sécurité en plus
+  // pour un vrai espace visible, pas juste "ne se touchent pas pile".
+  const geometricMaxAbs = items.length > 1 ? orbitRadius * Math.sin(Math.PI / items.length) * 0.8 : sizeBasis * 0.5;
+  const maxRatio = opts.maxRatio ?? 0.4;
+  const minRatio = opts.minRatio ?? 0.18;
+  const maxAbs = Math.min(maxRatio * sizeBasis, geometricMaxAbs);
+  const minAbs = Math.min(minRatio * sizeBasis, maxAbs * 0.6);
+
+  const weights = items.map((it) => Math.max(0, Number(it.weight) || 0));
+  const maxWeight = Math.max(...weights, 1e-6);
+  const normalized = weights.map((w) => 0.35 + 0.65 * Math.pow(w / maxWeight, 0.6));
+
+  return items.map((_, i) => {
+    const angle = ((i / items.length) * 360 + 15) * (Math.PI / 180); // +15° : jamais pile à droite du centre
+    const r = minAbs + (maxAbs - minAbs) * normalized[i];
+    return {
+      x: cx + Math.cos(angle) * orbitRadius,
+      y: cy + Math.sin(angle) * orbitRadius,
+      r
+    };
+  });
+}
+
 // ---- Layout complet : galaxies -> systèmes solaires -> étoiles, un seul espace persistant ---
 // `universeData` : même forme que la réponse de GET /api/users/intellectual-universe
 // (cf. server.js /api/users/intellectual-universe, mon-univers.js universeData). `worldRadius`
@@ -111,20 +160,35 @@ function layoutUniverseWorld(galaxies, worldRadius) {
     outGalaxies.push(galaxyNode);
 
     const systemItems = g.solarSystems.map((s) => ({ weight: s.articleCount || 1, ref: s }));
+    // gap + fillRatio réduit (0.6 -> 0.48) : les systèmes solaires d'une même galaxie
+    // apparaissaient trop collés/proches les uns des autres (demande du 13/08/2026, "écarte les
+    // solars des uns des autres") — un fillRatio plus bas force le calcul d'échelle globale à
+    // rétrécir davantage les systèmes pour laisser plus de vide entre eux, le gap ajoute une
+    // marge minimale garantie même sans ce rétrécissement (peu d'éléments, pas de compétition
+    // d'aire).
     const systemPositions = packCirclesInDisk(systemItems, gp.x, gp.y, gp.r * 0.8, {
       minRatio: 0.18,
       maxRatio: 0.4,
-      fillRatio: 0.6
+      fillRatio: 0.48,
+      gap: gp.r * 0.1
     });
 
     g.solarSystems.forEach((s, si) => {
       const sp = systemPositions[si];
+      // orbitRadius : rayon de l'anneau où gravitent les étoiles de ce système (satellites,
+      // cf. packSatellitesAroundPoint) — au-delà de son propre cercle (1.6x, pas 1.25x : plus
+      // d'écart entre le point solaire et ses satellites, demande du 13/08/2026), pas emboîté
+      // dedans. Conservé sur le nœud (pas seulement local à cette fonction) : mon-univers.js
+      // s'en sert pour cadrer la caméra de sorte que TOUTE l'orbite tienne dans le cadre au
+      // clic (cf. focusScaleFor), pas seulement la taille des étoiles elles-mêmes.
+      const orbitRadius = sp.r * 1.6;
       const systemNode = {
         id: `solarSystem:${g.name}:${s.id}`,
         name: s.name,
         x: sp.x,
         y: sp.y,
         r: sp.r,
+        orbitRadius,
         weight: systemItems[si].weight,
         galaxyId: galaxyNode.id,
         ref: s
@@ -132,10 +196,10 @@ function layoutUniverseWorld(galaxies, worldRadius) {
       outSolarSystems.push(systemNode);
 
       const starItems = s.stars.map((star) => ({ weight: star.articleCount || 1, ref: star }));
-      const starPositions = packCirclesInDisk(starItems, sp.x, sp.y, sp.r * 0.78, {
-        minRatio: 0.22,
-        maxRatio: 0.46,
-        fillRatio: 0.6
+      const starPositions = packSatellitesAroundPoint(starItems, sp.x, sp.y, orbitRadius, {
+        sizeBasis: sp.r,
+        minRatio: 0.18,
+        maxRatio: 0.4
       });
 
       s.stars.forEach((star, sti) => {

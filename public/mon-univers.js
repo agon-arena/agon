@@ -8,7 +8,7 @@
 // quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-safari-pinch";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-satellite-size-decoupled";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -162,15 +162,19 @@ function buildNeuronLinePoints(seed) {
 function neuronLinesBackground(hue) {
   const linePointSets = buildNeuronLinePoints(hue);
   const stroke = `hsl(${hue}, 20%, 85%)`;
+  // Opacités réduites d'~30% (demande du 13/08/2026, "réduire l'intensité
+  // lumineuse des galaxies") : 0.3/0.47/0.68 → 0.2/0.32/0.46, même structure
+  // (couleurs/rayons de flou inchangés) pour garder le même dessin de
+  // synapses, juste moins lumineux.
   const outerGlowPaths = linePointSets
-    .map((points) => buildTaperedPathSegments(points, 20, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.3" filter="url(#neuronGlowOuter)"`))
+    .map((points) => buildTaperedPathSegments(points, 20, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.2" filter="url(#neuronGlowOuter)"`))
     .join("");
   const innerGlowPaths = linePointSets
-    .map((points) => buildTaperedPathSegments(points, 12, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.47" filter="url(#neuronGlowInner)"`))
+    .map((points) => buildTaperedPathSegments(points, 12, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.32" filter="url(#neuronGlowInner)"`))
     .join("");
   const coreStroke = `hsl(${hue}, 10%, 97%)`;
   const corePaths = linePointSets
-    .map((points) => buildTaperedPathSegments(points, 6, 0.2, 5, `stroke="${coreStroke}" stroke-linecap="round" opacity="0.68" filter="url(#neuronGlowCore)"`))
+    .map((points) => buildTaperedPathSegments(points, 6, 0.2, 5, `stroke="${coreStroke}" stroke-linecap="round" opacity="0.46" filter="url(#neuronGlowCore)"`))
     .join("");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><defs>`
     + `<filter id="neuronGlowOuter" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="5.5"/></filter>`
@@ -183,10 +187,13 @@ function neuronLinesBackground(hue) {
 function galaxyBubbleVisual(galaxyName) {
   const hue = hueForGalaxy(galaxyName);
   const lines = neuronLinesBackground(hue);
-  const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.78) 26%, hsl(${hue} 22% 90%) 50%, hsla(${hue}, 20%, 85%, 0.3) 68%, transparent 84%)`;
+  // Cœur et halo également réduits d'~30% (demande du 13/08/2026) — alpha du
+  // centre blanc et de la teinte de fin de dégradé abaissés, glowColor (repris
+  // par .agon-tag-bubble-galaxy::before, style.css) idem.
+  const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.55) 26%, hsl(${hue} 22% 90%) 50%, hsla(${hue}, 20%, 85%, 0.2) 68%, transparent 84%)`;
   return {
     background: `${core}, ${lines}`,
-    glowColor: `hsla(${hue}, 25%, 85%, 0.72)`
+    glowColor: `hsla(${hue}, 25%, 85%, 0.5)`
   };
 }
 
@@ -197,6 +204,18 @@ let worldLayout = null; // { galaxies, solarSystems, stars, worldRadius } — cf
 let camera = null;
 let worldEl = null;
 let viewportEl = null;
+// Couche des libellés, EN DEHORS de worldEl (jamais affectée par son transform:scale) — un
+// libellé positionné en coordonnées écran (left/top recalculés à chaque frame de caméra, cf.
+// onCameraChange) plutôt qu'un contre-scale CSS (transform:scale(1/cam-scale)) imbriqué dans un
+// monde déjà mis à l'échelle : ce contre-scale imbriqué produisait un texte flou à fort zoom
+// (le compositeur recompose un bitmap agrandi puis rétréci au lieu de re-rasteriser le texte à
+// sa taille finale) — signalé le 13/08/2026 par capture d'écran, très net à ×20-40.
+let labelsOverlayEl = null;
+const labelElByNodeId = new Map();
+// Traits connecteurs étoile -> système solaire (demande du 13/08/2026) : enfants de worldEl
+// (pas de la couche des libellés), donc mis à l'échelle avec la scène comme les bulles — pas
+// besoin d'une précision de rendu façon texte, une ligne reste lisible même mise à l'échelle.
+const connectorElByNodeId = new Map();
 const nodeById = new Map(); // id (cf. layoutUniverseWorld) -> nœud positionné, reconstruit à chaque scène
 
 // Repli sur #agon-tag-trends-cloud (bulles "Ma mémoire" embarquées sur l'accueil, même cadre
@@ -215,15 +234,14 @@ function getSolarSystemById(galaxy, id) {
 }
 
 // ---- Seuils de révélation : une bulle système/étoile n'apparaît (et ne devient cliquable) que
-// lorsque SON PROPRE rayon à l'écran dépasse REVEAL_PX_SELF ET que son PARENT DIRECT est déjà
-// assez zoomé (PARENT_REVEAL_PX) — double condition, pas juste la taille propre. Une hiérarchie
-// stricte à 3 niveaux est demandée explicitement (13/08/2026) : sans le filtre par parent, un
-// jeu de données avec peu d'éléments par niveau pouvait faire franchir le seuil de taille aux 3
-// niveaux en même temps dès la vue d'ensemble (galaxie ET système ET étoile assez grands pour
-// se révéler d'un coup) — les étoiles, peintes en dernier donc par-dessus, masquaient alors
-// visuellement galaxies/systèmes en dessous, donnant l'impression de ne voir QUE les étoiles.
+// lorsque SON PROPRE rayon à l'écran dépasse REVEAL_PX_SELF ET que son PARENT DIRECT a déjà cédé
+// la place à ses enfants (cf. childrenCanShow, plus bas — dérivé du même REVEAL_PX_SELF, jamais
+// un seuil indépendant sur le rayon du parent lui-même : cf. son commentaire pour la raison).
+// Hiérarchie stricte à 3 niveaux demandée explicitement (13/08/2026) : sans le filtre par
+// parent, un jeu de données avec peu d'éléments par niveau pouvait faire franchir le seuil de
+// taille aux 3 niveaux en même temps dès la vue d'ensemble — les étoiles, peintes en dernier
+// donc par-dessus, masquaient alors visuellement galaxies/systèmes en dessous.
 const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
-const PARENT_REVEAL_PX = 70; // rayon à l'écran minimum du PARENT pour que ses enfants puissent apparaître
 
 // Rayon à l'écran visé, pour le plus gros enfant d'un nœud, une fois ce nœud ciblé par un clic
 // (focusOn) — comfortablement au-dessus de REVEAL_PX_SELF pour qu'il apparaisse net, pas
@@ -235,15 +253,21 @@ const PARENT_REVEAL_PX = 70; // rayon à l'écran minimum du PARENT pour que ses
 // cf. mountUniverse) garantit qu'au moins lui devient net, quelle que soit la répartition.
 const FOCUS_CHILD_TARGET_PX = 58;
 
+// Pour un système solaire, ses étoiles gravitent maintenant EN ORBITE autour de lui (satellites,
+// cf. packSatellitesAroundPoint, universe-zoom.js) plutôt qu'emboîtées dans son propre disque —
+// le cadrage doit donc AUSSI garantir que l'anneau entier (node.orbitRadius) tient dans le
+// cadre, pas seulement que les étoiles elles-mêmes sont assez grandes (sinon l'orbite déborde
+// du cadre visible une fois zoomé). Le plus petit des deux facteurs de zoom l'emporte : jamais
+// plus zoomé que ce que l'orbite peut encore contenir.
+const FOCUS_ORBIT_FIT_PX = 165;
+
 function focusScaleFor(node) {
   const targetR = node.maxChildR || node.r * 0.3;
-  return FOCUS_CHILD_TARGET_PX / targetR;
+  const legibilityScale = FOCUS_CHILD_TARGET_PX / targetR;
+  if (!node.orbitRadius) return legibilityScale;
+  const fitScale = FOCUS_ORBIT_FIT_PX / node.orbitRadius;
+  return Math.min(legibilityScale, fitScale);
 }
-// Seuil (rayon à l'écran) au-delà duquel un nœud est considéré comme le contexte courant de la
-// caméra pour le fil d'Ariane/bouton retour (cf. computeFocusInfo) — indépendant de
-// focusScaleFor, un simple repère "on est visiblement dedans", pas un seuil de netteté des
-// enfants.
-const FOCUS_CONTAINMENT_PX = 70;
 
 function pluralize(n, word) { return `${n} ${word}${n > 1 ? "s" : ""}`; }
 
@@ -257,6 +281,37 @@ function ariaLabelFor(kind, node) {
 
 // ---- Décorations : calculées une seule fois par nœud lors du montage (positions déjà connues
 // en coordonnées monde, contrairement à l'ancien modèle qui devait relire le DOM après coup) ----
+
+// Lunes autour d'une galaxie (demande du 13/08/2026) : leur nombre correspond EXACTEMENT au
+// nombre de systèmes solaires qu'elle contient (pas une décoration purement aléatoire comme les
+// lunes/scintillements des étoiles plus bas) — même principe que addMiniStarsAroundSolarSystem
+// juste en dessous (nombre réel plutôt que suggéré), mais sans plancher/plafond : l'utilisateur a
+// explicitement demandé la correspondance exacte ("18 solars = 18 lunes"), jamais arrondie.
+function addMoonsAroundGalaxy(galaxy) {
+  const count = galaxy.ref.solarSystems.length;
+  for (let m = 0; m < count; m += 1) {
+    const angle = (m / count) * Math.PI * 2 + (galaxy.x + galaxy.y) * 0.01;
+    const dist = galaxy.r + 14 + Math.random() * 20;
+    const moonSize = 8 + Math.random() * 6;
+    const moon = document.createElement("span");
+    moon.className = "universe-galaxy-moon";
+    // galaxyId : lu par onCameraChange pour masquer ces lunes dès que les systèmes solaires de
+    // LEUR galaxie deviennent visibles (demande du 13/08/2026, "quand je vois les solars, je ne
+    // veux plus voir ces lunes") — même bascule is-revealed que la bulle galaxie elle-même
+    // (childrenCanShow), pour rester synchronisé avec elle plutôt que de suivre un seuil propre.
+    moon.dataset.galaxyId = galaxy.id;
+    moon.style.left = Math.round(galaxy.x + Math.cos(angle) * dist - moonSize / 2) + "px";
+    moon.style.top = Math.round(galaxy.y + Math.sin(angle) * dist - moonSize / 2) + "px";
+    moon.style.width = moonSize + "px";
+    moon.style.height = moonSize + "px";
+    // --moon-twinkle (pas opacity directement) : opacity est le mécanisme de révélation
+    // is-revealed ci-dessous (cf. style.css), un inline opacity l'aurait court-circuité (une
+    // propriété posée en style inline gagne toujours sur une règle de classe).
+    moon.style.setProperty("--moon-twinkle", String(0.75 + Math.random() * 0.25));
+    worldEl.appendChild(moon);
+  }
+}
+
 const MINI_STAR_MIN = 2;
 const MINI_STAR_MAX = 10;
 
@@ -344,10 +399,15 @@ function createBubbleEl(kind, node, background, glowColor, extraClass) {
     }
   });
 
+  // Libellé dans la couche à part (labelsOverlayEl), jamais enfant de btn : cf. le commentaire
+  // sur labelsOverlayEl plus haut (texte flou évité). Positionné en coordonnées écran par
+  // onCameraChange, pas ici (la caméra n'a pas encore de position tant que le montage n'est pas
+  // terminé) — masqué par défaut (is-revealed ajouté par onCameraChange au premier calcul).
   const label = document.createElement("span");
-  label.className = "universe-zoom-bubble-label";
+  label.className = `universe-zoom-bubble-label${kind === "star" ? " universe-zoom-bubble-label-star" : ""}`;
   label.textContent = node.name;
-  btn.appendChild(label);
+  labelsOverlayEl.appendChild(label);
+  labelElByNodeId.set(node.id, label);
 
   worldEl.appendChild(btn);
   return btn;
@@ -359,7 +419,28 @@ function destroyUniverseScene() {
   if (viewportEl) viewportEl.remove();
   viewportEl = null;
   worldEl = null;
+  labelsOverlayEl = null;
+  labelElByNodeId.clear();
+  connectorElByNodeId.clear();
   nodeById.clear();
+}
+
+// Trait lumineux reliant une étoile à son système solaire (satellite, cf.
+// packSatellitesAroundPoint, universe-zoom.js) — un simple <div> tourné/étiré entre les deux
+// points, dans l'espace "monde" (enfant de worldEl, mis à l'échelle avec le reste de la scène).
+function createConnectorEl(fromX, fromY, toX, toY) {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const length = Math.hypot(dx, dy);
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const el = document.createElement("div");
+  el.className = "universe-zoom-connector";
+  el.style.left = fromX + "px";
+  el.style.top = fromY + "px";
+  el.style.width = length + "px";
+  el.style.transform = `rotate(${angle}deg)`;
+  worldEl.appendChild(el);
+  return el;
 }
 
 function mountUniverse() {
@@ -369,7 +450,12 @@ function mountUniverse() {
   viewportEl.className = "universe-zoom-viewport";
   worldEl = document.createElement("div");
   worldEl.className = "universe-zoom-world";
+  // Sibling de worldEl (pas un enfant) : reste en dehors de son transform:scale, cf. le
+  // commentaire sur labelsOverlayEl plus haut.
+  labelsOverlayEl = document.createElement("div");
+  labelsOverlayEl.className = "universe-zoom-labels-overlay";
   viewportEl.appendChild(worldEl);
+  viewportEl.appendChild(labelsOverlayEl);
   cloudEl.appendChild(viewportEl);
 
   // Rayon du monde dérivé de la taille réelle du cadre au montage : scale=1 (vue d'ensemble)
@@ -400,6 +486,7 @@ function mountUniverse() {
     const visual = galaxyBubbleVisual(g.name);
     const el = createBubbleEl("galaxy", g, visual.background, visual.glowColor, "agon-tag-bubble-galaxy");
     el.classList.add("is-revealed"); // toujours visibles, jamais soumises au seuil de révélation
+    addMoonsAroundGalaxy(g);
     nodeById.set(g.id, g);
   });
 
@@ -425,6 +512,10 @@ function mountUniverse() {
       "agon-tag-bubble-star"
     );
     addMoonsAndSparklesAroundStar(star);
+    const parentSystem = nodeById.get(star.solarSystemId);
+    if (parentSystem) {
+      connectorElByNodeId.set(star.id, createConnectorEl(parentSystem.x, parentSystem.y, star.x, star.y));
+    }
     nodeById.set(star.id, star);
   });
 
@@ -448,17 +539,28 @@ function mountUniverse() {
     nodeById.set(unclassifiedNode.id, unclassifiedNode);
   }
 
-  // Plafond fixe plutôt que dérivé du plus petit système solaire (focusScaleFor) : un seul
-  // système avec très peu d'étoiles peut avoir un rayon minuscule, poussant ce calcul très haut
-  // — un plafond global aligné dessus laissait alors quelques crans de molette suffire à
-  // dépasser toute zone utile pour les AUTRES systèmes, plus grands, et à se retrouver "dans"
-  // une bulle sans plus rien voir (constaté le 13/08/2026). 60 laisse une marge confortable
-  // au-delà du focusScaleFor typique d'un système solaire sans dépendre des cas extrêmes.
+  // Plafond dérivé de la lisibilité réelle des étoiles plutôt qu'une valeur fixe arbitraire —
+  // demande du 13/08/2026 ("une fois que les étoiles sont assez grosses et que le nom apparaît,
+  // on arrête la possibilité de zoomer encore") : au-delà du zoom qui rend déjà les étoiles
+  // nettes, continuer à zoomer n'apporte plus rien (aucun niveau sous l'étoile) et ne fait
+  // qu'agrandir le grain du fond étoilé. 85e centile des focusScaleFor de systèmes solaires
+  // (pas le max ni la moyenne) : un seul système avec très peu d'étoiles peut avoir un rayon
+  // minuscule, poussant SON focusScaleFor très haut — un plafond aligné sur le max, essayé
+  // d'abord, laissait alors quelques crans de molette suffire à dépasser toute zone utile pour
+  // les AUTRES systèmes et à se retrouver "dans" une bulle sans plus rien voir (constaté le
+  // 13/08/2026). Le centile ignore ces cas extrêmes isolés ; marge de 1.15x en plus pour ne pas
+  // couper le zoom pile au seuil de netteté.
+  const systemFocusScales = worldLayout.solarSystems.map((s) => focusScaleFor(s)).sort((a, b) => a - b);
+  const percentileScale = systemFocusScales.length
+    ? systemFocusScales[Math.floor(systemFocusScales.length * 0.85)] ?? systemFocusScales[systemFocusScales.length - 1]
+    : 12;
+  const maxScale = Math.min(35, Math.max(8, percentileScale * 1.15));
+
   camera = createUniverseCamera({
     viewportEl,
     worldEl,
     minScale: 1,
-    maxScale: 60,
+    maxScale,
     onChange: onCameraChange
   });
   camera.setState({ x: 0, y: 0, scale: 1 }, false);
@@ -474,44 +576,99 @@ function getGalaxyNameFromId(galaxyId) {
 // contre-scale les libellés pour qu'ils restent lisibles à tout niveau de zoom, met à jour le
 // fil d'Ariane. rAF-throttled côté caméra (cf. universe-zoom.js) : jamais plus d'une fois par
 // frame pendant un geste continu.
+// Un nœud cède la place à ses enfants exactement quand SON PLUS GROS enfant devient assez
+// grand à l'écran pour s'afficher (REVEAL_PX_SELF) — jamais un seuil indépendant sur le rayon
+// du PARENT lui-même. Un seuil indépendant (essayé d'abord, PARENT_REVEAL_PX fixe) pouvait se
+// déclencher AVANT qu'aucun enfant n'ait individuellement atteint sa propre taille de
+// révélation — sur un grand écran (cadre plus grand, donc rayons "monde" plus grands pour un
+// même jeu de données), un nœud avec beaucoup d'enfants (donc chacun plus petit) passait ce
+// seuil tout en gardant des enfants encore trop petits pour apparaître : le nœud disparaissait
+// (fondu croisé) SANS qu'aucun enfant ne le remplace, laissant un vide — constaté le 13/08/2026
+// ("apparaît furtivement et disparaît", capture d'écran : fil d'Ariane montrant une galaxie
+// "ouverte" dès l'arrivée sur le site, sans aucun zoom, cadre pourtant vide). Lier les deux
+// événements (le parent cède / un enfant apparaît) au MÊME calcul élimine ce vide par
+// construction.
+function childrenCanShow(node, scale) {
+  return (node.maxChildR || 0) * scale >= REVEAL_PX_SELF;
+}
+
 function onCameraChange(state) {
   document.documentElement.style.setProperty("--universe-cam-scale", String(state.scale));
 
+  const vw = viewportEl.clientWidth;
+  const vh = viewportEl.clientHeight;
+
   worldEl.querySelectorAll(".universe-zoom-bubble").forEach((el) => {
     const kind = el.dataset.kind;
-    if (kind === "galaxy" || kind === "unclassified") { el.classList.add("is-revealed"); return; } // toujours révélées
-    const node = nodeById.get(el.dataset.nodeId);
+    const nodeId = el.dataset.nodeId;
+    const node = nodeById.get(nodeId);
     if (!node) return;
-    // Hiérarchie stricte à 3 niveaux (demande du 13/08/2026) : un système/une étoile ne se
-    // révèle jamais seul(e) sur sa seule taille à l'écran — il faut AUSSI que son parent direct
-    // soit déjà lui-même assez zoomé (PARENT_REVEAL_PX). Sans cette double condition, un jeu de
-    // données avec peu d'éléments par niveau pouvait faire franchir le seuil de révélation aux
-    // 3 niveaux simultanément dès la vue d'ensemble — les étoiles, dessinées en dernier (donc
-    // par-dessus), masquaient alors visuellement galaxies/systèmes en dessous, donnant
-    // l'impression de ne voir QUE les étoiles, sans étapes intermédiaires.
-    const parentId = kind === "solarSystem" ? node.galaxyId : node.solarSystemId;
-    const parent = nodeById.get(parentId);
-    const parentZoomedIn = parent && parent.r * state.scale >= PARENT_REVEAL_PX;
-    const selfRevealed = node.r * state.scale >= REVEAL_PX_SELF;
-    el.classList.toggle("is-revealed", parentZoomedIn && selfRevealed);
+    const label = labelElByNodeId.get(nodeId);
+
+    let revealed;
+    if (kind === "unclassified") {
+      revealed = true; // toujours révélé
+    } else if (kind === "galaxy") {
+      revealed = !childrenCanShow(node, state.scale);
+    } else {
+      // Hiérarchie stricte à 3 niveaux (systèmes/étoiles) : un système/une étoile ne se révèle
+      // jamais seul(e) sur sa seule taille à l'écran — il faut AUSSI que son parent direct ait
+      // déjà cédé la place (même calcul childrenCanShow que celui qui masque ce parent, jamais
+      // de seuil indépendant qui risquerait de désynchroniser les deux).
+      // Contrairement à la galaxie (qui s'efface entièrement au profit de ses systèmes), un
+      // système solaire reste affiché même une fois ses étoiles satellites visibles (demande du
+      // 13/08/2026) : les étoiles gravitent AUTOUR de son point lumineux (cf.
+      // packSatellitesAroundPoint, universe-zoom.js), qui sert d'ancrage visuel et doit rester —
+      // jamais de fondu croisé à ce niveau-là, uniquement au niveau galaxie -> système.
+      const parentId = kind === "solarSystem" ? node.galaxyId : node.solarSystemId;
+      const parent = nodeById.get(parentId);
+      const parentCeded = parent && childrenCanShow(parent, state.scale);
+      const selfRevealed = node.r * state.scale >= REVEAL_PX_SELF;
+      revealed = parentCeded && selfRevealed;
+    }
+
+    // Position écran du libellé (couche à part, cf. labelsOverlayEl) — recalculée à chaque
+    // frame de caméra à partir des coordonnées "monde" du nœud, jamais via un contre-scale CSS
+    // imbriqué dans le monde transformé (texte flou à fort zoom, cf. son commentaire).
+    if (label) {
+      label.style.left = (vw / 2 + (node.x - state.x) * state.scale) + "px";
+      label.style.top = (vh / 2 + (node.y - state.y) * state.scale) + "px";
+      label.classList.toggle("is-revealed", revealed);
+    }
+    // Trait connecteur (étoiles uniquement, cf. createConnectorEl) : même état que l'étoile
+    // elle-même, jamais affiché seul ni en avance sur elle.
+    connectorElByNodeId.get(nodeId)?.classList.toggle("is-revealed", revealed);
+
+    el.classList.toggle("is-revealed", revealed);
+  });
+
+  // Lunes décoratives des galaxies (cf. addMoonsAroundGalaxy) : mêmes règles is-revealed que la
+  // bulle galaxie elle-même (childrenCanShow) — s'effacent dès que ses systèmes solaires
+  // deviennent visibles, plutôt qu'un seuil propre qui risquerait de se désynchroniser d'elle.
+  worldEl.querySelectorAll(".universe-galaxy-moon").forEach((el) => {
+    const node = nodeById.get(el.dataset.galaxyId);
+    if (!node) return;
+    el.classList.toggle("is-revealed", !childrenCanShow(node, state.scale));
   });
 
   renderBreadcrumb(computeFocusInfo(state));
 }
 
-// Nœud "englobant" le centre courant de la caméra (le plus profond dont le cercle contient le
-// point caméra ET qui est réellement révélé à l'écran) — sert au fil d'Ariane et au bouton
-// retour, dérivé de la caméra plutôt que d'un état de navigation séparé.
+// Nœud "englobant" le centre courant de la caméra (le plus profond qui a cédé la place à ses
+// enfants ET dont le point caméra reste dans son cercle) — sert au fil d'Ariane et au bouton
+// retour, dérivé de la caméra plutôt que d'un état de navigation séparé. Même calcul
+// (childrenCanShow) que la révélation elle-même : jamais de fil d'Ariane "en avance" sur ce qui
+// est réellement affiché.
 function computeFocusInfo(state) {
   let galaxy = null;
   for (const g of worldLayout.galaxies) {
-    if (Math.hypot(state.x - g.x, state.y - g.y) <= g.r && g.r * state.scale >= FOCUS_CONTAINMENT_PX) { galaxy = g; break; }
+    if (Math.hypot(state.x - g.x, state.y - g.y) <= g.r && childrenCanShow(g, state.scale)) { galaxy = g; break; }
   }
   if (!galaxy) return { galaxy: null, solarSystem: null };
   let solarSystem = null;
   for (const s of worldLayout.solarSystems) {
     if (s.galaxyId !== galaxy.id) continue;
-    if (Math.hypot(state.x - s.x, state.y - s.y) <= s.r && s.r * state.scale >= FOCUS_CONTAINMENT_PX) { solarSystem = s; break; }
+    if (Math.hypot(state.x - s.x, state.y - s.y) <= s.r && childrenCanShow(s, state.scale)) { solarSystem = s; break; }
   }
   return { galaxy, solarSystem };
 }

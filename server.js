@@ -15038,7 +15038,13 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
         const status = result.error === "rejected" ? 422 : 502;
         return res.status(status).json({ ok: false, error: result.reason || "Génération de la fiche impossible pour le moment." });
       }
-      questions = result.questions;
+      // searchTopic : l'intitulé exact tapé par le créateur dans la barre de
+      // recherche, distinct de sourceName (repris/reformulé par l'IA, cf.
+      // buildLeveledFicheAndQuizPrompt) — affiché sous le titre dans
+      // "Explorer les apprentissages disponibles" (demande du 13/08/2026),
+      // pas de colonne dédiée sur daily_quiz : porté par chaque question,
+      // même principe que sourceName/sourceType déjà dupliqués ainsi.
+      questions = result.questions.map((q) => ({ ...q, searchTopic: topic }));
 
       const { error: insertError } = await supabase.from("daily_quiz").insert({
         quiz_date: quizDate,
@@ -15089,13 +15095,15 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
 // à revoir si le volume grossit significativement (cf. [[project_supabase_1000_rows]]).
 app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req, res) => {
   try {
-    // ->>0->>sourceName : ne relit que le libellé de la première question du
-    // tableau JSONB, jamais le contenu complet (fiche + corrigé de chaque
-    // question, plusieurs Ko par ligne) — inutile pour une simple liste à
-    // parcourir (cf. audit egress du 12-13/08/2026).
+    // Nombre de questions affiché à côté du sujet (demande du 13/08/2026) :
+    // nécessite désormais de relire tout le tableau JSONB questions (PostgREST
+    // n'expose pas jsonb_array_length() en select=), pas seulement le libellé
+    // de la première comme avant (cf. audit egress du 12-13/08/2026) — accepté
+    // vu le volume actuel très faible (quelques dizaines de sujets libres),
+    // à revoir si ce nombre grossit significativement.
     const { data: quizRows, error: quizError } = await supabase
       .from("daily_quiz")
-      .select("quiz_date, slot, label:questions->0->>sourceName")
+      .select("quiz_date, slot, questions")
       .like("slot", "notion:custom:%");
     if (quizError) throw new Error(quizError.message);
 
@@ -15116,9 +15124,10 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
     // ci-dessus reste toutes dates confondues pour ce même slot.
     const bySlot = new Map();
     for (const row of quizRows || []) {
-      if (!row.label) continue;
+      const label = row.questions?.[0]?.sourceName;
+      if (!label) continue;
       const existing = bySlot.get(row.slot);
-      if (!existing || row.quiz_date > existing.quiz_date) bySlot.set(row.slot, row);
+      if (!existing || row.quiz_date > existing.quiz_date) bySlot.set(row.slot, { ...row, label });
     }
 
     const searchQuery = String(req.query.search || "").trim().toLowerCase();
@@ -15126,6 +15135,11 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
       slot: row.slot,
       quizDate: row.quiz_date,
       label: row.label,
+      // Absent sur les sujets créés avant l'ajout de searchTopic (13/08/2026,
+      // cf. POST /custom) : null plutôt qu'une chaîne vide, le client n'affiche
+      // alors rien plutôt qu'une ligne identique au titre juste au-dessus.
+      searchTopic: row.questions?.[0]?.searchTopic || null,
+      questionCount: Array.isArray(row.questions) ? row.questions.length : 0,
       userCount: userCountBySlot.get(row.slot) || 0
     }));
     if (searchQuery) items = items.filter((item) => item.label.toLowerCase().includes(searchQuery));
@@ -16296,6 +16310,29 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   }
 }
 
+// Traduit une soumission brute (optionIndex simple, ou associationAnswer/
+// optionIndexes/orderedItems selon le type) en l'index 0/CUSTOM_GRADED_CORRECT_INDEX
+// stocké dans daily_quiz_answers.option_index — factorisé entre POST /answer
+// (persiste) et POST /practice-answer (ne persiste jamais, cf. plus bas) pour
+// que les deux routes gradent toujours de façon identique. Retourne null si
+// la soumission est invalide (jamais 0, qui est une réponse fausse valide).
+function gradeQuizSubmissionOptionIndex(question, body) {
+  const questionType = question.type || "qcm";
+  if (questionType === "association") {
+    return isAssociationAnswerFullyCorrect(body?.associationAnswer, question.pairs || []) ? CUSTOM_GRADED_CORRECT_INDEX : 0;
+  }
+  if (questionType === "qcm_multi") {
+    return isQcmMultiAnswerFullyCorrect(body?.optionIndexes, question.correctIndexes || []) ? CUSTOM_GRADED_CORRECT_INDEX : 0;
+  }
+  if (questionType === "ordre") {
+    return isOrderAnswerFullyCorrect(body?.orderedItems, question.items || []) ? CUSTOM_GRADED_CORRECT_INDEX : 0;
+  }
+  const optionIndex = Number(body?.optionIndex);
+  const maxIndex = (Array.isArray(question.options) ? question.options.length : 4) - 1;
+  if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > maxIndex) return null;
+  return optionIndex;
+}
+
 app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (req, res) => {
   try {
     const voterKey = String(req.body?.voterKey || "").trim();
@@ -16320,30 +16357,9 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     if (existingAnswerResult.error) throw new Error(existingAnswerResult.error.message);
     const existingAnswer = existingAnswerResult.data;
 
-    // "association"/"qcm_multi"/"ordre" n'envoient pas optionIndex (pas un
-    // choix unique parmi des options) : on calcule nous-mêmes si la réponse
-    // soumise est intégralement correcte, et on le code dans la même colonne
-    // option_index que les autres formats (0/1), cf. CUSTOM_GRADED_CORRECT_INDEX
-    // — le reste de la route (idempotence, stats, computeUserScores) n'a
-    // besoin d'aucune autre modification.
     const questionType = question.type || "qcm";
-    let optionIndex;
-    if (questionType === "association") {
-      const allCorrect = isAssociationAnswerFullyCorrect(req.body?.associationAnswer, question.pairs || []);
-      optionIndex = allCorrect ? CUSTOM_GRADED_CORRECT_INDEX : 0;
-    } else if (questionType === "qcm_multi") {
-      const allCorrect = isQcmMultiAnswerFullyCorrect(req.body?.optionIndexes, question.correctIndexes || []);
-      optionIndex = allCorrect ? CUSTOM_GRADED_CORRECT_INDEX : 0;
-    } else if (questionType === "ordre") {
-      const allCorrect = isOrderAnswerFullyCorrect(req.body?.orderedItems, question.items || []);
-      optionIndex = allCorrect ? CUSTOM_GRADED_CORRECT_INDEX : 0;
-    } else {
-      optionIndex = Number(req.body?.optionIndex);
-      const maxIndex = (Array.isArray(question.options) ? question.options.length : 4) - 1;
-      if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > maxIndex) {
-        return res.status(400).json({ error: "Requête invalide." });
-      }
-    }
+    const optionIndex = gradeQuizSubmissionOptionIndex(question, req.body);
+    if (optionIndex === null) return res.status(400).json({ error: "Requête invalide." });
 
     let finalOptionIndex = optionIndex;
     if (existingAnswer) {
@@ -16398,6 +16414,53 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       recordDailyQuizEclairageAcquisition(voterKey, question)
         .catch((error) => console.warn("[daily quiz eclairage acquisitions] failed :", error.message));
     }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// "Refaire" (cf. views/qcm-du-jour.html renderFinalScore/quizAnswerEndpoint,
+// demande du 13/08/2026) : rejoue un QCM déjà terminé avec de vraies
+// nouvelles réponses, gradées exactement comme POST /answer (même
+// gradeQuizSubmissionOptionIndex), mais SANS JAMAIS écrire dans
+// daily_quiz_answers — la seule table dont dépendent le streak/l'ancrage
+// (computeQuestionStreaks) et le score Gnosis. Rien n'est persisté ⇒ rien ne
+// peut compter, par construction, plutôt que de dépendre d'un filtrage a
+// posteriori. Jamais d'appel à recordDailyQuizEclairageAcquisition non plus,
+// pour la même raison (n'accorderait un acquis "Ma mémoire" que sur la base
+// d'une réponse qui n'existe nulle part en base).
+app.post("/api/daily-quiz/practice-answer", rateLimit("daily-quiz-answer", 60), async (req, res) => {
+  try {
+    const voterKey = String(req.body?.voterKey || "").trim();
+    const questionId = String(req.body?.questionId || "").trim();
+    const slot = String(req.body?.slot || "").trim();
+    if (!voterKey || !questionId || !isValidDailyQuizSlot(slot)) {
+      return res.status(400).json({ error: "Requête invalide." });
+    }
+
+    const todayKey = resolveDailyQuizRequestDate(slot, req.body?.quizDate);
+    const questions = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    const question = questions.find((q) => q.id === questionId);
+    if (!question) return res.status(404).json({ error: "QCM introuvable." });
+
+    const questionType = question.type || "qcm";
+    const optionIndex = gradeQuizSubmissionOptionIndex(question, req.body);
+    if (optionIndex === null) return res.status(400).json({ error: "Requête invalide." });
+
+    // Stats réelles (autres visiteurs) affichées à titre indicatif — lecture
+    // seule, jamais affectées par une réponse d'entraînement non persistée.
+    const { stats, total } = await getDailyQuizStats(todayKey, questionId);
+    res.json({
+      correct: optionIndex === question.correctIndex,
+      correctIndex: question.correctIndex,
+      explanation: question.explanation,
+      optionIndex,
+      stats,
+      totalAnswers: total,
+      ...(questionType === "association" ? { pairs: question.pairs } : {}),
+      ...(questionType === "qcm_multi" ? { correctIndexes: question.correctIndexes } : {}),
+      ...(questionType === "ordre" ? { items: question.items } : {})
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
