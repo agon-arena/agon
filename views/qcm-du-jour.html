@@ -660,7 +660,10 @@
     }
     .qcm-mesqcm-td-check {
       width: 32px;
-      padding-right: 0;
+      /* padding-left (pas -right) : la case à cocher est désormais la dernière colonne
+         (demande du 13/08/2026, "tout à droite du tableau, pas à gauche"), collée au bouton
+         Supprimer qui la précède plutôt qu'au nom de l'apprentissage qui la suivait avant. */
+      padding-left: 0;
     }
     .qcm-mesqcm-row-checkbox,
     #qcm-mesqcm-select-all {
@@ -2535,7 +2538,7 @@
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
     html += '<table class="qcm-mesqcm-table">';
-    html += '<thead><tr><th></th><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th></tr></thead><tbody>';
+    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th><th></th></tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
@@ -2547,13 +2550,13 @@
         ? '<span class="qcm-mesqcm-state is-realized">Réalisé</span>'
         : '<span class="qcm-mesqcm-state">En attente de réalisation</span>';
       html += '<tr>';
-      html += '<td class="qcm-mesqcm-td-check"><input type="checkbox" class="qcm-mesqcm-row-checkbox" data-mesqcm-key="' + escapeHtml(getMesQcmRowKey(q)) + '" aria-label="Sélectionner ' + escapeHtml(q.label || meta.label) + '"></td>';
       html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
       html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
       html += '</button></td>';
       html += '<td>' + stateHtml + '</td>';
       html += '<td>' + badgeHtml + '</td>';
       html += '<td><button type="button" class="qcm-mesqcm-delete-btn" data-mesqcm-delete-index="' + index + '" aria-label="Supprimer cet apprentissage" title="Supprimer"><i class="fa-solid fa-trash-can"></i></button></td>';
+      html += '<td class="qcm-mesqcm-td-check"><input type="checkbox" class="qcm-mesqcm-row-checkbox" data-mesqcm-key="' + escapeHtml(getMesQcmRowKey(q)) + '" aria-label="Sélectionner ' + escapeHtml(q.label || meta.label) + '"></td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
