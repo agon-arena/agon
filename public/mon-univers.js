@@ -357,7 +357,10 @@ function addMoonsAroundGalaxy(galaxy) {
   const systems = galaxy.ref.solarSystems;
   if (!systems.length) return;
 
-  const moonSize = Math.max(6, Math.min(9, galaxy.r * 0.1));
+  // Taille suffisamment lisible dès la vue d'ensemble : à 6px et avec un z-index négatif,
+  // ces repères se confondaient avec les étoiles du fond et donnaient l'impression de
+  // n'apparaître qu'après le zoom sur les systèmes solaires.
+  const moonSize = Math.max(8, Math.min(11, galaxy.r * 0.13));
   const spacing = moonSize + 8;
   const firstRadius = galaxy.r + 14 + moonSize / 2;
   // Phase stable dérivée du nom : évite que toutes les galaxies alignent leurs premières lunes
@@ -1071,12 +1074,21 @@ function onCameraChange(state) {
     el.classList.toggle("is-revealed", revealed);
   });
 
-  // Lunes informatives des galaxies (une par système, cf. addMoonsAroundGalaxy) : mêmes règles
-  // is-revealed que la bulle galaxie — s'effacent dès que ses systèmes deviennent visibles.
+  // Lunes informatives des galaxies (une par système, cf. addMoonsAroundGalaxy) : elles
+  // appartiennent strictement au niveau « galaxies ». Le précédent calcul par galaxie pouvait
+  // laisser les lunes d'une galaxie visibles alors que les systèmes d'une autre avaient déjà
+  // franchi leur seuil. Dès qu'UN solar est réellement affiché, toutes les lunes disparaissent
+  // afin qu'aucun niveau ne se mélange visuellement.
+  const anySolarSystemVisible = Array.from(
+    worldEl.querySelectorAll('.universe-zoom-bubble[data-kind="solarSystem"]')
+  ).some((el) => el.classList.contains("is-revealed"));
   worldEl.querySelectorAll(".universe-galaxy-moon").forEach((el) => {
     const node = nodeById.get(el.dataset.galaxyId);
     if (!node) return;
-    el.classList.toggle("is-revealed", !childrenCanShow(node, state.scale));
+    el.classList.toggle(
+      "is-revealed",
+      !anySolarSystemVisible && !childrenCanShow(node, state.scale)
+    );
   });
 
   updateUniverseMinimap(state);

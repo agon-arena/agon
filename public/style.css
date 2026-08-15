@@ -25921,14 +25921,22 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   background: radial-gradient(circle, #fff 0%, rgba(255,236,190,0.95) 50%, transparent 100%);
   box-shadow: 0 0 10px 3px rgba(255,236,190,0.75);
   pointer-events: none;
-  z-index: -1;
+  /* Au-dessus du fond Mnoria, mais sous les connecteurs (z:2) et les interactions. Avec z:-1,
+     les lunes étaient peintes derrière la couche de fond et devenaient presque invisibles à la
+     vue galaxies. */
+  z-index: 1;
   /* Ces lunes s'effacent dès que les systèmes solaires de leur galaxie deviennent visibles,
      avec la même bascule de niveau que la bulle galaxie. */
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.16s ease;
 }
 .universe-galaxy-moon.is-revealed {
   opacity: 1;
+}
+/* Aucun fondu résiduel au passage galaxies → solars : les lunes ne doivent jamais accompagner
+   visuellement les systèmes qui prennent leur place. */
+.universe-galaxy-moon:not(.is-revealed) {
+  transition-duration: 0s;
 }
 
 #agon-universe-cloud.agon-tag-trends-cloud::after,
