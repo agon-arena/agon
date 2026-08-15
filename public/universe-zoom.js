@@ -331,11 +331,12 @@ function createUniverseCamera({
   }
 
   // ---- Molette (desktop) ----
-  // 0.0009 (pas 0.0016, trop sensible : quelques crans suffisaient à dépasser toute la plage
-  // utile et à se retrouver "dans" une bulle sans plus rien voir, constaté le 13/08/2026) —
-  // zoom plus progressif, contrôlable sur toute la plage min/max. zoomInPlace (pas de suivi du
-  // curseur) : demande du 13/08/2026, jamais de déplacement de la scène par un geste de zoom.
+  // Une molette/scroll vertical ordinaire appartient désormais à la PAGE, même si le pointeur
+  // se trouve sur Ma mémoire. Seul Ctrl/Meta + molette (le signal produit par le pincement des
+  // trackpads Chromium) zoome la scène ; Safari utilise les événements gesture* juste après.
+  // Cela évite que le cadre emprisonne le défilement vertical du site.
   viewportEl.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     zoomInPlace(Math.exp(-e.deltaY * 0.0009));
   }, { passive: false });
@@ -371,6 +372,7 @@ function createUniverseCamera({
   const activePointers = new Map();
   let dragLastPoint = null;
   let pinchStartDist = null;
+  let pinchLastMidpoint = null;
 
   function midpoint() {
     const pts = [...activePointers.values()];
@@ -384,25 +386,54 @@ function createUniverseCamera({
   viewportEl.addEventListener("pointerdown", (e) => {
     if (e.target.closest("button, a")) return;
     viewportEl.setPointerCapture(e.pointerId);
-    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    activePointers.set(e.pointerId, {
+      x: e.clientX,
+      y: e.clientY,
+      pointerType: e.pointerType || "mouse"
+    });
     if (activePointers.size === 1) {
       dragLastPoint = { x: e.clientX, y: e.clientY };
     } else if (activePointers.size === 2) {
       dragLastPoint = null;
       pinchStartDist = distance();
+      pinchLastMidpoint = midpoint();
     }
   });
 
   viewportEl.addEventListener("pointermove", (e) => {
     if (!activePointers.has(e.pointerId)) return;
-    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const previousPointer = activePointers.get(e.pointerId);
+    activePointers.set(e.pointerId, {
+      x: e.clientX,
+      y: e.clientY,
+      pointerType: previousPointer.pointerType
+    });
 
     if (activePointers.size === 1 && dragLastPoint) {
       const dx = e.clientX - dragLastPoint.x;
       const dy = e.clientY - dragLastPoint.y;
-      setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+      const isTouchLike = previousPointer.pointerType === "touch" || previousPointer.pointerType === "pen";
+      const isVerticalPageGesture = isTouchLike && Math.abs(dy) > Math.abs(dx) * 1.15;
+      if (isVerticalPageGesture) {
+        // touch-action:none garde la possibilité d'un vrai panoramique vertical à deux doigts.
+        // Le scroll à un doigt est donc relayé explicitement vers la page, avec le même sens
+        // qu'un geste natif (doigt vers le haut = page vers le bas).
+        window.scrollBy(0, -dy);
+      } else {
+        setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+      }
       dragLastPoint = { x: e.clientX, y: e.clientY };
     } else if (activePointers.size === 2) {
+      // Deux doigts constituent le geste « prononcé » pour déplacer verticalement la mémoire.
+      // Le déplacement du point médian pilote le panoramique tandis que la variation de leur
+      // distance conserve le pincement de zoom existant.
+      const nextMidpoint = midpoint();
+      if (pinchLastMidpoint) {
+        const dx = nextMidpoint.x - pinchLastMidpoint.x;
+        const dy = nextMidpoint.y - pinchLastMidpoint.y;
+        setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+      }
+      pinchLastMidpoint = nextMidpoint;
       const dist = distance();
       if (pinchStartDist) {
         zoomInPlace(dist / pinchStartDist);
@@ -417,9 +448,11 @@ function createUniverseCamera({
       const [pt] = activePointers.values();
       dragLastPoint = { x: pt.x, y: pt.y };
       pinchStartDist = null;
+      pinchLastMidpoint = null;
     } else if (activePointers.size === 0) {
       dragLastPoint = null;
       pinchStartDist = null;
+      pinchLastMidpoint = null;
     }
   }
   viewportEl.addEventListener("pointerup", releasePointer);
