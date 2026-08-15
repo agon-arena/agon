@@ -7332,10 +7332,10 @@ body.page-debate .topbar::after {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #000000;
   border-radius: 999px;
-  background: #e9ebec;
-  color: #111827;
+  background: #111827;
+  color: #ffffff;
   padding: 4px 8px;
   font-size: 10.5px;
   font-weight: 700;
@@ -7344,8 +7344,8 @@ body.page-debate .topbar::after {
 }
 
 .index-sort-toggle:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: #1f2937;
+  border-color: #000000;
   transform: translateY(-1px);
 }
 
@@ -7355,9 +7355,9 @@ body.page-debate .topbar::after {
 }
 
 .index-sort-toggle.index-sort-toggle-active {
-  background: #111827;
-  border-color: #111827;
-  color: #ffffff;
+  background: #ffffff;
+  border-color: #000000;
+  color: #111827;
 }
 
 .index-explorer-controls {
