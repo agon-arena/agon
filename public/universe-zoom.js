@@ -488,7 +488,13 @@ function createUniverseCamera({
 
   return {
     getState: () => state,
+    getScaleLimits: () => ({ minScale, maxScale }),
     setState,
+    zoomBy(factor, animate = true) {
+      const numericFactor = Number(factor);
+      if (!Number.isFinite(numericFactor) || numericFactor <= 0) return;
+      setState({ scale: state.scale * numericFactor }, animate);
+    },
     focusOn,
     zoomOutTo,
     setBackgroundTileSize,

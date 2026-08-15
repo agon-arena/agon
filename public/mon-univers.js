@@ -8,7 +8,7 @@
 // quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-native-page-scroll-v26";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-minimap-zoom-controls-v27";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -233,6 +233,9 @@ let minimapEl = null;
 let minimapSvgEl = null;
 let minimapViewportRectEl = null;
 let minimapPositionEl = null;
+let minimapZoomControlsEl = null;
+let minimapZoomInBtn = null;
+let minimapZoomOutBtn = null;
 let minimapBounds = null;
 let minimapActiveGalaxyId = null;
 let minimapClipIdCounter = 0;
@@ -525,6 +528,16 @@ function minimapToWorld(mapX, mapY) {
 function updateUniverseMinimap(state) {
   if (!minimapEl || !minimapViewportRectEl || !minimapPositionEl || !minimapBounds || !viewportEl) return;
 
+  const scaleLimits = camera?.getScaleLimits?.();
+  if (scaleLimits) {
+    const epsilon = Math.max(0.0001, scaleLimits.maxScale * 0.00001);
+    if (minimapZoomOutBtn) minimapZoomOutBtn.hidden = state.scale <= scaleLimits.minScale + epsilon;
+    if (minimapZoomInBtn) minimapZoomInBtn.hidden = state.scale >= scaleLimits.maxScale - epsilon;
+    if (minimapZoomControlsEl) {
+      minimapZoomControlsEl.hidden = !!(minimapZoomOutBtn?.hidden && minimapZoomInBtn?.hidden);
+    }
+  }
+
   const halfWorldW = viewportEl.clientWidth / (2 * state.scale);
   const halfWorldH = viewportEl.clientHeight / (2 * state.scale);
   const viewportStart = worldToMinimap(state.x - halfWorldW, state.y - halfWorldH);
@@ -665,6 +678,30 @@ function createUniverseMinimap() {
     zoomToRoot();
   });
 
+  minimapZoomControlsEl = document.createElement("div");
+  minimapZoomControlsEl.className = "universe-minimap__zoom-controls";
+  minimapZoomControlsEl.setAttribute("role", "group");
+  minimapZoomControlsEl.setAttribute("aria-label", "Contrôles de zoom de Ma mémoire");
+
+  const createZoomButton = (direction) => {
+    const isZoomIn = direction === "in";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `universe-minimap__zoom-button universe-minimap__zoom-button--${direction}`;
+    button.setAttribute("aria-label", isZoomIn ? "Zoomer dans Ma mémoire" : "Dézoomer dans Ma mémoire");
+    button.title = isZoomIn ? "Zoomer" : "Dézoomer";
+    button.textContent = isZoomIn ? "+" : "−";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      camera?.zoomBy(isZoomIn ? 1.45 : 1 / 1.45, true);
+    });
+    return button;
+  };
+  minimapZoomOutBtn = createZoomButton("out");
+  minimapZoomInBtn = createZoomButton("in");
+  minimapZoomControlsEl.append(minimapZoomOutBtn, minimapZoomInBtn);
+
   let dragState = null;
   const eventToMapPoint = (event) => {
     const rect = minimapSvgEl.getBoundingClientRect();
@@ -723,9 +760,14 @@ function createUniverseMinimap() {
   ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
     minimapEl.addEventListener(type, (event) => event.stopPropagation());
   });
+  minimapZoomControlsEl.addEventListener("pointerdown", (event) => event.stopPropagation());
+  minimapZoomControlsEl.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+  ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+    minimapZoomControlsEl.addEventListener(type, (event) => event.stopPropagation());
+  });
 
   minimapEl.append(minimapSvgEl, recenterBtn);
-  viewportEl.appendChild(minimapEl);
+  viewportEl.append(minimapZoomControlsEl, minimapEl);
 }
 
 // ---- Montage complet de la scène (une seule fois par chargement de données) ----
@@ -741,6 +783,9 @@ function destroyUniverseScene() {
   minimapSvgEl = null;
   minimapViewportRectEl = null;
   minimapPositionEl = null;
+  minimapZoomControlsEl = null;
+  minimapZoomInBtn = null;
+  minimapZoomOutBtn = null;
   minimapBounds = null;
   minimapActiveGalaxyId = null;
   minimapMarkerByNodeId.clear();
