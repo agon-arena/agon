@@ -5509,7 +5509,8 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       userId: user.id,
       totals: { articles: 0, solarSystems: 0, galaxies: 0, unclassifiedArticles: 0 },
       galaxies: [],
-      unclassified: []
+      unclassified: [],
+      knowledgeLinks: []
     };
 
     const { data: acquisitions, error: acquisitionsError } = await supabase
@@ -5531,6 +5532,50 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       if (seenEclairageKeys.has(key)) continue;
       seenEclairageKeys.add(key);
       eclairageAcquisitions.push(a);
+    }
+
+    // Relations entre les connaissances réellement présentes dans CET univers. Deux lectures
+    // indexées et découpées sur les source_id évitent une requête par acquisition ainsi qu'un
+    // .or() interpolé. Le filtrage final porte sur la paire exacte type + id : des ids identiques
+    // appartenant à deux types différents ne peuvent donc jamais créer un faux trait.
+    const acquiredKnowledgeKeys = new Set(eclairageAcquisitions.map((a) =>
+      cultureGeneraleNotionKey(a.eclairage_type, a.eclairage_source_id)
+    ));
+    const acquiredSourceIds = [...new Set(eclairageAcquisitions.map((a) => String(a.eclairage_source_id)))];
+    let knowledgeLinks = [];
+    if (acquiredSourceIds.length) {
+      const linkColumns = "id,type_a,source_id_a,type_b,source_id_b";
+      const [linksFromA, linksFromB] = await Promise.all([
+        fetchAllSupabaseRowsIn(acquiredSourceIds, (idsChunk) =>
+          supabase.from("culture_generale_notion_links").select(linkColumns)
+            .in("source_id_a", idsChunk).order("id", { ascending: true })
+        ),
+        fetchAllSupabaseRowsIn(acquiredSourceIds, (idsChunk) =>
+          supabase.from("culture_generale_notion_links").select(linkColumns)
+            .in("source_id_b", idsChunk).order("id", { ascending: true })
+        )
+      ]);
+      const linksError = linksFromA.error || linksFromB.error;
+      if (linksError) {
+        // La mémoire reste utilisable si la migration des liens n'est pas encore appliquée :
+        // seule sa couche décorative relationnelle est alors omise.
+        console.warn("[intellectual universe] liens indisponibles :", linksError.message);
+      } else {
+        const seenLinkIds = new Set();
+        knowledgeLinks = [...(linksFromA.data || []), ...(linksFromB.data || [])]
+          .filter((link) => {
+            if (seenLinkIds.has(link.id)) return false;
+            seenLinkIds.add(link.id);
+            return acquiredKnowledgeKeys.has(cultureGeneraleNotionKey(link.type_a, link.source_id_a))
+              && acquiredKnowledgeKeys.has(cultureGeneraleNotionKey(link.type_b, link.source_id_b));
+          })
+          .map((link) => ({
+            typeA: link.type_a,
+            sourceIdA: String(link.source_id_a),
+            typeB: link.type_b,
+            sourceIdB: String(link.source_id_b)
+          }));
+      }
     }
 
     // La fenêtre ouverte depuis une étoile doit mener à la même fiche détaillée
@@ -5683,7 +5728,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     console.log(`[intellectual universe] user=${user.id} articles=${totals.articles} solarSystems=${totals.solarSystems} galaxies=${totals.galaxies} unclassified=${totals.unclassifiedArticles}`);
 
-    res.json({ userId: user.id, totals, galaxies, unclassified: sortedUnclassified });
+    res.json({ userId: user.id, totals, galaxies, unclassified: sortedUnclassified, knowledgeLinks });
   } catch (error) {
     console.error("[intellectual universe]", error.message);
     return sendServerError(res, "Erreur chargement univers intellectuel.");

@@ -222,6 +222,10 @@ const labelElByNodeId = new Map();
 // (pas de la couche des libellés), donc mis à l'échelle avec la scène comme les bulles — pas
 // besoin d'une précision de rendu façon texte, une ligne reste lisible même mise à l'échelle.
 const connectorElByNodeId = new Map();
+// Liens sémantiques entre deux étoiles-connaissances. Contrairement aux connecteurs radiaux
+// étoile -> solar ci-dessus, une relation peut traverser deux systèmes ou deux galaxies : elle
+// est donc conservée par paire et ne devient visible que lorsque SES DEUX extrémités le sont.
+const knowledgeLinkEls = [];
 const nodeById = new Map(); // id (cf. layoutUniverseWorld) -> nœud positionné, reconstruit à chaque scène
 
 // HUD de navigation : un seul SVG très léger, indépendant du monde transformé. Il affiche
@@ -791,6 +795,7 @@ function destroyUniverseScene() {
   minimapMarkerByNodeId.clear();
   labelElByNodeId.clear();
   connectorElByNodeId.clear();
+  knowledgeLinkEls.length = 0;
   nodeById.clear();
 }
 
@@ -816,6 +821,27 @@ function createConnectorEl(fromX, fromY, toX, toY) {
   el.style.transform = `rotate(${angle}deg)`;
   worldEl.appendChild(el);
   return el;
+}
+
+function knowledgeNodeKey(sourceType, sourceId) {
+  return `${String(sourceType || "").trim()}::${String(sourceId || "").trim()}`;
+}
+
+// Tirets bleutés lumineux entre deux étoiles reliées intellectuellement. Le segment est placé
+// dans l'espace monde, comme les bulles : il suit donc exactement le pan et le zoom. Le motif,
+// l'épaisseur et le halo sont contre-dimensionnés dans onCameraChange pour rester fins et nets
+// à l'écran, quel que soit le facteur de zoom.
+function createKnowledgeLinkEl(fromNode, toNode) {
+  const dx = toNode.x - fromNode.x;
+  const dy = toNode.y - fromNode.y;
+  const el = document.createElement("div");
+  el.className = "universe-knowledge-link";
+  el.style.left = fromNode.x + "px";
+  el.style.top = fromNode.y + "px";
+  el.style.width = Math.hypot(dx, dy) + "px";
+  el.style.transform = `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`;
+  worldEl.appendChild(el);
+  knowledgeLinkEls.push({ el, fromNodeId: fromNode.id, toNodeId: toNode.id });
 }
 
 function mountUniverse() {
@@ -872,6 +898,28 @@ function mountUniverse() {
     maxChildRBySystem.set(star.solarSystemId, Math.max(maxChildRBySystem.get(star.solarSystemId) || 0, star.r));
   });
   worldLayout.solarSystems.forEach((s) => { s.maxChildR = maxChildRBySystem.get(s.id) || s.r * 0.3; });
+
+  // Un article acquis connaît son identité stable type + sourceDebateId. Elle permet de
+  // retrouver l'étoile qui le contient, y compris si plusieurs connaissances ont été regroupées
+  // dans une même étoile par la classification. Une relation interne à une seule étoile n'est
+  // pas dessinée : ses deux extrémités occupent déjà le même point visuel.
+  const starNodeByKnowledgeKey = new Map();
+  worldLayout.stars.forEach((star) => {
+    (star.ref?.articles || []).forEach((article) => {
+      const key = knowledgeNodeKey(article.sourceType, article.sourceDebateId);
+      if (key !== "::") starNodeByKnowledgeKey.set(key, star);
+    });
+  });
+  const renderedKnowledgePairs = new Set();
+  (universeData.knowledgeLinks || []).forEach((link) => {
+    const fromNode = starNodeByKnowledgeKey.get(knowledgeNodeKey(link.typeA, link.sourceIdA));
+    const toNode = starNodeByKnowledgeKey.get(knowledgeNodeKey(link.typeB, link.sourceIdB));
+    if (!fromNode || !toNode || fromNode.id === toNode.id) return;
+    const pairKey = [fromNode.id, toNode.id].sort().join("|");
+    if (renderedKnowledgePairs.has(pairKey)) return;
+    renderedKnowledgePairs.add(pairKey);
+    createKnowledgeLinkEl(fromNode, toNode);
+  });
 
   worldLayout.galaxies.forEach((g) => {
     g.themeHue = hueForGalaxy(g.name);
@@ -1051,6 +1099,7 @@ function onCameraChange(state) {
 
   const vw = viewportEl.clientWidth;
   const vh = viewportEl.clientHeight;
+  const revealedStarNodeIds = new Set();
 
   worldEl.querySelectorAll(".universe-zoom-bubble").forEach((el) => {
     const kind = el.dataset.kind;
@@ -1116,6 +1165,19 @@ function onCameraChange(state) {
       connector.classList.toggle("is-revealed", revealed);
     }
 
+    if (kind === "star" && revealed) revealedStarNodeIds.add(nodeId);
+
+    el.classList.toggle("is-revealed", revealed);
+  });
+
+  // Une relation ne flotte jamais seule dans le vide : elle apparaît uniquement lorsque les
+  // deux étoiles concernées sont visibles. Motif de 7px de lumière + 5px d'espace, épaisseur
+  // ~1,35px et halo constants en pixels écran malgré la mise à l'échelle du monde.
+  knowledgeLinkEls.forEach(({ el, fromNodeId, toNodeId }) => {
+    const revealed = revealedStarNodeIds.has(fromNodeId) && revealedStarNodeIds.has(toNodeId);
+    el.style.height = Math.max(0.35, 1.35 / state.scale) + "px";
+    el.style.backgroundSize = (12 / state.scale) + "px 100%";
+    el.style.boxShadow = `0 0 ${3 / state.scale}px rgba(105, 205, 255, 0.95), 0 0 ${8 / state.scale}px rgba(56, 166, 255, 0.72)`;
     el.classList.toggle("is-revealed", revealed);
   });
 

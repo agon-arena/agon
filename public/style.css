@@ -26030,6 +26030,12 @@ body.page-home:not(.agon-memoire-cloud-mode)
   transform-origin: 0 0;
   will-change: transform;
 }
+/* Les objets restent au-dessus des deux familles de traits. Cela masque naturellement chaque
+   segment sous le disque de l'étoile/du solar : les connexions semblent partir de leur bord,
+   jamais traverser leur centre ni recouvrir leur contenu. */
+.universe-zoom-bubble {
+  z-index: 2;
+}
 /* Trait connecteur étoile -> système solaire (satellite, cf. packSatellitesAroundPoint,
    universe-zoom.js ; createConnectorEl, mon-univers.js) — demande du 13/08/2026. Positionné/
    tourné en coordonnées "monde" (enfant de .universe-zoom-world, mis à l'échelle comme le
@@ -26045,12 +26051,36 @@ body.page-home:not(.agon-memoire-cloud-mode)
   position: absolute;
   transform-origin: 0 50%;
   background: linear-gradient(to right, rgba(255,255,255,0.65), rgba(255,255,255,0.15));
+  z-index: 0;
   opacity: 0;
   transition: opacity 0.35s ease;
   pointer-events: none;
 }
 .universe-zoom-connector.is-revealed {
   opacity: 1;
+}
+/* Relation intellectuelle étoile <-> étoile. Le gradient ne dessine que les 58 premiers
+   pourcents de chaque tuile puis laisse un intervalle transparent : background-size, épaisseur
+   et halo sont ajustés en inverse du zoom par onCameraChange, afin de conserver à l'écran des
+   tirets fins de 7px séparés de 5px et une lumière bleutée bien lisible. */
+.universe-knowledge-link {
+  position: absolute;
+  transform-origin: 0 50%;
+  background-image: linear-gradient(
+    to right,
+    rgba(151, 224, 255, 1) 0%,
+    rgba(151, 224, 255, 1) 58%,
+    rgba(151, 224, 255, 0) 58%,
+    rgba(151, 224, 255, 0) 100%
+  );
+  background-repeat: repeat-x;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+.universe-knowledge-link.is-revealed {
+  opacity: 0.96;
 }
 /* Couche des libellés : sibling de .universe-zoom-world, JAMAIS enfant (donc jamais affectée
    par son transform:scale) — chaque libellé est repositionné en coordonnées écran à chaque
