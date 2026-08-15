@@ -228,6 +228,13 @@
       color: #9ca3af;
       cursor: not-allowed;
     }
+    @media (max-width: 480px) {
+      .qcm-slot-switcher { gap: 4px; }
+      .qcm-slot-btn {
+        padding: 6px 8px;
+        font-size: 12px;
+      }
+    }
     .qcm-custom-search {
       display: none;
       gap: 8px;
@@ -1848,15 +1855,17 @@
   // 10/08/2026 car redondant avec cette liste) et "Renforcement des
   // connaissances" (pseudo-slot "renforcement", cf. server.js
   // DAILY_QUIZ_REINFORCEMENT_SLOT : uniquement les repasses de répétition
-  // espacée dues aujourd'hui).
+  // espacée dues aujourd'hui) et "Comprendre" (pseudo-slot personnel qui
+  // interroge les liens détectés entre deux connaissances déjà acquises).
   // "mesqcm" n'a pas de créneau à vérifier côté serveur : toujours visible
   // (cf. isCategoryAvailable), liste son propre contenu plutôt que de
   // charger un QCM directement — voir loadMesQcm ci-dessous.
-  var CATEGORY_ORDER = ['mesqcm', 'renforcement'];
-  var CATEGORY_LABELS = { mesqcm: 'Mes apprentissages', renforcement: 'Renforcement' };
+  var CATEGORY_ORDER = ['mesqcm', 'renforcement', 'comprendre'];
+  var CATEGORY_LABELS = { mesqcm: 'Mes apprentissages', renforcement: 'Renforcement', comprendre: 'Comprendre' };
   var QCM_SUBTITLE_BY_CATEGORY = {
     mesqcm: "Les connaissances que tu as choisi de mémoriser — chaque QCM réussi alimente « Ma mémoire ».",
-    renforcement: "Les questions de culture générale déjà répondues reviennent ici pour valider tes acquis durablement (4 bonnes réponses à intervalles croissants). Ne compte pas pour le score Gnosis."
+    renforcement: "Les questions de culture générale déjà répondues reviennent ici pour valider tes acquis durablement (4 bonnes réponses à intervalles croissants). Ne compte pas pour le score Gnosis.",
+    comprendre: "Relie tes connaissances entre elles : chaque question vérifie que tu comprends réellement le lien détecté entre deux notions. Ne compte pas pour le score Gnosis."
   };
   // Rubrique d'origine (sourceType, cf. server.js buildCultureGeneraleQuestionsForToday)
   // de chaque question de culture générale — mêmes icônes/libellés que la
@@ -1880,7 +1889,7 @@
   // seulement s'il y a au moins une repasse due aujourd'hui pour ce visiteur.
   function isCategoryAvailable(category) {
     if (category === 'mesqcm') return true;
-    return !!(slotsStatus.slots.renforcement && slotsStatus.slots.renforcement.available);
+    return !!(slotsStatus.slots[category] && slotsStatus.slots[category].available);
   }
 
   // Toujours les 3 boutons, même quand un créneau n'a pas
@@ -1925,7 +1934,7 @@
             loadMesQcm();
             return;
           }
-          loadSlot('renforcement', null, null);
+          loadSlot(category, null, null);
         });
       }
       categorySwitcher.appendChild(btn);
@@ -2074,6 +2083,9 @@
   // réutilise les icônes de rubrique (ACQUIS_SOURCE_TYPE_META) pour la
   // culture générale, un badge générique pour l'actu.
   function renderOriginBadge(question) {
+    if (question.origin === 'comprendre') {
+      return '<span class="qcm-origin-badge"><i class="fa-solid fa-link"></i>Comprendre</span>';
+    }
     if (question.origin === 'culture_generale') {
       var meta = ACQUIS_SOURCE_TYPE_META[question.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
       return '<span class="qcm-origin-badge"><i class="fa-solid ' + meta.icon + '"></i>' + escapeHtml(meta.label) + '</span>';
@@ -2088,6 +2100,7 @@
   // futures repasses en tient compte côté serveur (cf. server.js
   // fetchCultureGeneraleReviewInjectionForToday, filtré sur cette table).
   function renderExcludeButtonHtml() {
+    if (currentCategory === 'comprendre') return '';
     return '<button type="button" class="qcm-exclude-btn" id="qcm-exclude-btn" title="Ne plus jamais me reposer cette question">Ne plus me la demander</button>';
   }
   // Laisser réfléchir avant d'afficher les propositions (demande du
@@ -2710,7 +2723,9 @@
       ? 'Ce score d’entraînement ne compte pas — il ne modifie jamais ton ancrage ni tes vraies réponses du jour.'
       : (currentCategory === 'renforcement'
         ? 'Ces repasses ne comptent pas pour ton score Gnosis — elles font seulement progresser tes acquis vers leur validation définitive.'
-        : 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).');
+        : (currentCategory === 'comprendre'
+          ? 'Ce parcours ne compte pas pour ton score Gnosis ni pour l’ancrage — il vérifie uniquement ta compréhension des liens entre tes connaissances.'
+          : 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).'));
     body.innerHTML =
       '<div class="qcm-final-score">' +
       '<i class="fa-solid fa-trophy"></i>' +
@@ -3757,7 +3772,9 @@
     var myToken = ++loadToken;
     currentSlot = slotKey;
     currentQuizDate = quizDate || null;
-    currentCategory = slotKey === 'renforcement' ? 'renforcement' : 'mesqcm';
+    currentCategory = slotKey === 'renforcement'
+      ? 'renforcement'
+      : (slotKey === 'comprendre' ? 'comprendre' : 'mesqcm');
     currentIndex = 0;
     questions = [];
     answeredByQuestionId = {};
@@ -3784,7 +3801,9 @@
         if (!questions.length) {
           renderMessage(currentCategory === 'renforcement'
             ? 'Aucune repasse due aujourd’hui — reviens plus tard.'
-            : 'Ce QCM est introuvable.');
+            : (currentCategory === 'comprendre'
+              ? 'Aucun QCM de compréhension disponible pour le moment.'
+              : 'Ce QCM est introuvable.'));
           return;
         }
         // Croix du cadre visible dès qu'un vrai QCM démarre (demande du

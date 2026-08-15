@@ -12096,9 +12096,16 @@ const DAILY_QUIZ_NARRATIVE_MODEL = process.env.OPENAI_DAILY_QUIZ_NARRATIVE_MODEL
 // réutiliser toute l'infrastructure existante (grading, stats, idempotence).
 const DAILY_QUIZ_REINFORCEMENT_SLOT = "renforcement";
 const DAILY_QUIZ_REINFORCEMENT_LABEL = "Renforcement des connaissances";
+// Pseudo-slot « Comprendre » : QCM relationnel construit à partir des liens IA entre deux
+// connaissances déjà acquises. Comme Renforcement, il est personnel et composé à la demande,
+// mais ses banques de questions par paire sont persistées dans daily_quiz pour ne jamais payer
+// une nouvelle génération à chaque ouverture.
+const DAILY_QUIZ_COMPREHENSION_SLOT = "comprendre";
+const DAILY_QUIZ_COMPREHENSION_LABEL = "Comprendre les liens";
 
 function getDailyQuizSlotLabel(slot) {
   if (slot === DAILY_QUIZ_REINFORCEMENT_SLOT) return DAILY_QUIZ_REINFORCEMENT_LABEL;
+  if (slot === DAILY_QUIZ_COMPREHENSION_SLOT) return DAILY_QUIZ_COMPREHENSION_LABEL;
   return null;
 }
 // Score Gnosis (justesse au QCM) : les repasses de répétition espacée
@@ -12106,7 +12113,7 @@ function getDailyQuizSlotLabel(slot) {
 // test de connaissances fraîchement acquises sur l'actualité du jour —
 // exclues explicitement du calcul plus bas et via le message dédié côté
 // frontend (qcm-du-jour.html).
-const DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES = ["cgreview-"];
+const DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES = ["cgreview-", "comprendre:"];
 
 // Reconnaît une question de culture générale (fraîche "culture_generale-qN",
 // repasse "cgreview-..." ou QCM de notion "notion:...") — id toujours
@@ -12136,7 +12143,9 @@ const DAILY_QUIZ_ACQUIS_VALIDATION_STREAK = 4;
 const DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS = [3, 7, 30];
 
 function isValidDailyQuizSlot(slot) {
-  return slot === DAILY_QUIZ_REINFORCEMENT_SLOT || String(slot || "").startsWith("notion:");
+  return slot === DAILY_QUIZ_REINFORCEMENT_SLOT
+    || slot === DAILY_QUIZ_COMPREHENSION_SLOT
+    || String(slot || "").startsWith("notion:");
 }
 
 function parisDateKey(date = new Date()) {
@@ -14750,6 +14759,16 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey) {
     if (!key) return [];
     return fetchCultureGeneraleReviewInjectionForToday(key, quizDate);
   }
+  if (slot === DAILY_QUIZ_COMPREHENSION_SLOT) {
+    const key = String(voterKey || "").trim();
+    if (!key) return [];
+    const cacheKey = `comprendre:${quizDate}:${key}`;
+    const cached = _dailyQuizQuestionsCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) return cached.questions;
+    const questions = await fetchCultureGeneraleComprehensionQuestions(key, quizDate);
+    _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions });
+    return questions;
+  }
 
   const cacheKey = `${quizDate}:${slot}`;
   const cached = _dailyQuizQuestionsCache.get(cacheKey);
@@ -14804,13 +14823,20 @@ app.get("/api/daily-quiz/status", async (req, res) => {
     // DAILY_QUIZ_REINFORCEMENT_SLOT) : disponible seulement s'il existe au
     // moins une repasse due aujourd'hui pour ce visiteur précis.
     const voterKey = String(req.query.voterKey || "").trim();
-    const reinforcementQuestions = voterKey
-      ? await fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey)
-      : [];
+    const [reinforcementQuestions, comprehensionAvailable] = voterKey
+      ? await Promise.all([
+          fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey),
+          hasCultureGeneraleComprehensionLinks(voterKey)
+        ])
+      : [[], false];
     const slots = {
       [DAILY_QUIZ_REINFORCEMENT_SLOT]: {
         available: reinforcementQuestions.length > 0,
         label: DAILY_QUIZ_REINFORCEMENT_LABEL
+      },
+      [DAILY_QUIZ_COMPREHENSION_SLOT]: {
+        available: comprehensionAvailable,
+        label: DAILY_QUIZ_COMPREHENSION_LABEL
       }
     };
     res.json({ date: todayKey, slots, defaultSlot: null });
@@ -14829,7 +14855,9 @@ app.get("/api/daily-quiz/status", async (req, res) => {
 // question culture générale au sein de la session fusionnée.
 function stripQuestionForClient(q) {
   const type = q.type || "qcm";
-  const origin = isCultureGeneraleQuestionId(q.id) ? "culture_generale" : "actu";
+  const origin = String(q.id || "").startsWith("comprendre:")
+    ? "comprendre"
+    : (isCultureGeneraleQuestionId(q.id) ? "culture_generale" : "actu");
   const originFields = { origin, ...(q.sourceType ? { sourceType: q.sourceType } : {}) };
   if (type === "association") {
     const pairs = Array.isArray(q.pairs) ? q.pairs : [];
@@ -14862,7 +14890,9 @@ function stripQuestionForClient(q) {
 // `date` transmise est ignorée pour lui.
 function resolveDailyQuizRequestDate(slot, rawDate) {
   const requested = String(rawDate || "").trim();
-  if (slot === DAILY_QUIZ_REINFORCEMENT_SLOT || !/^\d{4}-\d{2}-\d{2}$/.test(requested)) return parisDateKey();
+  if (slot === DAILY_QUIZ_REINFORCEMENT_SLOT
+      || slot === DAILY_QUIZ_COMPREHENSION_SLOT
+      || !/^\d{4}-\d{2}-\d{2}$/.test(requested)) return parisDateKey();
   return requested;
 }
 
@@ -15718,7 +15748,11 @@ async function resolveOrCreateCultureGeneraleNotionLink(typeA, idA, nameA, typeB
     { type_a: type1, source_id_a: id1, name_a: name1, type_b: type2, source_id_b: id2, name_b: name2, label },
     { onConflict: "type_a,source_id_a,type_b,source_id_b", ignoreDuplicates: true }
   );
-  if (error) console.warn("[culture-generale notion-links] création échouée :", error.message);
+  if (error) {
+    console.warn("[culture-generale notion-links] création échouée :", error.message);
+    return null;
+  }
+  return { typeA: type1, idA: String(id1), nameA: name1, typeB: type2, idB: String(id2), nameB: name2, label };
 }
 
 // Corpus personnel réel : user_article_acquisitions n'est alimentée qu'après
@@ -15727,7 +15761,7 @@ async function resolveOrCreateCultureGeneraleNotionLink(typeA, idA, nameA, typeB
 async function fetchUserAcquiredCultureGeneraleNotions(userId) {
   const { data: acquisitionRows, error } = await supabase
     .from("user_article_acquisitions")
-    .select("eclairage_type, eclairage_source_id, eclairage_name")
+    .select("eclairage_type, eclairage_source_id, eclairage_name, eclairage_detail")
     .eq("user_id", userId)
     .not("eclairage_type", "is", null)
     .not("eclairage_source_id", "is", null)
@@ -15746,9 +15780,246 @@ async function fetchUserAcquiredCultureGeneraleNotions(userId) {
     const key = cultureGeneraleNotionKey(type, id);
     if (seen.has(key)) continue;
     seen.add(key);
-    notions.push({ type, id, name });
+    notions.push({ type, id, name, detail: String(row.eclairage_detail || "").trim() });
   }
   return notions;
+}
+
+// Liens dont LES DEUX extrémités appartiennent réellement à l'utilisateur. La table des liens
+// est globale (une même relation peut servir à plusieurs personnes) ; la jointure personnelle
+// se fait donc ici contre user_article_acquisitions, sur la clé exacte type + source_id.
+async function fetchOwnedCultureGeneraleNotionLinks(userId, acquiredNotions = null) {
+  const notions = acquiredNotions || await fetchUserAcquiredCultureGeneraleNotions(userId);
+  if (!notions.length) return [];
+  const notionByKey = new Map(notions.map((notion) => [cultureGeneraleNotionKey(notion.type, notion.id), notion]));
+  const sourceIds = [...new Set(notions.map((notion) => notion.id))];
+  const columns = "id,type_a,source_id_a,name_a,type_b,source_id_b,name_b,label,created_at";
+  const [fromA, fromB] = await Promise.all([
+    fetchAllSupabaseRowsIn(sourceIds, (idsChunk) =>
+      supabase.from("culture_generale_notion_links").select(columns)
+        .in("source_id_a", idsChunk).order("id", { ascending: true })
+    ),
+    fetchAllSupabaseRowsIn(sourceIds, (idsChunk) =>
+      supabase.from("culture_generale_notion_links").select(columns)
+        .in("source_id_b", idsChunk).order("id", { ascending: true })
+    )
+  ]);
+  const readError = fromA.error || fromB.error;
+  if (readError) {
+    console.warn("[culture-generale comprehension] lecture des liens échouée :", readError.message);
+    return [];
+  }
+  const seenIds = new Set();
+  const links = [];
+  for (const row of [...(fromA.data || []), ...(fromB.data || [])]) {
+    if (seenIds.has(row.id)) continue;
+    seenIds.add(row.id);
+    const notionA = notionByKey.get(cultureGeneraleNotionKey(row.type_a, row.source_id_a));
+    const notionB = notionByKey.get(cultureGeneraleNotionKey(row.type_b, row.source_id_b));
+    if (!notionA || !notionB) continue;
+    links.push({
+      id: row.id,
+      createdAt: row.created_at,
+      typeA: row.type_a,
+      idA: String(row.source_id_a),
+      nameA: row.name_a || notionA.name,
+      detailA: notionA.detail,
+      typeB: row.type_b,
+      idB: String(row.source_id_b),
+      nameB: row.name_b || notionB.name,
+      detailB: notionB.detail,
+      label: row.label
+    });
+  }
+  return links.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")) || Number(a.id) - Number(b.id));
+}
+
+function cultureGeneraleComprehensionPairHash(link) {
+  return crypto.createHash("sha1")
+    .update(`${cultureGeneraleNotionKey(link.typeA, link.idA)}|${cultureGeneraleNotionKey(link.typeB, link.idB)}`)
+    .digest("hex")
+    .slice(0, 20);
+}
+
+function cultureGeneraleComprehensionQuizSlot(link) {
+  return `notion:comprendre:${cultureGeneraleComprehensionPairHash(link)}`;
+}
+
+// Un quiz relationnel n'interroge jamais les deux fiches séparément : chaque question doit
+// obliger à comprendre le pont causal, conceptuel, chronologique ou illustratif entre elles.
+// La richesse factuelle détermine une cible de 2, 4 ou 6 questions, toujours dans la fourchette
+// demandée et sans gonfler artificiellement un lien simple.
+async function buildCultureGeneraleComprehensionQuiz(link) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+  const pairHash = cultureGeneraleComprehensionPairHash(link);
+  const detailA = String(link.detailA || "").slice(0, 2200);
+  const detailB = String(link.detailB || "").slice(0, 2200);
+  const richness = detailA.length + detailB.length;
+  const target = richness >= 2800 ? 6 : (richness >= 1200 ? 4 : 2);
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target, false, ["intrus", "ordre"]);
+  const prompt = [
+    "Tu es un pédagogue francophone. Crée un QCM qui vérifie qu'un utilisateur comprend réellement le LIEN entre deux connaissances déjà acquises — jamais deux mini-quiz indépendants.",
+    "",
+    `Connaissance A — ${link.nameA}`,
+    detailA || "Aucun détail supplémentaire disponible.",
+    "",
+    `Connaissance B — ${link.nameB}`,
+    detailB || "Aucun détail supplémentaire disponible.",
+    "",
+    `Relation détectée : ${link.label || "relation intellectuelle directe"}.`,
+    `Produis exactement ${target} questions. Chaque question doit mobiliser explicitement A ET B, ou demander la nature/la conséquence/le mécanisme du lien entre elles. Une question portant seulement sur A ou seulement sur B est interdite.`,
+    "Les mauvaises réponses doivent représenter des liens plausibles mais faux, afin de vérifier la compréhension du rapprochement et non la simple reconnaissance d'un mot.",
+    "L'explication de chaque réponse doit nommer clairement les deux connaissances et expliciter leur relation en une ou deux phrases.",
+    `Pour chaque question, sourceId doit valoir exactement "${pairHash}".`,
+    "",
+    ...formatBlock
+  ].join("\n");
+
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: prompt }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.35,
+      responseFormat: { type: "json_object" }
+    });
+    const parsed = JSON.parse(content);
+    const validated = validateNarrativeQuizQuestions(parsed?.questions, [pairHash], target, target);
+    if (validated.length < 2) {
+      console.warn(`[culture-generale comprehension:${pairHash}] seulement ${validated.length} question(s) valide(s).`);
+      return [];
+    }
+    return validated.slice(0, 6).map((question, index) => ({
+      id: `comprendre:${pairHash}-q${index + 1}`,
+      ...question,
+      sourceType: "comprendre",
+      sourceName: `${link.nameA} ↔ ${link.nameB}`,
+      comprehensionLabel: link.label || null,
+      comprehensionPair: {
+        typeA: link.typeA, sourceIdA: link.idA, nameA: link.nameA,
+        typeB: link.typeB, sourceIdB: link.idB, nameB: link.nameB
+      },
+      sourceDebateId: pairHash
+    }));
+  } catch (error) {
+    console.warn(`[culture-generale comprehension:${pairHash}] génération échouée :`, error.message);
+    return [];
+  }
+}
+
+// Banque partagée et persistante par paire. Deux utilisateurs ayant acquis le même lien
+// réutilisent le même contenu. La promesse en mémoire évite aussi deux appels IA identiques si
+// l'utilisateur ouvre « Comprendre » pendant que la génération lancée juste après sa bonne
+// réponse est encore en cours ; la contrainte daily_quiz reste le dernier filet inter-processus.
+const _cultureGeneraleComprehensionGenerationPromises = new Map();
+
+async function ensureCultureGeneraleComprehensionQuizPersisted(link, slot) {
+  const { data: existingRows, error: existingError } = await supabase
+    .from("daily_quiz")
+    .select("quiz_date,questions")
+    .eq("slot", slot)
+    .order("quiz_date", { ascending: false })
+    .limit(1);
+  if (existingError) {
+    console.warn("[culture-generale comprehension] lecture banque échouée :", existingError.message);
+    return [];
+  }
+  if (existingRows?.[0]?.questions?.length) return existingRows[0].questions;
+
+  const questions = await buildCultureGeneraleComprehensionQuiz(link);
+  if (questions.length < 2) return [];
+  const quizDate = parisDateKey();
+  const { error: insertError } = await supabase.from("daily_quiz").insert({
+    quiz_date: quizDate,
+    slot,
+    questions,
+    source_debate_ids: []
+  });
+  if (!insertError) return questions;
+  if (insertError.code !== "23505") {
+    console.warn("[culture-generale comprehension] écriture banque échouée :", insertError.message);
+    return [];
+  }
+  const { data: raceRow, error: raceError } = await supabase
+    .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+  if (raceError) {
+    console.warn("[culture-generale comprehension] relecture banque échouée :", raceError.message);
+    return [];
+  }
+  return raceRow?.questions || questions;
+}
+
+async function ensureCultureGeneraleComprehensionQuiz(link) {
+  const slot = cultureGeneraleComprehensionQuizSlot(link);
+  const pending = _cultureGeneraleComprehensionGenerationPromises.get(slot);
+  if (pending) return pending;
+  const generation = ensureCultureGeneraleComprehensionQuizPersisted(link, slot);
+  _cultureGeneraleComprehensionGenerationPromises.set(slot, generation);
+  try {
+    return await generation;
+  } finally {
+    if (_cultureGeneraleComprehensionGenerationPromises.get(slot) === generation) {
+      _cultureGeneraleComprehensionGenerationPromises.delete(slot);
+    }
+  }
+}
+
+async function resolveLegacyUserForComprehension(legacyKey) {
+  const validation = validateLegacyKey(legacyKey);
+  if (validation.error) return null;
+  const { data: user, error } = await supabase
+    .from("users").select("id").eq("legacy_key", validation.legacyKey).maybeSingle();
+  if (error) throw new Error(error.message);
+  return user;
+}
+
+async function hasCultureGeneraleComprehensionLinks(legacyKey) {
+  const user = await resolveLegacyUserForComprehension(legacyKey);
+  if (!user) return false;
+  const notions = await fetchUserAcquiredCultureGeneraleNotions(user.id);
+  const links = await fetchOwnedCultureGeneraleNotionLinks(user.id, notions);
+  return links.length > 0;
+}
+
+// Parcours « Comprendre » : au plus six questions par session, en tournant chaque jour entre
+// les liens disponibles. Le tri haché est stable pendant toute la journée (reprise/réponse
+// toujours sur le même lot), mais varie le lendemain pour ne pas privilégier éternellement les
+// premières relations d'un utilisateur très fourni.
+async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
+  const user = await resolveLegacyUserForComprehension(legacyKey);
+  if (!user) return [];
+  const notions = await fetchUserAcquiredCultureGeneraleNotions(user.id);
+  const links = await fetchOwnedCultureGeneraleNotionLinks(user.id, notions);
+  if (!links.length) return [];
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(quizDate || "")) ? String(quizDate) : parisDateKey();
+  const selectedLinks = links
+    .map((link) => ({
+      link,
+      rank: crypto.createHash("sha1").update(`${dateKey}:${link.id}`).digest("hex")
+    }))
+    .sort((a, b) => a.rank.localeCompare(b.rank))
+    .slice(0, 6)
+    .map((entry) => entry.link);
+  // Trois relations valides suffisent déjà à fournir six questions (minimum deux chacune).
+  // Procède donc par petits lots : un utilisateur possédant beaucoup d'anciens liens ne
+  // déclenche jamais six générations IA simultanées lors de sa toute première ouverture.
+  const banks = [];
+  for (let start = 0; start < selectedLinks.length && banks.reduce((sum, bank) => sum + bank.length, 0) < 6; start += 3) {
+    const batch = await Promise.all(selectedLinks.slice(start, start + 3).map(ensureCultureGeneraleComprehensionQuiz));
+    banks.push(...batch.filter((questions) => questions.length >= 2));
+  }
+  const session = [];
+  for (let questionIndex = 0; session.length < 6; questionIndex += 1) {
+    let added = false;
+    for (const bank of banks) {
+      if (bank[questionIndex]) {
+        session.push(bank[questionIndex]);
+        added = true;
+        if (session.length >= 6) break;
+      }
+    }
+    if (!added) break;
+  }
+  return session;
 }
 
 // Recherche jusqu'à trois liens pédagogiquement très pertinents entre la
@@ -15794,8 +16065,8 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
       validLinks.push({ match, label });
       if (validLinks.length >= 3) break;
     }
-    await Promise.all(validLinks.map(({ match, label }) =>
-      resolveOrCreateCultureGeneraleNotionLink(
+    await Promise.all(validLinks.map(async ({ match, label }) => {
+      const savedLink = await resolveOrCreateCultureGeneraleNotionLink(
         sourceType,
         String(sourceId),
         String(sourceName || "").slice(0, 300),
@@ -15803,8 +16074,18 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
         match.id,
         match.name,
         label
-      )
-    ));
+      );
+      if (!savedLink) return;
+      const detailByKey = new Map([
+        [selfKey, flattenCultureGeneraleDetail(sourceDetail).slice(0, 2200)],
+        [cultureGeneraleNotionKey(match.type, match.id), match.detail]
+      ]);
+      await ensureCultureGeneraleComprehensionQuiz({
+        ...savedLink,
+        detailA: detailByKey.get(cultureGeneraleNotionKey(savedLink.typeA, savedLink.idA)) || "",
+        detailB: detailByKey.get(cultureGeneraleNotionKey(savedLink.typeB, savedLink.idB)) || ""
+      });
+    }));
   } catch (e) {
     console.warn("[culture-generale notion-links] classification IA ignorée :", e.message);
   }
