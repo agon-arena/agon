@@ -26139,15 +26139,6 @@ body.page-home:not(.agon-memoire-cloud-mode)
   outline: none;
   border-color: rgba(232, 246, 251, 0.8);
 }
-/* La page autonome possède un indice « suite » superposé au bas du cadre. Remonte uniquement
-   son radar pour qu'il reste entièrement visible ; l'embed accueil conserve les 12px demandés. */
-#agon-universe-cloud .universe-minimap {
-  bottom: 52px;
-}
-.page-home .universe-minimap,
-.page-home-mobile .universe-minimap {
-  bottom: 32px;
-}
 @media (max-width: 640px) {
   .universe-minimap {
     right: 8px;
@@ -26162,13 +26153,6 @@ body.page-home:not(.agon-memoire-cloud-mode)
     width: 20px;
     height: 20px;
     font-size: 13px;
-  }
-  #agon-universe-cloud .universe-minimap {
-    bottom: 52px;
-  }
-  .page-home .universe-minimap,
-  .page-home-mobile .universe-minimap {
-    bottom: 28px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
