@@ -19300,6 +19300,10 @@ let _agonBubbleTensionDebates = [];
 let _agonCloudOriginalCaptionHtml = null;
 let _agonCloudSwitchLoading = false;
 let _agonCloudSwitchToken = 0;
+// Dernier nuage communautaire réellement reçu de l'API. Si un rafraîchissement
+// ponctuel expire, on conserve ses tags plutôt que de reconstruire des bulles
+// à partir des titres d'arènes.
+let _agonBubbleTrendsClientCache = [];
 // Jeton partagé avec mon-univers.js (module séparé, pas d'accès aux variables ci-dessus) : posé
 // sur window pour que loadUniverse() (fetch asynchrone) puisse détecter qu'un autre mode a
 // déjà pris le relais entre-temps sur le même conteneur partagé #agon-tag-trends-cloud, et
@@ -19438,25 +19442,46 @@ function afterAgonCloudSpinnerPaint(callback) {
 // Top 10 des arènes communautaires les plus actives : calculé côté serveur
 // (GET /api/agon-bubbles) directement en base, pour ne plus avoir à charger
 // toutes les arènes dans le navigateur juste pour ce classement. Garde-fou de
-// 5s : fetchJSON n'a pas de timeout propre, donc si la requête reste bloquée,
+// 10s : fetchJSON n'a pas de timeout propre, donc si la requête reste bloquée,
 // on n'attend jamais indéfiniment (sans quoi le sablier de la bascule Bulles
 // Actu/Agôn tournerait à l'infini).
+const AGON_COMMUNITY_GENERIC_TAGS = new Set([
+  "actualite", "actualites", "politique", "international", "societe", "economie",
+  "education", "justice", "culture", "medias", "sport", "sports", "sante",
+  "climat", "environnement", "france", "monde", "europe", "debat", "debats",
+  "information", "infos"
+]);
+
+function getFallbackAgonBubbleTag(debate) {
+  const cloudLabel = String(debate?.cloud_label || "").trim();
+  if (cloudLabel) return cloudLabel;
+  const keywords = Array.isArray(debate?.keywords) ? debate.keywords : [];
+  for (const keyword of keywords) {
+    const cleaned = String(keyword || "").replace(/#/g, "").replace(/\s+/g, " ").trim();
+    const normalized = cleaned.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    if (normalized.length >= 3 && !AGON_COMMUNITY_GENERIC_TAGS.has(normalized)) return cleaned;
+  }
+  return "";
+}
+
 function buildFallbackAgonBubbleTrends() {
   const communityDebates = (Array.isArray(debatesCache) ? debatesCache : [])
     .filter((debate) => !isAgonGeneratedDebate(debate))
     .map((debate) => ({
       debate,
+      tag: getFallbackAgonBubbleTag(debate),
       score: Math.max(0,
         Number(debate?.tension_score) ||
         (Number(debate?.argument_count) || 0) + (Number(debate?.comment_count) || 0) * 0.5
       )
     }))
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score > 0 && item.tag)
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
   const maxScore = communityDebates.reduce((max, item) => Math.max(max, item.score), 0);
-  return communityDebates.map(({ debate, score }) => ({
-    tag: String(debate?.question || debate?.title || "Arène de la communauté").trim(),
+  return communityDebates.map(({ debate, tag, score }) => ({
+    tag,
     subjectId: String(debate?.id || "").trim(),
     count: score,
     sizeWeight: maxScore > 0 ? score / maxScore : 0,
@@ -19468,12 +19493,20 @@ async function fetchAgonBubbleTrends() {
   try {
     const result = await Promise.race([
       fetchJSON(API + "/agon-bubbles"),
-      new Promise((resolve) => setTimeout(() => resolve(null), 5000))
+      // Le premier calcul serveur à froid prend parfois un peu plus de 5 s.
+      // Lui laisser 10 s évite un repli inutile tout en gardant une borne.
+      new Promise((resolve) => setTimeout(() => resolve(null), 10000))
     ]);
     const remoteTrends = Array.isArray(result?.bubbles) ? result.bubbles : [];
-    return remoteTrends.length ? remoteTrends : buildFallbackAgonBubbleTrends();
+    if (remoteTrends.length) {
+      _agonBubbleTrendsClientCache = remoteTrends;
+      return remoteTrends;
+    }
+    if (_agonBubbleTrendsClientCache.length) return _agonBubbleTrendsClientCache;
+    return buildFallbackAgonBubbleTrends();
   } catch (error) {
     console.warn('Chargement des Bulles Agôn interrompu :', error);
+    if (_agonBubbleTrendsClientCache.length) return _agonBubbleTrendsClientCache;
     return buildFallbackAgonBubbleTrends();
   }
 }

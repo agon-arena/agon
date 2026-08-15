@@ -10487,34 +10487,12 @@ app.post("/api/admin/veille/check-similar", requireAdmin, rateLimit("veille-simi
   }
 });
 
-// Thématiques trop générales écartées du fallback keyword (même esprit que le
-// nuage actualité, cf. AGON_CLOUD_GENERIC_KEYWORDS côté client).
-const AGON_CLOUD_GENERIC_KEYWORDS = new Set([
-  "actualite", "actualites", "politique", "international", "societe", "economie",
-  "education", "justice", "culture", "medias", "sport", "sports", "sante",
-  "climat", "environnement", "france", "monde", "europe", "debat", "debats",
-  "information", "infos"
-]);
-
-// Libellé de bulle en cascade : cloud_label → premier keyword non générique → question tronquée.
+// Libellé de bulle en cascade : cloud_label → premier keyword non générique.
+// Une question d'arène n'est jamais un tag : si aucun libellé associé n'est
+// disponible, l'arène est omise du nuage plutôt que d'afficher furtivement
+// son titre complet dans une bulle Communauté.
 function getAgonBubbleLabel(debate) {
-  const cloudLabel = String(debate?.cloud_label || "").trim();
-  if (cloudLabel) return cloudLabel;
-
-  const keywords = Array.isArray(debate?.keywords) ? debate.keywords : [];
-  for (const keyword of keywords) {
-    const cleaned = String(keyword || "").replace(/#/g, "").replace(/\s+/g, " ").trim();
-    const norm = cleaned.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-    if (norm.length >= 3 && !AGON_CLOUD_GENERIC_KEYWORDS.has(norm)) return cleaned;
-  }
-
-  const question = String(debate?.question || "").replace(/\s*\?\s*$/, "").trim();
-  if (!question) return "";
-  if (question.length <= 35) return question;
-  const cut = question.slice(0, 32);
-  const lastSpace = cut.lastIndexOf(" ");
-  return (lastSpace >= 12 ? cut.slice(0, lastSpace) : cut).trim() + "…";
+  return getCloudLabelFromDebate(debate);
 }
 
 let agonBubbleTrendsCache = null;
@@ -10715,8 +10693,8 @@ async function getAgonBubbleTrends() {
   // ~5,4s à froid (4 lectures Supabase en partie séquentielles) — plus long
   // que le timeout de 5s côté client (fetchAgonBubbleTrends, public/script.js),
   // qui abandonnait alors et retombait sur buildFallbackAgonBubbleTrends
-  // (titre du débat affiché à la place du tag dans les bulles Communauté,
-  // signalé le 13/08/2026). Dès qu'une valeur existe (même expirée), on la
+  // (ce repli n'utilise désormais lui aussi que cloud_label/keywords, jamais
+  // le titre du débat). Dès qu'une valeur existe (même expirée), on la
   // sert immédiatement pendant que le recalcul tourne en arrière-plan — seul
   // le tout premier appel depuis le démarrage du serveur attend le calcul
   // complet.
