@@ -26871,15 +26871,15 @@ body.universe-star-panel-open {
   }
 }
 
-/* Apprentissages et Ouvrir : même bouton marche/arrêt que l'index, uniquement
-   dans l'application installée. Placé directement dans le bandeau pour rester
-   visible sur ces deux pages qui masquent volontairement les autres actions de
-   .topbar-inner autour du logo. */
+/* Apprentissages, Ouvrir et Notifications : même bouton marche/arrêt que
+   l'index, uniquement dans l'application installée. Placé directement dans le
+   bandeau pour rester visible sur les pages qui masquent ou déplacent les
+   autres actions de .topbar-inner autour du logo. */
 .topbar--mnoria-uniform > .standalone-header-power {
   display: none;
 }
 
-body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile)
+body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
   .topbar--mnoria-uniform > .standalone-header-power {
   display: inline-flex !important;
   position: absolute !important;
@@ -26893,9 +26893,18 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile)
   transform: translateY(-50%) !important;
 }
 
-body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile)
+body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
   .topbar--mnoria-uniform > .standalone-header-power:hover,
-body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile)
+body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
   .topbar--mnoria-uniform > .standalone-header-power:focus-visible {
   transform: translateY(-50%) !important;
+}
+
+/* Sur Notifications desktop, l'ancien bouton retour partage le côté droit du
+   bandeau. En standalone on lui réserve une case distincte à gauche du bouton
+   d'allumage pour qu'aucun des deux ne se superpose. */
+@media (min-width: 769px) {
+  body.is-standalone:is(.page-notifications, .page-notifications-mobile) .topbar-actions {
+    right: 64px !important;
+  }
 }

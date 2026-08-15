@@ -85,7 +85,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260815-uniform-mnoria-header-v34" />
+<link rel="stylesheet" href="/style.min.css?v=20260815-notifications-header-v36" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -103,6 +103,19 @@
     .page-notifications .home-brand-block,
     .page-notifications-mobile .home-brand-block {
       flex: 0 0 auto;
+      margin-left: 0;
+    }
+    .page-notifications .home-brand-main,
+    .page-notifications-mobile .home-brand-main {
+      flex: 0 0 auto;
+    }
+    .page-notifications #admin-login-btn,
+    .page-notifications-mobile #admin-login-btn {
+      display: none !important;
+    }
+    .page-notifications .topbar-message,
+    .page-notifications-mobile .topbar-message {
+      display: none !important;
     }
     .page-notifications .topbar-actions,
     .page-notifications-mobile .topbar-actions {
@@ -214,12 +227,10 @@
         <i class="fa-solid fa-gear"></i>
       </button>
 
-      <img src="/mnoria-logo-dark.png?v=20260815-visible-v2" alt="Logo mnoria" class="home-logo home-logo--mnoria" width="2172" height="724">
+      <div class="home-brand-main">
+        <img src="/mnoria-logo-dark.png?v=20260815-visible-v2" alt="Logo mnoria" class="home-logo home-logo--mnoria" width="2172" height="724">
+      </div>
 
-      <p class="topbar-message">
-         <strong>La vraie gloire<br> est convaincre.
-  <strong>
-      </p>
     </div>
 
     <div class="topbar-actions">
@@ -278,6 +289,16 @@
     </div>
 
   </div>
+
+  <button
+    type="button"
+    class="home-topbar-login-icon standalone-header-power"
+    aria-label="Se connecter"
+    title="Se connecter"
+    onclick="showAccountsComingSoonMessage()"
+  >
+    <i class="fa-solid fa-power-off" aria-hidden="true"></i>
+  </button>
 </header>
 
 <main class="container home-page">
