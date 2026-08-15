@@ -25807,6 +25807,11 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   /* -20px (pas -14px) et opacités relevées (0.55/0.25 → 0.85/0.55/0.2) : demande du 08/08/2026
      "plus prononcé et foncé". */
   inset: -20px;
+  /* Neutralise width:52%/height:36% du reflet générique .agon-tag-bubble::before. Sans cette
+     remise à auto, le halo restait un petit voile ovale décalé vers le haut-gauche au lieu
+     d'épouser le centre de l'étoile. */
+  width: auto;
+  height: auto;
   border-radius: 50%;
   background: radial-gradient(circle closest-side, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.2) 75%, transparent 100%);
   z-index: -1;
