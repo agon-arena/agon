@@ -8,7 +8,7 @@
 // quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-mnoria-synced-scale";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-mnoria-synced-sharp-v2";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -742,7 +742,6 @@ function childrenCanShow(node, scale) {
 
 function onCameraChange(state) {
   document.documentElement.style.setProperty("--universe-cam-scale", String(state.scale));
-  document.documentElement.style.setProperty("--universe-inverse-cam-scale", String(1 / state.scale));
 
   const vw = viewportEl.clientWidth;
   const vh = viewportEl.clientHeight;

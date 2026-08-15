@@ -25789,9 +25789,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
      ici : l'étoile est un cercle parfait, pas une ellipse aplatie, donc pas de déformation du
      trou central comme rencontré ailleurs). */
   border: none;
-  box-shadow:
-    0 10px 28px rgba(0,0,0,0.38),
-    inset 0 1px 3px rgba(255,255,255,0.4);
+  box-shadow: inset 0 1px 3px rgba(255,255,255,0.4);
 }
 /* Halo lumineux noir autour de l'anneau (demande du 08/08/2026) : réutilise ::before, jusqu'ici
    désactivé (l'ancien reflet hérité de .agon-tag-bubble, retiré — cf. historique ci-dessous),
@@ -25802,21 +25800,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
    d'abord réduit à 35% d'opacité, encore trop visible. Même traitement que
    .agon-tag-bubble-galaxy::before pour la désactivation d'origine. */
 .agon-tag-bubble-star::before {
-  content: "";
-  position: absolute;
-  /* Halo de 12px VISUELS quelle que soit l'échelle du monde : la valeur inverse est actualisée
-     par onCameraChange. Un inset fixe dans le monde était lui aussi agrandi par la caméra et
-     finissait en immense voile gris autour des petites étoiles. */
-  inset: calc(-12px * var(--universe-inverse-cam-scale, 1));
-  /* Neutralise width:52%/height:36% du reflet générique .agon-tag-bubble::before. Sans cette
-     remise à auto, le halo restait un petit voile ovale décalé vers le haut-gauche au lieu
-     d'épouser le centre de l'étoile. */
-  width: auto;
-  height: auto;
-  border-radius: 50%;
-  background: radial-gradient(circle closest-side, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.2) 75%, transparent 100%);
-  z-index: -1;
-  pointer-events: none;
+  display: none;
 }
 /* Anneau en dégradé (conic-gradient, plusieurs teintes de noir/gris) à la place de l'ancien
    contour uni — demande du 07/08/2026. Épaisseur (padding) 7px : même largeur que le contour
@@ -25826,6 +25810,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
    content-box, cf. padding qui donne l'épaisseur) — fiable ici car cercle parfait (pas d'ellipse
    aplatie comme sur les autres tentatives de ce type). */
 .agon-tag-bubble-star::after {
+  display: none;
   content: "";
   position: absolute;
   inset: 0;

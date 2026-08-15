@@ -241,6 +241,18 @@ function createUniverseCamera({
   let state = { x: 0, y: 0, scale: minScale };
   let raf = null;
 
+  // La texture ne change d'échelle que lorsque la scène zoome, mais son grossissement physique
+  // reste très faible : à +15 % maximum, le PNG 4K conserve sa finesse même lorsque les objets
+  // interactifs atteignent ×8 ou davantage. La progression logarithmique évite un saut visuel.
+  const BACKGROUND_MAX_VISUAL_SCALE = 1.15;
+
+  function getBackgroundVisualScale(sceneScale) {
+    const scaleRange = Math.max(1, maxScale / minScale);
+    if (scaleRange === 1) return 1;
+    const progress = Math.log(Math.max(minScale, sceneScale) / minScale) / Math.log(scaleRange);
+    return 1 + Math.min(1, Math.max(0, progress)) * (BACKGROUND_MAX_VISUAL_SCALE - 1);
+  }
+
   function setBackgroundTileSize(width, height) {
     if (Number.isFinite(width) && width > 0) backgroundTileWidth = width;
     if (Number.isFinite(height) && height > 0) backgroundTileHeight = height;
@@ -252,12 +264,11 @@ function createUniverseCamera({
     const tx = vw / 2 - state.x * state.scale;
     const ty = vh / 2 - state.y * state.scale;
     worldEl.style.transform = `translate(${tx}px, ${ty}px) scale(${state.scale})`;
-    // Le fond et les éléments appartiennent maintenant au même plan visuel : la texture ne
-    // s'étend que lorsque galaxies, systèmes et étoiles s'étendent, avec exactement le même
-    // facteur de caméra. Le motif PNG 4K original reste intact et background-repeat assure la
+    // Le fond réagit uniquement au zoom de la scène, mais son facteur visuel est plafonné pour
+    // ne plus agrandir les pixels du PNG jusqu'à ×8/×35. background-repeat assure toujours la
     // continuité dans les quatre directions sans créer de grille d'images dans le DOM.
     if (backgroundEl) {
-      const backgroundScale = state.scale;
+      const backgroundScale = getBackgroundVisualScale(state.scale);
       const tileW = backgroundTileWidth * backgroundScale;
       const tileH = backgroundTileHeight * backgroundScale;
       const positionX = vw / 2 - state.x * backgroundScale - tileW / 2;
