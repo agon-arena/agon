@@ -365,12 +365,15 @@ function createUniverseCamera({
     e.preventDefault();
   });
 
-  // ---- Pointer Events : un doigt/clic-glisser = panoramique, deux doigts = pincement ----------
-  // Le déplacement à un doigt / clic-glisser fonctionne aussi à minScale. Le pincement à deux
-  // doigts reste un zoom sur place à tout niveau (jamais de panoramique via son point médian,
-  // cf. zoomInPlace).
+  // ---- Pointer Events : geste vertical = page, geste dirigé = mémoire ------------------------
+  // À un doigt, une intention verticale est laissée au scroll natif de la page ; une intention
+  // horizontale/diagonale déplace la scène. À la souris, le glisser conserve le panoramique
+  // direct. Deux doigts déplacent le point médian dans la mémoire et conservent le pincement de
+  // zoom : c'est le geste volontaire requis pour explorer verticalement la scène elle-même.
   const activePointers = new Map();
   let dragLastPoint = null;
+  let dragStartPoint = null;
+  let singlePointerIntent = null;
   let pinchStartDist = null;
   let pinchLastMidpoint = null;
 
@@ -385,7 +388,12 @@ function createUniverseCamera({
 
   viewportEl.addEventListener("pointerdown", (e) => {
     if (e.target.closest("button, a")) return;
-    viewportEl.setPointerCapture(e.pointerId);
+    // Les écrans tactiles possèdent déjà une capture implicite. Ne pas forcer
+    // setPointerCapture dans ce cas laisse surtout WebKit prendre en charge le
+    // pan-y natif de la page (avec son inertie), sans relais JS saccadé.
+    if (e.pointerType !== "touch" && e.pointerType !== "pen") {
+      viewportEl.setPointerCapture(e.pointerId);
+    }
     activePointers.set(e.pointerId, {
       x: e.clientX,
       y: e.clientY,
@@ -393,8 +401,12 @@ function createUniverseCamera({
     });
     if (activePointers.size === 1) {
       dragLastPoint = { x: e.clientX, y: e.clientY };
+      dragStartPoint = { x: e.clientX, y: e.clientY };
+      singlePointerIntent = (e.pointerType === "touch" || e.pointerType === "pen") ? null : "memory-pan";
     } else if (activePointers.size === 2) {
       dragLastPoint = null;
+      dragStartPoint = null;
+      singlePointerIntent = null;
       pinchStartDist = distance();
       pinchLastMidpoint = midpoint();
     }
@@ -413,15 +425,25 @@ function createUniverseCamera({
       const dx = e.clientX - dragLastPoint.x;
       const dy = e.clientY - dragLastPoint.y;
       const isTouchLike = previousPointer.pointerType === "touch" || previousPointer.pointerType === "pen";
-      const isVerticalPageGesture = isTouchLike && Math.abs(dy) > Math.abs(dx) * 1.15;
-      if (isVerticalPageGesture) {
-        // touch-action:none garde la possibilité d'un vrai panoramique vertical à deux doigts.
-        // Le scroll à un doigt est donc relayé explicitement vers la page, avec le même sens
-        // qu'un geste natif (doigt vers le haut = page vers le bas).
-        window.scrollBy(0, -dy);
-      } else {
-        setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+      if (isTouchLike && !singlePointerIntent && dragStartPoint) {
+        const totalDx = e.clientX - dragStartPoint.x;
+        const totalDy = e.clientY - dragStartPoint.y;
+        // Attend quelques pixels avant de verrouiller le geste : les petites
+        // oscillations du doigt ne déplacent ni la page ni la mémoire.
+        if (Math.hypot(totalDx, totalDy) < 8) return;
+        singlePointerIntent = Math.abs(totalDy) > Math.abs(totalDx) * 1.15
+          ? "page-scroll"
+          : "memory-pan";
       }
+      if (singlePointerIntent === "page-scroll") {
+        // Aucun preventDefault, aucun scrollBy : `touch-action: pan-y` confie
+        // intégralement le geste au navigateur, donc déplacement continu et
+        // inertie native même en standalone iOS.
+        dragLastPoint = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      if (e.cancelable) e.preventDefault();
+      setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
       dragLastPoint = { x: e.clientX, y: e.clientY };
     } else if (activePointers.size === 2) {
       // Deux doigts constituent le geste « prononcé » pour déplacer verticalement la mémoire.
@@ -447,10 +469,14 @@ function createUniverseCamera({
     if (activePointers.size === 1) {
       const [pt] = activePointers.values();
       dragLastPoint = { x: pt.x, y: pt.y };
+      dragStartPoint = { x: pt.x, y: pt.y };
+      singlePointerIntent = null;
       pinchStartDist = null;
       pinchLastMidpoint = null;
     } else if (activePointers.size === 0) {
       dragLastPoint = null;
+      dragStartPoint = null;
+      singlePointerIntent = null;
       pinchStartDist = null;
       pinchLastMidpoint = null;
     }

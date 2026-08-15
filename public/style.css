@@ -25953,14 +25953,15 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
    scène pendant le pan/zoom. .universe-zoom-world : la scène entière (galaxies, systèmes,
    étoiles, décorations), positionnée une seule fois en coordonnées "monde" puis déplacée/
    zoomée dans son ensemble via transform (jamais recalculée à la navigation, cf.
-   createUniverseCamera) — touch-action:none laisse le pincement/glisser custom (Pointer Events)
-   gérer le geste sans que le navigateur tente en plus son propre scroll/pan dessus. */
+   createUniverseCamera). Le pan vertical à un doigt reste natif (`pan-y`) : iOS conserve ainsi
+   un scroll de page parfaitement fluide et son inertie, même quand le doigt démarre sur le
+   cadre. Les gestes horizontaux et à deux doigts restent traités par la caméra. */
 .universe-zoom-viewport {
   position: absolute;
   inset: var(--bubble-frame-top) 30px 23px;
   overflow: hidden;
   border-radius: var(--bubble-frame-radius);
-  touch-action: none;
+  touch-action: pan-y;
 }
 /* Sécurité d'isolation pour l'accueil : cette scène appartient exclusivement à « Ma mémoire ».
    Le changement de mode la retire aussi immédiatement en JS, mais cette garde empêche un calque
