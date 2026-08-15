@@ -26870,3 +26870,32 @@ body.universe-star-panel-open {
     padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
   }
 }
+
+/* Apprentissages et Ouvrir : même bouton marche/arrêt que l'index, uniquement
+   dans l'application installée. Placé directement dans le bandeau pour rester
+   visible sur ces deux pages qui masquent volontairement les autres actions de
+   .topbar-inner autour du logo. */
+.topbar--mnoria-uniform > .standalone-header-power {
+  display: none;
+}
+
+body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile)
+  .topbar--mnoria-uniform > .standalone-header-power {
+  display: inline-flex !important;
+  position: absolute !important;
+  top: 50% !important;
+  right: 12px !important;
+  left: auto !important;
+  z-index: 10005 !important;
+  width: 38px !important;
+  height: 38px !important;
+  margin: 0 !important;
+  transform: translateY(-50%) !important;
+}
+
+body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile)
+  .topbar--mnoria-uniform > .standalone-header-power:hover,
+body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile)
+  .topbar--mnoria-uniform > .standalone-header-power:focus-visible {
+  transform: translateY(-50%) !important;
+}

@@ -1,4 +1,4 @@
-const SW_VERSION = "20260815-all-header-scores-v177";
+const SW_VERSION = "20260815-standalone-header-power-v178";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
