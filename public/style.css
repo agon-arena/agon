@@ -20128,8 +20128,12 @@ body.page-home #debates-list .theme-row-section:first-child {
   inset: var(--bubble-frame-top) 30px 23px;
   background: none;
   border: 6px solid #000;
+  box-sizing: border-box;
   border-radius: 18px;
-  z-index: -1;
+  /* Le cadre doit rester AU-DESSUS du contenu peint après le chargement. Lorsqu'il partageait
+     la couche de fond en z-index négatif, il apparaissait au début puis était recouvert par les
+     bulles/canvas. */
+  z-index: 200;
   pointer-events: none;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
   visibility: visible;
@@ -20143,8 +20147,15 @@ body.page-home #debates-list .theme-row-section:first-child {
    mobile et horizontalement en desktop, sans variante séparée par breakpoint.
    Assombrissement léger pour que les bulles (claires, bordure sombre) restent
    lisibles par-dessus. */
-.page-home .agon-tag-trends-cloud::before,
-.page-home-mobile .agon-tag-trends-cloud::before {
+.page-home .agon-tag-trends-cloud::after,
+.page-home-mobile .agon-tag-trends-cloud::after {
+  content: '';
+  position: absolute;
+  inset: var(--bubble-frame-top) 30px 23px;
+  border-radius: 18px;
+  overflow: hidden;
+  z-index: -2;
+  pointer-events: none;
   background: linear-gradient(180deg, rgba(8, 12, 16, 0.35), rgba(8, 12, 16, 0.55)), url("/agon-bulles-bg.jpg?v=2") center/cover no-repeat;
 }
 
@@ -20152,8 +20163,8 @@ body.page-home #debates-list .theme-row-section:first-child {
    dans script.js) : image dédiée différente de celle du mode Bulles Actu ci-dessus. Pas de
    voile sombre superposé ici (contrairement au fond globe au-dessus) : cette image est déjà
    quasi noire, un voile en plus la rendait invisible / indiscernable du cadre vide d'avant. */
-.page-home .agon-tag-trends-cloud.agon-cloud-mode-agon::before,
-.page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon::before {
+.page-home .agon-tag-trends-cloud.agon-cloud-mode-agon::after,
+.page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon::after {
   background: url("/agon-bulles-community-bg.jpg?v=2") center/cover no-repeat;
 }
 
@@ -20171,7 +20182,9 @@ body.page-home #debates-list .theme-row-section:first-child {
     text-align: center !important;
   }
 
-  .agon-tag-trends-cloud::before {
+  .agon-tag-trends-cloud::before,
+  .page-home .agon-tag-trends-cloud::after,
+  .page-home-mobile .agon-tag-trends-cloud::after {
     inset: var(--bubble-frame-top) 30px 78px;
   }
 }
@@ -20327,7 +20340,8 @@ body.agon-mobile-cloud-viewport .agon-tag-trends-cloud {
   }
 }
 
-body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::before {
+body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::before,
+body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::after {
   inset: var(--bubble-frame-top) 30px 78px;
 }
 
