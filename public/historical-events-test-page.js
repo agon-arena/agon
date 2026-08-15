@@ -73,6 +73,31 @@
     }
   }
 
+  // Même état local partagé que public/script.js, recopié ici parce que cette page historique
+  // isolée ne charge volontairement pas script.min.js. /apprentissage peut ainsi afficher le
+  // nom et le sablier même si ce document est remplacé pendant le fetch.
+  var PENDING_NOTION_QUIZZES_KEY = "agon_pending_notion_quizzes_v1";
+  function readPendingNotionQuizGenerations() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(PENDING_NOTION_QUIZZES_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  }
+  function startPendingNotionQuizGeneration(slot, label) {
+    try {
+      var rows = readPendingNotionQuizGenerations().filter(function (row) { return row && row.slot !== slot; });
+      rows.push({ slot: slot, label: String(label || "").slice(0, 160), quizDate: null, startedAt: Date.now() });
+      localStorage.setItem(PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
+    } catch (e) {}
+  }
+  function finishPendingNotionQuizGeneration(slot) {
+    try {
+      var rows = readPendingNotionQuizGenerations().filter(function (row) { return row && row.slot !== slot; });
+      if (rows.length) localStorage.setItem(PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
+      else localStorage.removeItem(PENDING_NOTION_QUIZZES_KEY);
+    } catch (e) {}
+  }
+
   // Clic sur "Mémoriser" (cf. server.js POST /api/users/notion-quizzes) :
   // crée un QCM indépendant et nommé sur cet événement précis (ou rejoint
   // celui déjà généré par un autre visiteur), qui apparaît dans "Mes QCM" sur
@@ -121,7 +146,7 @@
     modal.className = "het-memorize-explainer-modal";
     var text = document.createElement("p");
     text.className = "het-memorize-explainer-text";
-    text.appendChild(document.createTextNode("« " + notionName + " » a été ajouté à ta mémorisation. Tu pourras commencer à réviser en cliquant sur « Apprentissage » (bandeau du bas)."));
+    text.appendChild(document.createTextNode("Génération du QCM « " + notionName + " » en cours… Ouvre « Apprentissage » pour suivre sa génération."));
     var qcmBtn = document.createElement("button");
     qcmBtn.type = "button";
     qcmBtn.className = "het-memorize-explainer-qcm";
@@ -154,25 +179,32 @@
     var notionName = event.title || "cet événement";
     var sourceDebateId = event && event.id;
     if (!sourceDebateId) return;
+    var pendingSlot = "notion:histoire:" + String(sourceDebateId);
 
-    // Optimiste : le bouton passe actif et le message s'affiche
-    // immédiatement, annulé seulement si la requête échoue (cf. catch/then
-    // plus bas) — jamais d'attente visible pendant la génération IA.
+    // Optimiste : le bouton passe actif et le message nommé s'affiche
+    // immédiatement. La page Apprentissage reprend ensuite ce même état et
+    // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
     setMemorizeButtonState(btn, true);
+    startPendingNotionQuizGeneration(pendingSlot, notionName);
     showMemorizeExplainerModal(notionName);
 
     fetch("/api/users/notion-quizzes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      keepalive: true,
       body: JSON.stringify({ legacyKey: voterKey, sourceType: "histoire", sourceDebateId: String(sourceDebateId), item: event })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
+        finishPendingNotionQuizGeneration(pendingSlot);
         if (!data.ok) { setMemorizeButtonState(btn, false); return; }
         btn.setAttribute("data-quiz-slot", data.slot);
         btn.setAttribute("data-quiz-date", data.quizDate);
       })
-      .catch(function () { setMemorizeButtonState(btn, false); });
+      .catch(function () {
+        finishPendingNotionQuizGeneration(pendingSlot);
+        setMemorizeButtonState(btn, false);
+      });
   }
 
   // Décliquer ne retire que la ligne de la liste personnelle "Mes QCM" —

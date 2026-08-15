@@ -15288,6 +15288,38 @@ function getPrimaryNotionQuizTheme(question) {
   return String(legacyThemes.find((theme) => String(theme || "").trim()) || "").trim() || null;
 }
 
+// Suivi léger des générations lancées depuis « Mémoriser ». /apprentissage interroge seulement
+// les quelques slots encore attendus ; la liste complète (potentiellement volumineuse) n'est
+// rechargée qu'une fois lorsqu'un slot devient prêt.
+app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+    if (validation.error) return res.status(400).json({ ready: [], error: validation.error });
+    const slots = [...new Set(String(req.query?.slots || "")
+      .split(",")
+      .map((slot) => slot.trim())
+      .filter((slot) => slot.startsWith("notion:") && slot.length <= 500))]
+      .slice(0, 20);
+    if (!slots.length) return res.json({ ready: [] });
+
+    const { data: user, error: userError } = await supabase
+      .from("users").select("id").eq("legacy_key", validation.legacyKey).maybeSingle();
+    if (userError) throw new Error(userError.message);
+    if (!user) return res.json({ ready: [] });
+
+    const { data: rows, error: rowsError } = await supabase
+      .from("user_notion_quizzes")
+      .select("slot,quiz_date")
+      .eq("user_id", user.id)
+      .in("slot", slots);
+    if (rowsError) throw new Error(rowsError.message);
+    res.json({ ready: (rows || []).map((row) => ({ slot: row.slot, quizDate: row.quiz_date })) });
+  } catch (error) {
+    console.error("[notion-quizzes] suivi génération :", error.message);
+    res.status(500).json({ ready: [], error: "Suivi momentanément indisponible." });
+  }
+});
+
 // Liste "Mes QCM" (onglet par défaut de /qcm-du-jour) : les notions que ce
 // visiteur a choisi de mémoriser, les plus récentes en premier. Lecture
 // seule, jamais d'upsert (même esprit que les autres routes GET /api/users/*).

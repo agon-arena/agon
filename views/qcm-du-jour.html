@@ -1760,7 +1760,7 @@
     <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260815-radial-star-layout-v31" defer></script>
+<script src="/script.min.js?v=20260815-pending-qcm-v37" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -1822,6 +1822,9 @@
   // précédent) laisse la réponse tardive écraser l'écran affiché entre-temps
   // — cf. le "flash" de l'écran de fin de QCM historiquement signalé.
   var loadToken = 0;
+  var customSearchGenerationActive = false;
+  var pendingNotionQuizPollId = null;
+  var pendingNotionQuizStatusVisible = false;
 
   // Signale au parent (bandeau bleu + sablier "Chargement en cours",
   // cf. showDebateIframeParentLoadingOverlay dans script.js) que du contenu
@@ -1909,7 +1912,14 @@
     // en permanence malgré la classe correctement posée, seul l'attribut compte désormais.
     customSearchForm.hidden = !visible;
     customSearchForm.classList.toggle('visible', visible);
-    if (!visible) customSearchStatus.hidden = true;
+    if (!visible) {
+      customSearchStatus.hidden = true;
+      if (!customSearchGenerationActive) stopPieSpinner();
+      if (pendingNotionQuizPollId) {
+        clearTimeout(pendingNotionQuizPollId);
+        pendingNotionQuizPollId = null;
+      }
+    }
     exploreBtn.hidden = !visible;
   }
 
@@ -2941,6 +2951,123 @@
     pieSpinnerId = setInterval(tick, 60);
   }
 
+  function getPendingNotionQuizGenerations() {
+    if (typeof window.agonGetPendingNotionQuizGenerations === 'function') {
+      return window.agonGetPendingNotionQuizGenerations();
+    }
+    return [];
+  }
+
+  function pendingNotionQuizMessage(pending) {
+    if (pending.length === 1) {
+      return 'Génération du QCM « ' + pending[0].label + ' » en cours…';
+    }
+    return 'Génération de ' + pending.length + ' QCM en cours : ' + pending
+      .map(function (item) { return '« ' + item.label + ' »'; })
+      .join(', ') + '…';
+  }
+
+  function mesQcmListSignature(quizzes) {
+    return (quizzes || []).map(function (quiz) { return quiz.slot + '|' + quiz.quizDate; }).sort().join('||');
+  }
+
+  // Réconcilie l'état optimiste déposé par Éclairages/Histoire avec la liste serveur. Dès que
+  // le slot apparaît, le marqueur est supprimé ; tant qu'il manque, le même texte et le même
+  // camembert tournant que la génération par barre de recherche restent visibles, nom compris.
+  function syncPendingNotionQuizGenerations(quizzes) {
+    var pending = getPendingNotionQuizGenerations();
+    var availableSlots = {};
+    (quizzes || []).forEach(function (quiz) { availableSlots[quiz.slot] = true; });
+    pending.forEach(function (item) {
+      if (availableSlots[item.slot] && typeof window.agonFinishPendingNotionQuizGeneration === 'function') {
+        window.agonFinishPendingNotionQuizGeneration(item.slot);
+      }
+    });
+    pending = getPendingNotionQuizGenerations();
+
+    if (currentCategory !== 'mesqcm' || currentSlot || customSearchGenerationActive) return pending;
+    if (!pending.length) {
+      if (pendingNotionQuizStatusVisible) {
+        pendingNotionQuizStatusVisible = false;
+        setCustomSearchStatus('', false);
+        stopPieSpinner();
+      }
+      if (pendingNotionQuizPollId) {
+        clearTimeout(pendingNotionQuizPollId);
+        pendingNotionQuizPollId = null;
+      }
+      return pending;
+    }
+
+    var statusWasVisible = pendingNotionQuizStatusVisible;
+    pendingNotionQuizStatusVisible = true;
+    setCustomSearchStatus(pendingNotionQuizMessage(pending), false);
+    var spinnerEl = document.getElementById('qcm-pie-spinner');
+    if (!statusWasVisible || !spinnerEl || spinnerEl.hidden) startPieSpinner();
+    schedulePendingNotionQuizPoll();
+    return pending;
+  }
+
+  function fetchLatestMesQcmList() {
+    return fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (currentCategory !== 'mesqcm' || currentSlot) return;
+        var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+        var changed = mesQcmListSignature(quizzes) !== mesQcmListSignature(currentMesQcmQuizzes);
+        syncPendingNotionQuizGenerations(quizzes);
+        if (changed) renderMesQcmList(quizzes);
+      });
+  }
+
+  function refreshPendingNotionQuizList(forceListRefresh) {
+    if (currentCategory !== 'mesqcm' || currentSlot || customSearchGenerationActive || !voterKey) return;
+    var pending = getPendingNotionQuizGenerations();
+    if (!pending.length) {
+      syncPendingNotionQuizGenerations(currentMesQcmQuizzes);
+      if (forceListRefresh) fetchLatestMesQcmList().catch(function () {});
+      return;
+    }
+    var slots = pending.map(function (item) { return item.slot; }).join(',');
+    fetch('/api/users/notion-quizzes/generation-status?legacyKey=' + encodeURIComponent(voterKey) + '&slots=' + encodeURIComponent(slots), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (currentCategory !== 'mesqcm' || currentSlot) return;
+        var ready = Array.isArray(data.ready) ? data.ready : [];
+        if (!ready.length) {
+          syncPendingNotionQuizGenerations(currentMesQcmQuizzes);
+          return;
+        }
+        ready.forEach(function (item) {
+          if (typeof window.agonFinishPendingNotionQuizGeneration === 'function') {
+            window.agonFinishPendingNotionQuizGeneration(item.slot);
+          }
+        });
+        return fetchLatestMesQcmList();
+      })
+      .catch(function () { schedulePendingNotionQuizPoll(); });
+  }
+
+  function schedulePendingNotionQuizPoll() {
+    if (pendingNotionQuizPollId) clearTimeout(pendingNotionQuizPollId);
+    if (!getPendingNotionQuizGenerations().length || currentCategory !== 'mesqcm' || currentSlot) {
+      pendingNotionQuizPollId = null;
+      return;
+    }
+    pendingNotionQuizPollId = setTimeout(function () {
+      pendingNotionQuizPollId = null;
+      refreshPendingNotionQuizList(false);
+    }, 3000);
+  }
+
+  // Si la page d'origine reste vivante dans une autre iframe, sa réussite retire le marqueur
+  // localStorage et déclenche cet événement : relire immédiatement plutôt que d'attendre le
+  // prochain tour de polling.
+  window.addEventListener('storage', function (event) {
+    if (event.key !== 'agon_pending_notion_quizzes_v1') return;
+    if (currentCategory === 'mesqcm' && !currentSlot) refreshPendingNotionQuizList(true);
+  });
+
   // Récapitule sujet + niveau choisis avant de lancer la génération IA
   // (demande du 13/08/2026) : évite une génération partie par erreur (sujet
   // mal tapé, mauvais niveau cliqué dans showNotionQuizLevelPicker) — coûte
@@ -2990,10 +3117,10 @@
   }
 
   // Barre de recherche libre "Mes apprentissages" (cf. server.js POST
-  // /api/users/notion-quizzes/custom) : contrairement au clic "Mémoriser"
-  // sur Éclairages/Ce jour dans l'Histoire (optimiste, instantané), la fiche
-  // n'existe pas encore ici — on attend la vraie réponse (génération IA,
-  // quelques secondes) avant d'ouvrir le QCM tout juste créé via loadSlot.
+  // /api/users/notion-quizzes/custom). Comme pour un clic "Mémoriser" sur
+  // Éclairages/Ce jour dans l'Histoire, le sujet nommé et l'indicateur animé
+  // restent visibles pendant la génération IA. Ici, la réponse ouvre ensuite
+  // directement le QCM tout juste créé via loadSlot.
   // Niveau d'approfondissement toujours demandé avant génération (cf.
   // showNotionQuizLevelPicker, public/script.js — demande du 12/08/2026).
   function submitCustomTopic(e) {
@@ -3013,41 +3140,44 @@
     }
     showNotionQuizLevelPicker(function (level) {
       showGenerateConfirmModal(topic, level, function () {
-      customSearchBtn.disabled = true;
-      customSearchInput.disabled = true;
-      setCustomSearchStatus(
-        level === 'exhaustif'
-          ? 'Génération en cours, jusqu’à quelques minutes pour une liste à mémoriser en entier…'
-          : 'Génération de la fiche en cours…',
-        false
-      );
-      startPieSpinner();
+        customSearchGenerationActive = true;
+        customSearchBtn.disabled = true;
+        customSearchInput.disabled = true;
+        setCustomSearchStatus(
+          level === 'exhaustif'
+            ? 'Génération du QCM « ' + topic + ' » en cours — jusqu’à quelques minutes pour une liste à mémoriser en entier…'
+            : 'Génération du QCM « ' + topic + ' » en cours…',
+          false
+        );
+        startPieSpinner();
 
-      fetch('/api/users/notion-quizzes/custom', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ legacyKey: voterKey, topic: topic, level: level })
-      })
-        .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
-        .then(function (result) {
-          stopPieSpinner();
-          customSearchBtn.disabled = false;
-          customSearchInput.disabled = false;
-          if (!result.data.ok) {
-            setCustomSearchStatus(result.data.error || 'Génération impossible pour le moment.', true);
-            return;
-          }
-          customSearchInput.value = '';
-          setCustomSearchStatus('', false);
-          loadSlot(result.data.slot, result.data.quizDate, result.data.label);
+        fetch('/api/users/notion-quizzes/custom', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ legacyKey: voterKey, topic: topic, level: level })
         })
-        .catch(function () {
-          stopPieSpinner();
-          customSearchBtn.disabled = false;
-          customSearchInput.disabled = false;
-          setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
+          .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+          .then(function (result) {
+            customSearchGenerationActive = false;
+            stopPieSpinner();
+            customSearchBtn.disabled = false;
+            customSearchInput.disabled = false;
+            if (!result.data.ok) {
+              setCustomSearchStatus(result.data.error || 'Génération impossible pour le moment.', true);
+              return;
+            }
+            customSearchInput.value = '';
+            setCustomSearchStatus('', false);
+            loadSlot(result.data.slot, result.data.quizDate, result.data.label);
+          })
+          .catch(function () {
+            customSearchGenerationActive = false;
+            stopPieSpinner();
+            customSearchBtn.disabled = false;
+            customSearchInput.disabled = false;
+            setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
+          });
         });
-      });
     });
   }
   customSearchForm.addEventListener('submit', submitCustomTopic);
@@ -3218,7 +3348,9 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (myToken !== loadToken) return;
-        renderMesQcmList(Array.isArray(data.quizzes) ? data.quizzes : []);
+        var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+        syncPendingNotionQuizGenerations(quizzes);
+        renderMesQcmList(quizzes);
       })
       .catch(function () {
         if (myToken === loadToken) renderMessage('Impossible de charger tes QCM pour le moment.');

@@ -1064,7 +1064,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260815-radial-star-layout-v31" defer></script>
+<script src="/script.min.js?v=20260815-pending-qcm-v37" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1217,7 +1217,7 @@
     modal.className = 'ecl-memorize-explainer-modal';
     var text = document.createElement('p');
     text.className = 'ecl-memorize-explainer-text';
-    text.appendChild(document.createTextNode('« ' + notionName + ' » a été ajouté à ta mémorisation. Tu pourras commencer à réviser en cliquant sur « Apprentissage » (bandeau du bas).'));
+    text.appendChild(document.createTextNode('Génération du QCM « ' + notionName + ' » en cours… Ouvre « Apprentissage » pour suivre sa génération.'));
     var qcmBtn = document.createElement('button');
     qcmBtn.type = 'button';
     qcmBtn.className = 'ecl-memorize-explainer-qcm';
@@ -1255,25 +1255,38 @@
     try { item = rawItem ? JSON.parse(rawItem) : null; } catch (e) { item = null; }
     var sourceDebateId = item && item.current_topic_id;
     if (!item || !sourceDebateId) return;
+    var pendingSlot = 'notion:' + rubric + ':' + String(sourceDebateId);
 
-    // Optimiste : le bouton passe actif et le message s'affiche
-    // immédiatement, annulé seulement si la requête échoue (cf. catch/then
-    // plus bas) — jamais d'attente visible pendant la génération IA.
+    // Optimiste : le bouton passe actif et le message nommé s'affiche
+    // immédiatement. La page Apprentissage reprend ensuite ce même état et
+    // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
     setMemorizeButtonState(btn, true);
+    if (typeof window.agonStartPendingNotionQuizGeneration === 'function') {
+      window.agonStartPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName });
+    }
     showMemorizeExplainerModal(notionName);
 
     fetch('/api/users/notion-quizzes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
       body: JSON.stringify({ legacyKey: voterKey, sourceType: rubric, sourceDebateId: String(sourceDebateId), item: item })
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
+        if (typeof window.agonFinishPendingNotionQuizGeneration === 'function') {
+          window.agonFinishPendingNotionQuizGeneration(pendingSlot);
+        }
         if (!data.ok) { setMemorizeButtonState(btn, false); return; }
         btn.setAttribute('data-quiz-slot', data.slot);
         btn.setAttribute('data-quiz-date', data.quizDate);
       })
-      .catch(function () { setMemorizeButtonState(btn, false); });
+      .catch(function () {
+        if (typeof window.agonFinishPendingNotionQuizGeneration === 'function') {
+          window.agonFinishPendingNotionQuizGeneration(pendingSlot);
+        }
+        setMemorizeButtonState(btn, false);
+      });
   }
 
   // Décliquer ne retire que la ligne de la liste personnelle "Mes QCM" —

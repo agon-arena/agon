@@ -732,6 +732,49 @@ function lsGet(key) { try { return localStorage.getItem(key); } catch { return n
 function lsSet(key, val) { try { localStorage.setItem(key, String(val)); } catch {} }
 function lsRemove(key) { try { localStorage.removeItem(key); } catch {} }
 
+// Générations de QCM lancées depuis « Mémoriser » sur une autre page. L'état est partagé via
+// localStorage afin que /apprentissage puisse reprendre immédiatement le même sablier/message
+// que sa barre de recherche, même si la navigation détruit la page qui a démarré le fetch.
+// `slot` est connu avant l'appel (même convention que server.js) et permet à la page cible de
+// reconnaître le QCM dès qu'il apparaît dans GET /api/users/notion-quizzes.
+const AGON_PENDING_NOTION_QUIZZES_KEY = "agon_pending_notion_quizzes_v1";
+const AGON_PENDING_NOTION_QUIZ_MAX_AGE_MS = 30 * 60 * 1000;
+
+function readPendingNotionQuizGenerations() {
+  let rows = [];
+  try {
+    const parsed = JSON.parse(lsGet(AGON_PENDING_NOTION_QUIZZES_KEY) || "[]");
+    if (Array.isArray(parsed)) rows = parsed;
+  } catch {}
+  const now = Date.now();
+  const fresh = rows.filter((row) => row && row.slot && row.label
+    && Number.isFinite(Number(row.startedAt))
+    && now - Number(row.startedAt) <= AGON_PENDING_NOTION_QUIZ_MAX_AGE_MS);
+  if (fresh.length !== rows.length) lsSet(AGON_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(fresh));
+  return fresh;
+}
+
+function startPendingNotionQuizGeneration({ slot, label, quizDate = null } = {}) {
+  const normalizedSlot = String(slot || "").trim();
+  const normalizedLabel = String(label || "").trim().slice(0, 160);
+  if (!normalizedSlot || !normalizedLabel) return;
+  const rows = readPendingNotionQuizGenerations().filter((row) => row.slot !== normalizedSlot);
+  rows.push({ slot: normalizedSlot, label: normalizedLabel, quizDate, startedAt: Date.now() });
+  lsSet(AGON_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
+}
+
+function finishPendingNotionQuizGeneration(slot) {
+  const normalizedSlot = String(slot || "").trim();
+  if (!normalizedSlot) return;
+  const rows = readPendingNotionQuizGenerations().filter((row) => row.slot !== normalizedSlot);
+  if (rows.length) lsSet(AGON_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
+  else lsRemove(AGON_PENDING_NOTION_QUIZZES_KEY);
+}
+
+window.agonGetPendingNotionQuizGenerations = readPendingNotionQuizGenerations;
+window.agonStartPendingNotionQuizGeneration = startPendingNotionQuizGeneration;
+window.agonFinishPendingNotionQuizGeneration = finishPendingNotionQuizGeneration;
+
 const PUSH_INVITE_LAST_SHOWN_KEY = "pushInviteLastShownAt";
 const PUSH_INVITE_DISMISSED_KEY = "pushInviteDismissed";
 const PUSH_SUBSCRIBED_KEY = "pushSubscribed";
@@ -25486,14 +25529,16 @@ let currentDebateNotionsQuizDate = null;
 // Popup optimiste, identique à celle d'Éclairages/Ce jour dans l'Histoire
 // (cf. views/eclairages.html showMemorizeExplainerModal) — affichée dès le
 // clic, sans attendre la génération IA du QCM en arrière-plan.
-function showDebateNotionMemorizeExplainer(notionName) {
+function showDebateNotionMemorizeExplainer(notionName, isGenerating = false) {
   const overlay = document.createElement("div");
   overlay.className = "ecl-memorize-explainer-overlay";
   const modal = document.createElement("div");
   modal.className = "ecl-memorize-explainer-modal";
   const text = document.createElement("p");
   text.className = "ecl-memorize-explainer-text";
-  text.appendChild(document.createTextNode(`« ${notionName} » a été ajouté à ta mémorisation. Tu pourras commencer à réviser en cliquant sur « Apprentissage » (bandeau du bas).`));
+  text.appendChild(document.createTextNode(isGenerating
+    ? `Génération du QCM « ${notionName} » en cours… Ouvre « Apprentissage » pour suivre sa génération.`
+    : `Le QCM « ${notionName} » est disponible dans « Apprentissage ».`));
   const qcmBtn = document.createElement("button");
   qcmBtn.type = "button";
   qcmBtn.className = "ecl-memorize-explainer-qcm";
@@ -25597,7 +25642,7 @@ function showNotionQuizLevelPicker(onSelect) {
 function activateDebateNotion(btn, voterKey, debateId, quizDate) {
   const notionName = btn.getAttribute("data-notion-name") || "cette notion";
   if (btn.getAttribute("data-memorized") === "true") {
-    showDebateNotionMemorizeExplainer(notionName);
+    showDebateNotionMemorizeExplainer(notionName, false);
     return;
   }
   if (!voterKey) return;
@@ -25607,13 +25652,16 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
   if (!slug) return;
 
   showNotionQuizLevelPicker((level) => {
+    const pendingSlot = `notion:debat-notion:${debateId}-${slug}:${level}`;
     btn.setAttribute("data-memorized", "true");
     btn.classList.add("is-active");
-    showDebateNotionMemorizeExplainer(notionName);
+    startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
+    showDebateNotionMemorizeExplainer(notionName, true);
 
     fetchJSON(`${API}/users/notion-quizzes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      keepalive: true,
       body: JSON.stringify({
         legacyKey: voterKey,
         sourceType: "debat-notion",
@@ -25627,10 +25675,13 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
           notion_explanation: explanation
         }
       })
-    }).catch(() => {
-      btn.setAttribute("data-memorized", "false");
-      btn.classList.remove("is-active");
-    });
+    })
+      .then(() => { finishPendingNotionQuizGeneration(pendingSlot); })
+      .catch(() => {
+        finishPendingNotionQuizGeneration(pendingSlot);
+        btn.setAttribute("data-memorized", "false");
+        btn.classList.remove("is-active");
+      });
   });
 }
 
