@@ -67,12 +67,11 @@ function hueForGalaxy(name) {
 }
 
 // Saturation commune, luminosité des 3 arrêts du dégradé — jamais recalculée par galaxie.
-// Système solaire nettement plus lumineux que l'étoile : le système reste le conteneur visuel
-// de ses étoiles dans le nouveau modèle imbriqué, l'étoile une simple bulle satellite à
-// l'intérieur.
+// Le solar reprend désormais les mêmes niveaux colorés perceptibles que sa galaxie : des
+// luminosités trop proches du blanc donnaient auparavant l'impression d'une saturation moindre.
 const GALAXY_GRADIENT_LEVELS = {
   galaxy: [82, 72, 60],
-  solarSystem: [95, 91, 85],
+  solarSystem: [80, 68, 58],
   star: [76, 66, 54]
 };
 // Teinte volontairement douce, mais assez présente pour rester identifiable sur le fond Mnoria
@@ -85,6 +84,7 @@ function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
   const hue = hueForGalaxy(galaxyName);
   const stops = GALAXY_GRADIENT_LEVELS[level];
   const s = THEME_SATURATION;
+  const centerLightness = level === "solarSystem" ? 93 : 97;
   const tail = fadeEdge
     ? `hsla(${hue}, ${s}%, ${stops[1]}%, 0.75) 78%, hsla(${hue}, ${s}%, ${stops[2]}%, 0.35) 90%, hsla(${hue}, ${s}%, ${stops[2]}%, 0) 100%`
     : `hsl(${hue} ${s}% ${stops[2]}%) 100%`;
@@ -94,7 +94,7 @@ function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
   // circle (pas ellipse) centré à 50%/50% quand fadeEdge : garantit un rayon identique dans
   // toutes les directions, donc un alpha 0 pile sur le bord partout.
   const shape = fadeEdge ? "circle closest-side at 50% 50%" : "ellipse at 38% 32%";
-  return `radial-gradient(${shape}, rgba(255,255,255,1) 0%, hsl(${hue} ${s}% 97%) 14%, hsl(${hue} ${s}% ${stops[0]}%) 34%, hsl(${hue} ${s}% ${stops[1]}%) 68%, ${tail})`;
+  return `radial-gradient(${shape}, rgba(255,255,255,1) 0%, hsl(${hue} ${s}% ${centerLightness}%) 14%, hsl(${hue} ${s}% ${stops[0]}%) 34%, hsl(${hue} ${s}% ${stops[1]}%) 68%, ${tail})`;
 }
 
 // "À classer" (aucune galaxie à colorer) : même bleuté que le dégradé par défaut de
@@ -582,7 +582,7 @@ function mountUniverse() {
       "solarSystem",
       s,
       bubbleBackgroundFor(getGalaxyNameFromId(s.galaxyId), "solarSystem", true),
-      `hsla(${hue}, 34%, 76%, 0.72)`,
+      `hsla(${hue}, 36%, 72%, 0.76)`,
       "agon-tag-bubble-solarsystem"
     );
     addMiniStarsAroundSolarSystem(s);
