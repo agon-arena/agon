@@ -12913,12 +12913,6 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
     const { sourceName, sourceDetail, validated } = result;
     const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail);
     const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
-    // Jamais attendu : coûte une lecture du corpus + un appel IA + une écriture, sans
-    // rapport avec la génération du QCM lui-même (cf. findAndStoreCultureGeneraleNotionLink).
-    findAndStoreCultureGeneraleNotionLink(sourceType, id, sourceName, sourceDetail, userId).catch((e) =>
-      console.warn("[culture-generale notion-links] échec :", e.message)
-    );
-
     return validated.map((q, index) => ({
       id: `notion:${sourceType}:${id}-${level}-q${index + 1}`,
       ...q,
@@ -12965,10 +12959,6 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
     console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
     return [];
   }
-  findAndStoreCultureGeneraleNotionLink(sourceType, id, sourceName, sourceDetail, userId).catch((e) =>
-    console.warn("[culture-generale notion-links] échec :", e.message)
-  );
-
   const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], levelConfig.max, levelConfig.max);
   if (validated.length < levelConfig.min) {
     console.warn(`[notion-quiz:${sourceType}:${id}] seulement ${validated.length} question(s) valide(s).`);
@@ -13205,10 +13195,6 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
   }
   const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", finalSourceName, sourceDetail);
   const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
-  findAndStoreCultureGeneraleNotionLink("custom", id, finalSourceName, sourceDetail, userId).catch((e) =>
-    console.warn("[culture-generale notion-links] échec :", e.message)
-  );
-
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}-exhaustif-q${index + 1}`,
     ...q,
@@ -13281,10 +13267,6 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   // principale des sujets libres tombés dans "Autres" sur "Mes apprentissages".
   const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", sourceName, sourceDetail);
   const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
-  findAndStoreCultureGeneraleNotionLink("custom", id, sourceName, sourceDetail, userId).catch((e) =>
-    console.warn("[culture-generale notion-links] échec :", e.message)
-  );
-
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}${level ? `-${level}` : ""}-q${index + 1}`,
     ...q,
@@ -15356,8 +15338,19 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
 
     const first = questions[0];
+    let linkOwnerUserId = null;
+    const linkKeyValidation = validateLegacyKey(req.query?.legacyKey);
+    if (!linkKeyValidation.error) {
+      const { data: linkOwner, error: linkOwnerError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("legacy_key", linkKeyValidation.legacyKey)
+        .maybeSingle();
+      if (linkOwnerError) console.warn("[notion-quizzes] propriétaire des liens introuvable :", linkOwnerError.message);
+      linkOwnerUserId = linkOwner?.id || null;
+    }
     const links = first.sourceType && first.sourceDebateId
-      ? await fetchCultureGeneraleNotionLinks(first.sourceType, String(first.sourceDebateId))
+      ? await fetchCultureGeneraleNotionLinks(first.sourceType, String(first.sourceDebateId), linkOwnerUserId)
       : [];
     const primaryTheme = getPrimaryNotionQuizTheme(first);
     res.json({
@@ -15654,13 +15647,11 @@ async function classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourc
   return classification?.category ? [classification.category] : [];
 }
 
-// ---- Liens entre connaissances de "Mes apprentissages" (ex. "Voltaire" ↔ "Les
-// Lumières") : détectés une fois à la création d'une fiche, en comparant au corpus des
-// fiches déjà existantes, jamais dans le contenu figé de la fiche elle-même (contrairement
-// à sourceThemes) — stockés dans culture_generale_notion_links (cf. data/migration-
-// culture-generale-notion-links.sql) et consultés à l'affichage de CHAQUE fiche, si bien
-// qu'un lien apparaît immédiatement des DEUX côtés dès sa création, sans jamais avoir à
-// ré-écrire la fiche existante (demande du 12/08/2026).
+// ---- Liens entre connaissances (ex. "Voltaire" ↔ "Les Lumières") : détectés
+// après la PREMIÈRE bonne réponse, lorsque la connaissance entre réellement
+// dans la mémoire. L'IA la compare alors aux autres acquisitions réelles de
+// cet utilisateur, jamais aux simples QCM encore en attente dans sa liste.
+// Les liens sont stockés à part puis relus entre l'explication et le QCM.
 
 // Identité canonique d'une notion, indépendante du niveau (élémentaire/avancé) ou de la
 // date de génération — même paire que eclairage_type/eclairage_source_id dans
@@ -15685,73 +15676,60 @@ async function resolveOrCreateCultureGeneraleNotionLink(typeA, idA, nameA, typeB
   if (error) console.warn("[culture-generale notion-links] création échouée :", error.message);
 }
 
-// Corpus de candidats pour findAndStoreCultureGeneraleNotionLink : uniquement les
-// connaissances que CET utilisateur a personnellement ajoutées à "Mes apprentissages"
-// (user_notion_quizzes), jamais tout le corpus global — comparer contre les fiches de tous
-// les visiteurs serait à la fois un coût IA inutile et sans intérêt pédagogique, un lien
-// n'ayant de sens que rapporté aux connaissances qu'UN visiteur a lui-même en cours
-// (demande du 12/08/2026). Le contenu des fiches reste partagé (daily_quiz), seule la
-// LISTE (quiz_date, slot) que ce visiteur a choisi de garder est propre à lui.
-async function fetchUserOwnCultureGeneraleNotions(userId) {
-  const { data: ownRows, error: ownError } = await supabase
-    .from("user_notion_quizzes")
-    .select("quiz_date, slot")
+// Corpus personnel réel : user_article_acquisitions n'est alimentée qu'après
+// une bonne réponse. Cette lecture est aussi beaucoup plus légère que
+// l'ancienne relecture des tableaux JSONB questions de daily_quiz.
+async function fetchUserAcquiredCultureGeneraleNotions(userId) {
+  const { data: acquisitionRows, error } = await supabase
+    .from("user_article_acquisitions")
+    .select("eclairage_type, eclairage_source_id, eclairage_name")
     .eq("user_id", userId)
+    .not("eclairage_type", "is", null)
+    .not("eclairage_source_id", "is", null)
     .limit(2000);
-  if (ownError) { console.warn("[culture-generale notion-links] lecture user_notion_quizzes échouée :", ownError.message); return []; }
-  if (!ownRows?.length) return [];
-
-  const ownPairs = new Set(ownRows.map((r) => `${r.quiz_date}::${r.slot}`));
-  const slots = [...new Set(ownRows.map((r) => r.slot))];
-  const { data: quizRows, error: quizError } = await supabase
-    .from("daily_quiz")
-    .select("quiz_date, slot, questions")
-    .in("slot", slots)
-    .limit(2000);
-  if (quizError) { console.warn("[culture-generale notion-links] lecture daily_quiz échouée :", quizError.message); return []; }
-
+  if (error) {
+    console.warn("[culture-generale notion-links] lecture des acquis échouée :", error.message);
+    return [];
+  }
   const seen = new Set();
   const notions = [];
-  for (const row of quizRows || []) {
-    // .in("slot", slots) présélectionne large (un même libellé de slot peut avoir été
-    // généré à d'autres dates par d'autres visiteurs) — seule la paire (date, slot) exacte
-    // de user_notion_quizzes confirme que CET utilisateur l'a bien dans sa propre liste.
-    if (!ownPairs.has(`${row.quiz_date}::${row.slot}`)) continue;
-    const q = row.questions?.[0];
-    if (!q?.sourceDebateId || !q?.sourceType || !q?.sourceName) continue;
-    const key = cultureGeneraleNotionKey(q.sourceType, q.sourceDebateId);
+  for (const row of acquisitionRows || []) {
+    const type = String(row.eclairage_type || "").trim();
+    const id = String(row.eclairage_source_id || "").trim();
+    const name = String(row.eclairage_name || "").trim();
+    if (!type || !id || !name) continue;
+    const key = cultureGeneraleNotionKey(type, id);
     if (seen.has(key)) continue;
     seen.add(key);
-    notions.push({ type: q.sourceType, id: String(q.sourceDebateId), name: q.sourceName });
+    notions.push({ type, id, name });
   }
   return notions;
 }
 
-// Recherche un lien pédagogiquement pertinent entre la nouvelle fiche (sourceType/sourceId)
-// et l'une des connaissances déjà présentes dans "Mes apprentissages" de CE visiteur
-// (fetchUserOwnCultureGeneraleNotions) — jamais contre tout le corpus global. Jamais
-// bloquant pour la génération de la fiche : appelée sans attendre par l'appelant.
+// Recherche jusqu'à trois liens pédagogiquement très pertinents entre la
+// nouvelle acquisition et TOUTES les autres connaissances déjà acquises par
+// ce visiteur. Aucun lien vague n'est forcé.
 async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourceName, sourceDetail, userId) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || !sourceId || !userId) return;
 
   const selfKey = cultureGeneraleNotionKey(sourceType, sourceId);
-  const candidates = (await fetchUserOwnCultureGeneraleNotions(userId))
+  const candidates = (await fetchUserAcquiredCultureGeneraleNotions(userId))
     .filter((c) => cultureGeneraleNotionKey(c.type, c.id) !== selfKey);
   if (!candidates.length) return;
 
   const compact = {
     title: String(sourceName || "").slice(0, 160),
     detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
-    existing_notions: candidates.map((c) => `${cultureGeneraleNotionKey(c.type, c.id)}:${c.name}`).join(" | ")
+    existing_notions: candidates.map((c) => ({ key: cultureGeneraleNotionKey(c.type, c.id), name: c.name }))
   };
   const prompt = [
     "Réponds uniquement en json valide.",
-    "Un contenu de culture générale peut avoir un lien pédagogiquement pertinent et direct avec une connaissance déjà apprise, listée dans existing_notions (sous la forme identifiant:nom).",
+    "Un nouveau contenu de culture générale vient d'être acquis. Examine TOUTES les connaissances déjà acquises de cet utilisateur, listées dans existing_notions.",
     "Ce lien doit être une vraie relation intellectuelle directe et non triviale — ex. une personne appartenant à un mouvement, une cause et sa conséquence directe, un concept illustré par un événement précis. Un simple point commun vague (même siècle, même pays, même discipline générale) NE SUFFIT JAMAIS.",
-    "S'il existe UNE connaissance de existing_notions avec un tel lien direct et clair, renvoie son identifiant EXACT (recopié tel quel depuis existing_notions, avant le \":\") dans related_key, et un libellé de 2 à 5 mots expliquant le lien dans label (ex. \"Figure des Lumières\", \"Cause directe\").",
-    "S'il n'y a aucun lien vraiment pertinent, renvoie related_key à null et label à null.",
-    "Format obligatoire : {\"related_key\":null,\"label\":null}",
+    "Retourne au maximum 3 liens, uniquement s'ils sont tous très pertinents. Pour chacun, recopie exactement le champ key dans related_key et écris un libellé de 2 à 5 mots expliquant le lien (ex. \"Figure des Lumières\", \"Cause directe\").",
+    "S'il n'existe aucun lien vraiment pertinent, retourne un tableau links vide. Ne force jamais un rapprochement.",
+    "Format obligatoire : {\"links\":[{\"related_key\":\"type::id\",\"label\":\"...\"}]}",
     "",
     JSON.stringify(compact)
   ].join("\n");
@@ -15759,12 +15737,29 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
   try {
     const content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale notion-links]");
     const parsed = content ? JSON.parse(content) : null;
-    const relatedKey = String(parsed?.related_key || "").trim();
-    const label = String(parsed?.label || "").trim().slice(0, 60);
-    if (!relatedKey || !label) return;
-    const match = candidates.find((c) => cultureGeneraleNotionKey(c.type, c.id) === relatedKey);
-    if (!match) return;
-    await resolveOrCreateCultureGeneraleNotionLink(sourceType, String(sourceId), String(sourceName || "").slice(0, 300), match.type, match.id, match.name, label);
+    const candidateByKey = new Map(candidates.map((c) => [cultureGeneraleNotionKey(c.type, c.id), c]));
+    const seenRelated = new Set();
+    const validLinks = [];
+    for (const rawLink of Array.isArray(parsed?.links) ? parsed.links : []) {
+      const relatedKey = String(rawLink?.related_key || "").trim();
+      const label = String(rawLink?.label || "").trim().slice(0, 60);
+      const match = candidateByKey.get(relatedKey);
+      if (!match || !label || seenRelated.has(relatedKey)) continue;
+      seenRelated.add(relatedKey);
+      validLinks.push({ match, label });
+      if (validLinks.length >= 3) break;
+    }
+    await Promise.all(validLinks.map(({ match, label }) =>
+      resolveOrCreateCultureGeneraleNotionLink(
+        sourceType,
+        String(sourceId),
+        String(sourceName || "").slice(0, 300),
+        match.type,
+        match.id,
+        match.name,
+        label
+      )
+    ));
   } catch (e) {
     console.warn("[culture-generale notion-links] classification IA ignorée :", e.message);
   }
@@ -15774,7 +15769,7 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
 // (type_a,source_id_a) et (type_b,source_id_b) plutôt qu'un .or() avec interpolation de
 // sourceId dans la chaîne de filtre (risque d'injection PostgREST sur un identifiant qui
 // n'est pas systématiquement numérique, ex. hash de sujet libre).
-async function fetchCultureGeneraleNotionLinks(sourceType, sourceId) {
+async function fetchCultureGeneraleNotionLinks(sourceType, sourceId, userId = null) {
   const [{ data: asA, error: errA }, { data: asB, error: errB }] = await Promise.all([
     supabase.from("culture_generale_notion_links").select("type_b, source_id_b, name_b, label")
       .eq("type_a", sourceType).eq("source_id_a", sourceId),
@@ -15788,7 +15783,25 @@ async function fetchCultureGeneraleNotionLinks(sourceType, sourceId) {
   const links = [];
   for (const r of asA || []) links.push({ type: r.type_b, sourceId: r.source_id_b, name: r.name_b, label: r.label });
   for (const r of asB || []) links.push({ type: r.type_a, sourceId: r.source_id_a, name: r.name_a, label: r.label });
-  return links;
+  if (!userId || !links.length) return [];
+
+  // La table de relations est partagée, mais une fiche personnelle ne doit
+  // montrer que les extrémités réellement acquises par cet utilisateur.
+  const { data: ownedRows, error: ownedError } = await supabase
+    .from("user_article_acquisitions")
+    .select("eclairage_type, eclairage_source_id")
+    .eq("user_id", userId)
+    .not("eclairage_type", "is", null)
+    .not("eclairage_source_id", "is", null)
+    .limit(2000);
+  if (ownedError) {
+    console.warn("[culture-generale notion-links] filtrage des acquis échoué :", ownedError.message);
+    return [];
+  }
+  const ownedKeys = new Set((ownedRows || []).map((row) =>
+    cultureGeneraleNotionKey(row.eclairage_type, row.eclairage_source_id)
+  ));
+  return links.filter((link) => ownedKeys.has(cultureGeneraleNotionKey(link.type, link.sourceId)));
 }
 
 // Systèmes solaires "de départ" pour certaines galaxies : des sous-domaines
@@ -16482,6 +16495,17 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
       );
     if (error) throw error;
     console.log(`[daily quiz eclairage acquisitions] user=${user.id} sourceType=${sourceType} sourceDebateId=${sourceDebateId}`);
+
+    // La connaissance existe désormais réellement dans la mémoire. C'est à
+    // cet instant précis — première bonne réponse, jamais à la création du
+    // QCM — que l'IA examine tous les autres acquis de cet utilisateur.
+    await findAndStoreCultureGeneraleNotionLink(
+      sourceType,
+      sourceDebateId,
+      sourceName,
+      question.sourceDetail,
+      user.id
+    );
   } catch (error) {
     console.warn("[daily quiz eclairage acquisitions] failed : écriture acquisition —", error.message);
   }

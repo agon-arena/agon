@@ -1401,6 +1401,36 @@ function appendKnowledgeCorrectedQuestion(parent, question, index) {
   parent.appendChild(item);
 }
 
+// Relations très pertinentes détectées au moment de la première bonne
+// réponse. Placées entre l'explication et le QCM, comme dans la fiche ouverte
+// depuis "Mes apprentissages". Chaque relation mène à la fiche complète de
+// l'autre connaissance acquise.
+function appendKnowledgeLinks(parent, links, star) {
+  if (!Array.isArray(links) || !links.length) return;
+  const heading = document.createElement("h3");
+  heading.className = "qcm-fiche-section-label";
+  heading.textContent = "Les liens";
+  parent.appendChild(heading);
+
+  const list = document.createElement("div");
+  list.className = "qcm-fiche-links";
+  links.forEach((link) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "qcm-fiche-link-item";
+    const label = document.createElement("span");
+    label.className = "qcm-fiche-link-label";
+    label.textContent = link.label || "Connaissance reliée";
+    const name = document.createElement("span");
+    name.className = "qcm-fiche-link-name";
+    name.textContent = link.name || "Voir la fiche";
+    button.append(label, name);
+    button.addEventListener("click", () => showLinkedKnowledgeSheet(link, star));
+    list.appendChild(button);
+  });
+  parent.appendChild(list);
+}
+
 function renderKnowledgeSheet(article, star, fullFiche, loading = false) {
   const detail = fullFiche?.sourceDetail || article.sourceDetail || {};
   starPanelTitleEl.textContent = fullFiche?.label || article.title || "Fiche connaissance";
@@ -1480,6 +1510,8 @@ function renderKnowledgeSheet(article, star, fullFiche, loading = false) {
     appendKnowledgeSheetText(sheet, "qcm-fiche-explanation", section.text);
   });
 
+  appendKnowledgeLinks(sheet, fullFiche?.links, star);
+
   if (loading) {
     appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-loading", "Chargement de l’image et du QCM…");
   } else if (Array.isArray(fullFiche?.questions) && fullFiche.questions.length) {
@@ -1509,7 +1541,7 @@ async function showKnowledgeSheet(article, star) {
   if (!hasFullFiche) return;
 
   try {
-    const params = new URLSearchParams({ slot: article.quizSlot, date: article.quizDate });
+    const params = new URLSearchParams({ slot: article.quizSlot, date: article.quizDate, legacyKey: getKey() });
     const response = await fetch(`/api/users/notion-quizzes/fiche?${params.toString()}`, { cache: "no-store" });
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || "Fiche indisponible");
@@ -1519,6 +1551,32 @@ async function showKnowledgeSheet(article, star) {
     if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
     console.warn("[mon-univers] fiche QCM complète indisponible :", error.message);
     renderKnowledgeSheet(article, star, null, false);
+  }
+}
+
+async function showLinkedKnowledgeSheet(link, star) {
+  const requestToken = ++starKnowledgeRequestToken;
+  const fallbackArticle = {
+    title: link?.name || "Connaissance reliée",
+    sourceType: link?.type || null,
+    sourceDetail: { meta: null, sections: [] }
+  };
+  renderKnowledgeSheet(fallbackArticle, star, null, true);
+  try {
+    const params = new URLSearchParams({
+      linkType: String(link?.type || ""),
+      linkSourceId: String(link?.sourceId || ""),
+      legacyKey: getKey()
+    });
+    const response = await fetch(`/api/users/notion-quizzes/fiche?${params.toString()}`, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "Fiche indisponible");
+    if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
+    renderKnowledgeSheet({ ...fallbackArticle, title: data.label || fallbackArticle.title }, star, data, false);
+  } catch (error) {
+    if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
+    console.warn("[mon-univers] fiche liée indisponible :", error.message);
+    renderKnowledgeSheet(fallbackArticle, star, null, false);
   }
 }
 

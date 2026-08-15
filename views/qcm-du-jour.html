@@ -3738,13 +3738,13 @@
       });
   }
   function openMesQcmFiche(quiz) {
-    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(quiz.slot) + '&date=' + encodeURIComponent(quiz.quizDate), quiz.label);
+    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(quiz.slot) + '&date=' + encodeURIComponent(quiz.quizDate) + '&legacyKey=' + encodeURIComponent(voterKey || ''), quiz.label);
   }
   // Ouvre la fiche d'une connaissance liée (cf. renderLinksSection) : retrouvée par son
   // identité (type, sourceId) plutôt que par (slot, date), qui peuvent différer de la
   // fiche d'origine (autre date de génération, autre niveau).
   function openMesQcmFicheByLink(type, sourceId, fallbackName) {
-    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?linkType=' + encodeURIComponent(type) + '&linkSourceId=' + encodeURIComponent(sourceId), fallbackName);
+    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?linkType=' + encodeURIComponent(type) + '&linkSourceId=' + encodeURIComponent(sourceId) + '&legacyKey=' + encodeURIComponent(voterKey || ''), fallbackName);
   }
 
   // `quizDate` : un QCM de notion vit sous sa date de création, jamais
