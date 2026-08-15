@@ -26769,3 +26769,22 @@ span.universe-star-panel__item {
 body.universe-star-panel-open {
   overflow: hidden;
 }
+
+/* Nouveau mot-symbole horizontal dans les bandeaux blancs. Les anciennes dimensions
+   étaient calibrées pour le logo agôn carré : cette classe dédiée conserve les proportions
+   natives du PNG mnoria sans agrandir la hauteur des bandeaux. */
+.home-logo.home-logo--mnoria {
+  width: 220px !important;
+  max-width: min(44vw, 220px) !important;
+  height: auto !important;
+  max-height: 92px !important;
+  object-fit: contain !important;
+}
+
+@media (max-width: 768px) {
+  .home-logo.home-logo--mnoria {
+    width: 176px !important;
+    max-width: 46vw !important;
+    max-height: 72px !important;
+  }
+}
