@@ -15242,6 +15242,17 @@ app.post("/api/users/notion-quizzes/remove", rateLimit("users", 30), async (req,
   }
 });
 
+// Thématique unique affichée dans "Mes apprentissages". Les QCM récents
+// portent déjà sourcePlacement.category, choix principal qui pilote aussi la
+// galaxie de "Ma mémoire". Pour les anciens contenus sans sourcePlacement,
+// la première sourceThemes reste le meilleur ordre de pertinence disponible.
+function getPrimaryNotionQuizTheme(question) {
+  const placementCategory = String(question?.sourcePlacement?.category || "").trim();
+  if (placementCategory) return placementCategory;
+  const legacyThemes = Array.isArray(question?.sourceThemes) ? question.sourceThemes : [];
+  return String(legacyThemes.find((theme) => String(theme || "").trim()) || "").trim() || null;
+}
+
 // Liste "Mes QCM" (onglet par défaut de /qcm-du-jour) : les notions que ce
 // visiteur a choisi de mémoriser, les plus récentes en premier. Lecture
 // seule, jamais d'upsert (même esprit que les autres routes GET /api/users/*).
@@ -15299,12 +15310,16 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         answeredCount += 1;
       }
       const progressPct = Math.round((streakSum / (questions.length * DAILY_QUIZ_ACQUIS_VALIDATION_STREAK)) * 100);
+      const primaryTheme = getPrimaryNotionQuizTheme(questions[0]);
       quizzes.push({
         slot: link.slot,
         quizDate: link.quiz_date,
         label: questions[0]?.sourceName || null,
         sourceType: questions[0]?.sourceType || null,
-        themes: questions[0]?.sourceThemes || [],
+        // Une connaissance ne doit apparaître que dans sa rubrique la plus
+        // pertinente, y compris pour les anciens QCM stockés avec plusieurs
+        // sourceThemes.
+        themes: primaryTheme ? [primaryTheme] : [],
         questionCount: questions.length,
         realized: answeredCount > 0,
         progressPct,
@@ -15366,12 +15381,13 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     const links = first.sourceType && first.sourceDebateId
       ? await fetchCultureGeneraleNotionLinks(first.sourceType, String(first.sourceDebateId))
       : [];
+    const primaryTheme = getPrimaryNotionQuizTheme(first);
     res.json({
       slot: resolvedSlot,
       quizDate: resolvedQuizDate,
       label: first.sourceName || null,
       sourceType: first.sourceType || null,
-      themes: first.sourceThemes || [],
+      themes: primaryTheme ? [primaryTheme] : [],
       sourceDetail: first.sourceDetail || null,
       links,
       questions: questions.map((q) => {

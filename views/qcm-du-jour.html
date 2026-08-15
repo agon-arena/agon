@@ -3214,16 +3214,14 @@
     renderMessage("Tu n'as encore mémorisé aucune notion — tape un sujet ci-dessus, ou clique sur « Mémoriser » n'importe où sur le site pour commencer.");
   }
 
-  // Petites pastilles de thématiques (cf. server.js
-  // classifyCultureGeneraleThemesWithAI) — une connaissance peut couvrir
-  // plusieurs des 16 thématiques déjà utilisées ailleurs sur le site
-  // (Autres actus, Ma mémoire), jamais une seule comme la galaxie de Ma
-  // mémoire. Tableau vide (classification pas encore faite ou échouée) :
-  // rien affiché plutôt qu'un espace vide visible.
+  // Une seule pastille : la thématique principale qui pilote également le
+  // classement de la connaissance dans "Mes apprentissages". Le slice est
+  // une défense côté client pour les réponses encore mises en cache dans un
+  // ancien format multithématique.
   function renderThemeTags(themes) {
     if (!Array.isArray(themes) || !themes.length) return '';
     return '<div class="qcm-mesqcm-themes">' +
-      themes.map(function (t) { return '<span class="qcm-mesqcm-theme-tag">' + escapeHtml(t) + '</span>'; }).join('') +
+      themes.slice(0, 1).map(function (t) { return '<span class="qcm-mesqcm-theme-tag">' + escapeHtml(t) + '</span>'; }).join('') +
       '</div>';
   }
 
@@ -3414,10 +3412,10 @@
     });
   }
 
-  // Regroupé par thématique (cf. server.js classifyCultureGeneraleThemesWithAI)
-  // avec de vraies rubriques repliables, plutôt qu'un simple tableau plat — une
-  // connaissance couvrant plusieurs thématiques apparaît sous chacune d'elles
-  // (demande du 09/08/2026). "Autres" regroupe les QCM sans thématique
+  // Regroupé par thématique principale (cf. server.js
+  // getPrimaryNotionQuizTheme) avec de vraies rubriques repliables, plutôt
+  // qu'un simple tableau plat — chaque connaissance n'apparaît que dans UNE
+  // rubrique thématique. "Autres" regroupe les QCM sans thématique
   // résolue (classification pas encore faite ou échouée), toujours en
   // dernier. Une rubrique prioritaire "En attente de réalisation" regroupe
   // tout en haut, une seule fois, les QCM non réalisés. Les rubriques
@@ -3435,9 +3433,9 @@
     var byTheme = {};
     var untagged = [];
     quizzes.forEach(function (q) {
-      var themes = Array.isArray(q.themes) ? q.themes.filter(Boolean) : [];
-      if (!themes.length) { untagged.push(q); return; }
-      themes.forEach(function (t) { (byTheme[t] = byTheme[t] || []).push(q); });
+      var primaryTheme = Array.isArray(q.themes) ? q.themes.filter(Boolean)[0] : null;
+      if (!primaryTheme) { untagged.push(q); return; }
+      (byTheme[primaryTheme] = byTheme[primaryTheme] || []).push(q);
     });
     var themeNames = Object.keys(byTheme).sort(function (a, b) { return a.localeCompare(b, 'fr', { sensitivity: 'base' }); });
     if (untagged.length) { byTheme['Autres'] = untagged; themeNames.push('Autres'); }
