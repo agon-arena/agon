@@ -1,4 +1,4 @@
-const SW_VERSION = "20260815-mnoria-startup-logo-v175";
+const SW_VERSION = "20260815-uniform-mnoria-header-v176";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

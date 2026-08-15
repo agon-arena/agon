@@ -80,6 +80,53 @@ html {
   }
 }
 
+/* Même bandeau Mnoria que l'index : cette page isolée ne charge pas style.css. */
+.topbar.topbar--mnoria-uniform {
+  height: 152px;
+  min-height: 152px;
+  max-height: 152px;
+}
+.topbar.topbar--mnoria-uniform .topbar-inner {
+  height: 146px;
+  min-height: 146px;
+  max-height: 146px;
+  padding: 0;
+  box-sizing: border-box;
+}
+.topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
+  width: 220px;
+  max-width: 220px;
+  height: 92px;
+  max-height: 92px;
+  object-fit: contain;
+}
+@media (max-width: 768px) {
+  .topbar.topbar--mnoria-uniform {
+    height: 102px;
+    min-height: 102px;
+    max-height: 102px;
+  }
+  .topbar.topbar--mnoria-uniform .topbar-inner {
+    height: 96px;
+    min-height: 96px;
+    max-height: 96px;
+  }
+  .topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
+    width: 128px;
+    max-width: 128px;
+    height: 96px;
+    max-height: 96px;
+  }
+}
+@media (display-mode: standalone) and (max-width: 768px) {
+  .topbar.topbar--mnoria-uniform {
+    height: calc(98px + env(safe-area-inset-top, 0px));
+    min-height: calc(98px + env(safe-area-inset-top, 0px));
+    max-height: calc(98px + env(safe-area-inset-top, 0px));
+    padding-top: calc(1px + env(safe-area-inset-top, 0px));
+  }
+}
+
 .het-body::after {
   content: "";
   display: block;

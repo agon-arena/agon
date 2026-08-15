@@ -26800,3 +26800,73 @@ body.universe-star-panel-open {
     max-height: 96px !important;
   }
 }
+
+/* Tous les bandeaux Mnoria reprennent exactement l'encombrement mesuré sur
+   l'index. Les sélecteurs volontairement précis neutralisent aussi les anciennes
+   dimensions locales (74px sur Apprentissages/Ouvrir, par exemple). */
+@media (min-width: 769px) {
+  html body .topbar.topbar--mnoria-uniform {
+    height: 152px !important;
+    min-height: 152px !important;
+    max-height: 152px !important;
+    padding-top: 5px !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  html body .topbar.topbar--mnoria-uniform .topbar-inner.topbar-home {
+    height: 146px !important;
+    min-height: 146px !important;
+    max-height: 146px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  html body .topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
+    width: 220px !important;
+    max-width: 220px !important;
+    height: 92px !important;
+    max-height: 92px !important;
+    object-fit: contain !important;
+  }
+}
+
+@media (max-width: 768px) {
+  html body .topbar.topbar--mnoria-uniform {
+    height: 102px !important;
+    min-height: 102px !important;
+    max-height: 102px !important;
+    padding-top: 5px !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  html body .topbar.topbar--mnoria-uniform .topbar-inner.topbar-home {
+    height: 96px !important;
+    min-height: 96px !important;
+    max-height: 96px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  html body .topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
+    width: 128px !important;
+    max-width: 128px !important;
+    height: 96px !important;
+    max-height: 96px !important;
+    object-fit: contain !important;
+  }
+}
+
+/* En standalone, la zone sûre iOS s'ajoute au-dessus des mêmes 96px de
+   contenu que sur l'index, sans réduire le logo ni provoquer de saut. */
+@media (display-mode: standalone) and (max-width: 768px) {
+  html body .topbar.topbar--mnoria-uniform {
+    height: calc(98px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(98px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(98px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
+  }
+}
