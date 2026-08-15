@@ -20245,6 +20245,21 @@ body.agon-cloud-switch-loading::before {
   pointer-events: none;
 }
 
+/* Passage Bulles Actus -> Communauté : .agon-cloud-mode-agon est posé dès le début pour que
+   le sablier ait immédiatement le bon fond, mais les anciennes bulles Actus restent dans le
+   conteneur pendant le fetch. Elles apparaissaient donc furtivement sur le fond Communauté,
+   sans satellites, avant d'être remplacées par le vrai nuage. Masque tous les éléments du
+   nuage durant cette seule direction de transition ; le sablier, enfant séparé et au-dessus,
+   reste visible. finishAgonCloudSwitchLoading retire .agon-cloud-switching seulement après le
+   layout complet : noyaux, satellites et badges sont ainsi révélés dans la même image. */
+.agon-tag-trends-cloud.agon-cloud-switching.agon-cloud-mode-agon > .agon-tag-bubble,
+.agon-tag-trends-cloud.agon-cloud-switching.agon-cloud-mode-agon > .agon-tag-center-btn,
+.agon-tag-trends-cloud.agon-cloud-switching.agon-cloud-mode-agon > .agon-tag-label-overlay,
+.agon-tag-trends-cloud.agon-cloud-switching.agon-cloud-mode-agon > .agon-tag-trend,
+.agon-tag-trends-cloud.agon-cloud-switching.agon-cloud-mode-agon > .agon-tag-trend-connector {
+  visibility: hidden;
+}
+
 .agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-bubble,
 .agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-center-btn,
 .agon-tag-trends-cloud.agon-cloud-layout-pending .agon-tag-label-overlay,
