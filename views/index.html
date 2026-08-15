@@ -148,6 +148,23 @@
         opacity: 1;
       }
     }
+    /* Au lancement d'une PWA iOS, le layout viewport peut grandir pendant les
+       premières images (par exemple 768px -> 812px). Le centrage flex du
+       loader suivait cette hauteur provisoire : le bloc logo/texte apparaissait
+       donc trop haut, puis descendait. En standalone mobile uniquement, on
+       ancre son centre sur le large viewport, stable dès le premier rendu.
+       50vh reste le repli pour les anciens WebKit sans unités lvh. */
+    @media (display-mode: standalone) and (max-width: 768px) {
+      .agon-startup-loader-inner {
+        position: absolute;
+        left: 50%;
+        top: 50vh;
+        top: 50lvh;
+        transform: translate(-50%, -50%);
+        box-sizing: border-box;
+        width: min(360px, 100%);
+      }
+    }
     .agon-startup-loader.is-hiding {
       opacity: 0;
       visibility: hidden;
@@ -396,7 +413,7 @@
 <div id="agon-startup-loader" class="agon-startup-loader">
   <div class="agon-startup-loader-inner">
     <div class="agon-startup-brand">
-      <img src="/logovisuelchargement.png" class="agon-startup-logo-img" alt="Agôn">
+      <img src="/logovisuelchargement.png" class="agon-startup-logo-img" alt="Agôn" width="1200" height="800">
     </div>
     <div class="agon-startup-lines">
       <p class="agon-startup-line agon-startup-line-1">mentem eleva</p>
@@ -472,11 +489,19 @@
   // même mal peint au premier rendu.
   var nudgeLoaderComposite = function () {
     if (!loader.parentNode || loader.classList.contains('is-hiding')) return;
+    // En standalone, ne jamais court-circuiter l'opacité 0 prévue avant
+    // .is-ready, ni la transition de révélation. L'ancien style inline à 1
+    // rendait le loader visible dès la première frame, précisément pendant
+    // que le viewport iOS était encore provisoire.
+    if (!loader.classList.contains('is-ready') || Number.parseFloat(window.getComputedStyle(loader).opacity || '0') < 0.99) return;
     var prevTransition = loader.style.transition;
+    var prevOpacity = loader.style.opacity;
     loader.style.transition = 'none';
     loader.style.opacity = '0.999';
     void loader.offsetHeight;
-    loader.style.opacity = '1';
+    // Rend la main aux classes CSS (.is-ready puis .is-hiding) au lieu de
+    // laisser un opacity:1 inline qui les écrase.
+    loader.style.opacity = prevOpacity;
     loader.style.transition = prevTransition;
   };
   // Amélioration du 13/08/2026 : des points de contrôle espacés (30/80/150ms...) pouvaient
