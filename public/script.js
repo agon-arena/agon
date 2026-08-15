@@ -1278,6 +1278,9 @@ function renderUserScoreWidget(data) {
       body.page-debate .agon-user-score-widget-logo-overlay {
         max-width: min(210px, calc(100vw - 120px));
       }
+      .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay {
+        max-width: min(210px, calc(100vw - 120px));
+      }
       /* Avec les 3 scores (Rhetor + Logos + Gnosis), le texte dépasse le
          plafond ci-dessus et se fait tronquer (ellipsis) — plafond élargi
          uniquement pour ce cas, les badges à 1-2 scores restent inchangés. */
@@ -1285,6 +1288,9 @@ function renderUserScoreWidget(data) {
       body.page-home-mobile .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
       body.page-tribunes .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
       body.page-debate .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
+        max-width: min(320px, calc(100vw - 40px));
+      }
+      .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
         max-width: min(320px, calc(100vw - 40px));
       }
       @media (max-width: 768px) {
@@ -1298,6 +1304,9 @@ function renderUserScoreWidget(data) {
         body.page-home-mobile .agon-user-score-widget-logo-overlay,
         body.page-tribunes .agon-user-score-widget-logo-overlay,
         body.page-debate .agon-user-score-widget-logo-overlay {
+          bottom: 10px;
+        }
+        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay {
           bottom: 10px;
         }
       }
@@ -1316,14 +1325,28 @@ function renderUserScoreWidget(data) {
           padding: 2px 7px;
           gap: 4px;
         }
+        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay {
+          bottom: 9px;
+          transform: translateX(-50%);
+          max-width: min(168px, calc(100vw - 116px));
+          font-size: 8.5px;
+          padding: 2px 7px;
+          gap: 4px;
+        }
         body.page-home-mobile .agon-user-score-widget-logo-overlay i,
         body.page-tribunes .agon-user-score-widget-logo-overlay i,
         body.page-debate .agon-user-score-widget-logo-overlay i {
           font-size: 8px;
         }
+        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay i {
+          font-size: 8px;
+        }
         body.page-home-mobile .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
         body.page-tribunes .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
         body.page-debate .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
+          max-width: min(260px, calc(100vw - 40px));
+        }
+        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
           max-width: min(260px, calc(100vw - 40px));
         }
       }
@@ -1357,7 +1380,8 @@ function renderUserScoreWidget(data) {
     || document.body.classList.contains("page-home-mobile")
     || document.body.classList.contains("page-tribunes")
     || document.body.classList.contains("page-debate");
-  if (isIndexPage && brandMain) {
+  const hasUniformMnoriaHeader = topbar.classList.contains("topbar--mnoria-uniform");
+  if ((isIndexPage || hasUniformMnoriaHeader) && brandMain) {
     brandMain.classList.add("agon-user-score-anchor");
     widget.classList.add("agon-user-score-widget-logo-overlay");
     brandMain.appendChild(widget);
@@ -1622,14 +1646,12 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 }
 
 (function initUserScoreWidget() {
-  // Le badge doit rester visible dans l'iframe de la page débat (mode iframe
-  // mobile, cf. isIframeDebateLoadingOverlayContext) — son bandeau répliqué y
-  // est réellement affiché à l'écran, contrairement aux autres iframes de
-  // modales internes (notifications, contributions, création…) où le badge
-  // resterait caché derrière le contenu et ferait doublon avec celui de la
-  // page hôte.
+  // Toute page qui affiche le bandeau blanc Mnoria doit afficher les scores,
+  // y compris lorsqu'elle est ouverte dans l'iframe de navigation interne.
+  // Les iframes techniques sans bandeau restent exclues.
   const isDebateIframe = location.pathname === "/debate" && window.self !== window.top;
-  if (window !== window.top && !isDebateIframe) return;
+  const hasUniformMnoriaHeader = !!document.querySelector(".topbar.topbar--mnoria-uniform");
+  if (window !== window.top && !isDebateIframe && !hasUniformMnoriaHeader) return;
   const key = getKey();
   if (!key) return;
   fetch(API + "/my-score?key=" + encodeURIComponent(key))
