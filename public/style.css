@@ -25264,10 +25264,13 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   outline-offset: 1px;
 }
 .universe-breadcrumb__item--current {
-  color: #fff;
+  color: #9fb3c4;
   font-weight: 600;
   cursor: default;
   padding: 2px 4px;
+}
+.universe-breadcrumb--nested .universe-breadcrumb__item--current {
+  color: #fff;
 }
 .universe-breadcrumb__sep {
   color: #5b6b78;
@@ -25282,6 +25285,12 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 #agon-memoire-embed-before .universe-breadcrumb__item:hover,
 #agon-memoire-embed-before .universe-breadcrumb__item:focus-visible {
   color: rgba(255, 255, 255, 0.55);
+}
+
+/* Dans l'embed également, seul le dernier niveau réellement ouvert est
+   blanc. À la racine, « Ma mémoire » conserve le gris de la légende. */
+#agon-memoire-embed-before .universe-breadcrumb--nested .universe-breadcrumb__item--current {
+  color: #fff;
 }
 
 /* Bouton retour, priorité mobile (desktop peut déjà cliquer un cran du fil d'Ariane). */

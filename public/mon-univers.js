@@ -1185,6 +1185,10 @@ function renderBreadcrumb(focusInfo) {
   const crumbs = [{ label: "Ma mémoire", action: () => zoomToRoot() }];
   if (focusInfo.galaxy) crumbs.push({ label: focusInfo.galaxy.name, action: () => camera.focusOn(focusInfo.galaxy, focusScaleFor(focusInfo.galaxy)) });
   if (focusInfo.solarSystem) crumbs.push({ label: focusInfo.solarSystem.name, action: () => camera.focusOn(focusInfo.solarSystem, focusScaleFor(focusInfo.solarSystem)) });
+  // À la racine, « Ma mémoire » reste volontairement grisé. Dès qu'un
+  // niveau est ouvert, cette classe permet de mettre uniquement le dernier
+  // élément en blanc (galaxie, puis solar), jamais les niveaux précédents.
+  breadcrumbEl.classList.toggle("universe-breadcrumb--nested", crumbs.length > 1);
 
   crumbs.forEach((crumb, i) => {
     const isLast = i === crumbs.length - 1;
