@@ -789,7 +789,7 @@ window.addEventListener("appinstalled", () => {
     overlay.innerHTML = `
       <div class="install-modal" onclick="event.stopPropagation()">
         <div class="install-modal-brand">
-          <img src="/icon-192-optimized.png" alt="" class="install-modal-app-icon">
+          <img src="/mnoria-icon-192.png" alt="" class="install-modal-app-icon">
         </div>
         <h3 class="install-modal-title">Agôn est installé&nbsp;!</h3>
         <div class="install-modal-section">
@@ -1111,7 +1111,7 @@ function renderOpenAppBanner() {
   banner.className = "agon-open-app-banner";
   banner.innerHTML = `
     <button type="button" class="agon-open-app-banner-close" aria-label="Fermer">&times;</button>
-    <img src="/icon-192-optimized.png" alt="">
+    <img src="/mnoria-icon-192.png" alt="">
     <span>Utilise l'app Agôn déjà installée sur ton mobile pour retrouver tes contributions.</span>
     <button type="button" class="agon-open-app-banner-link">Comment l'ouvrir&nbsp;?</button>
   `;
@@ -1141,7 +1141,7 @@ function showOpenAppHowToModal() {
     overlay.innerHTML = `
       <div class="install-modal" onclick="event.stopPropagation()">
         <div class="install-modal-brand">
-          <img src="/icon-192-optimized.png" alt="" class="install-modal-app-icon">
+          <img src="/mnoria-icon-192.png" alt="" class="install-modal-app-icon">
         </div>
         <h3 class="install-modal-title">Ouvrir l'app Agôn</h3>
         <div class="install-modal-section">
@@ -2187,7 +2187,7 @@ function openInstallModalFallback() {
         <i class="fa-solid fa-xmark"></i>
       </button>
       <div class="install-modal-brand">
-        <img src="/icon-192-optimized.png" alt="" class="install-modal-app-icon">
+        <img src="/mnoria-icon-192.png" alt="" class="install-modal-app-icon">
       </div>
       <h3 class="install-modal-title">Installer l'icône Agôn</h3>
       <div class="install-modal-section">
@@ -2279,7 +2279,7 @@ function showPushInvite(reason = "action", options = {}) {
 
   const icon = document.createElement("div");
   icon.className = "push-invite-icon";
-  icon.innerHTML = '<img src="/icon-192-optimized.png" alt="Agôn">';
+  icon.innerHTML = '<img src="/mnoria-icon-192.png" alt="Mnoria">';
 
   copy.append(title, text);
   actions.append(primaryButton, laterButton);
@@ -13260,7 +13260,7 @@ function ensureAgonSourcePanel() {
     <div class="agon-source-panel-wrap">
     <div class="agon-source-panel" role="dialog" aria-modal="true" aria-label="Source externe">
       <div class="agon-source-panel-topbar">
-        <img src="/favicon-64.png" alt="agôn" class="agon-source-panel-logo">
+        <img src="/mnoria-icon-64.png" alt="mnoria" class="agon-source-panel-logo">
         <span id="agon-source-panel-domain" class="agon-source-panel-domain"></span>
         <button type="button" class="agon-source-panel-close" data-agon-source-panel-close>Retour</button>
       </div>

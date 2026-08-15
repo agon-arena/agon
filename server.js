@@ -6070,8 +6070,8 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       title: "L'arène des idées",
       body,
       url: "/",
-      icon: "/icon-192-optimized.png",
-      badge: "/icon-192-optimized.png"
+      icon: "/mnoria-icon-192.png",
+      badge: "/mnoria-icon-192.png"
     });
 
     return res.json({ success: true, wave: isMorningWave ? "morning" : "evening", body, eclairages, ...result });

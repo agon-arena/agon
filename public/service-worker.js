@@ -1,4 +1,4 @@
-const SW_VERSION = "20260812-apprentissage-empty-panel-flash-v172";
+const SW_VERSION = "20260815-mnoria-app-icon-v173";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -231,8 +231,8 @@ self.addEventListener("push", (event) => {
   const title = rawTitle.replace(/^from\s+ag[oô]n\s*:?\s*/i, "").trim() || "L'arène des idées";
   const options = {
     body: payload.body || "Nouvelle activité sur agôn.",
-    icon: payload.icon || "/icon-192-optimized.png",
-    badge: payload.badge || "/icon-192-optimized.png",
+    icon: payload.icon || "/mnoria-icon-192.png",
+    badge: payload.badge || "/mnoria-icon-192.png",
     data: {
       url: payload.url || "/",
       notificationId: payload.notificationId || payload.notification_id || null
