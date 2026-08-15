@@ -284,15 +284,18 @@ function getSolarSystemById(galaxy, id) {
   return (galaxy?.solarSystems || []).find((s) => String(s.id) === String(id)) || null;
 }
 
-// ---- Seuils de révélation : une bulle système/étoile n'apparaît (et ne devient cliquable) que
-// lorsque SON PROPRE rayon à l'écran dépasse REVEAL_PX_SELF ET que son PARENT DIRECT a déjà cédé
-// la place à ses enfants (cf. childrenCanShow, plus bas — dérivé du même REVEAL_PX_SELF, jamais
-// un seuil indépendant sur le rayon du parent lui-même : cf. son commentaire pour la raison).
+// ---- Seuils de révélation : un système n'apparaît que lorsque son rayon à l'écran dépasse
+// REVEAL_PX_SELF et que sa galaxie a cédé la place. Les étoiles utilisent un seuil plus précoce
+// dédié : d'abord minuscules, elles grandissent ensuite naturellement avec le zoom.
 // Hiérarchie stricte à 3 niveaux demandée explicitement (13/08/2026) : sans le filtre par
 // parent, un jeu de données avec peu d'éléments par niveau pouvait faire franchir le seuil de
 // taille aux 3 niveaux en même temps dès la vue d'ensemble — les étoiles, peintes en dernier
 // donc par-dessus, masquaient alors visuellement galaxies/systèmes en dessous.
-const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
+const REVEAL_PX_SELF = 30; // rayon minimum d'un système, et taille d'étoile considérée mature
+// Les étoiles commencent leur apparition bien avant leur taille de lecture définitive : elles
+// sont d'abord de minuscules points, puis le zoom du monde les fait grandir continûment.
+const STAR_REVEAL_PX = 6;
+const STAR_LABEL_REVEAL_PX = 18;
 
 // Rayon à l'écran visé, pour le plus gros enfant d'un nœud, une fois ce nœud ciblé par un clic
 // (focusOn) — comfortablement au-dessus de REVEAL_PX_SELF pour qu'il apparaisse net, pas
@@ -739,6 +742,7 @@ function childrenCanShow(node, scale) {
 
 function onCameraChange(state) {
   document.documentElement.style.setProperty("--universe-cam-scale", String(state.scale));
+  document.documentElement.style.setProperty("--universe-inverse-cam-scale", String(1 / state.scale));
 
   const vw = viewportEl.clientWidth;
   const vh = viewportEl.clientHeight;
@@ -767,9 +771,15 @@ function onCameraChange(state) {
       // jamais de fondu croisé à ce niveau-là, uniquement au niveau galaxie -> système.
       const parentId = kind === "solarSystem" ? node.galaxyId : node.solarSystemId;
       const parent = nodeById.get(parentId);
-      const parentCeded = parent && childrenCanShow(parent, state.scale);
-      const selfRevealed = node.r * state.scale >= REVEAL_PX_SELF;
-      revealed = parentCeded && selfRevealed;
+      if (kind === "star") {
+        const parentReady = parent && (parent.maxChildR || 0) * state.scale >= STAR_REVEAL_PX;
+        const selfReady = node.r * state.scale >= STAR_REVEAL_PX;
+        revealed = parentReady && selfReady;
+      } else {
+        const parentCeded = parent && childrenCanShow(parent, state.scale);
+        const selfRevealed = node.r * state.scale >= REVEAL_PX_SELF;
+        revealed = parentCeded && selfRevealed;
+      }
     }
 
     // Position écran du libellé (couche à part, cf. labelsOverlayEl) — recalculée à chaque
@@ -778,7 +788,8 @@ function onCameraChange(state) {
     if (label) {
       label.style.left = (vw / 2 + (node.x - state.x) * state.scale) + "px";
       label.style.top = (vh / 2 + (node.y - state.y) * state.scale) + "px";
-      label.classList.toggle("is-revealed", revealed);
+      const labelRevealed = revealed && (kind !== "star" || node.r * state.scale >= STAR_LABEL_REVEAL_PX);
+      label.classList.toggle("is-revealed", labelRevealed);
     }
     // Trait connecteur (étoiles uniquement, cf. createConnectorEl) : même état que l'étoile
     // elle-même, jamais affiché seul ni en avance sur elle. Épaisseur RECALCULÉE ici à chaque

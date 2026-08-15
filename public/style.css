@@ -25804,9 +25804,10 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
 .agon-tag-bubble-star::before {
   content: "";
   position: absolute;
-  /* -20px (pas -14px) et opacités relevées (0.55/0.25 → 0.85/0.55/0.2) : demande du 08/08/2026
-     "plus prononcé et foncé". */
-  inset: -20px;
+  /* Halo de 12px VISUELS quelle que soit l'échelle du monde : la valeur inverse est actualisée
+     par onCameraChange. Un inset fixe dans le monde était lui aussi agrandi par la caméra et
+     finissait en immense voile gris autour des petites étoiles. */
+  inset: calc(-12px * var(--universe-inverse-cam-scale, 1));
   /* Neutralise width:52%/height:36% du reflet générique .agon-tag-bubble::before. Sans cette
      remise à auto, le halo restait un petit voile ovale décalé vers le haut-gauche au lieu
      d'épouser le centre de l'étoile. */
