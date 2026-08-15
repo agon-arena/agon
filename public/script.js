@@ -713,6 +713,10 @@ window.forceFullPageRefresh = forceFullPageRefresh;
     // Pause sur le logo avant les messages
     if (window.__agonStartupInlineStarted !== true) {
       await wait(400);
+    } else {
+      const delayUntil = Number(window.__agonStartupLineDelayUntil || 0);
+      const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
+      if (delayUntil > now) await wait(delayUntil - now);
     }
 
     await playStartupLine(loader.querySelector('.agon-startup-line-1'), 1600);
@@ -36251,7 +36255,7 @@ window.addEventListener('pageshow', (event) => {
 // Bandeau "nouvelles publications" (style réseaux sociaux).
 // Remplace l'ancien rechargement automatique après inactivité (location.reload()
 // déclenché sur visibilitychange) : ce reload forcé interrompait la lecture mobile
-// et rejouait l'intro Agôn / "mentem eleva". L'utilisateur décide désormais lui-même
+// et rejouait l'intro. L'utilisateur décide désormais lui-même
 // du moment où il actualise, via ce bandeau.
 (function() {
   var p = location.pathname;

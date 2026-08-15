@@ -47,7 +47,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260815-knowledge-lines-v40">
+  <link rel="stylesheet" href="/style.min.css?v=20260815-startup-slogan-v41">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -197,6 +197,7 @@
       display: flex;
       flex-direction: column;
       gap: 0;
+      transform: translateY(-8px);
     }
     .agon-startup-line {
       margin: 9px 0;
@@ -419,7 +420,7 @@
       <img src="/mnoria-logo.png?v=20260815-startup-v1" class="agon-startup-logo-img" alt="Mnoria" width="2172" height="724">
     </div>
     <div class="agon-startup-lines">
-      <p class="agon-startup-line agon-startup-line-1">mentem eleva</p>
+      <p class="agon-startup-line agon-startup-line-1">Cultivez votre esprit</p>
     </div>
     <button type="button" class="agon-startup-retry-btn" onclick="try{window.location.reload()}catch(e){}" aria-label="Recharger l'application">&#8635;&nbsp;&nbsp;Recharger</button>
   </div>
@@ -443,6 +444,9 @@
   var line = loader.querySelector('.agon-startup-line-1');
   if (!line) return;
   window.__agonStartupInlineStarted = true;
+  var lineDelayMs = 500;
+  var startupClockNow = window.performance && window.performance.now ? window.performance.now() : Date.now();
+  window.__agonStartupLineDelayUntil = startupClockNow + lineDelayMs;
   var isMobileStartup = document.body.classList.contains('agon-mobile-cloud-viewport') ||
     window.matchMedia('(max-width: 768px)').matches;
   var retryDelay = isMobileStartup ? 12000 : 6500;
@@ -471,12 +475,12 @@
     document.documentElement.classList.remove('agon-startup-active');
     document.documentElement.classList.remove('agon-startup-stuck');
   }, automaticReleaseDelay);
-  requestAnimationFrame(function(){
+  setTimeout(function(){
     requestAnimationFrame(function(){
       window.__agonStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
       line.classList.add('is-playing');
     });
-  });
+  }, lineDelayMs);
   // Bande blanche furtive en bas de l'écran au lancement standalone (revu le 13/08/2026,
   // jamais observée hors standalone d'après retour utilisateur — absente dès qu'un vrai
   // navigateur/sa barre est présent). Se corrige TOUTE SEULE un instant après : pas la
@@ -1487,7 +1491,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260815-pending-qcm-v37" defer></script>
+<script src="/script.min.js?v=20260815-startup-slogan-v38" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

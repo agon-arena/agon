@@ -161,6 +161,7 @@ html.thematic-scroll body {
   display: flex;
   flex-direction: column;
   gap: 0;
+  transform: translateY(-8px);
 }
 
 .agon-startup-line {
