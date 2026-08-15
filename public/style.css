@@ -25920,11 +25920,9 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   z-index: -1;
 }
 
-/* Lunes autour d'une galaxie (cf. addMoonsAroundGalaxy, mon-univers.js) : demande du 13/08/2026,
-   leur nombre correspond exactement au nombre de systèmes solaires de la galaxie — même famille
-   lumineuse (glow blanc/or) que .universe-mini-star ci-dessus (demande explicite "lunes
-   lumineuses") ; l'équivalent terne autour des étoiles (.universe-star-moon) a depuis été retiré
-   (demande du 13/08/2026, "point noir... je n'en veux pas", cf. mon-univers.js). */
+/* Lunes informatives de la vue galaxie (cf. addMoonsAroundGalaxy) : exactement une par système
+   solaire, taille/éclat uniformes et placement radial déterministe. Aucune lune décorative ou
+   aléatoire n'est ajoutée ; l'équivalent terne autour des étoiles reste supprimé. */
 .universe-galaxy-moon {
   position: absolute;
   border-radius: 50%;
@@ -25932,18 +25930,13 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   box-shadow: 0 0 10px 3px rgba(255,236,190,0.75);
   pointer-events: none;
   z-index: -1;
-  /* is-revealed (posé/retiré par onCameraChange, mon-univers.js) : ces lunes s'effacent dès que
-     les systèmes solaires de leur galaxie deviennent visibles (demande du 13/08/2026, "quand je
-     vois les solars, je ne veux plus voir ces lunes"), même bascule opacity que
-     .universe-zoom-bubble. --moon-twinkle (pas opacity direct en JS) : la variété d'éclat
-     aléatoire par lune reste posée en style inline, appliquée seulement une fois révélée — sans
-     ce détour, un opacity inline aurait toujours gagné sur cette règle de classe et empêché le
-     fondu de disparition. */
+  /* Ces lunes s'effacent dès que les systèmes solaires de leur galaxie deviennent visibles,
+     avec la même bascule de niveau que la bulle galaxie. */
   opacity: 0;
   transition: opacity 0.35s ease;
 }
 .universe-galaxy-moon.is-revealed {
-  opacity: var(--moon-twinkle, 1);
+  opacity: 1;
 }
 
 /* Scintillement ponctuel (cf. drawSparklesForStars, mon-univers.js) : croix fine en dégradé,

@@ -61,7 +61,7 @@ function hueForGalaxy(name) {
   if (known !== undefined) return known;
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  const span = 181 - 25 + (334 - 256); // longueur cumulée des deux arcs autorisés
+  const span = 181 - 25 + (334 - 256);
   let offset = hash % span;
   return offset <= (181 - 25) ? 25 + offset : 256 + (offset - (181 - 25));
 }
@@ -81,7 +81,7 @@ const GALAXY_GRADIENT_LEVELS = {
 function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
   const hue = hueForGalaxy(galaxyName);
   const stops = GALAXY_GRADIENT_LEVELS[level];
-  const s = 12;
+  const s = 9;
   const tail = fadeEdge
     ? `hsla(${hue}, ${s}%, ${stops[1]}%, 0.75) 78%, hsla(${hue}, ${s}%, ${stops[2]}%, 0.35) 90%, hsla(${hue}, ${s}%, ${stops[2]}%, 0) 100%`
     : `hsl(${hue} ${s}% ${stops[2]}%) 100%`;
@@ -161,7 +161,7 @@ function buildNeuronLinePoints(seed) {
 // juste en dessous, qui superpose ce cœur par-dessus).
 function neuronLinesBackground(hue) {
   const linePointSets = buildNeuronLinePoints(hue);
-  const stroke = `hsl(${hue}, 20%, 85%)`;
+  const stroke = `hsl(${hue}, 9%, 85%)`;
   // Opacités réduites d'~30% (demande du 13/08/2026, "réduire l'intensité
   // lumineuse des galaxies") : 0.3/0.47/0.68 → 0.2/0.32/0.46, même structure
   // (couleurs/rayons de flou inchangés) pour garder le même dessin de
@@ -172,7 +172,7 @@ function neuronLinesBackground(hue) {
   const innerGlowPaths = linePointSets
     .map((points) => buildTaperedPathSegments(points, 12, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.32" filter="url(#neuronGlowInner)"`))
     .join("");
-  const coreStroke = `hsl(${hue}, 10%, 97%)`;
+  const coreStroke = `hsl(${hue}, 6%, 97%)`;
   const corePaths = linePointSets
     .map((points) => buildTaperedPathSegments(points, 6, 0.2, 5, `stroke="${coreStroke}" stroke-linecap="round" opacity="0.46" filter="url(#neuronGlowCore)"`))
     .join("");
@@ -190,10 +190,10 @@ function galaxyBubbleVisual(galaxyName) {
   // Cœur et halo également réduits d'~30% (demande du 13/08/2026) — alpha du
   // centre blanc et de la teinte de fin de dégradé abaissés, glowColor (repris
   // par .agon-tag-bubble-galaxy::before, style.css) idem.
-  const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.55) 26%, hsl(${hue} 22% 90%) 50%, hsla(${hue}, 20%, 85%, 0.2) 68%, transparent 84%)`;
+  const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.55) 26%, hsl(${hue} 10% 90%) 50%, hsla(${hue}, 9%, 85%, 0.2) 68%, transparent 84%)`;
   return {
     background: `${core}, ${lines}`,
-    glowColor: `hsla(${hue}, 25%, 85%, 0.5)`
+    glowColor: `hsla(${hue}, 11%, 85%, 0.5)`
   };
 }
 
@@ -327,36 +327,51 @@ function ariaLabelFor(kind, node) {
   return node.name;
 }
 
-// ---- Décorations : calculées une seule fois par nœud lors du montage (positions déjà connues
-// en coordonnées monde, contrairement à l'ancien modèle qui devait relire le DOM après coup) ----
+// ---- Indicateurs et décorations calculés une seule fois par nœud lors du montage ------------
 
-// Lunes autour d'une galaxie (demande du 13/08/2026) : leur nombre correspond EXACTEMENT au
-// nombre de systèmes solaires qu'elle contient (pas une décoration purement aléatoire comme les
-// lunes/scintillements des étoiles plus bas) — même principe que addMiniStarsAroundSolarSystem
-// juste en dessous (nombre réel plutôt que suggéré), mais sans plancher/plafond : l'utilisateur a
-// explicitement demandé la correspondance exacte ("18 solars = 18 lunes"), jamais arrondie.
+// Lunes INFORMATIVES de la vue galaxie : une lune exacte par système solaire, jamais de lune
+// ajoutée au hasard. Leur position est entièrement déterministe et se déploie en anneaux
+// radiaux réguliers autour de la galaxie. Si une galaxie contient trop de systèmes pour un seul
+// anneau sans chevauchement, les suivants occupent automatiquement un anneau plus éloigné.
 function addMoonsAroundGalaxy(galaxy) {
-  const count = galaxy.ref.solarSystems.length;
-  for (let m = 0; m < count; m += 1) {
-    const angle = (m / count) * Math.PI * 2 + (galaxy.x + galaxy.y) * 0.01;
-    const dist = galaxy.r + 14 + Math.random() * 20;
-    const moonSize = 8 + Math.random() * 6;
-    const moon = document.createElement("span");
-    moon.className = "universe-galaxy-moon";
-    // galaxyId : lu par onCameraChange pour masquer ces lunes dès que les systèmes solaires de
-    // LEUR galaxie deviennent visibles (demande du 13/08/2026, "quand je vois les solars, je ne
-    // veux plus voir ces lunes") — même bascule is-revealed que la bulle galaxie elle-même
-    // (childrenCanShow), pour rester synchronisé avec elle plutôt que de suivre un seuil propre.
-    moon.dataset.galaxyId = galaxy.id;
-    moon.style.left = Math.round(galaxy.x + Math.cos(angle) * dist - moonSize / 2) + "px";
-    moon.style.top = Math.round(galaxy.y + Math.sin(angle) * dist - moonSize / 2) + "px";
-    moon.style.width = moonSize + "px";
-    moon.style.height = moonSize + "px";
-    // --moon-twinkle (pas opacity directement) : opacity est le mécanisme de révélation
-    // is-revealed ci-dessous (cf. style.css), un inline opacity l'aurait court-circuité (une
-    // propriété posée en style inline gagne toujours sur une règle de classe).
-    moon.style.setProperty("--moon-twinkle", String(0.75 + Math.random() * 0.25));
-    worldEl.appendChild(moon);
+  const systems = galaxy.ref.solarSystems;
+  if (!systems.length) return;
+
+  const moonSize = Math.max(6, Math.min(9, galaxy.r * 0.1));
+  const spacing = moonSize + 8;
+  const firstRadius = galaxy.r + 14 + moonSize / 2;
+  // Phase stable dérivée du nom : évite que toutes les galaxies alignent leurs premières lunes
+  // sur le même axe sans introduire le moindre Math.random() ni mouvement entre deux visites.
+  const phase = (hueForGalaxy(galaxy.name) * Math.PI) / 180;
+  let systemIndex = 0;
+  let ringIndex = 0;
+
+  while (systemIndex < systems.length) {
+    const radialDistance = firstRadius + ringIndex * spacing;
+    const ringCapacity = Math.max(6, Math.floor((Math.PI * 2 * radialDistance) / spacing));
+    const ringCount = Math.min(ringCapacity, systems.length - systemIndex);
+    const ringOffset = ringIndex % 2 ? Math.PI / ringCount : 0;
+
+    for (let slot = 0; slot < ringCount; slot += 1) {
+      const system = systems[systemIndex];
+      const angle = phase + ringOffset + (slot / ringCount) * Math.PI * 2;
+      const moon = document.createElement("span");
+      moon.className = "universe-galaxy-moon";
+      moon.dataset.solarSystemId = String(system.id);
+      moon.setAttribute("aria-hidden", "true");
+      // galaxyId : lu par onCameraChange pour masquer ces lunes dès que les systèmes solaires de
+      // LEUR galaxie deviennent visibles (demande du 13/08/2026, "quand je vois les solars, je ne
+      // veux plus voir ces lunes") — même bascule is-revealed que la bulle galaxie elle-même
+      // (childrenCanShow), pour rester synchronisé avec elle plutôt que de suivre un seuil propre.
+      moon.dataset.galaxyId = galaxy.id;
+      moon.style.left = Math.round(galaxy.x + Math.cos(angle) * radialDistance - moonSize / 2) + "px";
+      moon.style.top = Math.round(galaxy.y + Math.sin(angle) * radialDistance - moonSize / 2) + "px";
+      moon.style.width = moonSize + "px";
+      moon.style.height = moonSize + "px";
+      worldEl.appendChild(moon);
+      systemIndex += 1;
+    }
+    ringIndex += 1;
   }
 }
 
@@ -419,6 +434,7 @@ function createBubbleEl(kind, node, background, glowColor, extraClass) {
   btn.className = `agon-tag-bubble universe-zoom-bubble${extraClass ? " " + extraClass : ""}`;
   btn.dataset.kind = kind;
   btn.dataset.nodeId = node.id;
+  if (Number.isFinite(node.themeHue)) btn.dataset.themeHue = String(node.themeHue);
   btn.style.left = (node.x - node.r) + "px";
   btn.style.top = (node.y - node.r) + "px";
   // .agon-tag-bubble ne fixe pas width/height elle-même (ça vient normalement de
@@ -545,6 +561,7 @@ function mountUniverse() {
   worldLayout.solarSystems.forEach((s) => { s.maxChildR = maxChildRBySystem.get(s.id) || s.r * 0.3; });
 
   worldLayout.galaxies.forEach((g) => {
+    g.themeHue = hueForGalaxy(g.name);
     const visual = galaxyBubbleVisual(g.name);
     const el = createBubbleEl("galaxy", g, visual.background, visual.glowColor, "agon-tag-bubble-galaxy");
     el.classList.add("is-revealed"); // toujours visibles, jamais soumises au seuil de révélation
@@ -554,11 +571,12 @@ function mountUniverse() {
 
   worldLayout.solarSystems.forEach((s) => {
     const hue = hueForGalaxy(getGalaxyNameFromId(s.galaxyId));
+    s.themeHue = hue;
     createBubbleEl(
       "solarSystem",
       s,
       bubbleBackgroundFor(getGalaxyNameFromId(s.galaxyId), "solarSystem", true),
-      `hsla(${hue}, 18%, 85%, 0.6)`,
+      `hsla(${hue}, 10%, 85%, 0.6)`,
       "agon-tag-bubble-solarsystem"
     );
     addMiniStarsAroundSolarSystem(s);
@@ -566,6 +584,7 @@ function mountUniverse() {
   });
 
   worldLayout.stars.forEach((star) => {
+    star.themeHue = hueForGalaxy(getGalaxyNameFromId(star.galaxyId));
     createBubbleEl(
       "star",
       star,
@@ -775,9 +794,8 @@ function onCameraChange(state) {
     el.classList.toggle("is-revealed", revealed);
   });
 
-  // Lunes décoratives des galaxies (cf. addMoonsAroundGalaxy) : mêmes règles is-revealed que la
-  // bulle galaxie elle-même (childrenCanShow) — s'effacent dès que ses systèmes solaires
-  // deviennent visibles, plutôt qu'un seuil propre qui risquerait de se désynchroniser d'elle.
+  // Lunes informatives des galaxies (une par système, cf. addMoonsAroundGalaxy) : mêmes règles
+  // is-revealed que la bulle galaxie — s'effacent dès que ses systèmes deviennent visibles.
   worldEl.querySelectorAll(".universe-galaxy-moon").forEach((el) => {
     const node = nodeById.get(el.dataset.galaxyId);
     if (!node) return;
