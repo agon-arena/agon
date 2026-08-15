@@ -4,6 +4,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script>
+    // Un refresh volontaire doit montrer le loader dès sa toute première image.
+    // Sans cette classe précoce, la protection standalone le garde transparent
+    // 200 ms et laisse brièvement voir le fond puis le cadre des bulles.
+    try {
+      if (new URLSearchParams(window.location.search).has('_swrefresh')) {
+        document.documentElement.classList.add('agon-user-refresh-startup');
+      }
+    } catch (_) {}
+  </script>
   <script src="/no-zoom.js?v=20260603" defer></script>
 
   <title>__META_TITLE__</title>
@@ -143,6 +153,9 @@
         opacity: 0;
       }
       .agon-startup-loader.is-ready {
+        opacity: 1;
+      }
+      html.agon-user-refresh-startup .agon-startup-loader {
         opacity: 1;
       }
     }
@@ -1265,18 +1278,13 @@ window.addEventListener("pageshow", function() {
     <span>Ouvrir</span>
   </a>
 
-  <!-- Voile sombre immédiat avant le reload, MAIS le voile est fixed et WebKit
-       (PWA iPhone) peint en retard les couches fixed dans les ~60px du bas :
-       la frame figée au moment de la navigation peut y garder la barre blanche
-       et la pastille "Autres actus", qui restent alors visibles sous l'intro de
-       la page suivante. D'où : (1) la classe agon-startup-active posée dès le
-       clic pour masquer ces éléments par le CSS critique (du contenu normal,
-       peint sans retard), (2) 250ms avant de naviguer — le temps que la bande
-       basse rattrape — au lieu de 60ms. -->
+  <!-- forceFullPageRefresh recrée immédiatement le véritable loader (logo +
+       slogan), puis navigue seulement après sa première peinture. Aucun voile
+       bleu intermédiaire et aucune frame des bulles ne doivent rester visibles. -->
   <button
     type="button"
     class="home-bottom-nav-item index-bottom-refresh-btn"
-    onclick="(function(){var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:#101820;';document.body.appendChild(o);document.documentElement.classList.add('agon-startup-active');setTimeout(function(){typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload();},250);})()"
+    onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload()"
     aria-label="Actualiser la page"
   >
     <i class="fa-solid fa-rotate-right"></i>
@@ -1491,7 +1499,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260815-startup-slogan-v38" defer></script>
+<script src="/script.min.js?v=20260815-immediate-refresh-v39" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

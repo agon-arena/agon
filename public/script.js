@@ -521,14 +521,67 @@ registerServiceWorker();
 // worker à ignorer le cache pour CETTE navigation précise et à attendre une
 // réponse fraîche du serveur (avec son propre filet de récupération si le
 // serveur ne répond pas). Nettoyé de l'URL visible juste après, plus bas.
-function forceFullPageRefresh() {
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.set("_swrefresh", "1");
-    window.location.replace(url.toString());
-  } catch (error) {
-    window.location.reload();
+function showAgonStartupBeforeRefresh() {
+  // L'animation de démarrage n'existe que sur l'index. Les boutons Actualiser
+  // des autres pages conservent donc leur rechargement direct habituel.
+  if (!document.getElementById("agon-startup-critical-css")) return false;
+
+  document.documentElement.classList.remove("agon-skip-startup-once", "agon-startup-stuck");
+  document.documentElement.classList.add("agon-startup-active", "agon-user-refresh-startup");
+  window.__agonSkipStartupOnce = false;
+
+  let loader = document.getElementById("agon-startup-loader");
+  if (!loader) {
+    loader = document.createElement("div");
+    loader.id = "agon-startup-loader";
+    loader.className = "agon-startup-loader";
+    loader.innerHTML =
+      '<div class="agon-startup-loader-inner">' +
+        '<div class="agon-startup-brand">' +
+          '<img src="/mnoria-logo.png?v=20260815-startup-v1" class="agon-startup-logo-img" alt="Mnoria" width="2172" height="724">' +
+        '</div>' +
+        '<div class="agon-startup-lines">' +
+          '<p class="agon-startup-line agon-startup-line-1">Cultivez votre esprit</p>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(loader);
   }
+
+  loader.classList.remove("is-hiding");
+  loader.classList.add("is-ready");
+  loader.style.removeProperty("opacity");
+  loader.style.removeProperty("visibility");
+  // Force le calcul avant de rendre la main : le logo est prêt pour la toute
+  // prochaine frame, sans attendre le parsing du nouveau document.
+  void loader.offsetHeight;
+  return true;
+}
+
+function forceFullPageRefresh() {
+  const startupShown = showAgonStartupBeforeRefresh();
+  const navigate = function() {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("_swrefresh", "1");
+      window.location.replace(url.toString());
+    } catch (error) {
+      window.location.reload();
+    }
+  };
+
+  if (!startupShown) {
+    navigate();
+    return;
+  }
+
+  // Le loader est ajouté synchroniquement au clic. Deux frames garantissent
+  // sa composition par WebKit ; la courte marge suivante conserve la bande
+  // basse masquée avant la navigation, sans afficher un écran bleu séparé.
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      window.setTimeout(navigate, 80);
+    });
+  });
 }
 window.forceFullPageRefresh = forceFullPageRefresh;
 
