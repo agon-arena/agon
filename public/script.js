@@ -116,6 +116,11 @@ function __agonGetModalDebugContext() {
 
 function __agonStoreFreezeLog(entry = {}) {
   if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+  // Les iframes sont des documents distincts mais partagent le même
+  // localStorage que leur parent. Elles ne doivent jamais écraser le journal
+  // de cycle de vie de la vraie page standalone : sinon /apprentissage peut
+  // être pris pour la dernière URL principale après un kill/reload WebKit.
+  if (window.self !== window.top) return;
   try {
     const prev = JSON.parse(localStorage.getItem(AGON_FREEZE_LOG_KEY) || "[]");
     prev.unshift({
@@ -156,6 +161,7 @@ function __agonGetDebugRuntimeContext(extra = {}) {
   } catch (e) {}
 
   return {
+    documentContext: window.self === window.top ? "top" : "iframe",
     visibilityState: document.visibilityState || "",
     hidden: document.hidden === true,
     online: navigator.onLine !== false,
@@ -181,6 +187,7 @@ function __agonGetDebugRuntimeContext(extra = {}) {
 
 function __agonStoreLifecycleSnapshot(reason, extra = {}) {
   if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+  if (window.self !== window.top) return;
   try {
     localStorage.setItem(AGON_LAST_LIFECYCLE_SNAPSHOT_KEY, JSON.stringify({
       reason,
@@ -195,6 +202,7 @@ function __agonStoreLifecycleSnapshot(reason, extra = {}) {
 
 function __agonDebugRefreshLog(source, type, extra = {}) {
   if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+  if (window.self !== window.top) return;
   try {
     const entry = {
       source,
@@ -224,6 +232,7 @@ function __agonDebugRefreshLog(source, type, extra = {}) {
 // pas connaissance (dans ce dernier cas, aucun motif ne sera trouvé au démarrage).
 const AGON_LAST_RELOAD_REASON_KEY = "agon_last_reload_reason";
 function __agonRecordReloadReason(reason) {
+  if (window.self !== window.top) return;
   try {
     sessionStorage.setItem(AGON_LAST_RELOAD_REASON_KEY, JSON.stringify({ reason, at: Date.now() }));
   } catch (e) {}
@@ -232,6 +241,10 @@ function __agonRecordReloadReason(reason) {
 // DIAGNOSTIC TEMPORAIRE — s'exécute au tout début de chaque chargement de script.js.
 (function __agonDebugStartupDiagnostic() {
   try {
+    // Ce diagnostic pilote aussi la restauration de la dernière URL après un
+    // crash iOS. Dans une iframe il consommerait les clés du parent et pourrait
+    // enregistrer sa propre URL comme destination top-level.
+    if (window.self !== window.top) return;
     let navigationType = "unknown";
     try {
       const navEntry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
@@ -314,7 +327,11 @@ function __agonRecordReloadReason(reason) {
     const isLikelyStandaloneKillRelaunch =
       isStandaloneDisplay &&
       likelyCause === "processus WebKit tué/crashé sans pagehide (mémoire probable) puis relance de la PWA standalone sur son URL de départ";
-    if (isLikelyStandaloneKillRelaunch && !skipStartup && window.location.pathname === "/" && lastLifecycleSnapshot?.url) {
+    // Les anciennes versions ne distinguaient pas page principale et iframe.
+    // Exiger explicitement documentContext === "top" neutralise aussi une
+    // dernière capture /apprentissage déjà contaminée avant ce correctif.
+    const previousSnapshotIsTopLevel = lastLifecycleSnapshot?.documentContext === "top";
+    if (isLikelyStandaloneKillRelaunch && previousSnapshotIsTopLevel && !skipStartup && window.location.pathname === "/" && lastLifecycleSnapshot?.url) {
       try {
         const previousUrl = new URL(lastLifecycleSnapshot.url, window.location.origin);
         const target = previousUrl.pathname + previousUrl.search + previousUrl.hash;
@@ -431,6 +448,7 @@ document.addEventListener("visibilitychange", () => {
 
 (function __agonBindFreezeHeartbeat() {
   if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+  if (window.self !== window.top) return;
   const HEARTBEAT_INTERVAL_MS = 5000;
   const STALL_THRESHOLD_MS = 12000;
   let expectedNextBeat = Date.now() + HEARTBEAT_INTERVAL_MS;
@@ -480,13 +498,17 @@ function registerServiceWorker() {
   });
 
   // Le service worker sert le HTML en cache instantanément au lancement standalone,
-  // puis revalide en arrière-plan. Si cette revalidation détecte que le HTML affiché
-  // est obsolète (ex. juste après un déploiement, décalage avec le CSS/JS déjà à
-  // jour), il prévient la page ici pour qu'elle se recharge une seule fois.
+  // puis revalide en arrière-plan. Une ancienne version rechargeait immédiatement
+  // le document dès que cette revalidation détectait un HTML plus récent. Pendant
+  // l'ouverture/fermeture d'une iframe (notamment /apprentissage), ce refresh
+  // intempestif interrompait le geste, puis la restauration iOS pouvait reprendre
+  // l'URL de l'iframe comme document principal. La réponse fraîche est déjà rangée
+  // dans le cache par le service worker : on la laisse donc simplement servir au
+  // prochain chargement volontaire, sans interrompre la session en cours.
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type !== "agon:page-stale" || window.__agonStalePageRefreshed) return;
     window.__agonStalePageRefreshed = true;
-    forceFullPageRefresh();
+    window.__agonPageUpdateAvailable = true;
   });
 }
 
