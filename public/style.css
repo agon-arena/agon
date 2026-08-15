@@ -25955,6 +25955,14 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   overflow: hidden;
   touch-action: none;
 }
+/* Sécurité d'isolation pour l'accueil : cette scène appartient exclusivement à « Ma mémoire ».
+   Le changement de mode la retire aussi immédiatement en JS, mais cette garde empêche un calque
+   Mnoria périmé de recouvrir les fonds Actus/Communauté si une transition asynchrone ou une
+   restauration WebKit repeint brièvement un ancien DOM. La page /mon-univers n'est pas ciblée. */
+body.page-home:not(.agon-memoire-cloud-mode)
+  #agon-tag-trends-cloud > .universe-zoom-viewport {
+  display: none;
+}
 /* Panoramique possible uniquement une fois zoomé au-delà de la vue d'ensemble (cf.
    universe-zoom.js apply()/pointermove) — curseur "main" seulement dans ce cas, jamais à la
    vue d'ensemble où glisser ne fait rien. */

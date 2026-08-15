@@ -19714,6 +19714,13 @@ function setMemoireCloudMode(enable, skipSync = false) {
     if (cloudEl && Number.isFinite(departingMemoireMarginTop)) {
       cloudEl.style.marginTop = departingMemoireMarginTop + 'px';
     }
+    // La nouvelle vue spatiale monte une fenêtre caméra complète dans le conteneur partagé.
+    // Retirer seulement .agon-memoire-frame changeait bien le pseudo-fond du cadre, mais la
+    // couche réelle .universe-zoom-background (enfant de cette fenêtre) restait au-dessus : le
+    // fond Mnoria demeurait donc visible derrière les Bulles Actu et Communauté. Supprime toute
+    // la scène dès la sortie ; reinitMemoireEmbed() la reconstruira proprement au prochain
+    // retour sur « Ma mémoire ».
+    cloudEl?.querySelector('.universe-zoom-viewport')?.remove();
     // Poussière d'étoiles/lunes/scintillements (mon-univers.js drawMiniStarsForSystems/
     // drawMoonsForStars/drawSparklesForStars) : posés en enfants directs du conteneur PARTAGÉ,
     // à côté des bulles (pas dedans) — clearTagTrendCloudVisualItems (tagTrendCloud.js,
