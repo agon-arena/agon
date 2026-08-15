@@ -2147,16 +2147,34 @@
         onConfirm: function () {
           btn.disabled = true;
           btn.textContent = 'Retirée';
-          fetch('/api/daily-quiz/exclude-question', {
+
+          // L'avancement ne doit jamais dépendre du temps de réponse réseau.
+          // C'était particulièrement visible en Renforcement dans la PWA : si
+          // l'upsert Supabase restait quelques secondes en attente, le bouton
+          // affichait bien « Retirée » mais l'utilisateur restait bloqué sur la
+          // question. On démarre donc l'enregistrement (avec keepalive pour
+          // qu'il survive aussi à une fermeture de l'iframe), puis on affiche
+          // immédiatement la question suivante, comme dans le QCM classique.
+          var exclusionRequest = fetch('/api/daily-quiz/exclude-question', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ legacyKey: voterKey, questionId: question.id })
+            body: JSON.stringify({ legacyKey: voterKey, questionId: question.id }),
+            keepalive: true
           })
-            .then(function () { goToNextQuestion(); })
-            .catch(function () {
-              btn.disabled = false;
-              btn.textContent = 'Ne plus me la demander';
+            .then(function (res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.json();
+            })
+            .then(function (data) {
+              if (!data || data.ok !== true) throw new Error((data && data.error) || 'Réponse invalide');
+            })
+            .catch(function (error) {
+              // L'échec éventuel est journalisé sans ramener l'utilisateur à
+              // la question qu'il vient précisément de retirer.
+              console.warn('[apprentissage] retrait de la question non enregistré :', error);
             });
+
+          goToNextQuestion();
         }
       });
     };
