@@ -20120,6 +20120,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 
 .agon-tag-trends-cloud {
   --bubble-frame-top: 55px;
+  --bubble-frame-radius: 24px;
 }
 
 .agon-tag-trends-cloud::before {
@@ -20129,7 +20130,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   background: none;
   border: 6px solid #000;
   box-sizing: border-box;
-  border-radius: 18px;
+  border-radius: var(--bubble-frame-radius);
   /* Le cadre doit rester AU-DESSUS du contenu peint après le chargement. Lorsqu'il partageait
      la couche de fond en z-index négatif, il apparaissait au début puis était recouvert par les
      bulles/canvas. */
@@ -20152,7 +20153,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   content: '';
   position: absolute;
   inset: var(--bubble-frame-top) 30px 23px;
-  border-radius: 18px;
+  border-radius: var(--bubble-frame-radius);
   overflow: hidden;
   z-index: -2;
   pointer-events: none;
@@ -25524,7 +25525,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   inset: var(--bubble-frame-top) 30px 23px;
   z-index: -1;
   pointer-events: none;
-  border-radius: 18px;
+  border-radius: var(--bubble-frame-radius);
   overflow: hidden;
   /* Texture 4K seamless définitive, utilisée directement dans sa version PNG originale. Elle
      est répétée à sa taille native corrigée de la densité d'écran (variables posées par
@@ -25961,6 +25962,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   position: absolute;
   inset: var(--bubble-frame-top) 30px 23px;
   overflow: hidden;
+  border-radius: var(--bubble-frame-radius);
   touch-action: none;
 }
 /* Sécurité d'isolation pour l'accueil : cette scène appartient exclusivement à « Ma mémoire ».
