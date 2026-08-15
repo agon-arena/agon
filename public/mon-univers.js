@@ -1272,6 +1272,38 @@ function buildDemoUniverseData() {
 // perpétuel, seulement en standalone, jamais en navigateur mobile classique déjà "chaud".
 const UNIVERSE_FETCH_TIMEOUT_MS = 12000;
 
+// L'état vide varie rarement d'un affichage à l'autre, mais l'appel Supabase qui le confirme
+// peut prendre plusieurs secondes au réveil d'une PWA standalone. Mémorise seulement cette
+// confirmation (jamais les données complètes) pendant quelques minutes : au retour sur
+// "Ma mémoire" ou après un refresh dans le même onglet, le message vide peut ainsi être peint
+// dès l'évaluation du module, pendant que la requête fraîche vérifie silencieusement l'état.
+// La page QCM supprime explicitement cette entrée dès qu'une bonne réponse peut créer la
+// première acquisition, afin de ne pas faire clignoter un ancien état vide devant les bulles.
+const UNIVERSE_EMPTY_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+
+function getUniverseEmptyCacheKey() {
+  return `agonUniverseEmpty:${getKey()}`;
+}
+
+function hasFreshEmptyUniverseCache() {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(getUniverseEmptyCacheKey()) || "null");
+    return cached?.empty === true
+      && Number.isFinite(cached.at)
+      && Date.now() - cached.at <= UNIVERSE_EMPTY_CACHE_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function cacheUniverseEmptyState(empty) {
+  try {
+    const key = getUniverseEmptyCacheKey();
+    if (empty) sessionStorage.setItem(key, JSON.stringify({ empty: true, at: Date.now() }));
+    else sessionStorage.removeItem(key);
+  } catch {}
+}
+
 // ---- Chargement (un seul appel réseau, jamais relancé à la navigation dans la scène) ----
 async function loadUniverse() {
   // Jeton partagé avec script.js (toggleAgonCloud/setPoliticalCloudGroup/setMemoireCloudMode) :
@@ -1284,7 +1316,8 @@ async function loadUniverse() {
   destroyUniverseScene();
   breadcrumbEl.innerHTML = "";
   backBtn.classList.remove("is-visible");
-  showStatus("loading");
+  const showedCachedEmpty = hasFreshEmptyUniverseCache();
+  showStatus(showedCachedEmpty ? "empty" : "loading");
 
   const isDemo = new URLSearchParams(location.search).get("demo") === "1";
   if (isDemo) {
@@ -1309,13 +1342,18 @@ async function loadUniverse() {
   } catch (error) {
     console.warn("[mon-univers] chargement échoué :", error.message);
     if (modeToken !== window._agonCloudModeToken) return;
-    showStatus("error");
+    // Si un état vide récent est déjà visible, une panne réseau momentanée ne doit pas le
+    // remplacer par une erreur ni faire réapparaître un chargement long. La prochaine entrée
+    // relancera de toute façon une vérification fraîche.
+    if (!showedCachedEmpty) showStatus("error");
     return;
   }
 
   if (modeToken !== window._agonCloudModeToken) return;
 
-  if (isUniverseEmpty(universeData)) {
+  const emptyUniverse = isUniverseEmpty(universeData);
+  cacheUniverseEmptyState(emptyUniverse);
+  if (emptyUniverse) {
     showStatus("empty");
     return;
   }

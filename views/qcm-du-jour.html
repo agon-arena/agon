@@ -1767,6 +1767,13 @@
   }
   function recordAnsweredQuestion(questionId, data) {
     (practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId)[questionId] = data;
+    // Une bonne réponse réelle peut créer la toute première acquisition affichée dans
+    // "Ma mémoire". Supprime immédiatement la confirmation locale d'univers vide : au retour
+    // sur l'accueil, le module attendra alors la réponse fraîche et ne montrera jamais
+    // furtivement l'ancien message vide devant les nouvelles bulles.
+    if (!practiceMode && data && data.correct) {
+      try { sessionStorage.removeItem('agonUniverseEmpty:' + voterKey); } catch (e) {}
+    }
   }
   var slotsStatus = null;
   // Dernière liste "Mes apprentissages" reçue (cf. renderMesQcmList) : lue par
