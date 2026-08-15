@@ -241,20 +241,6 @@ function createUniverseCamera({
   let state = { x: 0, y: 0, scale: minScale };
   let raf = null;
 
-  // Un zoom 1:1 du décor jusqu'au plafond de la scène (parfois ×35) transformerait une tuile
-  // 4K en bitmap affiché sur plus de 130 000px et agrandirait fortement ses pixels — précisément
-  // le comportement destructif visuellement interdit pour Mnoria. Le décor vit donc sur un
-  // plan profond en parallaxe : il accompagne continûment le zoom, mais son agrandissement
-  // physique reste borné à +15 %. Le contenu interactif conserve, lui, son zoom intégral.
-  const BACKGROUND_MAX_VISUAL_SCALE = 1.15;
-
-  function getBackgroundVisualScale(sceneScale) {
-    const scaleRange = Math.max(1, maxScale / minScale);
-    if (scaleRange === 1) return 1;
-    const progress = Math.log(Math.max(minScale, sceneScale) / minScale) / Math.log(scaleRange);
-    return 1 + Math.min(1, Math.max(0, progress)) * (BACKGROUND_MAX_VISUAL_SCALE - 1);
-  }
-
   function setBackgroundTileSize(width, height) {
     if (Number.isFinite(width) && width > 0) backgroundTileWidth = width;
     if (Number.isFinite(height) && height > 0) backgroundTileHeight = height;
@@ -266,14 +252,12 @@ function createUniverseCamera({
     const tx = vw / 2 - state.x * state.scale;
     const ty = vh / 2 - state.y * state.scale;
     worldEl.style.transform = `translate(${tx}px, ${ty}px) scale(${state.scale})`;
-    // Projection du plan profond depuis les coordonnées monde vers l'écran : le centre de la
-    // tuile contenant l'origine (0,0) coïncide avec le centre du viewport quand x=y=0. Le pan
-    // est projeté avec le même facteur visuel que ce plan, créant une parallaxe cohérente sans
-    // détacher le décor de la navigation. background-repeat réalise la continuité dans les
-    // quatre directions, y compris avant l'origine ; aucune dimension de monde ni aucun nombre
-    // de balises ne dépend du pan.
+    // Le fond et les éléments appartiennent maintenant au même plan visuel : la texture ne
+    // s'étend que lorsque galaxies, systèmes et étoiles s'étendent, avec exactement le même
+    // facteur de caméra. Le motif PNG 4K original reste intact et background-repeat assure la
+    // continuité dans les quatre directions sans créer de grille d'images dans le DOM.
     if (backgroundEl) {
-      const backgroundScale = getBackgroundVisualScale(state.scale);
+      const backgroundScale = state.scale;
       const tileW = backgroundTileWidth * backgroundScale;
       const tileH = backgroundTileHeight * backgroundScale;
       const positionX = vw / 2 - state.x * backgroundScale - tileW / 2;

@@ -5961,7 +5961,7 @@ body.page-debate .topbar::after {
   white-space: pre-wrap;
 }
 .comment-vote-disabled {
-  opacity: 0.45;
+  opacity: 0.8;
   cursor: not-allowed;
 }
 .replacement-success-overlay {

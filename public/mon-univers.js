@@ -8,7 +8,7 @@
 // quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-infinite-mnoria";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-mnoria-synced-scale";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -75,13 +75,16 @@ const GALAXY_GRADIENT_LEVELS = {
   solarSystem: [95, 91, 85],
   star: [76, 66, 54]
 };
+// Teinte volontairement douce, mais assez présente pour rester identifiable sur le fond Mnoria
+// très lumineux. Cette saturation est commune à toute la hiérarchie d'une thématique.
+const THEME_SATURATION = 30;
 // fadeEdge : les 2 derniers arrêts perdent progressivement leur opacité au lieu de rester
 // pleins jusqu'à 100% — sans lui, même en retirant le contour, le dégradé plein s'arrêtait net
 // à la même place, donnant l'impression d'une "rupture".
 function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
   const hue = hueForGalaxy(galaxyName);
   const stops = GALAXY_GRADIENT_LEVELS[level];
-  const s = 9;
+  const s = THEME_SATURATION;
   const tail = fadeEdge
     ? `hsla(${hue}, ${s}%, ${stops[1]}%, 0.75) 78%, hsla(${hue}, ${s}%, ${stops[2]}%, 0.35) 90%, hsla(${hue}, ${s}%, ${stops[2]}%, 0) 100%`
     : `hsl(${hue} ${s}% ${stops[2]}%) 100%`;
@@ -91,7 +94,7 @@ function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
   // circle (pas ellipse) centré à 50%/50% quand fadeEdge : garantit un rayon identique dans
   // toutes les directions, donc un alpha 0 pile sur le bord partout.
   const shape = fadeEdge ? "circle closest-side at 50% 50%" : "ellipse at 38% 32%";
-  return `radial-gradient(${shape}, rgba(255,255,255,1) 0%, hsl(${hue} ${s}% ${stops[0]}%) 40%, hsl(${hue} ${s}% ${stops[1]}%) 70%, ${tail})`;
+  return `radial-gradient(${shape}, rgba(255,255,255,1) 0%, hsl(${hue} ${s}% 97%) 14%, hsl(${hue} ${s}% ${stops[0]}%) 34%, hsl(${hue} ${s}% ${stops[1]}%) 68%, ${tail})`;
 }
 
 // "À classer" (aucune galaxie à colorer) : même bleuté que le dégradé par défaut de
@@ -161,7 +164,7 @@ function buildNeuronLinePoints(seed) {
 // juste en dessous, qui superpose ce cœur par-dessus).
 function neuronLinesBackground(hue) {
   const linePointSets = buildNeuronLinePoints(hue);
-  const stroke = `hsl(${hue}, 9%, 85%)`;
+  const stroke = `hsl(${hue}, ${THEME_SATURATION}%, 85%)`;
   // Opacités réduites d'~30% (demande du 13/08/2026, "réduire l'intensité
   // lumineuse des galaxies") : 0.3/0.47/0.68 → 0.2/0.32/0.46, même structure
   // (couleurs/rayons de flou inchangés) pour garder le même dessin de
@@ -172,7 +175,7 @@ function neuronLinesBackground(hue) {
   const innerGlowPaths = linePointSets
     .map((points) => buildTaperedPathSegments(points, 12, 0.25, 5, `stroke="${stroke}" stroke-linecap="round" opacity="0.32" filter="url(#neuronGlowInner)"`))
     .join("");
-  const coreStroke = `hsl(${hue}, 6%, 97%)`;
+  const coreStroke = `hsl(${hue}, 15%, 97%)`;
   const corePaths = linePointSets
     .map((points) => buildTaperedPathSegments(points, 6, 0.2, 5, `stroke="${coreStroke}" stroke-linecap="round" opacity="0.46" filter="url(#neuronGlowCore)"`))
     .join("");
@@ -190,10 +193,10 @@ function galaxyBubbleVisual(galaxyName) {
   // Cœur et halo également réduits d'~30% (demande du 13/08/2026) — alpha du
   // centre blanc et de la teinte de fin de dégradé abaissés, glowColor (repris
   // par .agon-tag-bubble-galaxy::before, style.css) idem.
-  const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.55) 26%, hsl(${hue} 10% 90%) 50%, hsla(${hue}, 9%, 85%, 0.2) 68%, transparent 84%)`;
+  const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.72) 0%, hsl(${hue} ${THEME_SATURATION}% 93%) 12%, hsl(${hue} ${THEME_SATURATION}% 80%) 36%, hsla(${hue}, ${THEME_SATURATION}%, 68%, 0.68) 66%, transparent 86%)`;
   return {
     background: `${core}, ${lines}`,
-    glowColor: `hsla(${hue}, 11%, 85%, 0.5)`
+    glowColor: `hsla(${hue}, 36%, 72%, 0.76)`
   };
 }
 
@@ -576,7 +579,7 @@ function mountUniverse() {
       "solarSystem",
       s,
       bubbleBackgroundFor(getGalaxyNameFromId(s.galaxyId), "solarSystem", true),
-      `hsla(${hue}, 10%, 85%, 0.6)`,
+      `hsla(${hue}, 34%, 76%, 0.72)`,
       "agon-tag-bubble-solarsystem"
     );
     addMiniStarsAroundSolarSystem(s);
