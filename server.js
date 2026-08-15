@@ -9452,7 +9452,10 @@ async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
     .insert({ galaxy, name: cleanUniverseNodeName(name), normalized_name: normalizedName })
     .select("id")
     .single();
-  if (!insertError) return inserted.id;
+  if (!insertError) {
+    invalidateCultureGeneraleHierarchyClassificationCache();
+    return inserted.id;
+  }
   const { data: retryExisting, error: retryError } = await supabase
     .from("solar_systems")
     .select("id")
@@ -12930,7 +12933,8 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
       return [];
     }
     const { sourceName, sourceDetail, validated } = result;
-    const sourceThemes = await classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail);
+    const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail);
+    const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
     // Jamais attendu : coûte une lecture du corpus + un appel IA + une écriture, sans
     // rapport avec la génération du QCM lui-même (cf. findAndStoreCultureGeneraleNotionLink).
     findAndStoreCultureGeneraleNotionLink(sourceType, id, sourceName, sourceDetail, userId).catch((e) =>
@@ -12945,6 +12949,7 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
       sourceName,
       sourceDetail,
       sourceThemes,
+      sourcePlacement,
       level,
       sourceDebateId: id
     }));
@@ -12961,21 +12966,23 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
   const quotaByItemId = new Map([[id, target]]);
   let parsed;
   let sourceThemes = [];
+  let sourcePlacement = null;
   try {
-    // Thématiques (cf. classifyCultureGeneraleThemesWithAI) menées en
-    // parallèle de la génération des questions — indépendantes l'une de
-    // l'autre, jamais bloquantes l'une pour l'autre (la classification
-    // échoue en silence, renvoie [] au pire).
-    const [content, themes] = await Promise.all([
+    // Le placement complet (thématique unique → solar → étoile) est mené en
+    // parallèle de la génération du contenu. Il est figé dans le QCM pour
+    // que toutes ses questions et sa future acquisition partagent la même
+    // branche de la mémoire.
+    const [content, placement] = await Promise.all([
       _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt([item], quotaByItemId, instruction) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
         responseFormat: { type: "json_object" }
       }),
-      classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail)
+      classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail)
     ]);
     parsed = JSON.parse(content);
-    sourceThemes = themes;
+    sourcePlacement = placement;
+    sourceThemes = placement?.category ? [placement.category] : [];
   } catch (error) {
     console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
     return [];
@@ -12998,6 +13005,7 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
     sourceName,
     sourceDetail,
     sourceThemes,
+    sourcePlacement,
     level: null,
     // Sans ce champ, POST /api/daily-quiz/answer n'appelle jamais
     // recordDailyQuizEclairageAcquisition pour ce QCM (elle exige
@@ -13217,7 +13225,8 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
     console.warn(`[notion-quizzes:custom:${id}] sujet énumérable : seulement ${validated.length} question(s) valide(s).`);
     return { error: "failed" };
   }
-  const sourceThemes = await classifyCultureGeneraleThemesWithAI("custom", finalSourceName, sourceDetail);
+  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", finalSourceName, sourceDetail);
+  const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
   findAndStoreCultureGeneraleNotionLink("custom", id, finalSourceName, sourceDetail, userId).catch((e) =>
     console.warn("[culture-generale notion-links] échec :", e.message)
   );
@@ -13230,6 +13239,7 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
     sourceName: finalSourceName,
     sourceDetail,
     sourceThemes,
+    sourcePlacement,
     level: "exhaustif",
     sourceDebateId: id
   }));
@@ -13291,7 +13301,8 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   // contenu (bug distinct du budget de tokens insuffisant, cf.
   // fetchGpt5JsonContentWithRetry) : constaté en pratique le 12/08/2026, cause
   // principale des sujets libres tombés dans "Autres" sur "Mes apprentissages".
-  const sourceThemes = await classifyCultureGeneraleThemesWithAI("custom", sourceName, sourceDetail);
+  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", sourceName, sourceDetail);
+  const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
   findAndStoreCultureGeneraleNotionLink("custom", id, sourceName, sourceDetail, userId).catch((e) =>
     console.warn("[culture-generale notion-links] échec :", e.message)
   );
@@ -13304,6 +13315,7 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
     sourceName,
     sourceDetail,
     sourceThemes,
+    sourcePlacement,
     level,
     // Même raison que buildNotionQuestions : requis par
     // recordDailyQuizEclairageAcquisition pour qu'une bonne réponse alimente
@@ -15462,6 +15474,77 @@ async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, {
   return "";
 }
 
+// Retrouve la rubrique officielle correspondant à une galaxie stockée. Pour
+// les quatre rubriques hybrides, restitue aussi la précision qui a produit
+// cette galaxie (ex. galaxie "Philosophie" → rubrique
+// "Philosophie - sciences sociales", précision "Philosophie").
+function getOpinionArticleCategoryForGalaxy(galaxy) {
+  const cleanGalaxy = String(galaxy || "").trim();
+  if (!cleanGalaxy) return null;
+  if (OPINION_ARTICLE_CATEGORY_OPTIONS.includes(cleanGalaxy) && !OPINION_ARTICLE_GALAXY_BY_PRECISION[cleanGalaxy]) {
+    return { category: cleanGalaxy, categoryPrecision: null };
+  }
+  for (const [category, byPrecision] of Object.entries(OPINION_ARTICLE_GALAXY_BY_PRECISION)) {
+    const match = Object.entries(byPrecision).find(([, mappedGalaxy]) => mappedGalaxy === cleanGalaxy);
+    if (match) return { category, categoryPrecision: match[0] };
+  }
+  return null;
+}
+
+let cultureGeneraleHierarchyClassificationCache = null;
+const CULTURE_GENERALE_HIERARCHY_CLASSIFICATION_CACHE_MS = 30_000;
+
+function invalidateCultureGeneraleHierarchyClassificationCache() {
+  cultureGeneraleHierarchyClassificationCache = null;
+}
+
+// Arbre existant présenté au classifieur dès la création du QCM. Il ne voit
+// plus seulement 16 libellés abstraits : il peut repérer qu'un sujet existe
+// déjà sous une étoile, retrouver son solar parent et choisir la même
+// thématique. Les ids restent validés côté serveur après la réponse IA. Le
+// cache très court évite de relire des milliers de lignes pour plusieurs QCM
+// créés à la suite ; toute création locale de solar/étoile l'invalide.
+async function fetchCultureGeneraleHierarchyForClassification() {
+  const now = Date.now();
+  if (cultureGeneraleHierarchyClassificationCache &&
+      now - cultureGeneraleHierarchyClassificationCache.loadedAt < CULTURE_GENERALE_HIERARCHY_CLASSIFICATION_CACHE_MS) {
+    return cultureGeneraleHierarchyClassificationCache.value;
+  }
+  const [{ data: solarRows, error: solarError }, { data: starRows, error: starError }] = await Promise.all([
+    supabase.from("solar_systems").select("id, name, galaxy").order("id", { ascending: true }).limit(5000),
+    supabase.from("stars").select("id, name, solar_system_id").order("id", { ascending: true }).limit(10000)
+  ]);
+  if (solarError || starError) {
+    console.warn("[culture-generale hierarchy] lecture incomplète :", (solarError || starError).message);
+  }
+  const solarSystems = solarRows || [];
+  const stars = starRows || [];
+  const starsBySolarId = new Map();
+  for (const star of stars) {
+    const key = Number(star.solar_system_id);
+    if (!starsBySolarId.has(key)) starsBySolarId.set(key, []);
+    starsBySolarId.get(key).push(star);
+  }
+  const lines = [];
+  for (const solar of solarSystems) {
+    const categoryPlacement = getOpinionArticleCategoryForGalaxy(solar.galaxy);
+    if (!categoryPlacement) continue;
+    const precision = categoryPlacement.categoryPrecision ? ` (${categoryPlacement.categoryPrecision})` : "";
+    const childStars = starsBySolarId.get(Number(solar.id)) || [];
+    const starsText = childStars.length
+      ? childStars.map((star) => `${star.id}:${star.name}`).join(" ; ")
+      : "aucune";
+    lines.push(`${categoryPlacement.category}${precision} > ${solar.galaxy} > solar ${solar.id}:${solar.name} > étoiles ${starsText}`);
+  }
+  const value = {
+    solarSystems,
+    stars,
+    promptText: lines.join("\n") || "(hiérarchie encore vide)"
+  };
+  cultureGeneraleHierarchyClassificationCache = { loadedAt: now, value };
+  return value;
+}
+
 // Classe un contenu Culture Générale dans une des 16 OPINION_ARTICLE_CATEGORY_OPTIONS
 // (mêmes rubriques que "Autres actus", cf. classifyOpinionArticlesWithAI ~9757) pour en
 // dériver la galaxie (cf. getOpinionArticleGalaxy) — remplace l'ancien mapping fixe
@@ -15473,10 +15556,13 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
+  const hierarchy = await fetchCultureGeneraleHierarchyForClassification();
+
   const compact = {
     type: sourceType,
     title: String(sourceName || "").slice(0, 160),
-    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400)
+    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
+    existing_memory_hierarchy: hierarchy.promptText
   };
   const prompt = [
     "Réponds uniquement en json valide.",
@@ -15485,8 +15571,10 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
     "Recopie le libellé de rubrique EXACTEMENT comme dans la liste, sans le modifier.",
     "4 rubriques sont volontairement hybrides et couvrent deux branches : \"Sports - loisirs\" (Sports ou Loisirs), \"Culture - arts\" (Culture ou Arts), \"Philosophie - sciences sociales\" (Philosophie ou Sciences sociales), \"Langues et Lettres\" (Langues ou Lettres).",
     "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
-    "Choisis la rubrique la plus spécifique d'après le titre et le détail fournis.",
-    "Format obligatoire : {\"category\":\"...\",\"category_precision\":null}",
+    "Explore aussi TOUTE existing_memory_hierarchy (thématiques, galaxies, solars et étoiles) avant de décider. Si le même sujet existe déjà dans une étoile — même sous un synonyme ou une reformulation — choisis obligatoirement la rubrique de cette branche et recopie les ids de son solar et de son étoile dans existing_solar_system_id et existing_star_id.",
+    "Si aucun sujet identique n'existe mais qu'un solar existant est clairement le bon parent, recopie seulement son id dans existing_solar_system_id et laisse existing_star_id à null.",
+    "Ne renvoie jamais un id absent de existing_memory_hierarchy et ne mélange jamais une étoile avec un autre solar. Si aucune branche existante n'est adaptée, laisse les deux ids à null et choisis simplement la rubrique la plus pertinente d'après le titre et le détail.",
+    "Format obligatoire : {\"category\":\"...\",\"category_precision\":null,\"existing_solar_system_id\":null,\"existing_star_id\":null}",
     "",
     JSON.stringify(compact)
   ].join("\n");
@@ -15513,76 +15601,52 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
       content = data?.choices?.[0]?.message?.content;
     }
     const parsed = content ? JSON.parse(content) : null;
-    const category = normalizeOpinionArticleCategory(parsed?.category);
+    let category = normalizeOpinionArticleCategory(parsed?.category);
+    let categoryPrecision = normalizeOpinionArticleCategoryPrecision(category, parsed?.category_precision);
+    const requestedSolarSystemId = Number(parsed?.existing_solar_system_id);
+    const requestedStarId = Number(parsed?.existing_star_id);
+    const requestedSolar = hierarchy.solarSystems.find((solar) => Number(solar.id) === requestedSolarSystemId);
+    const requestedStar = requestedSolar && hierarchy.stars.find((star) =>
+      Number(star.id) === requestedStarId && Number(star.solar_system_id) === Number(requestedSolar.id)
+    );
+
+    // Lorsqu'une branche existante a été explicitement reconnue, sa galaxie
+    // est l'autorité : on réaligne la rubrique sur l'arbre au lieu de rejeter
+    // un bon id parce que l'IA a mal recopié le libellé hybride.
+    const categoryFromExistingTree = requestedSolar
+      ? getOpinionArticleCategoryForGalaxy(requestedSolar.galaxy)
+      : null;
+    if (categoryFromExistingTree) {
+      category = categoryFromExistingTree.category;
+      categoryPrecision = categoryFromExistingTree.categoryPrecision;
+    }
     if (!category) {
       console.warn("[culture-generale category] catégorie IA non reconnue :", parsed?.category);
       return null;
     }
-    const categoryPrecision = normalizeOpinionArticleCategoryPrecision(category, parsed?.category_precision);
-    return { category, categoryPrecision };
+    const galaxy = getOpinionArticleGalaxy(category, categoryPrecision);
+    const matchingSolar = requestedSolar?.galaxy === galaxy ? requestedSolar : null;
+    const matchingStar = matchingSolar ? requestedStar : null;
+    return {
+      category,
+      categoryPrecision,
+      solarSystemId: matchingSolar ? Number(matchingSolar.id) : null,
+      starId: matchingStar ? Number(matchingStar.id) : null
+    };
   } catch (error) {
     console.warn("[culture-generale category] classification IA ignorée :", error.message);
     return null;
   }
 }
 
-// Classe un contenu Culture Générale dans une à trois des 16
-// OPINION_ARTICLE_CATEGORY_OPTIONS (mêmes rubriques que
-// classifyCultureGeneraleCategoryWithAI ci-dessus) — sert de "thématiques"
-// affichées sur "Mes QCM" (cf. buildNotionQuestions), jamais la même chose
-// que la galaxie de Ma mémoire (classifyCultureGeneraleCategoryWithAI, UNE
-// seule rubrique, dérive une hiérarchie distincte système/étoile) : une
-// connaissance peut couvrir plusieurs thématiques à la fois (ex. un
-// événement historique peut être à la fois "Histoire" et "Politique"),
-// demande du 09/08/2026. Retourne toujours un tableau, jamais null (vide en
-// cas d'échec) — jamais bloquant pour la génération du QCM lui-même.
+// Une connaissance appartient désormais à UNE seule thématique, la plus
+// pertinente. Cette fonction reste disponible comme repli léger, mais les
+// nouveaux QCM passent par classifyCultureGeneraleKnowledgePlacementWithAI :
+// le même choix unique pilote alors aussi galaxie → solar → étoile, au lieu
+// de lancer deux classifications indépendantes susceptibles de diverger.
 async function classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return [];
-
-  const compact = {
-    type: sourceType,
-    title: String(sourceName || "").slice(0, 160),
-    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400)
-  };
-  const prompt = [
-    "Réponds uniquement en json valide.",
-    "Indique les thématiques concernées par ce contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) parmi la liste ci-dessous — UNE à TROIS thématiques, jamais plus, seulement celles vraiment pertinentes.",
-    "Thématiques autorisées : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
-    "Recopie chaque libellé EXACTEMENT comme dans la liste, sans le modifier.",
-    "Format obligatoire : {\"themes\":[\"...\",\"...\"]}",
-    "",
-    JSON.stringify(compact)
-  ].join("\n");
-
-  try {
-    const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
-    let content;
-    if (isGpt5) {
-      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale themes]");
-    } else {
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({
-          model: OPINION_ARTICLE_CATEGORY_MODEL,
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          max_tokens: 150,
-          temperature: 0
-        })
-      });
-      if (!r.ok) throw new Error(`openai http ${r.status}`);
-      const data = await r.json();
-      content = data?.choices?.[0]?.message?.content;
-    }
-    const parsed = content ? JSON.parse(content) : null;
-    const rawThemes = Array.isArray(parsed?.themes) ? parsed.themes : [];
-    return [...new Set(rawThemes.map((t) => normalizeOpinionArticleCategory(t)).filter(Boolean))].slice(0, 3);
-  } catch (error) {
-    console.warn("[culture-generale themes] classification IA ignorée :", error.message);
-    return [];
-  }
+  const classification = await classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sourceDetail);
+  return classification?.category ? [classification.category] : [];
 }
 
 // ---- Liens entre connaissances de "Mes apprentissages" (ex. "Voltaire" ↔ "Les
@@ -15889,6 +15953,7 @@ function buildDomainSolarSystemPrompt(compact, domainConfig) {
   return [
     "Réponds uniquement en json valide.",
     `Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un "système" : ici, ${domainConfig.unitLabel}.`,
+    "Examine TOUS les éléments de existing_systems avant d'envisager une création. Si le même sujet, domaine ou période pertinente existe déjà, tu DOIS réutiliser son solar_system_id : créer un doublon ou une variante de libellé est interdit.",
     `Vérifie d'abord si un système de existing_systems correspond à ce contenu (${domainConfig.matchExample}) — dans ce cas renvoie son id dans solar_system_id. Il ne s'agit pas de retrouver EXACTEMENT la même notion mais le bon système : une correspondance de domaine suffit.`,
     `Sinon (aucun système existant ne correspond vraiment), propose dans new_solar_system ${domainConfig.newExample}.`,
     "RÈGLE OBLIGATOIRE : réponds avec soit \"solar_system_id\" (nombre), soit \"new_solar_system\" (texte court) — jamais les deux, jamais aucun des deux.",
@@ -15919,6 +15984,7 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
   const prompt = domainConfig ? buildDomainSolarSystemPrompt(compact, domainConfig) : [
     "Réponds uniquement en json valide.",
     "Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un \"système\" : la notion précise qu'il illustre.",
+    "Examine TOUS les éléments de existing_systems avant d'envisager une création. Si le sujet existe déjà sous un libellé identique, synonyme ou reformulé, tu DOIS réutiliser son solar_system_id : créer un doublon ou une variante de libellé est interdit.",
     "Vérifie d'abord si une notion de existing_systems désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans solar_system_id.",
     "Un simple lien thématique, un vocabulaire commun ou un domaine voisin NE SUFFISENT JAMAIS : \"Résilience\" (capacité psychologique/sociologique à surmonter un choc) n'est PAS \"Développement durable\" même si le mot \"résilience\" apparaît parfois dans ce contexte écologique — ce sont deux notions différentes, pas la même reformulée. En cas du moindre doute, ne réutilise jamais : propose un nouveau système plutôt qu'un rattachement hasardeux (un système en trop est sans conséquence, une fusion erronée mélange deux notions distinctes).",
     "Sinon, propose dans new_solar_system un libellé autonome et complet de 2 à 4 mots, idéalement 35 caractères maximum, jamais une phrase, qui résume la notion elle-même et jamais l'anecdote ou l'actualité du jour qui l'illustre (ex. \"La campagne de désinformation soviétique pendant la Guerre froide\" → \"Désinformation soviétique\").",
@@ -16037,7 +16103,10 @@ async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
     .insert({ solar_system_id: solarSystemId, name: cleanUniverseNodeName(name), normalized_name: normalizedName })
     .select("id")
     .single();
-  if (!insertError) return inserted.id;
+  if (!insertError) {
+    invalidateCultureGeneraleHierarchyClassificationCache();
+    return inserted.id;
+  }
   const { data: retryExisting, error: retryError } = await supabase
     .from("stars")
     .select("id")
@@ -16090,6 +16159,7 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
   const prompt = domainConfig ? [
     "Réponds uniquement en json valide.",
     `Un contenu de culture générale doit être rattaché à une "étoile" : une sous-catégorie du système solaire donné (${JSON.stringify(solarSystemName)}) — plus précise que ce système, mais encore assez large pour regrouper plusieurs contenus différents. JAMAIS le fait précis ou l'angle exact de ce contenu en particulier.`,
+    "Examine TOUTES les existing_stars avant d'envisager une création. Si le même sujet ou la même sous-catégorie existe déjà, tu DOIS réutiliser son star_id, même si son libellé est un synonyme ou une reformulation : aucune étoile doublon.",
     "Règle de test décisive : imagine dix autres contenus différents rattachés au même système solaire — l'étoile que tu choisis doit être EXACTEMENT LA MÊME pour plusieurs d'entre eux. Si ton étoile ne conviendrait qu'à ce contenu précis et à aucun autre, elle est trop précise : remonte d'un cran.",
     "INTERDICTION ABSOLUE : l'étoile ne doit JAMAIS reprendre les mots du système solaire lui-même, même reformulés — ce serait une simple redite, pas une sous-catégorie. Exemple : pour le système \"Révolution française & Empire\", l'étoile \"Révolution française\" est INTERDITE (redite du système) ; une vraie sous-catégorie serait \"Terreur\", \"Directoire\", \"Consulat\" ou \"Premier Empire\". Pour le système \"Éthique & morale\", l'étoile \"Éthique\" est interdite ; une vraie sous-catégorie serait \"Utilitarisme\" ou \"Impératif catégorique\".",
     "Vérifie d'abord si un thème de existing_stars correspond à ce contenu — dans ce cas renvoie son id dans star_id.",
@@ -16102,6 +16172,7 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
   ].join("\n") : [
     "Réponds uniquement en json valide.",
     "Un contenu de culture générale doit être rattaché à une \"étoile\" : la notion précise qu'il illustre, à l'intérieur du système solaire donné (un thème plus large et durable).",
+    "Examine TOUTES les existing_stars avant d'envisager une création. Si le sujet existe déjà sous un libellé identique, synonyme ou reformulé, tu DOIS réutiliser son star_id : créer une étoile doublon est interdit.",
     "Vérifie d'abord si une notion de existing_stars désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans star_id.",
     "Un simple lien thématique ou un vocabulaire commun NE SUFFIT JAMAIS : en cas du moindre doute, ne réutilise jamais — propose une nouvelle étoile plutôt qu'un rattachement hasardeux (une étoile en trop est sans conséquence, une fusion erronée mélange deux notions distinctes).",
     "Sinon, propose dans new_star un libellé autonome et complet de 2 à 4 mots, idéalement 35 caractères maximum, jamais une phrase, qui résume la notion elle-même et jamais l'anecdote ou l'actualité du jour qui l'illustre.",
@@ -16182,6 +16253,94 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
   return resolveOrCreateStar(solarSystemId, sourceName, normalizeStarName(sourceName));
 }
 
+// Placement canonique calculé UNE seule fois, dès la création du QCM. La
+// classification parcourt la hiérarchie dans l'ordre : une thématique unique
+// (donc une galaxie), tous les solars de cette galaxie, puis toutes les étoiles
+// du solar retenu. Les ids trouvés/créés sont copiés dans chaque question et
+// seront réutilisés à la première bonne réponse — aucune seconde décision IA
+// susceptible de ranger la même connaissance ailleurs.
+async function classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail) {
+  const classification = await classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sourceDetail);
+  if (!classification?.category) return null;
+
+  const galaxy = getOpinionArticleGalaxy(classification.category, classification.categoryPrecision);
+  const placement = {
+    category: classification.category,
+    categoryPrecision: classification.categoryPrecision || null,
+    galaxy: galaxy || null,
+    solarSystemId: null,
+    starId: null
+  };
+  if (!galaxy) return placement;
+
+  // Le classifieur global a pu reconnaître directement un solar (et
+  // éventuellement son étoile) dans l'arbre complet. Cette correspondance
+  // a priorité absolue ; la résolution locale ne sert qu'en l'absence de
+  // parent existant adapté.
+  const solarSystemId = classification.solarSystemId || await resolveCultureGeneraleSolarSystemWithAI(
+    galaxy,
+    sourceType,
+    sourceName,
+    sourceDetail
+  );
+  if (!solarSystemId) return placement;
+
+  const { data: solarSystemRow, error: solarSystemError } = await supabase
+    .from("solar_systems")
+    .select("id, name, galaxy")
+    .eq("id", solarSystemId)
+    .maybeSingle();
+  if (solarSystemError || !solarSystemRow || solarSystemRow.galaxy !== galaxy) {
+    console.warn("[culture-generale placement] solar invalide :", solarSystemError?.message || solarSystemId);
+    return placement;
+  }
+  placement.solarSystemId = solarSystemRow.id;
+
+  const starId = classification.starId || await resolveCultureGeneraleStarWithAI(
+    galaxy,
+    solarSystemRow.id,
+    solarSystemRow.name || sourceName,
+    sourceType,
+    sourceName,
+    sourceDetail
+  );
+  if (!starId) return placement;
+
+  const { data: starRow, error: starError } = await supabase
+    .from("stars")
+    .select("id, solar_system_id")
+    .eq("id", starId)
+    .maybeSingle();
+  if (starError || !starRow || Number(starRow.solar_system_id) !== Number(solarSystemRow.id)) {
+    console.warn("[culture-generale placement] étoile invalide :", starError?.message || starId);
+    return placement;
+  }
+  placement.starId = starRow.id;
+  return placement;
+}
+
+// Défense en profondeur avant de consommer un placement stocké dans le JSON
+// daily_quiz : la catégorie doit encore mener à la galaxie du solar, et
+// l'étoile doit réellement appartenir à ce solar. Les anciens QCM, qui n'ont
+// pas sourcePlacement, retombent simplement sur le flux historique plus bas.
+async function validateStoredCultureGeneralePlacement(rawPlacement) {
+  if (!rawPlacement || typeof rawPlacement !== "object") return null;
+  const category = normalizeOpinionArticleCategory(rawPlacement.category);
+  const categoryPrecision = normalizeOpinionArticleCategoryPrecision(category, rawPlacement.categoryPrecision);
+  const galaxy = getOpinionArticleGalaxy(category, categoryPrecision);
+  const solarSystemId = Number(rawPlacement.solarSystemId);
+  const starId = Number(rawPlacement.starId);
+  if (!galaxy || !Number.isInteger(solarSystemId) || solarSystemId <= 0 || !Number.isInteger(starId) || starId <= 0) return null;
+
+  const [{ data: solarSystem, error: solarError }, { data: star, error: starError }] = await Promise.all([
+    supabase.from("solar_systems").select("id, galaxy").eq("id", solarSystemId).maybeSingle(),
+    supabase.from("stars").select("id, solar_system_id").eq("id", starId).maybeSingle()
+  ]);
+  if (solarError || starError || !solarSystem || !star) return null;
+  if (solarSystem.galaxy !== galaxy || Number(star.solar_system_id) !== solarSystemId) return null;
+  return { solarSystemId, starId };
+}
+
 // Enregistre l'acquisition d'un contenu Culture Générale dans l'univers intellectuel
 // personnel de l'utilisateur (originale "culture_generale-qN" ou repasse "cgreview-...", les
 // deux portent déjà sourceDebateId/sourceType/sourceName sur l'objet question, cf.
@@ -16251,6 +16410,22 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
     }
   } catch (error) {
     console.warn("[daily quiz eclairage acquisitions] failed : recherche classification réutilisable —", error.message);
+  }
+
+  // Pour les QCM générés depuis cette version, le placement complet a déjà
+  // été décidé à leur création après exploration des solars/étoiles
+  // existants. On le réutilise tel quel : la bonne réponse ne relance plus un
+  // classement qui pourrait aboutir à une autre branche de la mémoire.
+  if (!solarSystemId || !starId) {
+    try {
+      const storedPlacement = await validateStoredCultureGeneralePlacement(question.sourcePlacement);
+      if (storedPlacement) {
+        solarSystemId = storedPlacement.solarSystemId;
+        starId = storedPlacement.starId;
+      }
+    } catch (error) {
+      console.warn("[daily quiz eclairage acquisitions] failed : validation placement QCM —", error.message);
+    }
   }
 
   if (!solarSystemId || !starId) {
