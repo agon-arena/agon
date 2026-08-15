@@ -92,10 +92,10 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
 }
 
 // Place des "satellites" en orbite AUTOUR d'un point (pas emboîtés dans un disque comme
-// packCirclesInDisk) — demande du 13/08/2026 : les étoiles doivent apparaître comme des petits
-// points lumineux autour du point du système solaire, pas empilées à l'intérieur de son propre
-// cercle. Répartition à angle régulier (pas en spirale golden-angle comme packCirclesInDisk :
-// un anneau régulier lit mieux comme "des satellites en orbite" qu'un nuage dispersé).
+// packCirclesInDisk). Le placement occupe autant d'anneaux radiaux que nécessaire : une étoile
+// ne peut jamais recouvrir une étoile déjà placée ni aucun système solaire, même si ces nœuds
+// appartiennent à un autre solar/une autre galaxie. L'espace monde étant infini, un anneau plus
+// extérieur finit toujours par offrir une place sans devoir réduire les étoiles.
 function packSatellitesAroundPoint(items, cx, cy, orbitRadius, opts = {}) {
   if (!items.length) return [];
 
@@ -108,31 +108,91 @@ function packSatellitesAroundPoint(items, cx, cy, orbitRadius, opts = {}) {
   // distance) et grossir (la taille) doivent rester deux réglages indépendants.
   const sizeBasis = opts.sizeBasis ?? orbitRadius;
 
-  // Rayon plafonné (en absolu, pas en ratio de sizeBasis) pour qu'aucun satellite ne touche son
-  // voisin sur l'anneau, quel que soit leur nombre — ils se touchaient/chevauchaient dès que
-  // plusieurs étoiles partageaient le même système. Distance entre deux satellites voisins
-  // espacés régulièrement = 2·orbitRadius·sin(π/N) ; pour ne jamais se toucher (au rayon
-  // maximal des deux), il faut rayon ≤ orbitRadius·sin(π/N) — 0.8 de marge de sécurité en plus
-  // pour un vrai espace visible, pas juste "ne se touchent pas pile".
-  const geometricMaxAbs = items.length > 1 ? orbitRadius * Math.sin(Math.PI / items.length) * 0.8 : sizeBasis * 0.5;
   const maxRatio = opts.maxRatio ?? 0.4;
   const minRatio = opts.minRatio ?? 0.18;
-  const maxAbs = Math.min(maxRatio * sizeBasis, geometricMaxAbs);
-  const minAbs = Math.min(minRatio * sizeBasis, maxAbs * 0.6);
+  const maxAbs = Math.max(0.001, maxRatio * sizeBasis);
+  const minAbs = Math.min(minRatio * sizeBasis, maxAbs);
 
   const weights = items.map((it) => Math.max(0, Number(it.weight) || 0));
   const maxWeight = Math.max(...weights, 1e-6);
   const normalized = weights.map((w) => 0.35 + 0.65 * Math.pow(w / maxWeight, 0.6));
+  const radii = normalized.map((weight) => minAbs + (maxAbs - minAbs) * weight);
+  const maxStarRadius = Math.max(...radii, 0.001);
 
-  return items.map((_, i) => {
-    const angle = ((i / items.length) * 360 + 15) * (Math.PI / 180); // +15° : jamais pile à droite du centre
-    const r = minAbs + (maxAbs - minAbs) * normalized[i];
-    return {
-      x: cx + Math.cos(angle) * orbitRadius,
-      y: cy + Math.sin(angle) * orbitRadius,
-      r
-    };
+  // Marge réelle entre les disques, en coordonnées monde. Elle s'agrandit donc avec le zoom
+  // comme les nœuds eux-mêmes et reste perceptible à tous les niveaux de caméra.
+  const gap = opts.gap ?? Math.max(0.8, sizeBasis * 0.12);
+  const slotSpacing = maxStarRadius * 2 + gap;
+  const firstOrbit = Math.max(orbitRadius, sizeBasis + maxStarRadius + gap);
+  const ringSpacing = Math.max(slotSpacing, sizeBasis * 0.45);
+  const phase = ((Number(opts.phaseDegrees) || 15) * Math.PI) / 180;
+  const fixedObstacles = Array.isArray(opts.obstacles) ? opts.obstacles : [];
+  // Tableau partagé par tous les solars : chaque étoile validée devient immédiatement un
+  // obstacle pour celles qui seront placées ensuite, y compris dans un autre système.
+  const occupied = Array.isArray(opts.occupied) ? opts.occupied : [];
+
+  function collides(x, y, r) {
+    const overlaps = (other) => (
+      other && Number.isFinite(other.x) && Number.isFinite(other.y) && Number.isFinite(other.r)
+      && Math.hypot(x - other.x, y - other.y) < r + other.r + gap
+    );
+    return fixedObstacles.some(overlaps) || occupied.some(overlaps);
+  }
+
+  const positions = new Array(items.length);
+  // Les grosses étoiles choisissent d'abord leur place ; les petites remplissent ensuite les
+  // intervalles disponibles. L'ordre de sortie reste néanmoins celui des données d'origine.
+  const order = items.map((_, index) => index).sort((a, b) => radii[b] - radii[a]);
+  const goldenFraction = 0.6180339887498949;
+
+  order.forEach((itemIndex, orderIndex) => {
+    const r = radii[itemIndex];
+    let best = null;
+    // Limite très généreuse : normalement les premiers anneaux suffisent. Le repli situé juste
+    // après garantit quand même une terminaison déterministe pour un jeu pathologique.
+    const maxRingAttempts = Math.max(24, items.length + Math.ceil((fixedObstacles.length + occupied.length) / 4));
+
+    for (let ringIndex = 0; ringIndex < maxRingAttempts && !best; ringIndex += 1) {
+      const radialDistance = firstOrbit + ringIndex * ringSpacing;
+      const ringCapacity = Math.max(6, Math.floor((Math.PI * 2 * radialDistance) / slotSpacing));
+      // Point de départ en nombre d'or : les premières étoiles ne se tassent pas toutes dans le
+      // même quadrant. Les anneaux impairs sont aussi déphasés d'un demi-cran.
+      const startSlot = Math.floor(
+        ((orderIndex * goldenFraction + (ringIndex % 2) * 0.5 / ringCapacity) % 1) * ringCapacity
+      );
+
+      for (let step = 0; step < ringCapacity && !best; step += 1) {
+        const slot = (startSlot + step) % ringCapacity;
+        const angle = phase + ((slot + (ringIndex % 2 ? 0.5 : 0)) / ringCapacity) * Math.PI * 2;
+        const x = cx + Math.cos(angle) * radialDistance;
+        const y = cy + Math.sin(angle) * radialDistance;
+        if (!collides(x, y, r)) best = { x, y, r };
+      }
+    }
+
+    if (!best) {
+      // Espace infini : avance encore radialement sur un rayon stable jusqu'à sortir de toutes
+      // les emprises déjà occupées. Toutes les emprises sont des disques finis : le parcours
+      // termine donc nécessairement, sans repli susceptible de réintroduire un chevauchement.
+      // Ce chemin n'est atteint que pour des volumes extrêmes.
+      const angle = phase + orderIndex * goldenFraction * Math.PI * 2;
+      let radialDistance = firstOrbit + maxRingAttempts * ringSpacing;
+      while (!best) {
+        const x = cx + Math.cos(angle) * radialDistance;
+        const y = cy + Math.sin(angle) * radialDistance;
+        if (!collides(x, y, r)) {
+          best = { x, y, r };
+          break;
+        }
+        radialDistance += ringSpacing;
+      }
+    }
+
+    positions[itemIndex] = best;
+    occupied.push(best);
   });
+
+  return positions;
 }
 
 // ---- Layout complet : galaxies -> systèmes solaires -> étoiles, un seul espace persistant ---
@@ -153,6 +213,7 @@ function layoutUniverseWorld(galaxies, worldRadius) {
   const outGalaxies = [];
   const outSolarSystems = [];
   const outStars = [];
+  const pendingStarSystems = [];
 
   galaxies.forEach((g, gi) => {
     const gp = galaxyPositions[gi];
@@ -196,27 +257,54 @@ function layoutUniverseWorld(galaxies, worldRadius) {
       outSolarSystems.push(systemNode);
 
       const starItems = s.stars.map((star) => ({ weight: star.articleCount || 1, ref: star }));
-      const starPositions = packSatellitesAroundPoint(starItems, sp.x, sp.y, orbitRadius, {
-        sizeBasis: sp.r,
-        minRatio: 0.18,
-        maxRatio: 0.4
-      });
+      pendingStarSystems.push({ galaxy: g, galaxyNode, solarSystem: s, systemNode, starItems });
+    });
+  });
 
-      s.stars.forEach((star, sti) => {
-        const stp = starPositions[sti];
-        outStars.push({
-          id: `star:${g.name}:${s.id}:${star.id}`,
-          name: star.name,
-          x: stp.x,
-          y: stp.y,
-          r: stp.r,
-          weight: starItems[sti].weight,
-          solarSystemId: systemNode.id,
-          galaxyId: galaxyNode.id,
-          ref: star
-        });
+  // Les étoiles sont calculées seulement APRÈS tous les solars. Elles peuvent ainsi tester
+  // leur position contre chaque solar du monde (pas uniquement leur parent) et contre toutes
+  // les étoiles déjà validées. Si un anneau est encombré, packSatellitesAroundPoint passe au
+  // suivant, plus extérieur : jamais de chevauchement, jamais de réduction forcée.
+  const solarObstacles = outSolarSystems.map((solar) => ({ x: solar.x, y: solar.y, r: solar.r }));
+  const occupiedStars = [];
+
+  pendingStarSystems.forEach((pending, pendingIndex) => {
+    const { galaxy, galaxyNode, solarSystem, systemNode, starItems } = pending;
+    const starPositions = packSatellitesAroundPoint(
+      starItems,
+      systemNode.x,
+      systemNode.y,
+      systemNode.orbitRadius,
+      {
+        sizeBasis: systemNode.r,
+        minRatio: 0.18,
+        maxRatio: 0.4,
+        gap: Math.max(0.8, systemNode.r * 0.12),
+        phaseDegrees: 15 + (pendingIndex * 137.5) % 360,
+        obstacles: solarObstacles,
+        occupied: occupiedStars
+      }
+    );
+
+    let radialExtent = systemNode.orbitRadius;
+    solarSystem.stars.forEach((star, starIndex) => {
+      const stp = starPositions[starIndex];
+      radialExtent = Math.max(radialExtent, Math.hypot(stp.x - systemNode.x, stp.y - systemNode.y) + stp.r);
+      outStars.push({
+        id: `star:${galaxy.name}:${solarSystem.id}:${star.id}`,
+        name: star.name,
+        x: stp.x,
+        y: stp.y,
+        r: stp.r,
+        weight: starItems[starIndex].weight,
+        solarSystemId: systemNode.id,
+        galaxyId: galaxyNode.id,
+        ref: star
       });
     });
+    // Le cadrage caméra et la minimap doivent inclure le dernier anneau réellement utilisé,
+    // pas seulement le premier rayon nominal.
+    systemNode.orbitRadius = radialExtent;
   });
 
   return { galaxies: outGalaxies, solarSystems: outSolarSystems, stars: outStars, worldRadius };
