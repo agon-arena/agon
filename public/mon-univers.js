@@ -772,9 +772,15 @@ function onCameraChange(state) {
       const parentId = kind === "solarSystem" ? node.galaxyId : node.solarSystemId;
       const parent = nodeById.get(parentId);
       if (kind === "star") {
-        const parentReady = parent && (parent.maxChildR || 0) * state.scale >= STAR_REVEAL_PX;
+        // Une étoile ne peut jamais précéder son système : on reproduit exactement les deux
+        // conditions qui rendent le solar parent visible (galaxie déjà ouverte + solar assez
+        // grand), puis on applique seulement le petit seuil progressif propre à l'étoile.
+        const parentGalaxy = parent && nodeById.get(parent.galaxyId);
+        const parentSolarVisible = parent && parentGalaxy
+          && childrenCanShow(parentGalaxy, state.scale)
+          && parent.r * state.scale >= REVEAL_PX_SELF;
         const selfReady = node.r * state.scale >= STAR_REVEAL_PX;
-        revealed = parentReady && selfReady;
+        revealed = parentSolarVisible && selfReady;
       } else {
         const parentCeded = parent && childrenCanShow(parent, state.scale);
         const selfRevealed = node.r * state.scale >= REVEAL_PX_SELF;
