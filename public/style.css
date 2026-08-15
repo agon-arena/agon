@@ -25273,6 +25273,17 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   color: #5b6b78;
 }
 
+/* Fil d'Ariane de Ma mémoire embarqué sur l'index : même gris translucide que
+   la légende « Les connaissances acquises grâce à agôn… » affichée sous le cadre. */
+#agon-memoire-embed-before .universe-breadcrumb,
+#agon-memoire-embed-before .universe-breadcrumb__item,
+#agon-memoire-embed-before .universe-breadcrumb__item--current,
+#agon-memoire-embed-before .universe-breadcrumb__sep,
+#agon-memoire-embed-before .universe-breadcrumb__item:hover,
+#agon-memoire-embed-before .universe-breadcrumb__item:focus-visible {
+  color: rgba(255, 255, 255, 0.55);
+}
+
 /* Bouton retour, priorité mobile (desktop peut déjà cliquer un cran du fil d'Ariane). */
 .universe-back-btn {
   display: none;
