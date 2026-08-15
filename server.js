@@ -15020,7 +15020,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     if (topic.length < 3 || topic.length > 150) {
       return res.status(400).json({ ok: false, error: "Sujet invalide (3 à 150 caractères)." });
     }
-    const quizDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.quizDate || "").trim())
+    let quizDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.quizDate || "").trim())
       ? String(req.body.quizDate).trim()
       : parisDateKey();
 
@@ -15031,16 +15031,27 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
     let questions;
-    const { data: existingQuiz, error: existingQuizError } = await supabase
+    let reused = false;
+    // Le slot porte à la fois la clé normalisée du sujet ET le niveau choisi
+    // (donc sa plage de nombre de questions). La recherche doit couvrir tout
+    // l'historique : auparavant elle était limitée à `quizDate`, si bien que
+    // le même sujet au même niveau était inutilement régénéré dès le
+    // lendemain. Une seule ligne suffit et limite fortement l'egress JSONB.
+    const { data: existingQuizRows, error: existingQuizError } = await supabase
       .from("daily_quiz")
-      .select("questions")
-      .eq("quiz_date", quizDate)
+      .select("quiz_date, questions")
       .eq("slot", slot)
-      .maybeSingle();
+      .order("quiz_date", { ascending: false })
+      .limit(1);
     if (existingQuizError) throw new Error(existingQuizError.message);
+    const existingQuiz = existingQuizRows?.[0] || null;
 
     if (existingQuiz) {
       questions = existingQuiz.questions || [];
+      // On redonne exactement le QCM existant : même niveau et donc
+      // exactement le même nombre de questions, sans aucun appel à l'IA.
+      quizDate = existingQuiz.quiz_date;
+      reused = true;
     } else {
       const result = await buildCustomTopicQuiz(topic, id, level, user.id);
       if (result.error) {
@@ -15084,7 +15095,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
       );
     if (linkError) throw new Error(linkError.message);
 
-    res.json({ ok: true, slot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length });
+    res.json({ ok: true, slot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length, reused });
   } catch (error) {
     console.error("[notion-quizzes] création (recherche libre) :", error.message);
     res.status(500).json({ ok: false, error: error.message });
