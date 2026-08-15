@@ -147,6 +147,16 @@
     var text = document.createElement("p");
     text.className = "het-memorize-explainer-text";
     text.appendChild(document.createTextNode("Génération du QCM « " + notionName + " » en cours… Ouvre « Apprentissage » pour suivre sa génération."));
+    var spinner = document.createElement("div");
+    spinner.setAttribute("aria-hidden", "true");
+    spinner.style.cssText = "width:36px;height:36px;margin:4px auto 20px;border-radius:50%;background:conic-gradient(#243038 0deg,#e2e6ea 0deg);box-shadow:inset 0 0 0 1px #d1d5db";
+    var spinnerStartedAt = Date.now();
+    function tickSpinner() {
+      var deg = ((Date.now() - spinnerStartedAt) % 2600) / 2600 * 360;
+      spinner.style.background = "conic-gradient(#243038 " + deg + "deg, #e2e6ea " + deg + "deg)";
+    }
+    tickSpinner();
+    var spinnerId = setInterval(tickSpinner, 60);
     var qcmBtn = document.createElement("button");
     qcmBtn.type = "button";
     qcmBtn.className = "het-memorize-explainer-qcm";
@@ -156,12 +166,14 @@
     closeBtn.className = "het-memorize-explainer-close";
     closeBtn.textContent = "J’ai compris";
     modal.appendChild(text);
+    modal.appendChild(spinner);
     modal.appendChild(qcmBtn);
     modal.appendChild(closeBtn);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
     function close() {
+      if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
       overlay.remove();
       document.removeEventListener("keydown", onKeydown);
     }
@@ -173,6 +185,18 @@
       close();
       goToApprentissage();
     });
+    return {
+      ready: function () {
+        if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
+        spinner.hidden = true;
+        text.textContent = "Le QCM « " + notionName + " » est prêt dans « Apprentissage ».";
+      },
+      failed: function () {
+        if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
+        spinner.hidden = true;
+        text.textContent = "La création du QCM « " + notionName + " » a échoué. Réessaie dans quelques instants.";
+      }
+    };
   }
 
   function memorizeEvent(btn, event, voterKey) {
@@ -186,7 +210,7 @@
     // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
     setMemorizeButtonState(btn, true);
     startPendingNotionQuizGeneration(pendingSlot, notionName);
-    showMemorizeExplainerModal(notionName);
+    var explainer = showMemorizeExplainerModal(notionName);
 
     fetch("/api/users/notion-quizzes", {
       method: "POST",
@@ -197,12 +221,18 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         finishPendingNotionQuizGeneration(pendingSlot);
-        if (!data.ok) { setMemorizeButtonState(btn, false); return; }
+        if (!data.ok) {
+          explainer.failed();
+          setMemorizeButtonState(btn, false);
+          return;
+        }
+        explainer.ready();
         btn.setAttribute("data-quiz-slot", data.slot);
         btn.setAttribute("data-quiz-date", data.quizDate);
       })
       .catch(function () {
         finishPendingNotionQuizGeneration(pendingSlot);
+        explainer.failed();
         setMemorizeButtonState(btn, false);
       });
   }

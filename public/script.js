@@ -25539,6 +25539,19 @@ function showDebateNotionMemorizeExplainer(notionName, isGenerating = false) {
   text.appendChild(document.createTextNode(isGenerating
     ? `Génération du QCM « ${notionName} » en cours… Ouvre « Apprentissage » pour suivre sa génération.`
     : `Le QCM « ${notionName} » est disponible dans « Apprentissage ».`));
+  const spinner = document.createElement("div");
+  let spinnerId = null;
+  if (isGenerating) {
+    spinner.setAttribute("aria-hidden", "true");
+    spinner.style.cssText = "width:36px;height:36px;margin:4px auto 20px;border-radius:50%;background:conic-gradient(#243038 0deg,#e2e6ea 0deg);box-shadow:inset 0 0 0 1px #d1d5db";
+    const spinnerStartedAt = Date.now();
+    const tickSpinner = () => {
+      const deg = ((Date.now() - spinnerStartedAt) % 2600) / 2600 * 360;
+      spinner.style.background = `conic-gradient(#243038 ${deg}deg, #e2e6ea ${deg}deg)`;
+    };
+    tickSpinner();
+    spinnerId = setInterval(tickSpinner, 60);
+  }
   const qcmBtn = document.createElement("button");
   qcmBtn.type = "button";
   qcmBtn.className = "ecl-memorize-explainer-qcm";
@@ -25548,12 +25561,14 @@ function showDebateNotionMemorizeExplainer(notionName, isGenerating = false) {
   closeBtn.className = "ecl-memorize-explainer-close";
   closeBtn.textContent = "J’ai compris";
   modal.appendChild(text);
+  if (isGenerating) modal.appendChild(spinner);
   modal.appendChild(qcmBtn);
   modal.appendChild(closeBtn);
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 
   function close() {
+    if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
     overlay.remove();
     document.removeEventListener("keydown", onKeydown);
   }
@@ -25564,8 +25579,20 @@ function showDebateNotionMemorizeExplainer(notionName, isGenerating = false) {
   qcmBtn.addEventListener("click", () => {
     close();
     if (typeof openDebateIframeModal === "function") openDebateIframeModal("/apprentissage");
-    else window.location.href = "/apprentissage";
+      else window.location.href = "/apprentissage";
   });
+  return {
+    ready() {
+      if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
+      spinner.hidden = true;
+      text.textContent = `Le QCM « ${notionName} » est prêt dans « Apprentissage ».`;
+    },
+    failed() {
+      if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
+      spinner.hidden = true;
+      text.textContent = `La création du QCM « ${notionName} » a échoué. Réessaie dans quelques instants.`;
+    }
+  };
 }
 
 // Niveaux d'approfondissement proposés avant toute génération de QCM de
@@ -25656,7 +25683,7 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
     btn.setAttribute("data-memorized", "true");
     btn.classList.add("is-active");
     startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
-    showDebateNotionMemorizeExplainer(notionName, true);
+    const explainer = showDebateNotionMemorizeExplainer(notionName, true);
 
     fetchJSON(`${API}/users/notion-quizzes`, {
       method: "POST",
@@ -25676,9 +25703,13 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
         }
       })
     })
-      .then(() => { finishPendingNotionQuizGeneration(pendingSlot); })
+      .then(() => {
+        finishPendingNotionQuizGeneration(pendingSlot);
+        explainer.ready();
+      })
       .catch(() => {
         finishPendingNotionQuizGeneration(pendingSlot);
+        explainer.failed();
         btn.setAttribute("data-memorized", "false");
         btn.classList.remove("is-active");
       });
