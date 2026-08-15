@@ -26059,10 +26059,11 @@ body.page-home:not(.agon-memoire-cloud-mode)
 .universe-zoom-connector.is-revealed {
   opacity: 1;
 }
-/* Relation intellectuelle étoile <-> étoile. Le gradient ne dessine que les 58 premiers
-   pourcents de chaque tuile puis laisse un intervalle transparent : background-size, épaisseur
-   et halo sont ajustés en inverse du zoom par onCameraChange, afin de conserver à l'écran des
-   tirets fins de 7px séparés de 5px et une lumière bleutée bien lisible. */
+/* Relation intellectuelle déclinée galaxie <-> galaxie, solar <-> solar puis étoile <-> étoile.
+   Le gradient ne dessine que les 58 premiers pourcents de chaque tuile puis laisse un intervalle
+   transparent : background-size, épaisseur et halo sont ajustés en inverse du zoom par
+   onCameraChange, afin de conserver à l'écran des tirets fins de 7px séparés de 5px et une
+   lumière bleutée bien lisible. */
 .universe-knowledge-link {
   position: absolute;
   transform-origin: 0 50%;

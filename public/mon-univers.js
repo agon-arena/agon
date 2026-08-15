@@ -222,9 +222,10 @@ const labelElByNodeId = new Map();
 // (pas de la couche des libellés), donc mis à l'échelle avec la scène comme les bulles — pas
 // besoin d'une précision de rendu façon texte, une ligne reste lisible même mise à l'échelle.
 const connectorElByNodeId = new Map();
-// Liens sémantiques entre deux étoiles-connaissances. Contrairement aux connecteurs radiaux
-// étoile -> solar ci-dessus, une relation peut traverser deux systèmes ou deux galaxies : elle
-// est donc conservée par paire et ne devient visible que lorsque SES DEUX extrémités le sont.
+// Liens sémantiques entre connaissances, déclinés aux trois niveaux (galaxie, solar, étoile).
+// Contrairement aux connecteurs radiaux étoile -> solar ci-dessus, une relation peut traverser
+// tout le monde : elle est conservée par paire et ne devient visible que lorsque SES DEUX
+// extrémités du niveau concerné le sont.
 const knowledgeLinkEls = [];
 const nodeById = new Map(); // id (cf. layoutUniverseWorld) -> nœud positionné, reconstruit à chaque scène
 
@@ -831,7 +832,7 @@ function knowledgeNodeKey(sourceType, sourceId) {
 // dans l'espace monde, comme les bulles : il suit donc exactement le pan et le zoom. Le motif,
 // l'épaisseur et le halo sont contre-dimensionnés dans onCameraChange pour rester fins et nets
 // à l'écran, quel que soit le facteur de zoom.
-function createKnowledgeLinkEl(fromNode, toNode) {
+function createKnowledgeLinkEl(level, fromNode, toNode) {
   const dx = toNode.x - fromNode.x;
   const dy = toNode.y - fromNode.y;
   const el = document.createElement("div");
@@ -841,7 +842,9 @@ function createKnowledgeLinkEl(fromNode, toNode) {
   el.style.width = Math.hypot(dx, dy) + "px";
   el.style.transform = `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`;
   worldEl.appendChild(el);
-  knowledgeLinkEls.push({ el, fromNodeId: fromNode.id, toNodeId: toNode.id });
+  const linkState = { el, level, fromNodeId: fromNode.id, toNodeId: toNode.id, count: 1 };
+  knowledgeLinkEls.push(linkState);
+  return linkState;
 }
 
 function mountUniverse() {
@@ -910,15 +913,32 @@ function mountUniverse() {
       if (key !== "::") starNodeByKnowledgeKey.set(key, star);
     });
   });
-  const renderedKnowledgePairs = new Set();
+  const galaxyNodeById = new Map(worldLayout.galaxies.map((node) => [node.id, node]));
+  const solarNodeById = new Map(worldLayout.solarSystems.map((node) => [node.id, node]));
+  const renderedKnowledgePairs = new Map();
   (universeData.knowledgeLinks || []).forEach((link) => {
-    const fromNode = starNodeByKnowledgeKey.get(knowledgeNodeKey(link.typeA, link.sourceIdA));
-    const toNode = starNodeByKnowledgeKey.get(knowledgeNodeKey(link.typeB, link.sourceIdB));
-    if (!fromNode || !toNode || fromNode.id === toNode.id) return;
-    const pairKey = [fromNode.id, toNode.id].sort().join("|");
-    if (renderedKnowledgePairs.has(pairKey)) return;
-    renderedKnowledgePairs.add(pairKey);
-    createKnowledgeLinkEl(fromNode, toNode);
+    const fromStar = starNodeByKnowledgeKey.get(knowledgeNodeKey(link.typeA, link.sourceIdA));
+    const toStar = starNodeByKnowledgeKey.get(knowledgeNodeKey(link.typeB, link.sourceIdB));
+    if (!fromStar || !toStar) return;
+
+    const pairsByLevel = [
+      ["galaxy", galaxyNodeById.get(fromStar.galaxyId), galaxyNodeById.get(toStar.galaxyId)],
+      ["solarSystem", solarNodeById.get(fromStar.solarSystemId), solarNodeById.get(toStar.solarSystemId)],
+      ["star", fromStar, toStar]
+    ];
+    pairsByLevel.forEach(([level, fromNode, toNode]) => {
+      if (!fromNode || !toNode || fromNode.id === toNode.id) return;
+      const pairKey = `${level}:${[fromNode.id, toNode.id].sort().join("|")}`;
+      const existingLink = renderedKnowledgePairs.get(pairKey);
+      if (existingLink) {
+        // Plusieurs relations intellectuelles peuvent converger vers les mêmes objets parents
+        // (notamment plusieurs paires d'étoiles appartenant aux deux mêmes solars/galaxies).
+        // Une seule ligne est conservée ; son épaisseur exprimera ce nombre dans le rendu.
+        existingLink.count += 1;
+        return;
+      }
+      renderedKnowledgePairs.set(pairKey, createKnowledgeLinkEl(level, fromNode, toNode));
+    });
   });
 
   worldLayout.galaxies.forEach((g) => {
@@ -1099,7 +1119,11 @@ function onCameraChange(state) {
 
   const vw = viewportEl.clientWidth;
   const vh = viewportEl.clientHeight;
-  const revealedStarNodeIds = new Set();
+  const revealedNodeIdsByLevel = {
+    galaxy: new Set(),
+    solarSystem: new Set(),
+    star: new Set()
+  };
 
   worldEl.querySelectorAll(".universe-zoom-bubble").forEach((el) => {
     const kind = el.dataset.kind;
@@ -1165,17 +1189,22 @@ function onCameraChange(state) {
       connector.classList.toggle("is-revealed", revealed);
     }
 
-    if (kind === "star" && revealed) revealedStarNodeIds.add(nodeId);
+    if (revealedNodeIdsByLevel[kind] && revealed) revealedNodeIdsByLevel[kind].add(nodeId);
 
     el.classList.toggle("is-revealed", revealed);
   });
 
-  // Une relation ne flotte jamais seule dans le vide : elle apparaît uniquement lorsque les
-  // deux étoiles concernées sont visibles. Motif de 7px de lumière + 5px d'espace, épaisseur
-  // ~1,35px et halo constants en pixels écran malgré la mise à l'échelle du monde.
-  knowledgeLinkEls.forEach(({ el, fromNodeId, toNodeId }) => {
-    const revealed = revealedStarNodeIds.has(fromNodeId) && revealedStarNodeIds.has(toNodeId);
-    el.style.height = Math.max(0.35, 1.35 / state.scale) + "px";
+  // Une relation ne flotte jamais seule dans le vide : à chaque profondeur, elle apparaît
+  // uniquement lorsque les deux galaxies, les deux solars ou les deux étoiles concernés sont
+  // visibles. Motif de 7px de lumière + 5px d'espace, épaisseur ~1,35px et halo constants en
+  // pixels écran malgré la mise à l'échelle du monde.
+  knowledgeLinkEls.forEach(({ el, level, fromNodeId, toNodeId, count }) => {
+    const revealedIds = revealedNodeIdsByLevel[level];
+    const revealed = revealedIds?.has(fromNodeId) && revealedIds.has(toNodeId);
+    // +0,5px écran par relation supplémentaire, plafonné à 3,35px : l'importance devient
+    // perceptible sans empiler plusieurs segments ni transformer une connexion dense en barre.
+    const screenThickness = Math.min(3.35, 1.35 + Math.max(0, count - 1) * 0.5);
+    el.style.height = Math.max(0.35, screenThickness / state.scale) + "px";
     el.style.backgroundSize = (12 / state.scale) + "px 100%";
     el.style.boxShadow = `0 0 ${3 / state.scale}px rgba(105, 205, 255, 0.95), 0 0 ${8 / state.scale}px rgba(56, 166, 255, 0.72)`;
     el.classList.toggle("is-revealed", revealed);
