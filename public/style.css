@@ -75,7 +75,18 @@ html.thematic-scroll body {
 
 .agon-startup-loader {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Doit rester strictement cohérent avec le CSS critique inline d'index.html.
+     `inset:0` ici annulait après le chargement de style.css le bottom négatif
+     défini avant le premier rendu : au lancement à froid de la PWA, WebKit
+     pouvait alors révéler une bande de la page sous le loader. La boîte et son
+     fond débordent désormais de 160px sous le viewport ; le padding identique
+     retire cette surhauteur de la zone de centrage, donc le logo ne bouge pas. */
+  bottom: calc(-1 * (var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
+  padding-bottom: calc(var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
+  box-sizing: border-box;
   z-index: 9999;
   display: flex;
   align-items: center;

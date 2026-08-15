@@ -49,7 +49,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260813-connector-fixedpx">
+  <link rel="stylesheet" href="/style.min.css?v=20260815-startup-bottom-overscan">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -97,8 +97,8 @@
       top: 0;
       left: 0;
       right: 0;
-      min-height: calc(100vh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 120px);
-      min-height: calc(100lvh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 120px);
+      min-height: calc(100vh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
+      min-height: calc(100lvh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
       z-index: 9998;
       pointer-events: none;
       background: radial-gradient(circle at 50% 50vh, #243038 0%, #101820 55%, #05070a 100%);
@@ -116,8 +116,8 @@
          padding-bottom de la même valeur (box-sizing:border-box) pour que le
          contenu centré (logo) reste calé sur le vrai viewport, pas sur cette
          boîte agrandie — sinon le centrage se décale vers le bas. */
-      bottom: calc(-1 * (var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 80px));
-      padding-bottom: calc(var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 80px);
+      bottom: calc(-1 * (var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
+      padding-bottom: calc(var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
       box-sizing: border-box;
       z-index: 9999;
       display: flex;
