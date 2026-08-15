@@ -618,6 +618,59 @@ function mountUniverse() {
   onCameraChange(camera.getState());
 }
 
+// Le montage DOM ci-dessus est synchrone, mais WebKit standalone peut différer d'une ou deux
+// images la peinture de ce monde assez lourd (dégradés, halos, lunes et libellés). Retirer le
+// sablier immédiatement après mountUniverse() révélait alors brièvement le seul fond étoilé,
+// avant que les galaxies deviennent visibles. Attend une vraie galaxie racine peinte à pleine
+// opacité, puis une image supplémentaire, sans jamais bloquer indéfiniment la navigation.
+function waitForUniverseRootPaint(modeToken) {
+  const startedAt = performance.now();
+  const maxWaitMs = 1000;
+
+  return new Promise((resolve) => {
+    const finishAfterPaint = () => requestAnimationFrame(() => resolve(true));
+    const check = () => {
+      // L'utilisateur a déjà quitté "Ma mémoire" : ce rendu périmé ne doit surtout pas retirer
+      // le sablier du nouveau mode qui a pris le relais sur le même conteneur partagé.
+      if (modeToken !== window._agonCloudModeToken || !isMemoireEmbedActive()) {
+        resolve(false);
+        return;
+      }
+
+      const rootBubbles = cloudEl.querySelectorAll(
+        '.universe-zoom-bubble[data-kind="galaxy"].is-revealed, ' +
+        '.universe-zoom-bubble[data-kind="unclassified"].is-revealed'
+      );
+      const rootIsPainted = Array.from(rootBubbles).some((bubble) => {
+        const rect = bubble.getBoundingClientRect();
+        const opacity = parseFloat(getComputedStyle(bubble).opacity || "0");
+        return rect.width > 0 && rect.height > 0 && opacity >= 0.98;
+      });
+
+      if (rootIsPainted) {
+        finishAfterPaint();
+        return;
+      }
+      if (performance.now() - startedAt >= maxWaitMs) {
+        // Filet de sécurité : une bizarrerie de style ne doit jamais laisser le sablier bloqué.
+        resolve(true);
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+
+    requestAnimationFrame(check);
+  });
+}
+
+async function mountUniverseAndHideSpinnerWhenReady(modeToken) {
+  mountUniverse();
+  if (typeof window.__agonHideBubbleCloudLoadingSpinner !== "function") return;
+  const ready = await waitForUniverseRootPaint(modeToken);
+  if (!ready || modeToken !== window._agonCloudModeToken || !isMemoireEmbedActive()) return;
+  window.__agonHideBubbleCloudLoadingSpinner();
+}
+
 function getGalaxyNameFromId(galaxyId) {
   const node = nodeById.get(galaxyId);
   return node ? node.name : null;
@@ -1324,7 +1377,7 @@ async function loadUniverse() {
     universeData = buildDemoUniverseData();
     if (modeToken !== window._agonCloudModeToken) return;
     showStatus("none");
-    mountUniverse();
+    await mountUniverseAndHideSpinnerWhenReady(modeToken);
     return;
   }
 
@@ -1359,8 +1412,7 @@ async function loadUniverse() {
   }
 
   showStatus("none");
-  mountUniverse();
-  if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
+  await mountUniverseAndHideSpinnerWhenReady(modeToken);
 }
 
 loadUniverse();

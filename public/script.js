@@ -19675,7 +19675,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260815-apprentissages-copy').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260815-galaxies-ready').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -21788,11 +21788,11 @@ function updateIndexTagTrends(items) {
       if (tagTrends.length) window.AGON_TAG_TRENDS = tagTrends;
       if (requestedCloudModeToken !== (window._agonCloudModeToken || 0) ||
           _agonCloudMode || _memoireCloudMode || _agonCloudSwitchLoading) {
-        // Le sablier a pu être affiché avant cette transition (cf. garde-fou plus haut, qui ne
-        // couvre que l'appel initial) : le retirer ici aussi, sinon il reste bloqué sur l'écran
-        // du mode qui a effectivement pris le relais (Ma mémoire/Bulles Agôn), qui ne le
-        // retirera jamais lui-même puisqu'il ne l'a pas créé.
-        if (_memoireCloudMode || _agonCloudMode) hideBubbleCloudLoadingSpinner();
+        // Le sablier est un élément partagé entre les trois modes. Dès qu'une transition plus
+        // récente a pris le relais, cette ancienne tâche Actu n'en est plus propriétaire : le
+        // retirer ici pouvait effacer celui que Ma mémoire venait de créer, laissant le fond
+        // vide jusqu'à l'arrivée des galaxies. Le mode actif le retirera lui-même quand SON
+        // rendu sera réellement prêt.
         return;
       }
 
@@ -21806,7 +21806,16 @@ function updateIndexTagTrends(items) {
 
       syncIndexBubbleTrendBadges();
       if (cloudContainer?.querySelector(".agon-tag-bubble")) return;
-      cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => setTimeout(hideBubbleCloudLoadingSpinner, 150));
+      cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => {
+        window.setTimeout(() => {
+          // Le callback de rendu Actu est volontairement différé. Entre-temps, l'utilisateur
+          // peut avoir ouvert Ma mémoire : ne jamais retirer le sablier appartenant au nouveau
+          // mode avec ce callback devenu périmé.
+          if (requestedCloudModeToken !== (window._agonCloudModeToken || 0) ||
+              _memoireCloudMode || _agonCloudMode || _agonCloudSwitchLoading) return;
+          hideBubbleCloudLoadingSpinner();
+        }, 150);
+      });
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
         if (currentBubbleTag) {
@@ -21829,7 +21838,12 @@ function updateIndexTagTrends(items) {
       });
     })
     .catch((error) => {
-      hideBubbleCloudLoadingSpinner();
+      // Même règle de propriété qu'au-dessus : une erreur tardive d'Actu ne doit pas effacer
+      // le chargement visuel de Ma mémoire ou de Bulles Agôn.
+      if (requestedCloudModeToken === (window._agonCloudModeToken || 0) &&
+          !_memoireCloudMode && !_agonCloudMode && !_agonCloudSwitchLoading) {
+        hideBubbleCloudLoadingSpinner();
+      }
       console.warn("[Agôn] Tag trends indisponibles:", error);
     });
 }
