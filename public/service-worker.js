@@ -1,4 +1,4 @@
-const SW_VERSION = "20260815-mnoria-app-icon-v173";
+const SW_VERSION = "20260815-mnoria-header-visible-v174";
 const STATIC_CACHE = `agon-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
