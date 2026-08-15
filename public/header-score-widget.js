@@ -1,6 +1,161 @@
 (function initStandaloneHeaderScoreWidget() {
   "use strict";
 
+  // Toutes les pages du bandeau doivent utiliser exactement le même ancrage
+  // autour du logo. Quelques anciens templates plaçaient encore l'image
+  // directement dans .home-brand-block, ce qui décalait le compteur.
+  function ensureUniformBrandAnchor() {
+    var topbar = document.querySelector(".topbar.topbar--mnoria-uniform");
+    var logo = topbar && topbar.querySelector(".home-logo");
+    if (!topbar || !logo) return null;
+    var brandMain = logo.closest(".home-brand-main");
+    if (!brandMain) {
+      brandMain = document.createElement("div");
+      brandMain.className = "home-brand-main";
+      logo.parentNode.insertBefore(brandMain, logo);
+      brandMain.appendChild(logo);
+    }
+    return brandMain;
+  }
+
+  // Compteur de santé numérique commun à TOUS les bandeaux. Il est créé ici,
+  // avant le script principal, afin que les pages légères (notamment Histoire)
+  // et les pages complètes utilisent le même DOM, la même police et les mêmes
+  // coordonnées. Le script principal conserve seulement son ancien fallback.
+  function renderUniversalTimeWidget(brandMain) {
+    if (!brandMain || document.querySelector(".agon-time-widget")) return;
+
+    var style = document.createElement("style");
+    style.id = "agon-universal-time-widget-styles";
+    style.textContent =
+      ".topbar--mnoria-uniform .home-brand-main.agon-time-widget-anchor{position:relative!important;overflow:visible!important}" +
+      ".agon-time-widget-logo-overlay{position:absolute;top:4px;left:50%;z-index:18;transform:translateX(-50%);max-width:min(220px,calc(100vw - 40px))}" +
+      ".agon-time-widget{display:inline-flex;align-items:center;gap:6px;margin:0;padding:4px 12px;border:0;border-radius:999px;background:transparent;color:#111827;font:700 11px/1 Arial,Helvetica,sans-serif!important;letter-spacing:normal;white-space:nowrap;cursor:pointer;box-sizing:border-box}" +
+      ".agon-time-widget i{color:#9cc3f0;font-size:10px}" +
+      ".agon-time-widget-warning{color:#d64545}" +
+      ".agon-time-widget-warning i{color:#d64545}" +
+      ".agon-time-widget-blinking{animation:agonUniversalTimeBlink .4s ease-in-out 3}" +
+      "@keyframes agonUniversalTimeBlink{0%,100%{opacity:1}50%{opacity:.15}}" +
+      "@media(max-width:768px){.agon-time-widget-logo-overlay{top:-3px}}" +
+      ".agon-time-explanation-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;background:rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}" +
+      ".agon-time-explanation{width:min(100%,430px);padding:30px 24px 22px;box-sizing:border-box;border:1px solid #dbeafe;border-radius:24px;background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);box-shadow:0 24px 60px rgba(15,23,42,.22),0 8px 24px rgba(59,130,246,.1);color:#111827;text-align:center}" +
+      ".agon-time-explanation h3{margin:0 0 20px;font-size:28px;line-height:1.2;font-weight:800}" +
+      ".agon-time-explanation p{margin:0 0 18px;color:#4b5563;font-size:14px;line-height:1.55}" +
+      ".agon-time-explanation button{display:flex;align-items:center;justify-content:center;width:100%;padding:12px 18px;border:0;border-radius:999px;background:#111827;color:#fff;font:700 15px/1 Arial,Helvetica,sans-serif;cursor:pointer}";
+    document.head.appendChild(style);
+
+    var widget = document.createElement("button");
+    widget.type = "button";
+    widget.className = "agon-time-widget agon-time-widget-logo-overlay";
+    widget.setAttribute("aria-label", "Temps passé sur agôn aujourd'hui");
+    widget.innerHTML = '<i class="fa-regular fa-clock" aria-hidden="true"></i><span></span>';
+    brandMain.classList.add("agon-time-widget-anchor");
+    brandMain.appendChild(widget);
+
+    var elapsedKey = "agon_time_widget_daily_v2";
+    var limitSeconds = 60 * 60;
+    var warningSeconds = 10 * 60;
+    function getParisDayKey() {
+      try {
+        var parts = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+        var values = {};
+        parts.forEach(function (part) { values[part.type] = part.value; });
+        return values.year + "-" + values.month + "-" + values.day;
+      } catch (e) {
+        var now = new Date();
+        return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+      }
+    }
+    var activeDayKey = getParisDayKey();
+    function readStoredElapsed() {
+      try {
+        var stored = JSON.parse(localStorage.getItem(elapsedKey) || "null");
+        var elapsedMs = Number(stored && stored.elapsedMs);
+        return stored && stored.dayKey === activeDayKey && Number.isFinite(elapsedMs) && elapsedMs > 0 ? elapsedMs : 0;
+      } catch (e) { return 0; }
+    }
+    var baseElapsedMs = readStoredElapsed();
+    var resumedAt = Date.now();
+    var running = !document.hidden;
+    function currentElapsedMs() { return baseElapsedMs + (running ? Date.now() - resumedAt : 0); }
+    function persistElapsed() {
+      var elapsedMs = Math.max(currentElapsedMs(), readStoredElapsed());
+      try { localStorage.setItem(elapsedKey, JSON.stringify({ dayKey: activeDayKey, elapsedMs: elapsedMs })); } catch (e) {}
+      return elapsedMs;
+    }
+    function resetIfNewDay() {
+      var todayKey = getParisDayKey();
+      if (todayKey === activeDayKey) return;
+      activeDayKey = todayKey;
+      baseElapsedMs = 0;
+      resumedAt = Date.now();
+      try { localStorage.setItem(elapsedKey, JSON.stringify({ dayKey: activeDayKey, elapsedMs: 0 })); } catch (e) {}
+    }
+    function pause() {
+      if (!running) return;
+      baseElapsedMs += Date.now() - resumedAt;
+      running = false;
+      baseElapsedMs = persistElapsed();
+    }
+    function resume() {
+      if (running) return;
+      resetIfNewDay();
+      baseElapsedMs = Math.max(baseElapsedMs, readStoredElapsed());
+      resumedAt = Date.now();
+      running = true;
+    }
+    document.addEventListener("visibilitychange", function () { document.hidden ? pause() : resume(); });
+    window.addEventListener("blur", pause);
+    window.addEventListener("focus", resume);
+    window.addEventListener("pagehide", pause);
+
+    var expired = false;
+    var visible = true;
+    var blinkActive = false;
+    function maybeBlink() {
+      var shouldBlink = expired && visible;
+      if (shouldBlink && !blinkActive) {
+        widget.classList.remove("agon-time-widget-blinking");
+        void widget.offsetWidth;
+        widget.classList.add("agon-time-widget-blinking");
+      }
+      blinkActive = shouldBlink;
+    }
+    function tick() {
+      resetIfNewDay();
+      var remaining = Math.max(0, limitSeconds - Math.floor(currentElapsedMs() / 1000));
+      expired = remaining <= 0;
+      widget.querySelector("span").textContent = expired
+        ? "Attention à ta santé numérique !"
+        : String(Math.floor(remaining / 60)).padStart(2, "0") + ":" + String(remaining % 60).padStart(2, "0");
+      widget.classList.toggle("agon-time-widget-warning", remaining <= warningSeconds);
+      widget.classList.toggle("agon-time-widget-expired", expired);
+      maybeBlink();
+      if (running) persistElapsed();
+    }
+    tick();
+    window.setInterval(tick, 1000);
+
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        visible = !!(entries[0] && entries[0].isIntersecting);
+        maybeBlink();
+      }).observe(widget);
+    }
+
+    widget.addEventListener("click", function () {
+      var existing = document.querySelector(".agon-time-explanation-overlay");
+      if (existing) existing.remove();
+      var overlay = document.createElement("div");
+      overlay.className = "agon-time-explanation-overlay";
+      overlay.innerHTML = '<div class="agon-time-explanation"><h3><i class="fa-regular fa-clock"></i> Temps passé</h3><p>Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes par jour sur les réseaux et plateformes comme agôn. Ce compteur ne bloque rien, c\'est juste un repère.</p><button type="button">Compris</button></div>';
+      function close() { overlay.remove(); }
+      overlay.addEventListener("click", function (event) { if (event.target === overlay) close(); });
+      overlay.querySelector("button").addEventListener("click", close);
+      document.body.appendChild(overlay);
+    });
+  }
+
   function ensureUniversalMenuStyles() {
     if (document.getElementById("mnoria-universal-menu-styles")) return;
     var style = document.createElement("style");
@@ -14,6 +169,7 @@
       ".mnoria-universal-menu-item{display:flex;align-items:center;gap:7px;width:100%;padding:6px 9px;border:0;border-radius:9px;background:#fff;color:#1f2937;font:inherit;font-size:13px;font-weight:700;line-height:1.15;text-align:left;text-decoration:none;cursor:pointer;box-sizing:border-box}" +
       ".mnoria-universal-menu-item:hover,.mnoria-universal-menu-item:focus-visible{background:#f3f4f6;outline:none}" +
       ".mnoria-universal-menu-item i{width:16px;flex:0 0 16px;text-align:center;font-size:14px}" +
+      "@media(display-mode:standalone) and (max-width:768px){.mnoria-universal-menu-wrap{top:calc(49px + env(safe-area-inset-top,0px))}}" +
       "body.mnoria-universal-menu-open .topbar{z-index:300000!important;overflow:visible!important}";
     document.head.appendChild(style);
   }
@@ -139,7 +295,9 @@
     brandMain.appendChild(widget);
   }
 
+  var uniformBrandMain = ensureUniformBrandAnchor();
   ensureUniversalHamburgerMenu();
+  renderUniversalTimeWidget(uniformBrandMain);
 
   // Les pages qui chargent script.min.js utilisent le widget complet (détail
   // des scores + compteur de temps). Ce petit fichier ne prend le relais que

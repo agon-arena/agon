@@ -26934,6 +26934,17 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .pag
   transform: translateY(-50%) !important;
 }
 
+/* Sur iPhone installé, le bouton est enfant direct du bandeau : top:50%
+   incluait donc la zone sûre supérieure et le plaçait plus haut que celui de
+   l'index, qui est centré dans les 96px utiles sous cette zone. 49px + safe
+   reproduit exactement le centre de ce contenu utile. */
+@media (display-mode: standalone) and (max-width: 768px) {
+  body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
+    .topbar--mnoria-uniform > .standalone-header-power {
+    top: calc(49px + env(safe-area-inset-top, 0px)) !important;
+  }
+}
+
 body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
   .topbar--mnoria-uniform > .standalone-header-power:hover,
 body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
