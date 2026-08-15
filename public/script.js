@@ -19698,7 +19698,22 @@ function setMemoireCloudMode(enable, skipSync = false) {
     if (statusEl) statusEl.hidden = true;
     const cloudEl = document.getElementById('agon-tag-trends-cloud');
     if (cloudEl) cloudEl.hidden = false;
+    // En standalone mobile, le cadre "Ma mémoire" possède déjà la bonne position verticale
+    // via sa marge CSS dédiée (-84px actuellement). Lorsqu'on retire sa classe ci-dessous,
+    // cette marge disparaissait immédiatement : le cadre partagé descendait pendant le fetch
+    // des Bulles Agôn, puis alignStandaloneBubbleFrameToActiveFilter le remontait seulement
+    // après l'apparition du tag "Communauté". Conserve donc la position effectivement rendue
+    // avant de changer de fond ; le recalage normal affinera ensuite cette même marge dès que
+    // le filtre cible sera disponible, sans image intermédiaire trop basse.
+    const departingMemoireMarginTop = (
+      cloudEl &&
+      document.body.classList.contains('is-standalone') &&
+      isAgonMobileCloudViewport()
+    ) ? parseFloat(getComputedStyle(cloudEl).marginTop) : NaN;
     cloudEl?.classList.remove('agon-memoire-frame');
+    if (cloudEl && Number.isFinite(departingMemoireMarginTop)) {
+      cloudEl.style.marginTop = departingMemoireMarginTop + 'px';
+    }
     // Poussière d'étoiles/lunes/scintillements (mon-univers.js drawMiniStarsForSystems/
     // drawMoonsForStars/drawSparklesForStars) : posés en enfants directs du conteneur PARTAGÉ,
     // à côté des bulles (pas dedans) — clearTagTrendCloudVisualItems (tagTrendCloud.js,
