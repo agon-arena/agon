@@ -25481,7 +25481,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   /* background:none : sur l'accueil, .page-home(-mobile) .agon-tag-trends-cloud::before pose
      l'image "Bulles Actu" (agon-bulles-bg.jpg) sur ce même ::before — jamais nettoyée en mode
      Ma mémoire (aucune règle ne touchait jusqu'ici à sa propriété background), elle restait
-     visible par-dessus le ::after (fond universe-bg.jpg), passé plus bas à un z-index inférieur
+     visible par-dessus le ::after (fond Mnoria), passé plus bas à un z-index inférieur
      (-2 vs -1 ici) : elle le masquait entièrement. Demande du 09/08/2026, "c'est le même que
      celui qui a sur bulles actu, pas celui qu'on avait inséré dans mon univers". */
   background: none;
@@ -25512,18 +25512,16 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   pointer-events: none;
   border-radius: 18px;
   overflow: hidden;
-  /* Fond remplacé par une vraie image (demande du 07/08/2026, "à la place du fond étoilé, insère
-     cette image comme image de fond") : plus de dégradés/poussière générés en CSS (le tout
-     précédent, plusieurs dizaines de radial-gradient, est retiré) — public/universe-bg.jpg,
-     fournie directement par l'utilisateur. cover + center : remplit tout le cadre en gardant le
-     ratio de l'image, recadrée si besoin plutôt que déformée. background-color gardé en filet de
-     secours (image lente à charger / échec réseau) : mieux qu'un blanc éclatant vu le thème
-     sombre de la page. */
+  /* Texture 4K seamless définitive, utilisée directement dans sa version PNG originale. Elle
+     est répétée à sa taille native corrigée de la densité d'écran (variables posées par
+     mon-univers.js), jamais étirée en une image géante, recompressée, floutée ou filtrée. Ce
+     calque fixe sert de fond de secours pendant le chargement et dans l'état mémoire vide ; la
+     couche caméra .universe-zoom-background reprend exactement la même texture au-dessus. */
   background-color: #020610;
-  background-image: url("/universe-bg.jpg?v=2");
-  background-size: cover;
+  background-image: url("/mnoria_master_4K_seamless_infini.png?v=20260815-original");
+  background-size: var(--mnoria-tile-width, 3840px) var(--mnoria-tile-height, 2560px);
   background-position: center;
-  background-repeat: no-repeat;
+  background-repeat: repeat;
 }
 /* Inset bas 23px hérité de sa règle desktop ci-dessus : sur mobile, le cadre décoratif
    (.agon-tag-trends-cloud::before) passe lui à 78px (cf. @media plus haut) — sans cet
@@ -26000,45 +25998,20 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
     inset: var(--bubble-frame-top) 30px 78px;
   }
 }
-/* Fond étoilé zoomable ET panoramique (demande du 13/08/2026) : même image que le cadre
-   décoratif fixe (#agon-universe-cloud::after, laissé tel quel — reste visible dessous,
-   recouvert par celui-ci). Son transform (translate + scale) est posé directement en JS par
-   universe-zoom.js (apply()), avec le MÊME décalage relatif que le monde des bulles (worldEl)
-   — pas seulement le scale via une variable CSS (essayé d'abord) : un panoramique déplaçait
-   alors les bulles sans bouger le fond, donnant l'impression de bulles flottant sur un
-   arrière-plan figé au lieu d'un même espace qui bouge ensemble. Rogné par overflow:hidden de
-   .universe-zoom-viewport (son parent) : jamais de débordement visible hors du cadre malgré
-   l'agrandissement/déplacement. transform-origin centré par défaut (50% 50%, cohérent avec le
-   calcul JS qui décale depuis ce centre plutôt que depuis (0,0) comme worldEl). */
+/* Fond infini synchronisé à la caméra. La couche couvre seulement le viewport ; l'infini vient
+   de background-repeat, pas d'un élément arbitrairement gigantesque. universe-zoom.js projette
+   la même texture seamless depuis l'espace monde vers l'écran via background-position et
+   background-size : pan positif/négatif et zoom restent cohérents avec les nœuds. Une seule
+   image est décodée/réutilisée par le navigateur, sans balises <img> supplémentaires. */
 .universe-zoom-background {
   position: absolute;
-  /* Bien plus grand que le cadre (400% dans chaque dimension, centré) : une fois le
-     panoramique possible (cf. universe-zoom.js), déplacer ce fond (translate) avec un bord
-     calé pile sur le cadre (inset:0, essayé d'abord) finissait par révéler ce bord — et
-     dessous, le cadre décoratif statique (#agon-universe-cloud::after, jamais déplacé)
-     apparaissait, tranché net (signalé le 13/08/2026 par capture d'écran). Cette marge
-     généreuse absorbe un déplacement raisonnable sans jamais montrer son propre bord.
-     ATTENTION : "background-size: cover" (et de même 100vw/100vh, essayés tous les deux) se
-     recadre sur la taille de CETTE boîte agrandie (ou du viewport navigateur, lui aussi plus
-     grand que le cadre) et non sur le cadre visible lui-même — l'image apparaissait alors bien
-     plus zoomée qu'avant ce correctif à chaque fois (signalé le 13/08/2026, captures d'écran).
-     La taille exacte (px, équivalent à "cover" mais calculé sur le cadre réel, pas cette boîte)
-     est donc posée en JS (sizeUniverseBackground, mon-univers.js) juste après le montage — ceci
-     n'est qu'un filet de secours au cas où ce calcul JS échouerait.
-     background-repeat: repeat (pas no-repeat, essayé d'abord) : à taille fixe, l'image ne
-     déborde du cadre que de la marge naturelle laissée par "cover" (quelques centaines de px) —
-     largement dépassée par un panoramique une fois zoomé, ce qui révélait alors une zone plate
-     background-color au lieu du champ d'étoiles (signalé le 13/08/2026 par capture d'écran, "le
-     fond doit rester accroché au cadre"). La répétition en tuile garantit que tout panoramique,
-     même lointain, continue de montrer du champ d'étoiles plutôt qu'un vide uni — la reprise
-     entre tuiles n'est pas parfaitement invisible mais reste bien moins gênante qu'un aplat. */
-  inset: -150%;
+  inset: 0;
   background-color: #020610;
-  background-image: url("/universe-bg.jpg?v=2");
-  background-size: cover;
+  background-image: url("/mnoria_master_4K_seamless_infini.png?v=20260815-original");
+  background-size: var(--mnoria-tile-width, 3840px) var(--mnoria-tile-height, 2560px);
   background-position: center;
   background-repeat: repeat;
-  will-change: transform;
+  will-change: background-position, background-size;
 }
 .universe-zoom-world {
   position: absolute;

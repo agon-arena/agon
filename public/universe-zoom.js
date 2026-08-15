@@ -225,42 +225,39 @@ function layoutUniverseWorld(galaxies, worldRadius) {
 // ---- Caméra : zoom continu sur #universe-world à l'intérieur de #universe-viewport ------------
 // État { x, y, scale } : (x,y) = point du monde actuellement au CENTRE du viewport, scale =
 // facteur de zoom (1 = vue d'ensemble telle que dimensionnée par worldRadius au chargement).
-// Jamais de panoramique libre (glisser-déposer) : demande du 13/08/2026, "les galaxies restent
-// fixes sur l'écran, comme accrochées au fond" — la molette/le pincement changent uniquement le
-// scale, x/y ne bougent QUE via un clic sur une bulle (focusOn, qui recentre délibérément sur
-// le nœud ciblé) ou le retour en arrière (zoomOutTo/setState explicite), jamais par un geste de
-// zoom libre ni par un cliquer-glisser. jamais d'animation transform pendant un geste continu
-// (réactivité), seulement lors d'un zoom programmatique (focusOn) — transform seul (jamais
-// box-shadow), cf. historique de tremblement visuel sur mobile Safari documenté ailleurs sur
-// cette page.
-function createUniverseCamera({ viewportEl, worldEl, backgroundEl, minScale = 1, maxScale = 40, onChange }) {
+// Le fond est une texture répétée dans le même espace logique. Il ne possède donc plus de bord
+// à utiliser comme limite de panoramique : x/y peuvent être positifs ou négatifs et s'étendre
+// aussi loin que les coordonnées numériques du navigateur le permettent.
+function createUniverseCamera({
+  viewportEl,
+  worldEl,
+  backgroundEl,
+  backgroundTileWidth = 3840,
+  backgroundTileHeight = 2560,
+  minScale = 1,
+  maxScale = 40,
+  onChange
+}) {
   let state = { x: 0, y: 0, scale: minScale };
   let raf = null;
-  // Taille (px, cf. sizeUniverseBackground côté mon-univers.js) du fond étoilé une fois ajusté
-  // au cadre — sert à plafonner le panoramique pile à l'endroit où ce fond cesse de le couvrir
-  // (demande du 13/08/2026, "le déplacement doit s'arrêter au bord du cadre" — pas de zone vide
-  // ni de reprise en tuile visible, cf. clampPan ci-dessous).
-  let bgRenderedW = 0;
-  let bgRenderedH = 0;
-  function setBackgroundSize(renderedW, renderedH) {
-    bgRenderedW = renderedW;
-    bgRenderedH = renderedH;
+
+  // Un zoom 1:1 du décor jusqu'au plafond de la scène (parfois ×35) transformerait une tuile
+  // 4K en bitmap affiché sur plus de 130 000px et agrandirait fortement ses pixels — précisément
+  // le comportement destructif visuellement interdit pour Mnoria. Le décor vit donc sur un
+  // plan profond en parallaxe : il accompagne continûment le zoom, mais son agrandissement
+  // physique reste borné à +15 %. Le contenu interactif conserve, lui, son zoom intégral.
+  const BACKGROUND_MAX_VISUAL_SCALE = 1.15;
+
+  function getBackgroundVisualScale(sceneScale) {
+    const scaleRange = Math.max(1, maxScale / minScale);
+    if (scaleRange === 1) return 1;
+    const progress = Math.log(Math.max(minScale, sceneScale) / minScale) / Math.log(scaleRange);
+    return 1 + Math.min(1, Math.max(0, progress)) * (BACKGROUND_MAX_VISUAL_SCALE - 1);
   }
-  // Demi-marge (unités "monde", cf. state.x/y) disponible de part et d'autre du centre avant que
-  // le fond (mis à l'échelle avec la scène, comme worldEl) ne cesse de couvrir le cadre. Croît
-  // avec le zoom (à un scale donné, le fond rendu grandit avec la scène alors que la fenêtre du
-  // cadre reste fixe) — jamais négative par construction (le fond couvre toujours le cadre au
-  // repos, cf. sizeUniverseBackground : cover garantit renderedW/H >= largeur/hauteur du cadre).
-  function clampPan(x, y, scale) {
-    if (!bgRenderedW || !bgRenderedH) return { x, y };
-    const vw = viewportEl.clientWidth;
-    const vh = viewportEl.clientHeight;
-    const halfSlackX = bgRenderedW / 2 - vw / (2 * scale);
-    const halfSlackY = bgRenderedH / 2 - vh / (2 * scale);
-    return {
-      x: Math.min(halfSlackX, Math.max(-halfSlackX, x)),
-      y: Math.min(halfSlackY, Math.max(-halfSlackY, y)),
-    };
+
+  function setBackgroundTileSize(width, height) {
+    if (Number.isFinite(width) && width > 0) backgroundTileWidth = width;
+    if (Number.isFinite(height) && height > 0) backgroundTileHeight = height;
   }
 
   function apply() {
@@ -269,15 +266,20 @@ function createUniverseCamera({ viewportEl, worldEl, backgroundEl, minScale = 1,
     const tx = vw / 2 - state.x * state.scale;
     const ty = vh / 2 - state.y * state.scale;
     worldEl.style.transform = `translate(${tx}px, ${ty}px) scale(${state.scale})`;
-    // Fond étoilé "accroché" aux bulles (demande du 13/08/2026) : même décalage relatif que
-    // worldEl (-state.x/-state.y à l'échelle courante), mais depuis son propre centre
-    // (transform-origin:center, cf. style.css — il n'a pas de repère (0,0) façon monde, juste
-    // une image de fond centrée) plutôt que le calcul vw/2-tx de worldEl : sans ce décalage, le
-    // fond ne faisait QUE zoomer sur place pendant qu'un panoramique déplaçait les bulles à
-    // côté, donnant l'impression de bulles flottant sur un arrière-plan figé au lieu d'un même
-    // espace qui bouge ensemble.
+    // Projection du plan profond depuis les coordonnées monde vers l'écran : le centre de la
+    // tuile contenant l'origine (0,0) coïncide avec le centre du viewport quand x=y=0. Le pan
+    // est projeté avec le même facteur visuel que ce plan, créant une parallaxe cohérente sans
+    // détacher le décor de la navigation. background-repeat réalise la continuité dans les
+    // quatre directions, y compris avant l'origine ; aucune dimension de monde ni aucun nombre
+    // de balises ne dépend du pan.
     if (backgroundEl) {
-      backgroundEl.style.transform = `translate(${-state.x * state.scale}px, ${-state.y * state.scale}px) scale(${state.scale})`;
+      const backgroundScale = getBackgroundVisualScale(state.scale);
+      const tileW = backgroundTileWidth * backgroundScale;
+      const tileH = backgroundTileHeight * backgroundScale;
+      const positionX = vw / 2 - state.x * backgroundScale - tileW / 2;
+      const positionY = vh / 2 - state.y * backgroundScale - tileH / 2;
+      backgroundEl.style.backgroundSize = `${tileW}px ${tileH}px`;
+      backgroundEl.style.backgroundPosition = `${positionX}px ${positionY}px`;
     }
     // Curseur "main" uniquement quand le panoramique est réellement possible (state.scale >
     // minScale, cf. le pointermove plus bas) — jamais à la vue d'ensemble, où glisser ne fait
@@ -296,15 +298,21 @@ function createUniverseCamera({ viewportEl, worldEl, backgroundEl, minScale = 1,
   function setState(next, animate = false) {
     state = { ...state, ...next };
     state.scale = Math.min(maxScale, Math.max(minScale, state.scale));
-    const clamped = clampPan(state.x, state.y, state.scale);
-    state.x = clamped.x;
-    state.y = clamped.y;
     if (animate) {
       worldEl.style.transition = "transform 550ms cubic-bezier(.2,.7,.3,1)";
       const clearTransition = () => { worldEl.style.transition = ""; worldEl.removeEventListener("transitionend", clearTransition); };
       worldEl.addEventListener("transitionend", clearTransition);
+      if (backgroundEl) {
+        backgroundEl.style.transition = "background-position 550ms cubic-bezier(.2,.7,.3,1), background-size 550ms cubic-bezier(.2,.7,.3,1)";
+        const clearBackgroundTransition = () => {
+          backgroundEl.style.transition = "";
+          backgroundEl.removeEventListener("transitionend", clearBackgroundTransition);
+        };
+        backgroundEl.addEventListener("transitionend", clearBackgroundTransition);
+      }
     } else {
       worldEl.style.transition = "";
+      if (backgroundEl) backgroundEl.style.transition = "";
     }
     apply();
     scheduleChange();
@@ -435,7 +443,11 @@ function createUniverseCamera({ viewportEl, worldEl, backgroundEl, minScale = 1,
     setState,
     focusOn,
     zoomOutTo,
-    setBackgroundSize,
+    setBackgroundTileSize,
+    refresh() {
+      apply();
+      scheduleChange();
+    },
     destroy() {
       // Pas de removeEventListener détaillé (le conteneur est recréé côté appelant à chaque
       // ré-init, cf. mon-univers.js loadUniverse) — documenté pour un futur ajout si besoin.

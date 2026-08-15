@@ -8,7 +8,7 @@
 // quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260813-pan-clamped";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-infinite-mnoria";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -211,8 +211,8 @@ let viewportEl = null;
 // (le compositeur recompose un bitmap agrandi puis rétréci au lieu de re-rasteriser le texte à
 // sa taille finale) — signalé le 13/08/2026 par capture d'écran, très net à ×20-40.
 let labelsOverlayEl = null;
-// Recalcule sizeUniverseBackground() au redimensionnement du cadre (rotation mobile, fenêtre
-// redimensionnée) : sa taille en dur (px) ne suit sinon plus le cadre réel, cf. mountUniverse.
+// Recalcule les dimensions CSS de la tuile 4K au redimensionnement/changement de densité
+// d'écran (rotation mobile, passage d'un écran Retina à un autre), cf. mountUniverse.
 let universeBgResizeObserver = null;
 const labelElByNodeId = new Map();
 // Traits connecteurs étoile -> système solaire (demande du 13/08/2026) : enfants de worldEl
@@ -228,6 +228,51 @@ const cloudEl = document.getElementById("agon-universe-cloud") || document.getEl
 const breadcrumbEl = document.getElementById("universe-breadcrumb");
 const statusEl = document.getElementById("universe-status");
 const backBtn = document.getElementById("universe-back-btn");
+
+// Texture définitive fournie pour "Ma mémoire". Le fichier PNG demeure strictement intact :
+// aucune variante, recompression ou transformation n'est générée. À l'échelle caméra 1, une
+// dimension CSS divisée par devicePixelRatio fait correspondre un pixel source à un pixel
+// physique sur les écrans Retina/HiDPI ; le zoom de la caméra reste ensuite un zoom visuel
+// normal du même asset original.
+const MNORIA_TEXTURE_NATURAL_W = 3840;
+const MNORIA_TEXTURE_NATURAL_H = 2560;
+const MNORIA_TEXTURE_URL = "/mnoria_master_4K_seamless_infini.png?v=20260815-original";
+let mnoriaTextureReadyPromise = null;
+
+function ensureMnoriaTextureReady() {
+  if (mnoriaTextureReadyPromise) return mnoriaTextureReadyPromise;
+  mnoriaTextureReadyPromise = new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.fetchPriority = "high";
+    image.onload = () => {
+      if (typeof image.decode === "function") {
+        image.decode().catch(() => {}).finally(() => resolve(true));
+      } else {
+        resolve(true);
+      }
+    };
+    // Une erreur réseau ne doit pas bloquer la navigation : le fond sombre CSS reste le filet
+    // de sécurité, mais aucun dérivé compressé de moindre qualité n'est substitué.
+    image.onerror = () => resolve(false);
+    image.src = MNORIA_TEXTURE_URL;
+  });
+  return mnoriaTextureReadyPromise;
+}
+
+function syncMnoriaTileMetrics() {
+  const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
+  const width = MNORIA_TEXTURE_NATURAL_W / dpr;
+  const height = MNORIA_TEXTURE_NATURAL_H / dpr;
+  cloudEl?.style.setProperty("--mnoria-tile-width", `${width}px`);
+  cloudEl?.style.setProperty("--mnoria-tile-height", `${height}px`);
+  return { width, height };
+}
+
+// Le module est évalué dès l'entrée dans "Ma mémoire", avant même la réponse API : le fond
+// fixe de secours (::after) profite donc lui aussi immédiatement de la bonne densité Retina.
+syncMnoriaTileMetrics();
+ensureMnoriaTextureReady();
 
 function getGalaxyByName(name) {
   return (universeData?.galaxies || []).find((g) => g.name === name) || null;
@@ -245,36 +290,6 @@ function getSolarSystemById(galaxy, id) {
 // taille aux 3 niveaux en même temps dès la vue d'ensemble — les étoiles, peintes en dernier
 // donc par-dessus, masquaient alors visuellement galaxies/systèmes en dessous.
 const REVEAL_PX_SELF = 30; // rayon à l'écran minimum pour qu'une bulle système/étoile s'affiche
-
-// Dimensions réelles de public/universe-bg.jpg (1536x1024, vérifié via `sips`) — nécessaires pour
-// reproduire à la main le calcul de "background-size: cover" (cf. sizeUniverseBackground). Fixe
-// : ne varie que si le fichier image est remplacé (bumper alors aussi son ?v=).
-const UNIVERSE_BG_NATURAL_W = 1536;
-const UNIVERSE_BG_NATURAL_H = 1024;
-
-// .universe-zoom-background est volontairement bien plus grand que le cadre visible (cf.
-// style.css, inset:-150%) pour absorber le panoramique sans jamais révéler son propre bord.
-// Problème : "background-size: cover" pur se recalcule sur CETTE boîte agrandie, pas sur le
-// cadre — l'image apparaissait alors bien plus zoomée qu'avant (signalé le 13/08/2026, capture
-// d'écran, à deux reprises : une 1ère fois avec cover sur la boîte agrandie, une 2e avec
-// background-size:100vw/100vh — plus grand que le cadre lui-même, donc encore trop zoomé). On
-// calcule donc ICI, à la main, la taille que "cover" donnerait pour une boîte de la taille RÉELLE
-// du cadre (viewportEl, pas la boîte agrandie), puis on pose cette taille en dur (px) sur la
-// boîte agrandie : le rendu au repos est alors identique pixel pour pixel à l'ancien fond fixe
-// (#agon-universe-cloud::after). Retourne ces dimensions (plutôt que de les garder locales) :
-// camera.setBackgroundSize (universe-zoom.js) en a besoin pour plafonner le panoramique pile là
-// où ce fond cesse de couvrir le cadre (demande du 13/08/2026, "le déplacement doit s'arrêter au
-// bord du cadre" — jamais de zone vide ni de reprise en tuile visible).
-function sizeUniverseBackground(backgroundEl, viewportEl) {
-  const frameW = viewportEl.clientWidth;
-  const frameH = viewportEl.clientHeight;
-  if (!frameW || !frameH) return null;
-  const coverScale = Math.max(frameW / UNIVERSE_BG_NATURAL_W, frameH / UNIVERSE_BG_NATURAL_H);
-  const renderedW = Math.ceil(UNIVERSE_BG_NATURAL_W * coverScale);
-  const renderedH = Math.ceil(UNIVERSE_BG_NATURAL_H * coverScale);
-  backgroundEl.style.backgroundSize = `${renderedW}px ${renderedH}px`;
-  return { renderedW, renderedH };
-}
 
 // Rayon à l'écran visé, pour le plus gros enfant d'un nœud, une fois ce nœud ciblé par un clic
 // (focusOn) — comfortablement au-dessus de REVEAL_PX_SELF pour qu'il apparaisse net, pas
@@ -479,11 +494,9 @@ function mountUniverse() {
 
   viewportEl = document.createElement("div");
   viewportEl.className = "universe-zoom-viewport";
-  // Fond étoilé zoomable (demande du 13/08/2026, "que le fond s'avance aussi") : posé AVANT
-  // worldEl (donc dessous), à l'intérieur de viewportEl pour profiter de son overflow:hidden
-  // (le cadre décoratif existant, #agon-universe-cloud::after, reste fixe — non affecté, cette
-  // couche vient juste se superposer par-dessus). Mis à l'échelle via --universe-cam-scale (CSS),
-  // pas manipulé en JS ici.
+  // Fond infini zoomable : une seule couche sous worldEl, remplie par la texture PNG seamless
+  // répétée par le moteur CSS. Aucun <img> ni grille de tuiles DOM n'est créé, même si le monde
+  // s'étend très loin. La caméra met uniquement à jour background-position/background-size.
   const backgroundEl = document.createElement("div");
   backgroundEl.className = "universe-zoom-background";
   worldEl = document.createElement("div");
@@ -496,11 +509,14 @@ function mountUniverse() {
   viewportEl.appendChild(worldEl);
   viewportEl.appendChild(labelsOverlayEl);
   cloudEl.appendChild(viewportEl);
-  let lastBgSize = sizeUniverseBackground(backgroundEl, viewportEl);
+  let backgroundTileMetrics = syncMnoriaTileMetrics();
   if (universeBgResizeObserver) universeBgResizeObserver.disconnect();
   universeBgResizeObserver = new ResizeObserver(() => {
-    lastBgSize = sizeUniverseBackground(backgroundEl, viewportEl);
-    if (lastBgSize && camera) camera.setBackgroundSize(lastBgSize.renderedW, lastBgSize.renderedH);
+    backgroundTileMetrics = syncMnoriaTileMetrics();
+    if (camera) {
+      camera.setBackgroundTileSize(backgroundTileMetrics.width, backgroundTileMetrics.height);
+      camera.refresh();
+    }
   });
   universeBgResizeObserver.observe(viewportEl);
 
@@ -609,11 +625,12 @@ function mountUniverse() {
     viewportEl,
     worldEl,
     backgroundEl,
+    backgroundTileWidth: backgroundTileMetrics.width,
+    backgroundTileHeight: backgroundTileMetrics.height,
     minScale: 1,
     maxScale,
     onChange: onCameraChange
   });
-  if (lastBgSize) camera.setBackgroundSize(lastBgSize.renderedW, lastBgSize.renderedH);
   camera.setState({ x: 0, y: 0, scale: 1 }, false);
   onCameraChange(camera.getState());
 }
@@ -625,7 +642,9 @@ function mountUniverse() {
 // opacité, puis une image supplémentaire, sans jamais bloquer indéfiniment la navigation.
 function waitForUniverseRootPaint(modeToken) {
   const startedAt = performance.now();
-  const maxWaitMs = 1000;
+  const maxWaitMs = 15000;
+  let textureSettled = false;
+  ensureMnoriaTextureReady().then(() => { textureSettled = true; });
 
   return new Promise((resolve) => {
     const finishAfterPaint = () => requestAnimationFrame(() => resolve(true));
@@ -647,7 +666,7 @@ function waitForUniverseRootPaint(modeToken) {
         return rect.width > 0 && rect.height > 0 && opacity >= 0.98;
       });
 
-      if (rootIsPainted) {
+      if (rootIsPainted && textureSettled) {
         finishAfterPaint();
         return;
       }
