@@ -25342,7 +25342,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
     position: absolute;
     left: 30px;
     right: 30px;
-    top: 54px;
+    top: 52px;
   }
 
   body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before .universe-breadcrumb {
@@ -25369,15 +25369,16 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
     flex: 0 0 auto;
   }
 
-  /* Même position dans l'application installée : l'ancien top négatif faisait
+  /* Dans l'application installée, le fil est remonté de 6px supplémentaires pour
+     mieux le détacher du cadre sans modifier la position de celui-ci. L'ancien top négatif faisait
      remonter le fil d'Ariane jusque sur le bouton Trier / Rechercher.
-     54px - 84px = -30px : suit le rapprochement du cadre lui-même (margin-top: -84px sur
+     La position suit le rapprochement du cadre lui-même (margin-top: -84px sur
      #agon-tag-trends-cloud.agon-memoire-frame, cf. règle juste au-dessus dans ce fichier) —
      sans ce même décalage, le fil d'Ariane (positionné indépendamment, relatif à la section et
      non au cadre) flottait DANS le cadre au lieu de rester juste au-dessus (constaté le
      12/08/2026 après le rapprochement du cadre). */
   body.is-standalone.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: -30px;
+    top: -36px;
   }
 
   /* Mêmes marges de sélecteur que les autres modes mobiles. */
@@ -25393,7 +25394,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   /* Le navigateur mobile décale déjà le cloud de 14px vers le bas : le fil d'Ariane
      et la flèche, positionnés en absolu, suivent exactement le même décalage. */
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: 54px;
+    top: 52px;
   }
   body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-after {
     top: 451px;
