@@ -224,6 +224,20 @@ const labelElByNodeId = new Map();
 const connectorElByNodeId = new Map();
 const nodeById = new Map(); // id (cf. layoutUniverseWorld) -> nœud positionné, reconstruit à chaque scène
 
+// HUD de navigation : un seul SVG très léger, indépendant du monde transformé. Il affiche
+// uniquement les galaxies, la position de la caméra et l'emprise du viewport.
+const MINIMAP_VIEWBOX_W = 128;
+const MINIMAP_VIEWBOX_H = 92;
+const MINIMAP_PADDING = 6;
+let minimapEl = null;
+let minimapSvgEl = null;
+let minimapViewportRectEl = null;
+let minimapPositionEl = null;
+let minimapBounds = null;
+let minimapActiveGalaxyId = null;
+let minimapClipIdCounter = 0;
+const minimapMarkerByNodeId = new Map();
+
 // Repli sur #agon-tag-trends-cloud (bulles "Ma mémoire" embarquées sur l'accueil, même cadre
 // que Bulles Actu/Bulles Agôn) — la page /mon-univers autonome a bien son propre
 // #agon-universe-cloud, jamais affecté par ce repli.
@@ -430,6 +444,287 @@ function createBubbleEl(kind, node, background, glowColor, extraClass) {
   return btn;
 }
 
+// ---- Petite minimap / radar cosmique --------------------------------------------------------
+
+function computeUniverseMinimapBounds() {
+  const nodes = [
+    ...(worldLayout?.galaxies || []),
+    ...(worldLayout?.solarSystems || []),
+    ...(worldLayout?.stars || [])
+  ];
+  if (!nodes.length) return { minX: -1, maxX: 1, minY: -1, maxY: 1 };
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  nodes.forEach((node) => {
+    const radius = Math.max(0, Number(node.r) || 0);
+    minX = Math.min(minX, node.x - radius);
+    maxX = Math.max(maxX, node.x + radius);
+    minY = Math.min(minY, node.y - radius);
+    maxY = Math.max(maxY, node.y + radius);
+  });
+
+  const fallbackSpan = Math.max(2, (worldLayout?.worldRadius || 1) * 2);
+  let width = Math.max(1, maxX - minX);
+  let height = Math.max(1, maxY - minY);
+  const marginX = Math.max(width * 0.14, fallbackSpan * 0.06);
+  const marginY = Math.max(height * 0.14, fallbackSpan * 0.06);
+  minX -= marginX;
+  maxX += marginX;
+  minY -= marginY;
+  maxY += marginY;
+  width = maxX - minX;
+  height = maxY - minY;
+
+  // Agrandit l'axe le plus court pour conserver les proportions monde dans le petit radar.
+  // Aucun étirement artificiel : les distances relatives restent donc lisibles.
+  const mapAspect = (MINIMAP_VIEWBOX_W - MINIMAP_PADDING * 2) / (MINIMAP_VIEWBOX_H - MINIMAP_PADDING * 2);
+  const worldAspect = width / height;
+  if (worldAspect > mapAspect) {
+    const targetHeight = width / mapAspect;
+    const extra = (targetHeight - height) / 2;
+    minY -= extra;
+    maxY += extra;
+  } else {
+    const targetWidth = height * mapAspect;
+    const extra = (targetWidth - width) / 2;
+    minX -= extra;
+    maxX += extra;
+  }
+
+  return { minX, maxX, minY, maxY };
+}
+
+function worldToMinimap(worldX, worldY) {
+  if (!minimapBounds) return { x: MINIMAP_VIEWBOX_W / 2, y: MINIMAP_VIEWBOX_H / 2 };
+  const innerW = MINIMAP_VIEWBOX_W - MINIMAP_PADDING * 2;
+  const innerH = MINIMAP_VIEWBOX_H - MINIMAP_PADDING * 2;
+  return {
+    x: MINIMAP_PADDING + ((worldX - minimapBounds.minX) / (minimapBounds.maxX - minimapBounds.minX)) * innerW,
+    y: MINIMAP_PADDING + ((worldY - minimapBounds.minY) / (minimapBounds.maxY - minimapBounds.minY)) * innerH
+  };
+}
+
+function minimapToWorld(mapX, mapY) {
+  if (!minimapBounds) return { x: 0, y: 0 };
+  const innerW = MINIMAP_VIEWBOX_W - MINIMAP_PADDING * 2;
+  const innerH = MINIMAP_VIEWBOX_H - MINIMAP_PADDING * 2;
+  const normalizedX = Math.min(1, Math.max(0, (mapX - MINIMAP_PADDING) / innerW));
+  const normalizedY = Math.min(1, Math.max(0, (mapY - MINIMAP_PADDING) / innerH));
+  return {
+    x: minimapBounds.minX + normalizedX * (minimapBounds.maxX - minimapBounds.minX),
+    y: minimapBounds.minY + normalizedY * (minimapBounds.maxY - minimapBounds.minY)
+  };
+}
+
+function updateUniverseMinimap(state) {
+  if (!minimapEl || !minimapViewportRectEl || !minimapPositionEl || !minimapBounds || !viewportEl) return;
+
+  const halfWorldW = viewportEl.clientWidth / (2 * state.scale);
+  const halfWorldH = viewportEl.clientHeight / (2 * state.scale);
+  const viewportStart = worldToMinimap(state.x - halfWorldW, state.y - halfWorldH);
+  const viewportEnd = worldToMinimap(state.x + halfWorldW, state.y + halfWorldH);
+  minimapViewportRectEl.setAttribute("x", String(Math.min(viewportStart.x, viewportEnd.x)));
+  minimapViewportRectEl.setAttribute("y", String(Math.min(viewportStart.y, viewportEnd.y)));
+  minimapViewportRectEl.setAttribute("width", String(Math.max(2.5, Math.abs(viewportEnd.x - viewportStart.x))));
+  minimapViewportRectEl.setAttribute("height", String(Math.max(2.5, Math.abs(viewportEnd.y - viewportStart.y))));
+
+  const cameraPoint = worldToMinimap(state.x, state.y);
+  const clampedX = Math.min(MINIMAP_VIEWBOX_W - MINIMAP_PADDING, Math.max(MINIMAP_PADDING, cameraPoint.x));
+  const clampedY = Math.min(MINIMAP_VIEWBOX_H - MINIMAP_PADDING, Math.max(MINIMAP_PADDING, cameraPoint.y));
+  minimapPositionEl.setAttribute("cx", String(clampedX));
+  minimapPositionEl.setAttribute("cy", String(clampedY));
+  minimapPositionEl.classList.toggle("is-outside", clampedX !== cameraPoint.x || clampedY !== cameraPoint.y);
+
+  // Repère de zone stable : une nouvelle galaxie ne devient active que si elle est nettement
+  // plus proche (22 %) que la précédente, afin d'éviter un clignotement aux frontières.
+  const galaxies = worldLayout?.galaxies || [];
+  let nearest = null;
+  galaxies.forEach((galaxy) => {
+    const distance = Math.hypot(state.x - galaxy.x, state.y - galaxy.y);
+    if (!nearest || distance < nearest.distance) nearest = { galaxy, distance };
+  });
+  const currentGalaxy = galaxies.find((galaxy) => galaxy.id === minimapActiveGalaxyId);
+  const currentDistance = currentGalaxy ? Math.hypot(state.x - currentGalaxy.x, state.y - currentGalaxy.y) : Infinity;
+  if (nearest && (!currentGalaxy || nearest.galaxy.id === currentGalaxy.id || nearest.distance < currentDistance * 0.78)) {
+    minimapActiveGalaxyId = nearest.galaxy.id;
+  }
+  minimapMarkerByNodeId.forEach((marker, nodeId) => {
+    marker.classList.toggle("is-current", nodeId === minimapActiveGalaxyId);
+  });
+  const activeGalaxy = galaxies.find((galaxy) => galaxy.id === minimapActiveGalaxyId);
+  minimapEl.setAttribute("aria-label", activeGalaxy
+    ? `Repère spatial de Ma mémoire, zone ${activeGalaxy.name}`
+    : "Repère spatial de Ma mémoire");
+}
+
+function createUniverseMinimap() {
+  if (!viewportEl || !worldLayout) return;
+  const svgNs = "http://www.w3.org/2000/svg";
+  minimapBounds = computeUniverseMinimapBounds();
+  minimapMarkerByNodeId.clear();
+  minimapActiveGalaxyId = null;
+
+  minimapEl = document.createElement("div");
+  minimapEl.className = "universe-minimap";
+  minimapEl.setAttribute("role", "group");
+  minimapEl.setAttribute("aria-label", "Repère spatial de Ma mémoire");
+  minimapEl.dataset.minX = String(minimapBounds.minX);
+  minimapEl.dataset.maxX = String(minimapBounds.maxX);
+  minimapEl.dataset.minY = String(minimapBounds.minY);
+  minimapEl.dataset.maxY = String(minimapBounds.maxY);
+
+  minimapSvgEl = document.createElementNS(svgNs, "svg");
+  minimapSvgEl.classList.add("universe-minimap__map");
+  minimapSvgEl.setAttribute("viewBox", `0 0 ${MINIMAP_VIEWBOX_W} ${MINIMAP_VIEWBOX_H}`);
+  minimapSvgEl.setAttribute("aria-label", "Carte des grandes thématiques");
+  minimapSvgEl.setAttribute("role", "group");
+
+  const clipId = `universe-minimap-clip-${++minimapClipIdCounter}`;
+  const defs = document.createElementNS(svgNs, "defs");
+  const clipPath = document.createElementNS(svgNs, "clipPath");
+  clipPath.id = clipId;
+  const clipRect = document.createElementNS(svgNs, "rect");
+  clipRect.setAttribute("x", String(MINIMAP_PADDING));
+  clipRect.setAttribute("y", String(MINIMAP_PADDING));
+  clipRect.setAttribute("width", String(MINIMAP_VIEWBOX_W - MINIMAP_PADDING * 2));
+  clipRect.setAttribute("height", String(MINIMAP_VIEWBOX_H - MINIMAP_PADDING * 2));
+  clipRect.setAttribute("rx", "6");
+  clipPath.appendChild(clipRect);
+  defs.appendChild(clipPath);
+  minimapSvgEl.appendChild(defs);
+
+  const field = document.createElementNS(svgNs, "rect");
+  field.classList.add("universe-minimap__field");
+  field.setAttribute("x", String(MINIMAP_PADDING));
+  field.setAttribute("y", String(MINIMAP_PADDING));
+  field.setAttribute("width", String(MINIMAP_VIEWBOX_W - MINIMAP_PADDING * 2));
+  field.setAttribute("height", String(MINIMAP_VIEWBOX_H - MINIMAP_PADDING * 2));
+  field.setAttribute("rx", "6");
+  minimapSvgEl.appendChild(field);
+
+  const markerLayer = document.createElementNS(svgNs, "g");
+  markerLayer.setAttribute("clip-path", `url(#${clipId})`);
+  (worldLayout.galaxies || []).forEach((galaxy) => {
+    const point = worldToMinimap(galaxy.x, galaxy.y);
+    const marker = document.createElementNS(svgNs, "g");
+    marker.classList.add("universe-minimap__marker");
+    marker.dataset.nodeId = galaxy.id;
+    marker.setAttribute("role", "button");
+    marker.setAttribute("tabindex", "0");
+    marker.setAttribute("aria-label", `Centrer sur ${galaxy.name}`);
+    marker.style.setProperty("--universe-minimap-hue", String(galaxy.themeHue ?? hueForGalaxy(galaxy.name)));
+    marker.setAttribute("transform", `translate(${point.x} ${point.y})`);
+
+    const hitArea = document.createElementNS(svgNs, "circle");
+    hitArea.classList.add("universe-minimap__marker-hit");
+    hitArea.setAttribute("r", "7");
+    const dot = document.createElementNS(svgNs, "circle");
+    dot.classList.add("universe-minimap__marker-dot");
+    dot.setAttribute("r", String(2.8 + Math.min(1.4, Math.log1p(Math.max(1, galaxy.weight || 1)) * 0.16)));
+    const title = document.createElementNS(svgNs, "title");
+    title.textContent = galaxy.name;
+    marker.append(hitArea, dot, title);
+    marker.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const currentScale = camera?.getState().scale || 1;
+      camera?.setState({ x: galaxy.x, y: galaxy.y, scale: currentScale }, true);
+    });
+    markerLayer.appendChild(marker);
+    minimapMarkerByNodeId.set(galaxy.id, marker);
+  });
+  minimapSvgEl.appendChild(markerLayer);
+
+  minimapViewportRectEl = document.createElementNS(svgNs, "rect");
+  minimapViewportRectEl.classList.add("universe-minimap__viewport");
+  minimapViewportRectEl.setAttribute("clip-path", `url(#${clipId})`);
+  minimapViewportRectEl.setAttribute("rx", "1.5");
+  minimapSvgEl.appendChild(minimapViewportRectEl);
+
+  minimapPositionEl = document.createElementNS(svgNs, "circle");
+  minimapPositionEl.classList.add("universe-minimap__position");
+  minimapPositionEl.setAttribute("r", "1.8");
+  minimapSvgEl.appendChild(minimapPositionEl);
+
+  const recenterBtn = document.createElement("button");
+  recenterBtn.type = "button";
+  recenterBtn.className = "universe-minimap__recenter";
+  recenterBtn.setAttribute("aria-label", "Recentrer Ma mémoire");
+  recenterBtn.title = "Recentrer";
+  recenterBtn.textContent = "◎";
+  recenterBtn.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    zoomToRoot();
+  });
+
+  let dragState = null;
+  const eventToMapPoint = (event) => {
+    const rect = minimapSvgEl.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / Math.max(1, rect.width)) * MINIMAP_VIEWBOX_W,
+      y: ((event.clientY - rect.top) / Math.max(1, rect.height)) * MINIMAP_VIEWBOX_H
+    };
+  };
+  minimapSvgEl.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    minimapSvgEl.setPointerCapture(event.pointerId);
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+      nodeId: event.target.closest?.("[data-node-id]")?.dataset.nodeId || null
+    };
+  });
+  minimapSvgEl.addEventListener("pointermove", (event) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY) > 3) dragState.moved = true;
+    if (!dragState.moved) return;
+    const point = eventToMapPoint(event);
+    const worldPoint = minimapToWorld(point.x, point.y);
+    camera?.setState({ x: worldPoint.x, y: worldPoint.y }, false);
+  });
+  const finishMinimapPointer = (event, cancelled = false) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!cancelled && !dragState.moved) {
+      const node = dragState.nodeId ? nodeById.get(dragState.nodeId) : null;
+      if (node) {
+        camera?.setState({ x: node.x, y: node.y }, true);
+      } else {
+        const point = eventToMapPoint(event);
+        const worldPoint = minimapToWorld(point.x, point.y);
+        camera?.setState({ x: worldPoint.x, y: worldPoint.y }, true);
+      }
+    }
+    if (minimapSvgEl.hasPointerCapture?.(event.pointerId)) minimapSvgEl.releasePointerCapture(event.pointerId);
+    dragState = null;
+  };
+  minimapSvgEl.addEventListener("pointerup", (event) => finishMinimapPointer(event));
+  minimapSvgEl.addEventListener("pointercancel", (event) => finishMinimapPointer(event, true));
+  minimapSvgEl.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  minimapEl.addEventListener("pointerdown", (event) => event.stopPropagation());
+  minimapEl.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+  ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+    minimapEl.addEventListener(type, (event) => event.stopPropagation());
+  });
+
+  minimapEl.append(minimapSvgEl, recenterBtn);
+  viewportEl.appendChild(minimapEl);
+}
+
 // ---- Montage complet de la scène (une seule fois par chargement de données) ----
 function destroyUniverseScene() {
   camera = null;
@@ -439,6 +734,13 @@ function destroyUniverseScene() {
   viewportEl = null;
   worldEl = null;
   labelsOverlayEl = null;
+  minimapEl = null;
+  minimapSvgEl = null;
+  minimapViewportRectEl = null;
+  minimapPositionEl = null;
+  minimapBounds = null;
+  minimapActiveGalaxyId = null;
+  minimapMarkerByNodeId.clear();
   labelElByNodeId.clear();
   connectorElByNodeId.clear();
   nodeById.clear();
@@ -611,6 +913,7 @@ function mountUniverse() {
     maxScale,
     onChange: onCameraChange
   });
+  createUniverseMinimap();
   camera.setState({ x: 0, y: 0, scale: 1 }, false);
   onCameraChange(camera.getState());
 }
@@ -776,6 +1079,7 @@ function onCameraChange(state) {
     el.classList.toggle("is-revealed", !childrenCanShow(node, state.scale));
   });
 
+  updateUniverseMinimap(state);
   renderBreadcrumb(computeFocusInfo(state));
 }
 

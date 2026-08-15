@@ -26029,6 +26029,147 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   pointer-events: none;
 }
 
+/* Petit radar cosmique : enfant du viewport de Ma mémoire, donc ancré au cadre et jamais au
+   document. Il reste au-dessus du monde mais sous le liseré noir permanent du cadre (z:200). */
+.universe-minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 128px;
+  height: 92px;
+  box-sizing: border-box;
+  z-index: 180;
+  overflow: hidden;
+  border: 1px solid rgba(190, 218, 232, 0.34);
+  border-radius: 10px;
+  background: rgba(3, 9, 17, 0.68);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  opacity: 0.72;
+  transition: opacity 0.18s ease, border-color 0.18s ease;
+  pointer-events: auto;
+}
+.universe-minimap:hover,
+.universe-minimap:focus-within {
+  opacity: 0.96;
+  border-color: rgba(205, 229, 240, 0.56);
+}
+.universe-minimap__map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.universe-minimap__field {
+  fill: rgba(7, 18, 29, 0.38);
+  stroke: rgba(185, 216, 232, 0.12);
+  stroke-width: 0.7;
+}
+.universe-minimap__marker {
+  cursor: pointer;
+  outline: none;
+}
+.universe-minimap__marker-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+.universe-minimap__marker-dot {
+  fill: hsl(var(--universe-minimap-hue, 205) 30% 72%);
+  stroke: rgba(255, 255, 255, 0.62);
+  stroke-width: 0.7;
+  filter: drop-shadow(0 0 2px hsla(var(--universe-minimap-hue, 205), 38%, 72%, 0.64));
+  transition: r 0.16s ease, stroke-width 0.16s ease;
+  pointer-events: none;
+}
+.universe-minimap__marker:hover .universe-minimap__marker-dot,
+.universe-minimap__marker:focus-visible .universe-minimap__marker-dot,
+.universe-minimap__marker.is-current .universe-minimap__marker-dot {
+  stroke: rgba(255, 255, 255, 0.96);
+  stroke-width: 1.25;
+}
+.universe-minimap__viewport {
+  fill: rgba(165, 213, 235, 0.09);
+  stroke: rgba(214, 239, 249, 0.8);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.universe-minimap__position {
+  fill: #f3fbff;
+  stroke: rgba(84, 148, 179, 0.95);
+  stroke-width: 0.8;
+  filter: drop-shadow(0 0 2px rgba(187, 232, 251, 0.9));
+  pointer-events: none;
+}
+.universe-minimap__position.is-outside {
+  fill: #f4c98e;
+  stroke: rgba(127, 75, 23, 0.9);
+}
+.universe-minimap__recenter {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(205, 229, 240, 0.42);
+  border-radius: 50%;
+  background: rgba(4, 12, 21, 0.78);
+  color: rgba(240, 249, 252, 0.9);
+  font: 700 15px/1 Arial, sans-serif;
+  cursor: pointer;
+}
+.universe-minimap__recenter:hover,
+.universe-minimap__recenter:focus-visible {
+  color: #fff;
+  background: rgba(27, 51, 66, 0.92);
+  outline: none;
+  border-color: rgba(232, 246, 251, 0.8);
+}
+/* La page autonome possède un indice « suite » superposé au bas du cadre. Remonte uniquement
+   son radar pour qu'il reste entièrement visible ; l'embed accueil conserve les 12px demandés. */
+#agon-universe-cloud .universe-minimap {
+  bottom: 52px;
+}
+.page-home .universe-minimap,
+.page-home-mobile .universe-minimap {
+  bottom: 32px;
+}
+@media (max-width: 640px) {
+  .universe-minimap {
+    right: 8px;
+    bottom: 8px;
+    width: 106px;
+    height: 76px;
+    border-radius: 8px;
+  }
+  .universe-minimap__recenter {
+    right: 4px;
+    top: 4px;
+    width: 20px;
+    height: 20px;
+    font-size: 13px;
+  }
+  #agon-universe-cloud .universe-minimap {
+    bottom: 52px;
+  }
+  .page-home .universe-minimap,
+  .page-home-mobile .universe-minimap {
+    bottom: 28px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .universe-minimap,
+  .universe-minimap__marker-dot {
+    transition: none;
+  }
+}
+
 /* Bulle : même apparence que .agon-tag-bubble (fond/bordure/ombre déjà posés par cette classe,
    cf. tagTrendCloud.js) mais dimensionnée en continu (width/height inline, cf. createBubbleEl)
    plutôt que par paliers -large/-medium/-small (propres à l'ancien moteur, non utilisés ici).
