@@ -19675,7 +19675,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260815-minimap-zoom-controls-v27').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260815-index-font-harmony-v29').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
