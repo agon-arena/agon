@@ -19675,7 +19675,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260815-galaxy-moons-level-v21').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260815-pan-at-root-v24').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;

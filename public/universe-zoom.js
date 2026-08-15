@@ -276,10 +276,10 @@ function createUniverseCamera({
       backgroundEl.style.backgroundSize = `${tileW}px ${tileH}px`;
       backgroundEl.style.backgroundPosition = `${positionX}px ${positionY}px`;
     }
-    // Curseur "main" uniquement quand le panoramique est réellement possible (state.scale >
-    // minScale, cf. le pointermove plus bas) — jamais à la vue d'ensemble, où glisser ne fait
-    // rien (indice visuel cohérent avec le comportement réel).
-    viewportEl.classList.toggle("universe-zoom-can-pan", state.scale > minScale);
+    // Le panoramique est disponible à tous les niveaux, y compris à la vue d'ensemble : le
+    // fond Mnoria est infini et l'utilisateur doit pouvoir explorer immédiatement sans être
+    // obligé d'effectuer d'abord un zoom artificiel.
+    viewportEl.classList.add("universe-zoom-can-pan");
   }
 
   function scheduleChange() {
@@ -365,13 +365,9 @@ function createUniverseCamera({
   });
 
   // ---- Pointer Events : un doigt/clic-glisser = panoramique, deux doigts = pincement ----------
-  // Panoramique actif UNIQUEMENT une fois zoomé au-delà de la vue d'ensemble (state.scale >
-  // minScale) — demande du 13/08/2026, en deux temps : d'abord "les galaxies restent fixes à
-  // la vue d'ensemble, je ne peux pas aller à droite/gauche" (panoramique retiré), puis "une
-  // fois que je zoome, je veux pouvoir aller dans toutes les directions" (panoramique remis,
-  // mais seulement une fois zoomé — sinon on retombe dans le premier problème signalé). Le
-  // pincement à deux doigts, lui, reste un zoom sur place à tout niveau (jamais de panoramique
-  // via son point médian, cf. zoomInPlace).
+  // Le déplacement à un doigt / clic-glisser fonctionne aussi à minScale. Le pincement à deux
+  // doigts reste un zoom sur place à tout niveau (jamais de panoramique via son point médian,
+  // cf. zoomInPlace).
   const activePointers = new Map();
   let dragLastPoint = null;
   let pinchStartDist = null;
@@ -402,11 +398,9 @@ function createUniverseCamera({
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (activePointers.size === 1 && dragLastPoint) {
-      if (state.scale > minScale) {
-        const dx = e.clientX - dragLastPoint.x;
-        const dy = e.clientY - dragLastPoint.y;
-        setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
-      }
+      const dx = e.clientX - dragLastPoint.x;
+      const dy = e.clientY - dragLastPoint.y;
+      setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
       dragLastPoint = { x: e.clientX, y: e.clientY };
     } else if (activePointers.size === 2) {
       const dist = distance();

@@ -25970,9 +25970,8 @@ body.page-home:not(.agon-memoire-cloud-mode)
   #agon-tag-trends-cloud > .universe-zoom-viewport {
   display: none;
 }
-/* Panoramique possible uniquement une fois zoomé au-delà de la vue d'ensemble (cf.
-   universe-zoom.js apply()/pointermove) — curseur "main" seulement dans ce cas, jamais à la
-   vue d'ensemble où glisser ne fait rien. */
+/* Le panoramique est possible même à la vue d'ensemble (cf. universe-zoom.js) : le curseur
+   « main » l'indique dès l'arrivée dans Ma mémoire. */
 .universe-zoom-can-pan {
   cursor: grab;
 }
