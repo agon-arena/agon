@@ -25898,19 +25898,6 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
   mask-image: linear-gradient(to right, #000 0%, transparent 100%);
 }
 
-/* Poussière d'étoiles autour des bulles système (cf. mon-univers.js drawMiniStarsForSystems) :
-   petits points sans nom, purement décoratifs, jamais interactifs. */
-.universe-mini-star {
-  position: absolute;
-  border-radius: 50%;
-  background: radial-gradient(circle, #fff 0%, rgba(255,236,190,0.95) 50%, transparent 100%);
-  /* Halo doublé (6px/2px → 12px/4px, demande du 08/08/2026 "beaucoup plus grosses/lumineuses"),
-     même taille de point relevée en JS (mon-univers.js drawMiniStarsForSystems). */
-  box-shadow: 0 0 12px 4px rgba(255,236,190,0.85);
-  pointer-events: none;
-  z-index: -1;
-}
-
 /* Lunes informatives de la vue galaxie (cf. addMoonsAroundGalaxy) : exactement une par système
    solaire, taille/éclat uniformes et placement radial déterministe. Aucune lune décorative ou
    aléatoire n'est ajoutée ; l'équivalent terne autour des étoiles reste supprimé. */
@@ -25928,20 +25915,6 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
 }
 .universe-galaxy-moon.is-revealed {
   opacity: 1;
-}
-
-/* Scintillement ponctuel (cf. drawSparklesForStars, mon-univers.js) : croix fine en dégradé,
-   façon reflet d'objectif/étoile filante — même demande, décoration la plus discrète des trois
-   (peu d'étoiles concernées, cf. STAR_SPARKLE_CHANCE). */
-.universe-star-sparkle {
-  position: absolute;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    linear-gradient(to right, transparent 0%, rgba(255,255,255,0.85) 46%, rgba(255,255,255,0.85) 54%, transparent 100%),
-    linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.85) 46%, rgba(255,255,255,0.85) 54%, transparent 100%);
-  mask-image: radial-gradient(circle, #000 0%, transparent 70%);
-  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 70%);
 }
 
 #agon-universe-cloud.agon-tag-trends-cloud::after,

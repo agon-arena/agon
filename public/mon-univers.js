@@ -381,49 +381,6 @@ function addMoonsAroundGalaxy(galaxy) {
   }
 }
 
-const MINI_STAR_MIN = 2;
-const MINI_STAR_MAX = 10;
-
-function addMiniStarsAroundSolarSystem(system) {
-  const count = Math.max(MINI_STAR_MIN, Math.min(MINI_STAR_MAX, system.ref.stars.length));
-  for (let s = 0; s < count; s += 1) {
-    const angle = (s / count) * Math.PI * 2 + (system.x + system.y) * 0.01;
-    const dist = system.r + 10 + Math.random() * 16;
-    const dotSize = 10 + Math.random() * 8;
-    const dot = document.createElement("span");
-    dot.className = "universe-mini-star";
-    dot.style.left = Math.round(system.x + Math.cos(angle) * dist - dotSize / 2) + "px";
-    dot.style.top = Math.round(system.y + Math.sin(angle) * dist - dotSize / 2) + "px";
-    dot.style.width = dotSize + "px";
-    dot.style.height = dotSize + "px";
-    dot.style.opacity = String(0.7 + Math.random() * 0.3);
-    worldEl.appendChild(dot);
-  }
-}
-
-const STAR_SPARKLE_CHANCE = 0.22;
-
-// Lunes ternes autour des étoiles retirées (demande du 13/08/2026, "point noir qui apparait sur
-// la bulle solar dès que l'étoile apparait, je n'en veux pas") : leur dégradé bleu-gris foncé
-// (#4a5a68), pensé comme une sphère ombrée discrète à taille fixe, devenait un gros disque sombre
-// bien visible une fois mis à l'échelle avec le reste de la scène (même mécanisme que les bulles,
-// volontaire pour elles mais pas prévu ici) — repéré au moment même où les étoiles satellites se
-// révèlent, puisque montées en même temps qu'elles (cf. worldLayout.stars.forEach, ci-dessous).
-function addSparklesAroundStar(star) {
-  if (Math.random() <= STAR_SPARKLE_CHANCE) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = star.r + 14 + Math.random() * 14;
-    const sparkleSize = 10 + Math.random() * 6;
-    const sparkle = document.createElement("span");
-    sparkle.className = "universe-star-sparkle";
-    sparkle.style.left = Math.round(star.x + Math.cos(angle) * dist - sparkleSize / 2) + "px";
-    sparkle.style.top = Math.round(star.y + Math.sin(angle) * dist - sparkleSize / 2) + "px";
-    sparkle.style.width = sparkleSize + "px";
-    sparkle.style.height = sparkleSize + "px";
-    worldEl.appendChild(sparkle);
-  }
-}
-
 // ---- Construction d'une bulle (élément DOM) pour un nœud positionné ----
 function createBubbleEl(kind, node, background, glowColor, extraClass) {
   // <div role="button"> plutôt qu'un vrai <button> : un <button> impose une taille minimale
@@ -585,7 +542,6 @@ function mountUniverse() {
       `hsla(${hue}, 36%, 72%, 0.76)`,
       "agon-tag-bubble-solarsystem"
     );
-    addMiniStarsAroundSolarSystem(s);
     nodeById.set(s.id, s);
   });
 
@@ -598,7 +554,6 @@ function mountUniverse() {
       null,
       "agon-tag-bubble-star"
     );
-    addSparklesAroundStar(star);
     const parentSystem = nodeById.get(star.solarSystemId);
     if (parentSystem) {
       connectorElByNodeId.set(star.id, createConnectorEl(parentSystem.x, parentSystem.y, star.x, star.y));
