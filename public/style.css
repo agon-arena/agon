@@ -20131,10 +20131,10 @@ body.page-home #debates-list .theme-row-section:first-child {
   border: 6px solid #000;
   box-sizing: border-box;
   border-radius: var(--bubble-frame-radius);
-  /* Le cadre doit rester AU-DESSUS du contenu peint après le chargement. Lorsqu'il partageait
-     la couche de fond en z-index négatif, il apparaissait au début puis était recouvert par les
-     bulles/canvas. */
-  z-index: 200;
+  /* Derrière les éléments du nuage : les bulles, satellites, libellés et indicateurs doivent
+     pouvoir chevaucher la bordure noire. Le fond reste encore un niveau plus bas (::after à
+     -2), donc les portions de cadre non recouvertes demeurent visibles en permanence. */
+  z-index: -1;
   pointer-events: none;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
   visibility: visible;
@@ -25486,11 +25486,8 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
 }
 
 /* Liseré noir autour du cadre décoratif EXISTANT (.agon-tag-trends-cloud::before, hérité),
-   pas un nouveau cadre séparé sur le conteneur (essayé le 06/08/2026, retiré : ce n'était pas
-   ce qui était demandé). box-shadow plutôt qu'un vrai border/outline : suit correctement le
-   border-radius du cadre existant dans tous les navigateurs, et s'ajoute par-dessus les deux
-   ombres déjà présentes sur ce ::before (portées : celles-ci doivent être répétées ici, un
-   box-shadow ne s'additionne pas entre deux règles pour le même sélecteur). */
+   pas un nouveau cadre séparé sur le conteneur. Il reste derrière les éléments interactifs :
+   le box-shadow suit l'arrondi tout en laissant bulles et satellites le recouvrir. */
 #agon-universe-cloud.agon-tag-trends-cloud::before,
 .agon-memoire-frame.agon-tag-trends-cloud::before {
   /* background:none : sur l'accueil, .page-home(-mobile) .agon-tag-trends-cloud::before pose
@@ -25995,6 +25992,9 @@ body.page-home:not(.agon-memoire-cloud-mode)
 .universe-zoom-background {
   position: absolute;
   inset: 0;
+  box-sizing: border-box;
+  border: 6px solid #000;
+  border-radius: var(--bubble-frame-radius);
   background-color: #020610;
   background-image: url("/mnoria_master_4K_seamless_infini.png?v=20260815-original");
   background-size: var(--mnoria-tile-width, 3840px) var(--mnoria-tile-height, 2560px);
