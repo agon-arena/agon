@@ -1,0 +1,17 @@
+-- À exécuter une fois dans le SQL editor de Supabase. Complète
+-- data/migration-memory-items.sql avec l'unique index manquant, identifié
+-- après coup en observant les requêtes réellement introduites par le
+-- branchement du scheduler FSRS sur le chemin actif (tâche #12, 16/08/2026) —
+-- pas ajouté par anticipation.
+--
+-- applyFsrsReviewForDailyQuizAnswer (server.js) résout une réponse de
+-- repasse ("cgreview-{questionId}") vers son memory_item via
+-- `WHERE question_id = ref ORDER BY quiz_date DESC LIMIT 1` — sans index sur
+-- question_id, chaque réponse de repasse forcerait un scan séquentiel de
+-- memory_items. Aucune autre nouvelle requête introduite par la refonte FSRS
+-- ne nécessite d'index supplémentaire : (user_id, due_at) sur
+-- memory_item_fsrs_states couvre la sélection des repasses dues, ses UNIQUE
+-- (user_id, memory_item_id) couvrent la lecture/écriture de l'état d'un
+-- MemoryItem donné, et daily_quiz / users portent déjà les index nécessaires
+-- (contrainte UNIQUE(quiz_date, slot) et UNIQUE(legacy_key) respectivement).
+CREATE INDEX IF NOT EXISTS memory_items_question_id_idx ON memory_items (question_id, quiz_date DESC);

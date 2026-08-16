@@ -57,7 +57,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260815-startup-slogan-v41">
+  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -265,12 +265,16 @@
     /* Réserve le gabarit mobile définitif avant le premier rendu. Sans ce
        verrou précoce, le conteneur flex peut brièvement comprimer le cadre
        Bulles Actu avant que la classe agon-mobile-cloud-viewport soit prise
-       en compte, puis le faire grandir jusqu'à 548px. */
+       en compte, puis le faire grandir. Hauteur dynamique (cf. style.css,
+       même formule) hors standalone, qui garde sa propre valeur fixe via le
+       fallback body.agon-mobile-cloud-viewport .agon-tag-trends-cloud (636px,
+       inchangé, moins spécifique que ce verrou donc repris automatiquement
+       dès que ce dernier ne cible plus le mode standalone). */
     @media (max-width: 768px) {
-      body.page-home-mobile #agon-tag-trends-cloud {
-        height: 548px;
-        min-height: 548px;
-        flex: 0 0 548px;
+      body.page-home-mobile:not(.is-standalone) #agon-tag-trends-cloud {
+        height: calc(100dvh - 50px - env(safe-area-inset-bottom, 0px));
+        min-height: calc(100dvh - 50px - env(safe-area-inset-bottom, 0px));
+        flex: 0 0 auto;
       }
     }
 
@@ -348,7 +352,7 @@
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260815-universal-countdown-v3" defer></script>
+  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
 </head>
 
 <body class="page-home page-home-mobile">
@@ -648,9 +652,6 @@
       <i class="fa-solid fa-power-off"></i>
     </button>
 
-    <img src="/appagon-192.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
-    <img src="/appagonordi.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
-
     <div class="admin-controls-row" data-admin style="display:none;">
       <div class="admin-topbar-menu" id="admin-topbar-menu">
         <button
@@ -844,15 +845,15 @@
     </div>
   </div>
 <div id="agon-cloud-mode-switch" class="agon-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
-  <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)">Actualités</button>
-  <button type="button" id="agon-cloud-mode-memoire-btn" class="agon-cloud-mode-segment" onclick="setMemoireCloudMode(true)">Ma mémoire</button>
-  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)">Communauté</button>
+  <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)"><i class="fa-solid fa-circle-nodes agon-cloud-mode-segment-icon" aria-hidden="true"></i><span class="agon-cloud-mode-segment-label">Actualités</span></button>
+  <button type="button" id="agon-cloud-mode-memoire-btn" class="agon-cloud-mode-segment" onclick="setMemoireCloudMode(true)"><i class="fa-solid fa-brain agon-cloud-mode-segment-icon" aria-hidden="true"></i><span class="agon-cloud-mode-segment-label">Ma mémoire</span></button>
+  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)"><i class="fa-solid fa-atom agon-cloud-mode-segment-icon" aria-hidden="true"></i><span class="agon-cloud-mode-segment-label">Communauté</span></button>
 </div>
 <div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
 <div id="agon-political-cloud-switch" class="agon-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
-  <button type="button" id="agon-political-cloud-left" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')">Gauche</button>
+  <button type="button" id="agon-political-cloud-left" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')"><i class="fa-solid fa-arrow-left" aria-hidden="true" style="font-size:9px"></i> Gauche</button>
   <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Tout</button>
-  <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite</button>
+  <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite <i class="fa-solid fa-arrow-right" aria-hidden="true" style="font-size:9px"></i></button>
 </div>
 <a href="/autres-sources" class="agon-tribunes-btn" onclick="try{showTribunesNavOverlay()}catch(e){}">
   <i class="fa-solid fa-newspaper"></i>
@@ -899,7 +900,7 @@ window.addEventListener("pageshow", function() {
 });
 </script>
 <p class="agon-tag-trends-caption" style="text-align: center;">
-  Les tendances de l'actualité française ces dernières heures.<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal('/about#fonctionnement-feed')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>
+  Les tendances de l'actualité française. <a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal('/about#fonctionnement-feed')" style="color:rgba(255,255,255,0.75);text-decoration:none;cursor:pointer;">En savoir plus.</a>
 </p>
 </section>
 
@@ -936,7 +937,7 @@ window.addEventListener("pageshow", function() {
     width: max-content;
     max-width: 100%;
     margin: -23px auto 30px;
-    border: 1px solid rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 999px;
     /* Quasi-opaque (pas juste vitré à 8% comme le switch Bulles Actu/Agôn) :
        la marge négative ci-dessus fait remonter ce bandeau sur le bas du
@@ -944,7 +945,7 @@ window.addEventListener("pageshow", function() {
        bulles derrière transparaissaient et rendaient le haut du texte
        illisible. */
     background: rgba(28, 42, 51, 0.94);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
     overflow: hidden;
   }
   @media (min-width: 769px) {
@@ -1499,7 +1500,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260815-immediate-refresh-v39" defer></script>
+<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

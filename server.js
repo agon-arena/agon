@@ -11,6 +11,28 @@ const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
+const { buildMemoryItemNaturalKey } = require("./lib/spaced-repetition/memory-model");
+const { reviewMemoryItem } = require("./lib/spaced-repetition/fsrs-scheduler");
+const { mapMnoriaReviewToFsrsRating } = require("./lib/spaced-repetition/rating-mapper");
+const { resolveQuestionVariantLabel, resolveActiveQuestionVariant } = require("./lib/spaced-repetition/question-variant");
+const {
+  QUESTION_TYPES,
+  FILL_BLANK_MARKER,
+  CUSTOM_GRADED_CORRECT_INDEX,
+  shuffleArray,
+  shuffleOptionsPreservingCorrectIndex,
+  shuffleOptionsPreservingCorrectIndexes,
+  validateAssociationPairs,
+  validateQcmMultiOptions,
+  validateOrderItems,
+  validateQuestionItemCoreBase,
+  validateAltVariant,
+  validateQuestionItemCore,
+  isAssociationAnswerFullyCorrect,
+  isQcmMultiAnswerFullyCorrect,
+  isOrderAnswerFullyCorrect,
+  gradeQuizSubmissionOptionIndex
+} = require("./lib/question-formats");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 const { createNotificationEventSafe } = require("./lib/notification-events");
 const { sendTestPushToLatestSubscription, sendNotificationEventPushById, processPendingPushEvents, broadcastPush } = require("./lib/push-sender");
@@ -12018,7 +12040,14 @@ if (ANALYSIS_SCHEDULER_ENABLED) {
 
 async function _callOpenAI(apiKey, messages, opts = {}) {
   const MAX_ATTEMPTS = 3;
-  const TIMEOUT_MS   = 45_000;
+  // Configurable (opts.timeoutMs) depuis le 16/08/2026 : la génération
+  // "jusqu'à 3 variantes par question" produit une sortie sensiblement plus
+  // longue qu'avant (jusqu'à 3 objets par question au lieu de 1-2) — observé
+  // en pratique sur un niveau Expert (20 questions) : le budget par défaut de
+  // 45s pouvait être atteint alors que le modèle produisait encore une
+  // réponse valide, juste plus longue. Toujours 45s par défaut pour tous les
+  // autres appels du fichier, inchangés.
+  const TIMEOUT_MS = opts.timeoutMs || 45_000;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let r;
@@ -12126,21 +12155,16 @@ function isCultureGeneraleQuestionId(id) {
 }
 
 
-// Répétition espacée pour "Mes acquis" (demande du 02/08/2026) : une question
-// de culture générale n'est "validée" (✓ vert côté frontend) qu'après
-// DAILY_QUIZ_ACQUIS_VALIDATION_STREAK bonnes réponses à des intervalles
-// croissants — jamais plusieurs fois le même jour, l'intervalle grandit à
-// chaque palier franchi. Une mauvaise réponse en repasse remet le compteur à
-// 0 (courbe à la Anki) : la question redevient due au plus court intervalle.
-// Tant qu'elle n'est pas validée, elle est réinjectée dans le QCM Culture
-// Générale du visiteur concerné dès que son intervalle est atteint (cf.
-// fetchCultureGeneraleReviewInjectionForToday) — jamais dans la ligne
-// partagée daily_quiz, donc invisible pour les autres visiteurs.
+// Repère d'affichage pour "Mes acquis"/"Mes apprentissages" (✓ vert) : une
+// question de culture générale est considérée "validée" après
+// DAILY_QUIZ_ACQUIS_VALIDATION_STREAK bonnes réponses consécutives (jamais
+// plusieurs fois le même jour). Purement un affichage dérivé de l'historique
+// (computeQuestionStreaks/computeCultureGeneraleStreaks) depuis le passage à
+// FSRS (13-16/08/2026, cf. lib/spaced-repetition/) : ce compteur n'influence
+// plus la date de la prochaine repasse (portée uniquement par
+// memory_item_fsrs_states.due_at désormais), contrairement à l'ancien
+// mécanisme à paliers fixes [3, 7, 30] jours qu'il remplace.
 const DAILY_QUIZ_ACQUIS_VALIDATION_STREAK = 4;
-// Index 0 = délai avant que la 2e bonne réponse compte, index 1 = avant la
-// 3e, index 2 = avant la 4e (qui valide définitivement). Un streak revenu à 0
-// après un échec réutilise l'index 0 (le plus court délai).
-const DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS = [3, 7, 30];
 
 function isValidDailyQuizSlot(slot) {
   return slot === DAILY_QUIZ_REINFORCEMENT_SLOT
@@ -12201,12 +12225,16 @@ const DAILY_QUIZ_FORMAT_ROTATION_POOL = [
   "qcm", "ordre", "vrai_faux", "qcm", "intrus"
 ];
 
-// `excludeTypes` (demande du 13/08/2026) : retire un ou plusieurs formats de
-// la rotation — utilisé pour bannir "intrus" des QCM sur liste énumérable
-// (cf. buildEnumerableQuizChunkPrompt), où il dérive systématiquement en
-// "lequel de ces éléments ne fait PAS partie de la liste ?" — injouable dès
-// que la liste complète peut monter jusqu'à NOTION_QUIZ_ENUMERABLE_MAX_ITEMS
-// (200) éléments, que le lecteur n'a évidemment jamais tous en tête.
+// `excludeTypes` (demande du 13/08/2026, étendu le 16/08/2026) : retire un
+// ou plusieurs formats de la rotation — utilisé pour bannir "intrus" des QCM
+// sur liste énumérable (cf. buildEnumerableQuizChunkPrompt), où il dérive
+// systématiquement en "lequel de ces éléments ne fait PAS partie de la
+// liste ?" — injouable dès que la liste complète peut monter jusqu'à
+// NOTION_QUIZ_ENUMERABLE_MAX_ITEMS (200) éléments, que le lecteur n'a
+// évidemment jamais tous en tête ; et pour bannir "ordre"/"association"/
+// "qcm_multi" du même contexte (audit pédagogique du 16/08/2026), où ils
+// dérivaient vers des exercices artificiels (tri alphabétique, appariements
+// sans rapport réel) faute de relation entre les éléments testés un par un.
 function buildFormatAssignments(count, excludeTypes) {
   const pool = excludeTypes && excludeTypes.length
     ? DAILY_QUIZ_FORMAT_ROTATION_POOL.filter((f) => !excludeTypes.includes(f))
@@ -12222,14 +12250,33 @@ function buildFormatAssignments(count, excludeTypes) {
 // et de l'énumération JSON finale, pas seulement de la rotation suggérée
 // (qui ne fait qu'orienter l'IA, jamais l'empêcher de choisir un format
 // décrit plus haut si elle le juge plus adapté).
+// Descriptions renforcées le 16/08/2026 (audit pédagogique sur 847 questions
+// réelles) sur trois points mesurés et concrets, cf. rapport d'audit :
+// - qcm : ~6% des questions avaient une bonne réponse trahie par sa longueur/
+//   précision (ex. "Conquête espagnole menée par Francisco Pizarro" au milieu
+//   de distracteurs vagues comme "Une révolte interne des paysans"), et
+//   certains distracteurs étaient hors-sujet plutôt qu'incorrects-mais-
+//   plausibles (ex. "Pour construire des centrales nucléaires" comme
+//   distracteur sur une question de gestion des méduses).
+// - association/qcm_multi : le garde-fou existant interdisait de combiner
+//   PLUSIEURS SUJETS différents, mais rien n'empêchait de combiner plusieurs
+//   FAITS INDÉPENDANTS sur UN SEUL sujet (constaté : une association
+//   "Louis IX" mêlant dates de règne, lieu de mort, date de canonisation et
+//   pape canonisateur — quatre connaissances sans lien de correspondance
+//   entre elles, jamais un vrai appariement) — signal FSRS tout-ou-rien sur
+//   4 connaissances alors qu'une seule aurait pu être mal sue.
+// - ordre : sans connaissance de séquence réelle disponible, le tri
+//   alphabétique était utilisé comme substitut (constaté sur les listes
+//   énumérables type capitales du monde) — ne teste que l'orthographe/
+//   l'alphabet, pas une connaissance.
 const QUESTION_FORMAT_DEFS = [
-  { type: "qcm", desc: "\"qcm\" : question à 4 options, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte." },
+  { type: "qcm", desc: "\"qcm\" : question à 4 options, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte. Les 4 options doivent appartenir à la MÊME catégorie conceptuelle que la bonne réponse (ex. si la bonne réponse est un nom de personne, les distracteurs sont d'autres noms de personnes plausibles dans ce contexte — jamais une option hors-sujet ou absurde qui n'a rien à voir avec la question). Les distracteurs doivent rester globalement comparables en longueur et en niveau de précision à la bonne réponse : n'ajoute jamais spontanément un détail, un nom propre ou une précision supplémentaire à la bonne réponse qui la rendrait reconnaissable par sa seule longueur ou sa seule précision au milieu d'options plus vagues." },
   { type: "vrai_faux", desc: "\"vrai_faux\" : une affirmation à trancher, avec exactement 2 options [\"Vrai\",\"Faux\"] (dans cet ordre) et correctIndex 0 ou 1." },
   { type: "texte_a_trous", desc: "\"texte_a_trous\" : une phrase tirée du texte où un mot ou groupe de mots est remplacé par le marqueur exact \"___\" (le champ \"question\" doit contenir ce marqueur), avec 4 options pour le compléter, une seule correcte." },
-  { type: "association", desc: "\"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 éléments distincts et non ambigus à apparier entre eux (jamais en combinant plusieurs sujets différents) ; sinon préfère un autre format." },
+  { type: "association", desc: "\"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 ENTITÉS DISTINCTES de la même catégorie (ex. plusieurs philosophes, plusieurs pays, plusieurs éléments chimiques) à apparier chacune à son propre correspondant. INTERDIT : combiner plusieurs sujets différents, ET combiner 3-4 attributs indépendants d'UNE SEULE entité (ex. jamais associer \"date de naissance de Louis IX\"/\"lieu de sa mort\"/\"date de sa canonisation\"/\"pape qui l'a canonisé\" — ce sont 4 connaissances séparées sur une même personne, pas un appariement ; préfère alors 4 questions \"qcm\" distinctes, une par fait). Sinon préfère un autre format." },
   { type: "intrus", desc: "\"intrus\" : 4 options dont une seule ne va pas avec les 3 autres (qui partagent un point commun clair au vu du texte) — la question formule ce qu'ont en commun les 3 bonnes et demande de trouver l'intrus ; correctIndex pointe vers l'intrus." },
-  { type: "qcm_multi", desc: "\"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\" ; n'utilise ce format QUE si le sujet offre naturellement plusieurs bonnes réponses distinctes et sans ambiguïté au vu du texte." },
-  { type: "ordre", desc: "\"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents et ordonnés DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents, ni un ordre déduit de connaissances extérieures au texte fourni ; n'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte, sinon préfère un autre format." }
+  { type: "qcm_multi", desc: "\"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\". N'utilise ce format QUE pour une vraie question d'APPARTENANCE À UNE CATÉGORIE COHÉRENTE ET CLAIREMENT DÉFINIE (ex. \"lesquelles de ces capitales sont en Asie ?\", \"lesquels sont membres permanents du Conseil de sécurité de l'ONU ?\") — jamais pour compresser plusieurs faits indépendants sur un même sujet en une seule question (ex. jamais \"lesquelles de ces affirmations sur le Piton de la Fournaise sont vraies ?\" avec des options portant chacune sur un aspect sans rapport — altitude, activité, localisation — préfère alors une question \"qcm\" ou \"vrai_faux\" séparée par fait). Sinon préfère un autre format." },
+  { type: "ordre", desc: "\"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents et ordonnés DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents, ni un ordre déduit de connaissances extérieures au texte fourni. N'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte — JAMAIS un tri alphabétique, une longueur de nom ou tout autre critère arbitraire utilisé comme substitut faute d'un vrai ordre disponible : un tri purement alphabétique ne teste aucune connaissance, seulement l'orthographe. Sinon préfère un autre format." }
 ];
 
 // `includeAltVariant` (demande du 12/08/2026) : demande en plus, pour
@@ -12238,10 +12285,11 @@ const QUESTION_FORMAT_DEFS = [
 // question sous la même forme que la fois précédente (cf.
 // resolveActiveQuestionVariant, alternée sans appel IA supplémentaire à
 // chaque repasse — tout est généré une seule fois, ici, à la création).
-// Restreint à qcm/vrai_faux/texte_a_trous : les autres formats (association/
-// intrus/qcm_multi/ordre) ont besoin d'éléments supplémentaires qui
-// n'existent pas pour une simple reformulation d'un seul fait isolé.
-function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAltVariant, excludeTypes) {
+// Restreint à qcm/vrai_faux/texte_a_trous pour toute variante autre que la
+// principale : les formats composites (association/intrus/qcm_multi/ordre)
+// ont besoin d'éléments supplémentaires qui n'existent pas pour une simple
+// reformulation d'un seul fait isolé.
+function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVariants, excludeTypes) {
   const assignments = buildFormatAssignments(questionCount, excludeTypes);
   const availableDefs = excludeTypes && excludeTypes.length
     ? QUESTION_FORMAT_DEFS.filter((d) => !excludeTypes.includes(d.type))
@@ -12264,215 +12312,61 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeAl
     assignments.map((f, i) => (i + 1) + ". " + f).join(" · "),
     "Respecte cette suggestion. Exception : si le sujet retenu pour UNE question précise ne se prête vraiment pas au format suggéré (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée), utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet" + (excludeTypes && excludeTypes.length ? ", et jamais l'un des formats interdits ci-dessus" : "") + ".",
     "",
+    ...(includeVariants ? [
+      // "jusqu'à 3 variantes pertinentes" (refonte du 16/08/2026) : remplace
+      // l'ancien altVariant unique. La diversité recherchée est d'abord une
+      // diversité de CHEMIN DE RÉCUPÉRATION (direct/inverse/contextuel),
+      // jamais une diversité de format imposée artificiellement — 3 n'est
+      // jamais une obligation, seulement un maximum.
+      "=== Jusqu'à 3 variantes par question — une seule connaissance, plusieurs chemins pour la retrouver ===",
+      "Avant de rédiger, identifie silencieusement le fait ou concept précis que cette question doit tester et écris-le tel quel dans le champ \"knowledgeTarget\" (ex. \"La chute du mur de Berlin a lieu en 1989.\") — une phrase factuelle courte, jamais la question elle-même.",
+      // Atomicité stricte de knowledgeTarget (correctif du 16/08/2026, cas
+      // réel observé : "L'armée ottomane comptait environ 80 000 hommes, les
+      // défenseurs environ 7 000 à 10 000." avec V1 testant l'effectif
+      // ottoman et V2 l'effectif byzantin — deux grandeurs qu'on peut savoir
+      // l'une sans l'autre, empaquetées dans un seul knowledgeTarget
+      // uniquement parce qu'elles partageaient la phrase source). Prompt
+      // uniquement : ne touche ni au schéma, ni à FSRS, ni aux 749
+      // MemoryItems historiques (altVariant), ni à la rotation des variantes.
+      "RÈGLE D'ATOMICITÉ (impérative) : \"knowledgeTarget\" doit représenter UNE SEULE connaissance récupérable indépendamment. Test à appliquer silencieusement avant de rédiger : si quelqu'un peut connaître une PARTIE de ce \"knowledgeTarget\" sans connaître l'autre partie, il est trop large — scinde-le en questions séparées, chacune avec son propre \"knowledgeTarget\" atomique, plutôt que de forcer une seule question à porter les deux.",
+      "N'empaquette jamais dans un seul \"knowledgeTarget\" : deux dates indépendantes, deux nombres/grandeurs indépendants, deux personnes avec leurs informations respectives, plusieurs causes distinctes, plusieurs conséquences distinctes, ou plus généralement plusieurs faits qui ne sont reliés QUE parce qu'ils apparaissent dans la même phrase ou le même paragraphe source. Exemple interdit : \"Les Ottomans étaient environ 80 000 et les défenseurs 7 000 à 10 000\" — ce sont deux connaissances (l'effectif ottoman ; l'effectif des défenseurs), donc deux questions distinctes avec chacune son \"knowledgeTarget\", jamais une seule question dont une variante teste l'un des deux chiffres et une autre variante teste l'autre. Cas particulier des grandeurs numériques : \"A vaut X, B vaut Y\" donne normalement DEUX connaissances (une par grandeur) — l'exception est quand c'est le RAPPORT ou la DISPROPORTION lui-même qui constitue le fait à retenir (ex. \"Les Ottomans étaient environ dix fois plus nombreux que les défenseurs\") : dans ce seul cas, un unique \"knowledgeTarget\" sur cette disproportion est légitime, et toutes ses variantes doivent alors tester cette disproportion elle-même, jamais l'un des deux chiffres exacts séparément.",
+      "Une connaissance PEUT en revanche mentionner plusieurs éléments textuels si ceux-ci forment une seule relation indivisible entre eux (jamais deux faits juxtaposés) : \"Paris est la capitale de la France\" reste UNE connaissance (la relation Paris ↔ capitale de la France) malgré ses deux entités, tout comme \"La chute du mur de Berlin a lieu en 1989\" (la relation événement ↔ date est précisément ce qu'on veut faire retenir). Dans ces cas, une variante \"France → Paris\" et une variante \"Paris → France\" restent deux formulations de la MÊME relation, donc légitimes dans le même MemoryItem.",
+      "Rédige ensuite entre 1 et 3 variantes de cette question dans le tableau \"variants\", TOUTES centrées sur ce \"knowledgeTarget\" désormais atomique. Par défaut, VISE 2 variantes (\"direct\" + \"inverse\") : pour la grande majorité des faits isolés (une date, un nom, un lieu, une définition...), l'angle inverse existe et vaut la peine d'être écrit — ne t'arrête pas à 1 variante par facilité, cherche vraiment le second angle avant d'y renoncer. Passe à 3 SEULEMENT si un troisième chemin (généralement \"contextual\") apporte réellement quelque chose de plus qu'une simple reformulation. Redescends à 1 SEULEMENT quand la connaissance cible ne se prête à aucun second angle honnête (ex. un format déjà composite en variante principale, ou un fait dont l'inverse serait ambigu ou trivial). Dans tous les cas, avant d'ajouter une variante, vérifie qu'elle reste répondable avec la SEULE connaissance cible ci-dessus — si elle exige une information supplémentaire (ex. une variante sur la date d'un événement et une autre sur qui en est responsable), ce sont deux connaissances différentes : ne l'ajoute pas, elle appartient à une autre question.",
+      "Chemins de récupération possibles (champ \"retrievalMode\" sur chaque variante, optionnel mais recommandé) :",
+      "- \"direct\" : du fait vers la réponse (ex. \"En quelle année tombe le mur de Berlin ?\").",
+      "- \"inverse\" : de la réponse vers le fait, en restant SANS AMBIGUÏTÉ même si plusieurs faits partagent une réponse proche (ex. \"Quel événement majeur concernant Berlin a lieu en 1989 ?\" — jamais \"Que s'est-il passé en 1989 ?\", trop vague si plusieurs événements importants partagent cette année).",
+      "- \"contextual\" : une mise en situation qui mène à la même réponse sans se contenter de reformuler la question posée par \"direct\" (ex. \"Quel événement de 1989 symbolise la fin de la division de l'Allemagne ?\").",
+      "Règles impératives : jamais deux variantes qui ne sont que des paraphrases l'une de l'autre (\"Quand ?\"/\"En quelle année ?\"/\"Quelle année ?\" ne comptent que pour UNE seule variante) ; jamais deux variantes du même type exact ; seule la variante à l'index 0 du tableau (la plus claire, montrée en premier) peut être un format composite (association/intrus/qcm_multi/ordre) — les variantes suivantes restent \"qcm\", \"vrai_faux\" ou \"texte_a_trous\", et si l'index 0 est déjà composite, n'ajoute aucune autre variante (une reformulation partielle d'un ensemble/séquence/catégorie ne peut pas rester honnête).",
+      "Chaque variante porte ses propres champs complets (\"type\", \"question\", \"options\"/\"correctIndex\" ou équivalent selon le type, \"explanation\", \"selfContained\" pour qcm/texte_a_trous/qcm_multi UNIQUEMENT — cf. règle ci-dessous) — jamais de champ \"" + sourceIdField + "\" à l'intérieur d'une variante (implicite, commun à toutes).",
+      ""
+    ] : []),
     "=== Répondable sans voir les propositions ? ===",
-    "Pour chaque question de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) : l'interface l'utilise pour proposer ou non de réfléchir à la réponse avant d'afficher les propositions — une décision qui dépend du CONTENU de la question, jamais de son seul type.",
+    (includeVariants
+      ? "Pour chaque VARIANTE de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) sur cette variante — une décision qui dépend du CONTENU de cette formulation précise, jamais de son seul type ni héritée d'une autre variante de la même question."
+      : "Pour chaque question de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) : l'interface l'utilise pour proposer ou non de réfléchir à la réponse avant d'afficher les propositions — une décision qui dépend du CONTENU de la question, jamais de son seul type."),
     "- true : la réponse existe indépendamment des propositions, un lecteur qui connaît le sujet peut la deviner seul avant de les voir (ex. \"Quel est l'historien qui a écrit « Le Fromage et les Vers » ?\").",
     "- false : la question ne peut être comprise ou résolue qu'en comparant les propositions entre elles, ou y fait explicitement référence (ex. \"Lequel de ces historiens n'a pas travaillé sur le Moyen Âge ?\", \"Parmi ces éléments, lequel...\", toute question de type comparatif ou par élimination). Sois honnête et strict : en cas de doute réel, réponds false plutôt que true — mieux vaut afficher les propositions à tort que de bloquer une question à laquelle on ne peut objectivement pas répondre sans elles.",
     "Aucun champ \"selfContained\" pour les autres types (vrai_faux, association, intrus, ordre) — la question n'est jamais concernée par ce choix.",
     "",
-    ...(includeAltVariant ? [
-      "=== Variante alternative (obligatoire pour chaque question) ===",
-      "En plus des champs normaux, ajoute pour chaque question un champ \"altVariant\" : une SECONDE façon de tester exactement le même fait/la même réponse que la question principale, mais dans un type DIFFÉRENT — ex. une question principale \"qcm\" peut avoir un altVariant \"vrai_faux\" ou \"texte_a_trous\" sur le même fait, et inversement. Cette variante est destinée à être reposée plus tard (répétition espacée), sous une forme différente de la première fois — jamais la même question mot pour mot.",
-      "\"altVariant\" doit être un objet avec exactement les mêmes champs qu'une question de son propre type (\"type\", \"question\", \"options\"/\"correctIndex\" selon le type, \"explanation\") — MAIS son \"type\" doit obligatoirement être \"qcm\", \"vrai_faux\" ou \"texte_a_trous\" (jamais association/intrus/qcm_multi/ordre, qui ont besoin d'éléments supplémentaires que la reformulation d'un seul fait isolé ne peut pas fournir honnêtement), et jamais le même type que la question principale.",
-      "Aucun champ \"" + sourceIdField + "\" à l'intérieur de \"altVariant\" (implicite, le même que la question principale).",
-      ""
-    ] : []),
-    `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"${availableTypes.join("|")}","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"${includeAltVariant ? ',"altVariant":{"type":"qcm|vrai_faux|texte_a_trous","question":"...","options":[...],"correctIndex":0,"explanation":"...","selfContained":true|false}' : ""}}]}.`
+    includeVariants
+      // Exemple à DEUX objets dans "variants" (pas un seul) : un modèle
+      // pattern-matche fortement sur la forme littérale de l'exemple — un
+      // tableau à un seul élément dans le schéma final produisait
+      // systématiquement 1 seule variante partout, malgré une consigne en
+      // prose demandant d'en viser 2 (constaté le 16/08/2026 : 18/18
+      // questions à 1 variante sur deux générations réelles avant ce
+      // correctif). L'exemple est donc explicitement direct+inverse.
+      ? `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...","variants":[{"type":"${availableTypes.join("|")}","question":"(formulation directe)","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"retrievalMode":"direct"},{"type":"qcm|vrai_faux|texte_a_trous","question":"(formulation inverse ou contextuelle, PAS une paraphrase de la première)","options":["..."],"correctIndex":0,"explanation":"...","selfContained":true|false,"retrievalMode":"inverse"}],"${sourceIdField}":"id fourni"}]} — 2 variantes dans cet exemple, mais rappel : 1 seule si aucun second angle honnête n'existe, 3 si un troisième chemin apporte vraiment quelque chose.`
+      : `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"${availableTypes.join("|")}","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"}]}.`
   ];
 }
 
-function shuffleArray(arr) {
-  const copy = arr.slice();
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
-// Les modèles ont un biais de position bien connu (la bonne réponse se
-// retrouve trop souvent en première position) : constaté en pratique sur ce
-// projet (un lot généré où les 5 questions "qcm" avaient toutes
-// correctIndex:0). Demander à l'IA de varier la position dans le prompt ne
-// suffit pas à corriger ce biais de façon fiable — on mélange donc
-// nous-mêmes l'ordre des options après validation, en se basant sur les
-// index (pas sur le texte) pour rester correct même si deux options ont un
-// texte identique.
-function shuffleOptionsPreservingCorrectIndex(options, correctIndex) {
-  const shuffledPositions = shuffleArray(options.map((_, i) => i));
-  return {
-    options: shuffledPositions.map((originalIndex) => options[originalIndex]),
-    correctIndex: shuffledPositions.indexOf(correctIndex)
-  };
-}
-
-// Types de questions QCM possibles (indépendant du `type` de rubrique
-// source utilisé ailleurs — ex. formatEclairagesItemForPrompt distingue
-// parallele/pensee/mecanisme/concept/citation, un concept totalement
-// différent — d'où le nom "questionType" dans ce qui suit, jamais "type"
-// seul, pour ne pas confondre les deux dans les fonctions qui touchent aux
-// deux à la fois).
-const QUESTION_TYPES = new Set(["qcm", "vrai_faux", "texte_a_trous", "association", "intrus", "qcm_multi", "ordre"]);
-// Marqueur du "trou" dans une question de type texte_a_trous — identique
-// dans le prompt, le validateur et le rendu client.
-const FILL_BLANK_MARKER = "___";
-// "association"/"qcm_multi"/"ordre" n'ont pas de correctIndex fourni par
-// l'IA (pas un choix unique parmi des options, mais un appariement, un choix
-// multiple ou un ordre) : on réutilise la colonne existante
-// daily_quiz_answers.option_index comme indicateur binaire "l'utilisateur a-
-// t-il tout réussi", jamais comme un vrai index d'option. Sentinelle fixe
-// plutôt que dérivée, pour que toute la chaîne de lecture existante
-// (computeUserScores, getDailyQuizStats, GET /results) continue de
-// fonctionner sans changement : il suffit de comparer ce même 1 des deux
-// côtés, quel que soit lequel des 3 formats est en jeu.
-const CUSTOM_GRADED_CORRECT_INDEX = 1;
-
-// Valide les 3-4 paires {left,right} d'une question "association" : chaînes
-// non vides et raisonnablement courtes, aucun doublon ni côté gauche ni
-// côté droit (un doublon rendrait l'appariement ambigu côté client).
-function validateAssociationPairs(rawPairs) {
-  if (!Array.isArray(rawPairs)) return null;
-  const pairs = [];
-  const seenLefts = new Set();
-  const seenRights = new Set();
-  for (const raw of rawPairs) {
-    const left = String(raw?.left || "").trim();
-    const right = String(raw?.right || "").trim();
-    if (!left || !right || left.length > 200 || right.length > 300) return null;
-    const leftKey = left.toLowerCase();
-    const rightKey = right.toLowerCase();
-    if (seenLefts.has(leftKey) || seenRights.has(rightKey)) return null;
-    seenLefts.add(leftKey);
-    seenRights.add(rightKey);
-    pairs.push({ left, right });
-  }
-  if (pairs.length < 3 || pairs.length > 4) return null;
-  return pairs;
-}
-
-// Valide les options + correctIndexes (2 bonnes réponses ou plus, jamais
-// toutes) d'une question "qcm_multi" — choix multiple parmi 4-5 options.
-function validateQcmMultiOptions(rawOptions, rawCorrectIndexes) {
-  const options = Array.isArray(rawOptions) ? rawOptions.map((o) => String(o || "").trim()).filter(Boolean) : [];
-  if (options.length < 4 || options.length > 5) return null;
-  const correctIndexes = Array.isArray(rawCorrectIndexes) ? [...new Set(rawCorrectIndexes.map((n) => Number(n)))] : [];
-  if (correctIndexes.length < 2 || correctIndexes.length >= options.length) return null;
-  if (correctIndexes.some((i) => !Number.isInteger(i) || i < 0 || i >= options.length)) return null;
-  return { options, correctIndexes };
-}
-
-// Mélange les options d'une question "qcm_multi" en réindexant correctIndexes
-// en conséquence — variante à plusieurs bonnes réponses de
-// shuffleOptionsPreservingCorrectIndex.
-function shuffleOptionsPreservingCorrectIndexes(options, correctIndexes) {
-  const shuffledPositions = shuffleArray(options.map((_, i) => i));
-  const correctSet = new Set(correctIndexes);
-  const newCorrectIndexes = [];
-  shuffledPositions.forEach((originalIndex, newIndex) => {
-    if (correctSet.has(originalIndex)) newCorrectIndexes.push(newIndex);
-  });
-  return {
-    options: shuffledPositions.map((originalIndex) => options[originalIndex]),
-    correctIndexes: newCorrectIndexes
-  };
-}
-
-// Valide les 3-4 éléments d'une question "ordre" — fournis par l'IA dans
-// leur ordre correct, mélangés seulement à l'affichage (cf. stripQuestionForClient).
-function validateOrderItems(rawItems) {
-  if (!Array.isArray(rawItems)) return null;
-  const items = [];
-  const seen = new Set();
-  for (const raw of rawItems) {
-    const text = String(raw || "").trim();
-    if (!text || text.length > 200) return null;
-    const key = text.toLowerCase();
-    if (seen.has(key)) return null;
-    seen.add(key);
-    items.push(text);
-  }
-  if (items.length < 3 || items.length > 4) return null;
-  return items;
-}
-
-// Normalise et valide les champs communs aux formats de question — la
-// logique de dédup par source (sourceDebateId/sourceId, un ou plusieurs par
-// source selon l'appelant) reste propre à validateNarrativeQuizQuestions, qui
-// appelle ce helper puis y ajoute cette vérification. Une réponse de forme
-// inconnue/invalide renvoie null, jamais une exception (traitée comme une
-// question ignorée par l'appelant).
-function validateQuestionItemCoreBase(item) {
-  const questionType = QUESTION_TYPES.has(item?.type) ? item.type : "qcm";
-  const question = String(item?.question || "").trim();
-  const explanation = String(item?.explanation || "").trim();
-  if (!question) return null;
-
-  if (questionType === "association") {
-    const pairs = validateAssociationPairs(item?.pairs);
-    if (!pairs) return null;
-    return { type: questionType, question, pairs, correctIndex: CUSTOM_GRADED_CORRECT_INDEX, explanation };
-  }
-
-  if (questionType === "qcm_multi") {
-    const validated = validateQcmMultiOptions(item?.options, item?.correctIndexes);
-    if (!validated) return null;
-    const shuffled = shuffleOptionsPreservingCorrectIndexes(validated.options, validated.correctIndexes);
-    return { type: questionType, question, options: shuffled.options, correctIndexes: shuffled.correctIndexes, correctIndex: CUSTOM_GRADED_CORRECT_INDEX, explanation };
-  }
-
-  if (questionType === "ordre") {
-    const items = validateOrderItems(item?.items);
-    if (!items) return null;
-    return { type: questionType, question, items, correctIndex: CUSTOM_GRADED_CORRECT_INDEX, explanation };
-  }
-
-  const options = Array.isArray(item?.options) ? item.options.map((o) => String(o || "").trim()).filter(Boolean) : [];
-  const correctIndex = Number(item?.correctIndex);
-  // qcm/texte_a_trous/intrus : 4 options, comme avant l'introduction des
-  // autres formats. vrai_faux : exactement 2 (ex. ["Vrai","Faux"]).
-  const expectedLength = questionType === "vrai_faux" ? 2 : 4;
-  if (options.length !== expectedLength) return null;
-  if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= expectedLength) return null;
-  if (questionType === "texte_a_trous" && !question.includes(FILL_BLANK_MARKER)) return null;
-  const shuffled = shuffleOptionsPreservingCorrectIndex(options, correctIndex);
-  return { type: questionType, question, options: shuffled.options, correctIndex: shuffled.correctIndex, explanation };
-}
-
-// Formats autorisés pour un altVariant (cf. buildQuestionFormatsPromptBlock,
-// includeAltVariant) : uniquement des formats autonomes autour d'un seul
-// fait — jamais association/intrus/qcm_multi/ordre, qui ont besoin
-// d'éléments supplémentaires qu'une simple reformulation ne peut fournir.
-const ALT_VARIANT_ALLOWED_TYPES = new Set(["qcm", "vrai_faux", "texte_a_trous"]);
-
-function validateAltVariant(rawAltVariant, primaryType) {
-  if (!rawAltVariant || typeof rawAltVariant !== "object") return null;
-  if (!ALT_VARIANT_ALLOWED_TYPES.has(rawAltVariant.type) || rawAltVariant.type === primaryType) return null;
-  const core = validateQuestionItemCoreBase(rawAltVariant);
-  if (!core || !ALT_VARIANT_ALLOWED_TYPES.has(core.type)) return null;
-  // selfContained propre à cette variante (cf. validateQuestionItemCore) :
-  // sa formulation peut être répondable sans les propositions même si la
-  // question principale ne l'est pas, ou inversement — jamais hérité.
-  return { ...core, selfContained: rawAltVariant?.selfContained === true };
-}
-
-// Point d'entrée public (inchangé pour tous les appelants existants) —
-// n'ajoute que la validation/attache de altVariant et selfContained par-dessus
-// la logique de base. `selfContained` (demande du 13/08/2026, remplace un
-// filtrage par expression régulière côté client jugé trop fragile) : décidé
-// par l'IA elle-même à la génération, question par question — le format seul
-// (qcm/texte_a_trous/qcm_multi) ne suffit pas à savoir si elle est répondable
-// sans voir les propositions (ex. "Lequel de ces historiens..." est un
-// "qcm" mais ne l'est pas). Absent ou faux par défaut (jamais présent pour
-// les prompts qui ne le demandent pas, cf. buildQuestionFormatsPromptBlock) :
-// choix volontairement sûr, un contenu plus ancien sans ce champ ne propose
-// simplement plus l'écran "réfléchis avant de voir les propositions" plutôt
-// que de deviner via un motif de texte.
-function validateQuestionItemCore(item) {
-  const core = validateQuestionItemCoreBase(item);
-  if (!core) return null;
-  const altVariant = validateAltVariant(item?.altVariant, core.type);
-  return { ...core, selfContained: item?.selfContained === true, ...(altVariant ? { altVariant } : {}) };
-}
+// shuffleArray, shuffleOptionsPreservingCorrectIndex(es), QUESTION_TYPES,
+// FILL_BLANK_MARKER, CUSTOM_GRADED_CORRECT_INDEX, les validateurs de format
+// (association/qcm_multi/ordre/core/altVariant) et validateQuestionItemCore
+// vivent désormais dans lib/question-formats.js (extrait le 16/08/2026, audit
+// pédagogique des QCM) — ce sont des fonctions pures, testées unitairement
+// là-bas (test/question-formats.test.js), importées en haut de ce fichier.
 
 // ── QCM "Ce jour dans l'Histoire" et "Parallèle historique" ────────────────
 // Deux créneaux narratifs de plus (même table/schéma daily_quiz), mais avec
@@ -12890,12 +12784,23 @@ function buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, r
   lines.push("");
   lines.push(`Pour chaque question, le champ "sourceId" doit valoir exactement la chaîne : "${id}".`);
   lines.push("");
+  // Exemple concret de forme de "questions" (pas un simple {...}) :
+  // indispensable pour que le modèle suive vraiment la structure
+  // variants/knowledgeTarget décrite en prose plus haut — un placeholder
+  // vague en toute fin de prompt l'emportait sinon sur la consigne
+  // détaillée (constaté le 16/08/2026 : le modèle retombait sur l'ancienne
+  // forme altVariant malgré des instructions "variants" explicites).
+  // Exemple à DEUX objets dans "variants" (direct + inverse), pas un seul :
+  // un modèle pattern-matche fortement sur la forme littérale de l'exemple
+  // final — un tableau à un seul élément produisait systématiquement 1 seule
+  // variante partout malgré la consigne en prose (constaté le 16/08/2026).
+  const questionShapeExample = '{"knowledgeTarget":"...","variants":[{"type":"qcm|vrai_faux|texte_a_trous|intrus|qcm_multi|association|ordre","question":"(formulation directe)","options":[...],"correctIndex":0,"explanation":"...","selfContained":true,"retrievalMode":"direct"},{"type":"qcm|vrai_faux|texte_a_trous","question":"(formulation inverse ou contextuelle, PAS une paraphrase)","options":[...],"correctIndex":0,"explanation":"...","selfContained":true,"retrievalMode":"inverse"}],"sourceId":"' + id + '"}';
   if (requireValidation) {
     lines.push("Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces deux formes exactement :");
     lines.push("- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}");
-    lines.push("- Sujet accepté : {\"valid\":true,\"sourceName\":\"...\",\"meta\":\"...\"|null,\"sections\":[{\"label\":\"...\"|null,\"text\":\"...\"}],\"questions\":[{...}]}");
+    lines.push(`- Sujet accepté : {"valid":true,"sourceName":"...","meta":"..."|null,"sections":[{"label":"..."|null,"text":"..."}],"questions":[${questionShapeExample}, "... (${target} objets de cette forme au total)"]}`);
   } else {
-    lines.push("Réponds uniquement en JSON strict, sans aucun texte autour, sous cette forme exactement : {\"sourceName\":\"...\",\"meta\":\"...\"|null,\"sections\":[{\"label\":\"...\"|null,\"text\":\"...\"}],\"questions\":[{...}]}");
+    lines.push(`Réponds uniquement en JSON strict, sans aucun texte autour, sous cette forme exactement : {"sourceName":"...","meta":"..."|null,"sections":[{"label":"..."|null,"text":"..."}],"questions":[${questionShapeExample}, "... (${target} objets de cette forme au total)"]}`);
   }
   return lines.join("\n");
 }
@@ -12951,7 +12856,16 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
       const content = await _callOpenAI(apiKey, [{ role: "user", content: buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, false) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
-        responseFormat: { type: "json_object" }
+        responseFormat: { type: "json_object" },
+        // Proportionnel au nombre de questions demandées (jusqu'à 3
+        // variantes chacune, cf. buildQuestionFormatsPromptBlock) : un
+        // niveau Expert (20 questions) produit une sortie sensiblement plus
+        // longue qu'un niveau Élémentaire (5 questions) — un budget fixe
+        // pénalisait les petits niveaux ou était trop court pour les grands
+        // (constaté le 16/08/2026 : timeout systématique à 45s puis 75s sur
+        // Expert). Plafonné à 120s pour rester sous les limites usuelles de
+        // proxy/hébergement.
+        timeoutMs: Math.min(120_000, 45_000 + target * 3_000)
       });
       parsed = JSON.parse(content);
     } catch (error) {
@@ -13201,7 +13115,20 @@ function buildEnumerableQuizChunkPrompt(subject, itemsChunk, id) {
   // (jusqu'à NOTION_QUIZ_ENUMERABLE_MAX_ITEMS éléments), il dérivait
   // systématiquement en "lequel de ces éléments ne fait pas partie de la
   // liste ?" — injouable, personne ne mémorise 200 éléments comme un tout.
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count, true, ["intrus"]).slice(0, -1);
+  //
+  // "ordre"/"association"/"qcm_multi" bannis ici aussi (audit pédagogique du
+  // 16/08/2026) : la consigne juste en dessous génère UNE question par
+  // ÉLÉMENT INDIVIDUEL de la liste (ex. "capitale du Sénégal ?"), il n'existe
+  // donc structurellement aucune relation entre plusieurs éléments à
+  // apparier/ordonner/regrouper dans ce contexte. Forcés quand même, ces
+  // formats produisaient des exercices artificiels sans vraie base de
+  // connaissance — constaté en pratique : "ordre" dérivait vers un simple tri
+  // alphabétique des capitales (ne teste que l'orthographe), et
+  // "association"/"qcm_multi" bricolaient un regroupement de 3-4 éléments
+  // choisis au hasard dans la liste plutôt qu'un ensemble réellement
+  // cohérent. Ce contexte reste "qcm"/"vrai_faux"/"texte_a_trous" — les trois
+  // formats qui testent honnêtement UN élément à la fois.
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count, true, ["intrus", "ordre", "association", "qcm_multi"]).slice(0, -1);
   return [
     `Tu écris un quiz de mémorisation en français sur : "${subject}".`,
     "Éléments à couvrir dans ce lot (base-toi UNIQUEMENT sur ceux-ci, ne les modifie pas, n'en invente aucun autre) :",
@@ -13227,7 +13154,8 @@ async function generateEnumerableQuizQuestions(apiKey, subject, items, id) {
       const content = await _callOpenAI(apiKey, [{ role: "user", content: buildEnumerableQuizChunkPrompt(subject, chunk, id) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
-        responseFormat: { type: "json_object" }
+        responseFormat: { type: "json_object" },
+        timeoutMs: Math.min(120_000, 45_000 + chunk.length * 3_000)
       });
       const parsedChunk = JSON.parse(content);
       all.push(...validateNarrativeQuizQuestions(parsedChunk?.questions, [id], chunk.length, chunk.length));
@@ -13295,7 +13223,12 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
     const content = await _callOpenAI(apiKey, [{ role: "user", content: buildLeveledFicheAndQuizPrompt(topic, null, id, levelConfig, true) }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      // Proportionnel au nombre de questions (cf. commentaire équivalent
+      // dans buildNotionQuestions) : Expert/Exhaustif (20 questions, jusqu'à
+      // 3 variantes chacune) produisent une sortie sensiblement plus longue
+      // qu'Élémentaire (5 questions).
+      timeoutMs: Math.min(120_000, 45_000 + levelConfig.target * 3_000)
     });
     parsed = JSON.parse(content);
   } catch (error) {
@@ -13663,54 +13596,17 @@ function computeCultureGeneraleStreaks(events) {
   return computeStreaksGroupedBy(events, "sourceDebateId");
 }
 
-// Progression indépendante par question — "Mes apprentissages" (% d'ancrage,
-// moyenne des streaks de chaque question d'une notion, demande du
-// 10/08/2026 : chaque question a son propre calendrier de repasses, une
-// notion ne se valide donc plus d'un bloc) et l'injection des repasses dues
-// (cf. fetchCultureGeneraleReviewInjectionForToday, qui réinjecte désormais
-// chaque question due individuellement plutôt qu'une seule par notion).
-function computeQuestionStreaks(events) {
-  return computeStreaksGroupedBy(events, "questionId");
-}
-
-// Toute question déjà répondue au moins une fois (ratée ou réussie) entre
-// dans le cycle de repasses tant qu'elle n'est pas validée — sinon une
-// question ratée dès sa première apparition ne reviendrait jamais et ne
-// pourrait donc jamais être validée. Streak à 0 (jamais réussie, ou remise à
-// 0 après un échec en repasse) utilise le plus court délai (index 0),
-// exactement comme un échec en repasse.
-// Difficulté ressentie déclarée par l'utilisateur au moment de répondre
-// (demande du 13/08/2026, cf. POST /answer + boutons Facile/Moyen/Difficile
-// avant validation côté client) : raccourcit ou allonge l'intervalle avant
-// la prochaine repasse — "difficile" revient plus vite, "facile" plus tard.
-// "moyen" et l'absence de valeur (réponses antérieures à cette fonctionnalité)
-// gardent l'intervalle de base inchangé (×1), un choix neutre par défaut.
-const DAILY_QUIZ_DIFFICULTY_INTERVAL_MULTIPLIER = { facile: 1.5, moyen: 1, difficile: 0.5 };
-
-function isCultureGeneraleReviewDueToday(state, todayKey) {
-  if (state.validated || !state.lastQuizDate) return false;
-  const intervalIndex = Math.min(Math.max(state.streak - 1, 0), DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS.length - 1);
-  const baseIntervalDays = DAILY_QUIZ_ACQUIS_REVIEW_INTERVALS_DAYS[intervalIndex];
-  const multiplier = DAILY_QUIZ_DIFFICULTY_INTERVAL_MULTIPLIER[state.lastDifficulty] || 1;
-  const intervalDays = Math.max(1, Math.round(baseIntervalDays * multiplier));
-  const dueDateKey = parisDateKey(new Date(new Date(`${state.lastQuizDate}T00:00:00Z`).getTime() + intervalDays * 24 * 60 * 60 * 1000));
-  return todayKey >= dueDateKey;
-}
-
 // Questions à réinjecter aujourd'hui dans le QCM Culture Générale de ce
-// visiteur (cf. getDailyQuizQuestions) : chaque QUESTION (pas chaque notion,
-// depuis le 10/08/2026 — cf. computeQuestionStreaks) dont l'intervalle de
-// répétition espacée est atteint, les plus en retard d'abord, plafonnées à
+// visiteur (cf. getDailyQuizQuestions) : chaque QUESTION dont l'échéance
+// FSRS (memory_item_fsrs_states.due_at, cf. lib/spaced-repetition/) est
+// atteinte, les plus en retard d'abord, plafonnées à
 // DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY — sans ce plafond, plusieurs jours
 // d'absence feraient réapparaître toutes les repasses en retard d'un coup
 // (demande du 03/08/2026). Les questions en retard mais laissées de côté par
 // le plafond restent dues (pas de recalcul de date ici) : elles repasseront
-// au prochain appel tant qu'elles n'auront pas été répondues. Une même
-// notion peut donc apparaître plusieurs fois le même jour si plusieurs de
-// ses questions sont dues en même temps (chacune avec son propre calendrier,
-// désynchronisé au fil du temps). Id "cgreview-{questionId}" — jamais
-// persistées dans daily_quiz, recalculées à chaque appel (pas de cache, cf.
-// getDailyQuizQuestions).
+// au prochain appel tant qu'elles n'auront pas été répondues. Id
+// "cgreview-{questionId}" — jamais persistées dans daily_quiz, recalculées à
+// chaque appel (pas de cache, cf. getDailyQuizQuestions).
 const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 10;
 
 // Questions qu'un visiteur a explicitement écartées de ses futures repasses
@@ -13729,45 +13625,73 @@ async function fetchExcludedQuestionIds(voterKey) {
   return new Set((data || []).map((r) => r.question_id));
 }
 
-// Alterne entre la question telle que générée à l'origine et son
-// altVariant (cf. buildQuestionFormatsPromptBlock, includeAltVariant) selon
-// le nombre de fois où elle a déjà été répondue — jamais la même forme
-// deux repasses de suite (demande du 12/08/2026). Recalculé à l'identique au
-// SERVICE (GET) et à la CORRECTION (POST /answer, qui relit aussi
-// fetchCultureGeneraleReviewInjectionForToday avant d'enregistrer la
-// réponse en cours) : `reviewCount` provient à chaque fois du même historique
-// daily_quiz_answers pas encore mis à jour par cette réponse, donc les deux
-// calculs tombent toujours sur la même variante. Sans altVariant (contenu
-// plus ancien, ou provenant d'Éclairages/Ce jour dans l'Histoire qui ne le
-// génèrent pas) : renvoie la question telle quelle, inchangé.
-function resolveActiveQuestionVariant(question, reviewCount) {
-  if (!question.altVariant || reviewCount % 2 === 0) return question;
-  const { altVariant, ...rest } = question;
-  return { ...rest, ...altVariant };
-}
+// resolveActiveQuestionVariant vit désormais dans
+// lib/spaced-repetition/question-variant.js (refonte du 16/08/2026, jusqu'à
+// 3 variantes par MemoryItem plutôt que base+altVariant) — importée en haut
+// de ce fichier. Choisit parmi 1 à 3 variantes en évitant la répétition
+// immédiate, recalculé à l'identique au SERVICE et à la CORRECTION (même
+// reviewCount = memory_item_fsrs_states.reps pas encore mis à jour par la
+// réponse en cours).
 
-async function fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey) {
-  const [{ events, contentByQuestionId }, excludedIds] = await Promise.all([
-    fetchUserCultureGeneraleAnswerEvents(voterKey),
-    fetchExcludedQuestionIds(voterKey)
+// todayKey n'est plus consulté (comparaison désormais sur l'instant exact
+// via memory_item_fsrs_states.due_at, pas sur une date arrondie au jour, cf.
+// lib/spaced-repetition/scheduler-version.js) — conservé uniquement pour ne
+// pas changer la signature côté appelants (getDailyQuizQuestions, GET
+// /api/daily-quiz/status).
+async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) {
+  const key = String(voterKey || "").trim();
+  if (!key) return [];
+
+  // Lecture seule (jamais resolveLegacyUser, qui crée la ligne) : un
+  // visiteur sans historique n'a par définition aucune ligne memory_items ni
+  // memory_item_fsrs_states, inutile de lui créer une ligne users ici — la
+  // création reste réservée au chemin d'écriture (POST /answer).
+  const { data: userRow, error: userError } = await supabase.from("users").select("id").eq("legacy_key", key).maybeSingle();
+  if (userError) { console.warn("[fsrs due] lecture user échouée :", userError.message); return []; }
+  if (!userRow) return [];
+
+  const [{ data: dueStates, error: dueError }, excludedIds] = await Promise.all([
+    supabase.from("memory_item_fsrs_states")
+      .select("reps, memory_items(slot, quiz_date, question_id)")
+      .eq("user_id", userRow.id)
+      .lte("due_at", new Date().toISOString())
+      .order("due_at", { ascending: true })
+      .limit(DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY),
+    fetchExcludedQuestionIds(key)
   ]);
-  if (!events.length) return [];
-  const streaks = computeQuestionStreaks(events);
-  const reviewCountByQuestionId = new Map();
-  for (const e of events) reviewCountByQuestionId.set(e.questionId, (reviewCountByQuestionId.get(e.questionId) || 0) + 1);
-  const due = [];
-  for (const [questionId, state] of streaks) {
-    if (excludedIds.has(questionId)) continue;
-    if (!isCultureGeneraleReviewDueToday(state, todayKey)) continue;
-    const question = contentByQuestionId.get(questionId);
-    if (!question) continue;
-    due.push({ questionId, lastQuizDate: state.lastQuizDate, question, reviewCount: reviewCountByQuestionId.get(questionId) || 0 });
+  if (dueError) { console.warn("[fsrs due] lecture memory_item_fsrs_states échouée :", dueError.message); return []; }
+  if (!dueStates || !dueStates.length) return [];
+
+  const dueItems = dueStates
+    .map((s) => ({ reps: s.reps, memoryItem: s.memory_items }))
+    .filter((s) => s.memoryItem && !excludedIds.has(s.memoryItem.question_id));
+  if (!dueItems.length) return [];
+
+  // Regroupe par ligne daily_quiz d'origine pour ne la relire qu'une fois,
+  // même si plusieurs de ses questions sont dues en même temps.
+  const bySlotDate = new Map();
+  for (const { memoryItem } of dueItems) {
+    const k = `${memoryItem.quiz_date}:${memoryItem.slot}`;
+    if (!bySlotDate.has(k)) bySlotDate.set(k, { quizDate: memoryItem.quiz_date, slot: memoryItem.slot });
   }
-  due.sort((a, b) => (a.lastQuizDate < b.lastQuizDate ? -1 : a.lastQuizDate > b.lastQuizDate ? 1 : 0));
-  return due.slice(0, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY).map(({ question, questionId, reviewCount }) => ({
-    ...resolveActiveQuestionVariant(question, reviewCount),
-    id: `cgreview-${questionId}`
-  }));
+  const quizRowResults = await Promise.all([...bySlotDate.values()].map(({ quizDate, slot }) =>
+    supabase.from("daily_quiz").select("quiz_date, slot, questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
+  const questionByDateSlotId = new Map();
+  for (const { data } of quizRowResults) {
+    if (!data) continue;
+    for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
+  }
+
+  const due = [];
+  for (const { reps, memoryItem } of dueItems) {
+    const question = questionByDateSlotId.get(`${memoryItem.quiz_date}:${memoryItem.slot}:${memoryItem.question_id}`);
+    if (!question) continue; // contenu hors fenêtre de rétention (cas des anciens slots hors "notion:%", jamais backfillés)
+    due.push({
+      ...resolveActiveQuestionVariant(question, reps),
+      id: `cgreview-${memoryItem.question_id}`
+    });
+  }
+  return due;
 }
 
 // Rubrique Éclairages -> service de lecture + clé du tableau de contenu
@@ -14975,7 +14899,9 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     const sourceType = String(req.body?.sourceType || "").trim();
     const sourceDebateId = String(req.body?.sourceDebateId || "").trim();
     const item = req.body?.item;
-    const quizDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.quizDate || "").trim())
+    // let (pas const) : réajusté à la date réelle de la ligne existante si la
+    // recherche par slot ci-dessous en retrouve une (cf. ce commentaire).
+    let quizDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.quizDate || "").trim())
       ? String(req.body.quizDate).trim()
       : parisDateKey();
     if (!NOTION_QUIZ_SOURCE_TYPES.has(sourceType) || !sourceDebateId || sourceDebateId.length > 200 || !item || typeof item !== "object") {
@@ -14990,16 +14916,31 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
     let questions;
-    const { data: existingQuiz, error: existingQuizError } = await supabase
+    // Recherche par slot SEUL, sans filtrer sur quizDate (même règle que
+    // POST /api/users/notion-quizzes/custom, cf. son commentaire) : le
+    // client (views/eclairages.html memorizeNotion) n'envoie jamais de
+    // quizDate, qui retombait donc sur aujourd'hui — un visiteur mémorisant
+    // une notion déjà mémorisée par un AUTRE visiteur un jour antérieur ne
+    // retrouvait jamais la ligne existante (recherche exacte sur (quiz_date,
+    // slot)) et déclenchait une régénération IA complète, avec une
+    // formulation différente et donc un jeu de MemoryItems totalement
+    // déconnecté de l'historique déjà accumulé sur cette même notion —
+    // trouvaille de l'audit du 16/08/2026 (aucune occurrence encore observée
+    // en base au moment du correctif, mais un chemin de code réellement
+    // atteignable). `quizDate` réajusté sur la ligne trouvée quand elle
+    // existe, pour que le lien user_notion_quizzes pointe vers la bonne date.
+    const { data: existingQuizRows, error: existingQuizError } = await supabase
       .from("daily_quiz")
-      .select("questions")
-      .eq("quiz_date", quizDate)
+      .select("quiz_date, questions")
       .eq("slot", slot)
-      .maybeSingle();
+      .order("quiz_date", { ascending: false })
+      .limit(1);
     if (existingQuizError) throw new Error(existingQuizError.message);
+    const existingQuiz = existingQuizRows?.[0] || null;
 
     if (existingQuiz) {
       questions = existingQuiz.questions || [];
+      quizDate = existingQuiz.quiz_date;
     } else {
       questions = await buildNotionQuestions(sourceType, sourceDebateId, item, level, user.id);
       if (!questions.length) return res.status(502).json({ ok: false, error: "Génération du QCM impossible pour le moment." });
@@ -15351,32 +15292,43 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (quizRowsError) throw new Error(quizRowsError.message);
     const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
 
-    // Progression vers la mémorisation durable : depuis le 10/08/2026, chaque
-    // QUESTION d'une notion a son propre streak de répétition espacée
-    // indépendant (cf. computeQuestionStreaks — répondre une seule fois ne
-    // valide jamais une question, il faut DAILY_QUIZ_ACQUIS_VALIDATION_STREAK
-    // bonnes réponses à des intervalles croissants), et le "% d'ancrage"
-    // affiché pour la notion est la moyenne de ces streaks sur toutes ses
-    // questions (une question jamais répondue compte pour 0 dans la moyenne)
-    // — plus fin qu'un streak unique par notion (ancien "n/4", cf. commit du
-    // 09/08/2026), qui exigeait que toutes les questions répondues un même
-    // jour soient correctes pour que ce jour compte.
-    const { events } = await fetchUserCultureGeneraleAnswerEvents(validation.legacyKey);
-    const questionStreaks = computeQuestionStreaks(events);
+    // Progression par sujet : AGRÉGATION DÉRIVÉE de l'état FSRS de chacune de
+    // ses questions (memory_item_fsrs_states, cf. lib/spaced-repetition/),
+    // jamais l'inverse — ce calcul ne réinjecte rien dans le scheduler
+    // (invariant D de la refonte FSRS, 13-16/08/2026). Chaque question compte
+    // pour 0 (jamais répondue), 0.5 (encore en apprentissage/réapprentissage,
+    // state Learning/Relearning) ou 1 (passée en cycle de révision long
+    // terme, state Review) ; le "% d'ancrage" affiché est la moyenne sur
+    // toutes les questions de la notion. Remplace l'ancien streak-de-4 par
+    // question (computeQuestionStreaks), qui ne reflétait plus le rythme réel
+    // des repasses une fois celui-ci piloté par due_at plutôt que par des
+    // paliers fixes.
+    const { data: fsrsStates, error: fsrsStatesError } = await supabase
+      .from("memory_item_fsrs_states")
+      .select("state, memory_items(slot, quiz_date, question_id)")
+      .eq("user_id", userRow.id);
+    if (fsrsStatesError) throw new Error(fsrsStatesError.message);
+    const FSRS_STATE_PROGRESS_CREDIT = { Learning: 0.5, Relearning: 0.5, Review: 1 };
+    const stateByQuestionKey = new Map();
+    for (const row of fsrsStates || []) {
+      const mi = row.memory_items;
+      if (!mi) continue;
+      stateByQuestionKey.set(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`, row.state);
+    }
 
     const quizzes = [];
     for (const link of links) {
       const questions = questionsByKey.get(`${link.quiz_date}:${link.slot}`);
       if (!questions || !questions.length) continue; // contenu introuvable (générateur en échec, cas limite) : jamais affiché
-      let streakSum = 0;
+      let creditSum = 0;
       let answeredCount = 0;
       for (const q of questions) {
-        const state = questionStreaks.get(q.id);
+        const state = stateByQuestionKey.get(`${link.quiz_date}:${link.slot}:${q.id}`);
         if (!state) continue;
-        streakSum += state.streak;
+        creditSum += FSRS_STATE_PROGRESS_CREDIT[state] || 0;
         answeredCount += 1;
       }
-      const progressPct = Math.round((streakSum / (questions.length * DAILY_QUIZ_ACQUIS_VALIDATION_STREAK)) * 100);
+      const progressPct = Math.round((creditSum / questions.length) * 100);
       const primaryTheme = getPrimaryNotionQuizTheme(questions[0]);
       quizzes.push({
         slot: link.slot,
@@ -15483,45 +15435,10 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
   }
 });
 
-// Compare la proposition d'appariement de l'utilisateur (tableau {left,right})
-// aux paires réellement correctes de la question : vrai seulement si TOUTES
-// les paires sont correctes (pas de score partiel, cf. plan — reste cohérent
-// avec les autres formats, tous notés tout-ou-rien).
-function isAssociationAnswerFullyCorrect(submittedPairs, correctPairs) {
-  if (!Array.isArray(submittedPairs) || submittedPairs.length !== correctPairs.length) return false;
-  const correctByLeft = new Map(correctPairs.map((p) => [p.left, p.right]));
-  const seenLefts = new Set();
-  for (const raw of submittedPairs) {
-    const left = String(raw?.left || "").trim();
-    const right = String(raw?.right || "").trim();
-    if (!left || !right || seenLefts.has(left) || !correctByLeft.has(left)) return false;
-    seenLefts.add(left);
-    if (correctByLeft.get(left) !== right) return false;
-  }
-  return seenLefts.size === correctPairs.length;
-}
-
-// "qcm_multi" : correct seulement si l'ensemble des index cochés correspond
-// exactement à question.correctIndexes (ni oubli, ni ajout en trop).
-function isQcmMultiAnswerFullyCorrect(submittedIndexes, correctIndexes) {
-  if (!Array.isArray(submittedIndexes)) return false;
-  const submittedSet = new Set(submittedIndexes.map((n) => Number(n)));
-  if (submittedSet.size !== submittedIndexes.length) return false;
-  const correctSet = new Set(correctIndexes);
-  if (submittedSet.size !== correctSet.size) return false;
-  for (const i of submittedSet) if (!correctSet.has(i)) return false;
-  return true;
-}
-
-// "ordre" : correct seulement si la séquence soumise correspond exactement,
-// terme à terme, à question.items (l'ordre fourni par l'IA).
-function isOrderAnswerFullyCorrect(submittedItems, correctItems) {
-  if (!Array.isArray(submittedItems) || submittedItems.length !== correctItems.length) return false;
-  for (let i = 0; i < correctItems.length; i++) {
-    if (String(submittedItems[i] || "").trim() !== correctItems[i]) return false;
-  }
-  return true;
-}
+// isAssociationAnswerFullyCorrect/isQcmMultiAnswerFullyCorrect/
+// isOrderAnswerFullyCorrect vivent désormais dans lib/question-formats.js
+// (cf. import en haut du fichier) — correction tout-ou-rien, pas de score
+// partiel, cohérent avec les autres formats.
 
 // Résolution du système solaire d'un contenu Culture Générale : vérifie d'abord si
 // la notion correspond à un système déjà existant dans cette galaxie (ex. "Résilience"
@@ -16869,28 +16786,9 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   }
 }
 
-// Traduit une soumission brute (optionIndex simple, ou associationAnswer/
-// optionIndexes/orderedItems selon le type) en l'index 0/CUSTOM_GRADED_CORRECT_INDEX
-// stocké dans daily_quiz_answers.option_index — factorisé entre POST /answer
-// (persiste) et POST /practice-answer (ne persiste jamais, cf. plus bas) pour
-// que les deux routes gradent toujours de façon identique. Retourne null si
-// la soumission est invalide (jamais 0, qui est une réponse fausse valide).
-function gradeQuizSubmissionOptionIndex(question, body) {
-  const questionType = question.type || "qcm";
-  if (questionType === "association") {
-    return isAssociationAnswerFullyCorrect(body?.associationAnswer, question.pairs || []) ? CUSTOM_GRADED_CORRECT_INDEX : 0;
-  }
-  if (questionType === "qcm_multi") {
-    return isQcmMultiAnswerFullyCorrect(body?.optionIndexes, question.correctIndexes || []) ? CUSTOM_GRADED_CORRECT_INDEX : 0;
-  }
-  if (questionType === "ordre") {
-    return isOrderAnswerFullyCorrect(body?.orderedItems, question.items || []) ? CUSTOM_GRADED_CORRECT_INDEX : 0;
-  }
-  const optionIndex = Number(body?.optionIndex);
-  const maxIndex = (Array.isArray(question.options) ? question.options.length : 4) - 1;
-  if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > maxIndex) return null;
-  return optionIndex;
-}
+// gradeQuizSubmissionOptionIndex (factorisée entre POST /answer et POST
+// /practice-answer) vit désormais dans lib/question-formats.js — mêmes
+// règles de correction, cf. import en haut du fichier.
 
 app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (req, res) => {
   try {
@@ -16929,6 +16827,7 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     const difficulty = ["facile", "moyen", "difficile"].includes(rawDifficulty) ? rawDifficulty : null;
 
     let finalOptionIndex = optionIndex;
+    let isNewAnswer = false;
     if (existingAnswer) {
       finalOptionIndex = existingAnswer.option_index;
     } else {
@@ -16954,6 +16853,7 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
         }
       } else {
         _dailyQuizStatsCache.delete(`${todayKey}:${questionId}`);
+        isNewAnswer = true;
       }
     }
 
@@ -16982,17 +16882,147 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       recordDailyQuizEclairageAcquisition(voterKey, question)
         .catch((error) => console.warn("[daily quiz eclairage acquisitions] failed :", error.message));
     }
+
+    // État FSRS (cf. lib/spaced-repetition/) : uniquement sur une réponse
+    // RÉELLEMENT nouvelle (jamais un simple re-fetch d'une réponse déjà
+    // enregistrée, jamais la version perdante d'une course d'insertion) et
+    // uniquement dans le périmètre "notion:%"/"cgreview-*" (cf.
+    // applyFsrsReviewForDailyQuizAnswer). Conséquence secondaire, jamais sur
+    // le chemin critique — la réponse HTTP est déjà partie.
+    if (isNewAnswer) {
+      applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate: todayKey, questionId, isCorrect: correct, difficulty })
+        .catch((error) => console.warn("[fsrs review] failed :", error.message));
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// Rejoue la réponse qui vient d'être enregistrée dans daily_quiz_answers vers
+// memory_item_fsrs_states/memory_review_events (cf. lib/spaced-repetition/).
+// Indépendant de l'objet `question` déjà résolu côté appelant (potentiellement
+// déjà basculé sur son altVariant, cf. resolveActiveQuestionVariant) : relit
+// toujours le contenu canonique depuis daily_quiz pour rester correct quelle
+// que soit la variante affichée à l'utilisateur.
+async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, questionId, isCorrect, difficulty }) {
+  let memoryItemRow = null;
+  if (questionId.startsWith("notion:")) {
+    memoryItemRow = await upsertMemoryItemForNotionAnswer({ slot, quizDate, questionId });
+  } else if (questionId.startsWith("cgreview-")) {
+    // "Dernière génération gagne" (même convention que la réutilisation d'un
+    // sujet libre déjà généré, cf. POST /api/users/notion-quizzes/custom) :
+    // en usage normal un (slot, question_id) donné n'a qu'un seul memory_item,
+    // ce choix ne s'applique qu'au cas rare d'une régénération de sujet libre.
+    const ref = questionId.slice("cgreview-".length);
+    const { data, error } = await supabase.from("memory_items")
+      .select("id, slot, quiz_date, question_id")
+      .eq("question_id", ref)
+      .order("quiz_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    memoryItemRow = data;
+  } else {
+    return; // hors périmètre FSRS (question actu, ancien slot hors "notion:%")
+  }
+  if (!memoryItemRow) return;
+
+  const { data: quizRow, error: quizRowError } = await supabase.from("daily_quiz")
+    .select("questions").eq("quiz_date", memoryItemRow.quiz_date).eq("slot", memoryItemRow.slot).maybeSingle();
+  if (quizRowError) throw quizRowError;
+  const canonicalQuestion = (quizRow?.questions || []).find((q) => q.id === memoryItemRow.question_id);
+  if (!canonicalQuestion) return; // ne devrait pas arriver pour un slot "notion:%" (jamais purgé)
+
+  const { user } = await resolveLegacyUser(supabase, voterKey);
+
+  const { data: existingStateRow, error: stateError } = await supabase.from("memory_item_fsrs_states")
+    .select("*").eq("user_id", user.id).eq("memory_item_id", memoryItemRow.id).maybeSingle();
+  if (stateError) throw stateError;
+
+  const currentState = existingStateRow ? {
+    due: new Date(existingStateRow.due_at),
+    stability: existingStateRow.stability,
+    difficulty: existingStateRow.difficulty,
+    scheduledDays: existingStateRow.scheduled_days,
+    learningSteps: existingStateRow.learning_steps,
+    reps: existingStateRow.reps,
+    lapses: existingStateRow.lapses,
+    state: existingStateRow.state,
+    lastReviewAt: existingStateRow.last_review_at ? new Date(existingStateRow.last_review_at) : null
+  } : null;
+
+  const rating = mapMnoriaReviewToFsrsRating({ isCorrect, perceivedDifficulty: difficulty });
+  const now = new Date();
+  const { nextState, elapsedDays, schedulerModelId } = reviewMemoryItem({ currentState, rating, now });
+  const questionVariant = resolveQuestionVariantLabel(canonicalQuestion, currentState ? currentState.reps : 0);
+
+  const { error: eventError } = await supabase.from("memory_review_events").insert({
+    user_id: user.id,
+    memory_item_id: memoryItemRow.id,
+    question_variant: questionVariant,
+    is_correct: isCorrect,
+    perceived_difficulty: difficulty,
+    rating,
+    elapsed_days: elapsedDays,
+    due_at: nextState.due.toISOString(),
+    stability_after: nextState.stability,
+    difficulty_after: nextState.difficulty,
+    scheduler_model_id: schedulerModelId,
+    reviewed_at: now.toISOString()
+  });
+  // 23505 : doublon idempotent (retry réseau du fire-and-forget côté client
+  // ou du serveur), jamais une vraie erreur — cf. UNIQUE (user_id,
+  // memory_item_id, reviewed_at).
+  if (eventError && eventError.code !== "23505") throw eventError;
+
+  const { error: upsertError } = await supabase.from("memory_item_fsrs_states").upsert({
+    user_id: user.id,
+    memory_item_id: memoryItemRow.id,
+    state: nextState.state,
+    due_at: nextState.due.toISOString(),
+    stability: nextState.stability,
+    difficulty: nextState.difficulty,
+    scheduled_days: nextState.scheduledDays,
+    learning_steps: nextState.learningSteps,
+    reps: nextState.reps,
+    lapses: nextState.lapses,
+    last_review_at: nextState.lastReviewAt ? nextState.lastReviewAt.toISOString() : null,
+    scheduler_model_id: schedulerModelId,
+    updated_at: now.toISOString()
+  }, { onConflict: "user_id,memory_item_id" });
+  if (upsertError) throw upsertError;
+}
+
+async function upsertMemoryItemForNotionAnswer({ slot, quizDate, questionId }) {
+  const { data: quizRow, error: quizRowError } = await supabase.from("daily_quiz")
+    .select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+  if (quizRowError) throw quizRowError;
+  const question = (quizRow?.questions || []).find((q) => q.id === questionId);
+  if (!question || !question.sourceType || !question.sourceDebateId) return null;
+
+  const naturalKey = buildMemoryItemNaturalKey({ slot, quizDate, questionId });
+  const { data, error } = await supabase.from("memory_items")
+    .upsert({
+      natural_key: naturalKey,
+      subject_type: question.sourceType,
+      subject_source_id: String(question.sourceDebateId),
+      slot,
+      quiz_date: quizDate,
+      question_id: questionId
+    }, { onConflict: "natural_key" })
+    .select("id, slot, quiz_date, question_id")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // "Refaire" (cf. views/qcm-du-jour.html renderFinalScore/quizAnswerEndpoint,
 // demande du 13/08/2026) : rejoue un QCM déjà terminé avec de vraies
 // nouvelles réponses, gradées exactement comme POST /answer (même
 // gradeQuizSubmissionOptionIndex), mais SANS JAMAIS écrire dans
-// daily_quiz_answers — la seule table dont dépendent le streak/l'ancrage
-// (computeQuestionStreaks) et le score Gnosis. Rien n'est persisté ⇒ rien ne
+// daily_quiz_answers — la seule table dont dépendent l'état FSRS
+// (memory_item_fsrs_states, cf. applyFsrsReviewForDailyQuizAnswer) et le
+// score Gnosis. Rien n'est persisté ⇒ rien ne
 // peut compter, par construction, plutôt que de dépendre d'un filtrage a
 // posteriori. Jamais d'appel à recordDailyQuizEclairageAcquisition non plus,
 // pour la même raison (n'accorderait un acquis "Ma mémoire" que sur la base
@@ -17042,7 +17072,7 @@ app.post("/api/daily-quiz/practice-answer", rateLimit("daily-quiz-answer", 60), 
 // toute façon) — seul fetchCultureGeneraleReviewInjectionForToday consulte
 // cette table, cf. plus bas. `questionId` peut arriver préfixé "cgreview-"
 // si l'exclusion est cliquée pendant une repasse : normalisé ici vers l'id
-// canonique, le seul utilisé par computeQuestionStreaks/les événements de
+// canonique, le seul utilisé par memory_items.question_id/les événements de
 // réponse (cf. fetchUserCultureGeneraleAnswerEvents).
 app.post("/api/daily-quiz/exclude-question", rateLimit("users", 30), async (req, res) => {
   try {

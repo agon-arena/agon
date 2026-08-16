@@ -7316,6 +7316,62 @@ body.page-debate .topbar::after {
   z-index: 140;
 }
 
+/* Repositionne visuellement Trier/Rechercher juste au-dessus du premier
+   bandeau thématique (#debates-list, où renderDebates insère "À la une" en
+   1er) : .debates-section est une grille à une colonne, donc `order` déplace
+   le bloc sans toucher au DOM (tout le JS qui référence ces éléments par id
+   reste inchangé) ni à l'ordre de tabulation clavier. Les autres enfants de
+   la grille gardent leur order:0 implicite, donc restent avant ce bloc dans
+   l'ordre visuel. */
+body.page-home .index-explorer-topbar,
+body.page-home #index-explorer-controls,
+body.page-home #index-active-filters,
+body.page-home-mobile .index-explorer-topbar,
+body.page-home-mobile #index-explorer-controls,
+body.page-home-mobile #index-active-filters {
+  order: 3;
+}
+
+/* Équilibre l'espace sous le bouton Trier/Rechercher (vers le bandeau
+   thématique #debates-list) avec celui au-dessus (vers le liseret ci-dessous) :
+   24px des deux côtés, harmonisé avec le standalone (--agon-home-sort-btn-mt /
+   --agon-home-first-row-mt, cf. syncAgonHomeTrendsCaptionAnchor). */
+body.page-home .index-explorer-topbar,
+body.page-home-mobile .index-explorer-topbar {
+  margin-bottom: -10px;
+}
+
+/* Liseret fin au-dessus du bouton, pour marquer la séparation avec ce qui
+   précède (bulles/actions) sans une barre franche — dégradé qui s'estompe
+   sur les bords plutôt qu'une ligne pleine. */
+body.page-home .index-explorer-topbar::before,
+body.page-home-mobile .index-explorer-topbar::before {
+  content: "";
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 1) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+body.page-home .agon-tag-trends-section,
+body.page-home-mobile .agon-tag-trends-section {
+  order: 1;
+}
+
+body.page-home .home-secondary-actions,
+body.page-home-mobile .home-secondary-actions {
+  order: 2;
+}
+
+body.page-home #debates-list,
+body.page-home-mobile #debates-list {
+  order: 4;
+}
+
 /* Page "Autres actus" : le bouton Trier/Rechercher est juste sous le switch
    Gauche/Tout/Droite (.tribunes-filter-switch) et le margin-top négatif
    générique le fait chevaucher ce switch. On le repousse en dessous. */
@@ -7332,13 +7388,13 @@ body.page-debate .topbar::after {
 .index-sort-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   border: 1px solid #000000;
   border-radius: 999px;
   background: #111827;
   color: #ffffff;
-  padding: 4px 8px;
-  font-size: 10.5px;
+  padding: 8px 16px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -7502,7 +7558,7 @@ body.page-debate .topbar::after {
   }
 
   .page-home-mobile main {
-    padding: 16px 0 28px 0;
+    padding: 10px 0 28px 0;
   }
 
   .page-home-mobile .home-page {
@@ -7592,8 +7648,18 @@ body.page-debate .topbar::after {
     transform: none;
   }
 
+  /* En standalone (PWA), l'espace au-dessus du bouton Trier/Rechercher était
+     écrasé par les marges négatives des blocs précédents (switch Bulles Actu/Agôn,
+     bandeau Éclairages/Ce jour dans l'Histoire, calibrées pour ce mode) — on
+     redonne au-dessus le même espace qu'en dessous (~20px, cf. margin-bottom:-14px
+     ci-dessus combiné au gap de grille de .debates-section + margin-top de
+     #debates-list). */
+  body.is-standalone.page-home-mobile .index-explorer-topbar {
+    margin-top: 16px;
+  }
+
   .page-home-mobile .agon-cloud-mode-switch {
-    margin-top: -47px;
+    margin-top: -70px;
     margin-bottom: 8px;
     z-index: 165;
   }
@@ -7620,18 +7686,19 @@ body.page-debate .topbar::after {
 
   .page-home-mobile .agon-tag-trends-caption {
     transform: none;
-    font-size: 0.98rem;
+    font-size: 0.82rem;
     position: relative;
     z-index: 30;
+    margin-top: 4px;
     margin-left: auto;
     margin-right: auto;
     text-align: center !important;
   }
 
   .page-home-mobile .index-sort-toggle {
-    min-height: 28px;
-    padding: 4px 8px;
-    font-size: 10.5px;
+    min-height: 38px;
+    padding: 8px 16px;
+    font-size: 14px;
   }
 
   .page-home-mobile .index-explorer-controls {
@@ -9586,6 +9653,7 @@ padding:4px 14px 12px 14px;
 
 .index-active-filters.index-active-filters-empty {
   pointer-events: none;
+  min-height: 0;
 }
 
 .index-active-filter-tag {
@@ -19822,6 +19890,31 @@ body.page-home-mobile .debate-card-agon-badge {
     position: relative;
     z-index: 2;
   }
+
+  /* Mode "Ma mémoire" seulement : le bouton "Autres actus" (référence de la
+     logique symétrique ci-dessus) est masqué, cette logique ne s'applique donc
+     pas (cf. guard contentBottomDoc dans syncAgonHomeTrendsCaptionAnchor). Le
+     bouton Trier/Rechercher est alors calé à 24px sous le nuage de bulles,
+     mesuré en direct — même fonction JS, bloc dédié. */
+  body.is-standalone.page-home-mobile.agon-memoire-cloud-mode .index-explorer-topbar {
+    margin-top: var(--agon-home-sort-btn-mt, -4px) !important;
+  }
+
+  /* Emporte sur le margin-top:0 !important générique posé dans index.html
+     (@media max-width:768px, hors mode Ma mémoire) : ici le bandeau doit
+     suivre la mesure JS ci-dessus (24px sous le bouton), pas rester à 0.
+     Sélecteur volontairement plus spécifique (4 classes) pour gagner. */
+  body.is-standalone.page-home-mobile.agon-memoire-cloud-mode #debates-list .theme-row-section:first-child {
+    margin-top: var(--agon-home-first-row-mt, -4px) !important;
+  }
+
+  /* Mobile navigateur (hors standalone), mode "Ma mémoire" : 24px avant le
+     bouton, harmonisé avec les 24px après (margin-bottom plus haut) et avec
+     le standalone ci-dessus. Valeur statique ici (pas de mesure JS possible
+     sans le fold instable du standalone) : base -4px + 14px. */
+  body.page-home-mobile.agon-memoire-cloud-mode:not(.is-standalone) .index-explorer-topbar {
+    margin-top: 10px !important;
+  }
 }
 
 body.page-home #debates-list .theme-row-section:first-child {
@@ -19842,6 +19935,20 @@ body.page-home #debates-list .theme-row-section:first-child {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+/* Le margin-top -80px ci-dessus était calibré pour un cadre précédé de la barre
+   Trier/Rechercher (qui comblait cet espace). Depuis son passage en 1er bloc visuel
+   de la grille (order:1, cf. règle order plus haut), ce même -80px le tirait sous le
+   bandeau blanc du haut sur mobile navigateur (standalone déjà à 0 !important via
+   body.is-standalone .agon-tag-trends-section). Remonté à -62px (au lieu de -6px) pour
+   agrandir le cadre visible jusqu'à 3px du bandeau : le bord haut du cadre décoratif
+   (::before, cf. --bubble-frame-top plus bas) gagne exactement les 56px repris ici,
+   puisque la hauteur du cloud grandit d'autant en contrepartie (580px → 636px). */
+@media (max-width: 768px) {
+  body.page-home-mobile:not(.is-standalone) .agon-tag-trends-section {
+    margin-top: -64px;
+  }
 }
 
 /* Fil d'Ariane "Ma mémoire" embarqué sur l'accueil (#agon-memoire-embed-before, premier enfant
@@ -19891,7 +19998,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   align-self: center;
   text-align: center;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 0.98rem;
+  font-size: 0.82rem;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.55);
   letter-spacing: 0.02em;
@@ -19905,26 +20012,33 @@ body.page-home #debates-list .theme-row-section:first-child {
   width: max-content;
   margin: 0 auto 12px;
   align-self: center;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   /* Anneau sombre en plus de la bordure claire : selon la couleur de bulle qui se
      trouve juste derrière (nuage de tags dynamique), une bordure blanche seule peut
      se fondre dans le fond et sembler disparaître/recouverte. L'un des deux anneaux
      (clair ou sombre) reste toujours visible quel que soit le fond. */
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   /* overflow:hidden met la taille mini flex à 0 : sans flex-shrink:0, la section
      desktop (hauteur figée + cloud rigide) écrase le switch à chaque bascule */
   flex-shrink: 0;
 }
 
+/* Contour du sélecteur Actualités/Ma mémoire/Communauté retiré (demande du 16/08/2026) :
+   uniquement ce switch précis (id, pas la classe partagée), le filtre Gauche/Tout/Droite
+   ci-dessous garde le sien. */
+#agon-cloud-mode-switch {
+  border: none;
+  box-shadow: none;
+}
+
 .agon-cloud-mode-segment {
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.65);
-  padding: 6px 16px;
-  min-width: 104px;
+  padding: 7px 20px;
+  min-width: 112px;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 700;
@@ -19938,9 +20052,19 @@ body.page-home #debates-list .theme-row-section:first-child {
      pour ne pas montrer de soulignement de lien (demande du 08/08/2026, "en plus des boutons
      bulles actu bulles agon, ajoute Ma mémoire"). */
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   text-decoration: none;
+}
+
+/* Petit logo au-dessus du libellé (Actualités/Ma mémoire/Communauté uniquement — le filtre
+   Gauche/Tout/Droite réutilise la même classe .agon-cloud-mode-segment mais sans icône,
+   donc rien ne change pour lui). */
+.agon-cloud-mode-segment-icon {
+  font-size: 13px;
+  line-height: 1;
 }
 
 .agon-cloud-mode-segment:hover {
@@ -20033,7 +20157,31 @@ body.page-home #debates-list .theme-row-section:first-child {
   font-size: 10px;
   position: relative;
   text-align: center;
+  flex-direction: row;
+  gap: 5px;
 }
+/* Gauche/Droite plus étroits que "Tout" : libellé court, pas besoin des mêmes
+   120px. Sélecteur à 2 ID (parent + bouton), sinon la règle générale
+   "#agon-political-cloud-switch .agon-cloud-mode-segment" juste au-dessus (ID+classe,
+   spécificité plus forte qu'un ID seul) l'emporte malgré l'ordre des règles et annule
+   ce rétrécissement sans effet visible. */
+#agon-political-cloud-switch #agon-political-cloud-left,
+#agon-political-cloud-switch #agon-political-cloud-right {
+  padding: 4px 8px;
+  min-width: 70px;
+  font-size: 9px;
+}
+
+/* Segment actif du filtre Gauche/Tout/Droite : fond foncé (pas la pastille
+   claire par défaut de .agon-cloud-mode-segment-active, réservée au switch
+   Bulles Actu/Agôn/Communauté) pour rester cohérent avec le bandeau sombre
+   environnant plutôt que de trancher en blanc. */
+#agon-political-cloud-switch .agon-cloud-mode-segment-active,
+#agon-political-cloud-switch .agon-cloud-mode-segment-active:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
 #agon-political-cloud-switch .agon-cloud-mode-segment:not(:last-child)::after {
   content: '';
   position: absolute;
@@ -20064,13 +20212,13 @@ body.page-home #debates-list .theme-row-section:first-child {
   /* -4px : même écartement net que celui entre le switch Bulles Actu/Agôn au-dessus
      et le switch Gauche/Général/Droite (12px de margin-bottom + -8px de margin-top = 4px). */
   margin: -4px auto 12px;
-  padding: 5px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 4px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.75);
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -20111,8 +20259,8 @@ body.page-home #debates-list .theme-row-section:first-child {
 .agon-tag-trends-cloud {
   position: relative;
   width: 100%;
-  max-width: 390px;
-  height: 548px;
+  max-width: 414px;
+  height: 636px;
   margin: 0 auto;
   overflow: visible;
   isolation: isolate;
@@ -20127,7 +20275,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 .agon-tag-trends-cloud::before {
   content: '';
   position: absolute;
-  inset: var(--bubble-frame-top) 30px 23px;
+  inset: var(--bubble-frame-top) 20px 23px;
   background: none;
   border: 6px solid #000;
   box-sizing: border-box;
@@ -20137,7 +20285,7 @@ body.page-home #debates-list .theme-row-section:first-child {
      -2), donc les portions de cadre non recouvertes demeurent visibles en permanence. */
   z-index: -1;
   pointer-events: none;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.55), 0 3px 10px rgba(0, 0, 0, 0.4);
   visibility: visible;
 }
 
@@ -20153,7 +20301,7 @@ body.page-home #debates-list .theme-row-section:first-child {
 .page-home-mobile .agon-tag-trends-cloud::after {
   content: '';
   position: absolute;
-  inset: var(--bubble-frame-top) 30px 23px;
+  inset: var(--bubble-frame-top) 20px 23px;
   border-radius: var(--bubble-frame-radius);
   overflow: hidden;
   z-index: -2;
@@ -20187,7 +20335,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   .agon-tag-trends-cloud::before,
   .page-home .agon-tag-trends-cloud::after,
   .page-home-mobile .agon-tag-trends-cloud::after {
-    inset: var(--bubble-frame-top) 30px 78px;
+    inset: var(--bubble-frame-top) 2px 78px;
   }
 }
 
@@ -20224,8 +20372,8 @@ body.page-home #debates-list .theme-row-section:first-child {
 #agon-cloud-loading-spinner {
   position: absolute;
   top: var(--bubble-frame-top, 55px);
-  left: 30px;
-  right: 30px;
+  left: 20px;
+  right: 20px;
   bottom: 23px;
   display: flex;
   align-items: center;
@@ -20304,7 +20452,7 @@ body.agon-cloud-switch-loading::before {
     margin-bottom: 40px;
   }
   .agon-tag-trends-section {
-    max-width: min(780px, 100%);
+    max-width: min(820px, 100%);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -20315,7 +20463,7 @@ body.agon-cloud-switch-loading::before {
     transform: translateX(-10px);
   }
   .agon-tag-trends-cloud {
-    max-width: 780px;
+    max-width: 820px;
     flex: 1;
     height: auto;
     min-height: 260px;
@@ -20323,14 +20471,32 @@ body.agon-cloud-switch-loading::before {
 }
 
 body.agon-mobile-cloud-viewport .agon-tag-trends-section {
-  max-width: 430px;
+  max-width: 454px;
 }
 
 body.agon-mobile-cloud-viewport .agon-tag-trends-cloud {
-  max-width: 390px;
-  height: 548px;
-  min-height: 548px;
+  max-width: 414px;
+  height: 636px;
+  min-height: 636px;
   flex: 0 0 auto;
+}
+
+/* Hauteur dynamique du cadre (3 modes) sur l'accueil mobile navigateur : au lieu d'une
+   valeur fixe (qui déborde ou laisse un vide selon la hauteur réelle de l'écran), le cadre
+   remplit l'espace entre le bandeau blanc du haut et le bandeau blanc du bas, avec 3px de
+   marge de chaque côté. Le bord haut du cadre décoratif est déjà calé à ce même 3px via le
+   margin-top -62px de .agon-tag-trends-section (fixe, indépendant de la hauteur d'écran) :
+   seule la hauteur du cloud doit donc s'ajuster ici pour placer le bord bas.
+   Dérivation : bord bas visible = box_top(24px, fixe) + hauteur - 78px (inset bas mobile,
+   cf. ::before/::after) doit tomber à 3px au-dessus du bandeau bas (~62px + safe-area) ⇒
+   hauteur = 100dvh - 11px - safe-area-inset-bottom. Exclu du mode standalone (système de
+   positionnement différent et déjà calé séparément, cf. body.is-standalone plus haut/bas). */
+@media (max-width: 768px) {
+  body.page-home-mobile:not(.is-standalone) .agon-tag-trends-cloud,
+  body.page-home-mobile:not(.is-standalone) #agon-tag-trends-cloud.agon-memoire-frame {
+    height: calc(100dvh - 50px - env(safe-area-inset-bottom, 0px));
+    min-height: calc(100dvh - 50px - env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* Dans le navigateur mobile, le cadre remontait légèrement plus haut que dans
@@ -20344,7 +20510,7 @@ body.agon-mobile-cloud-viewport .agon-tag-trends-cloud {
 
 body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::before,
 body.agon-mobile-cloud-viewport .agon-tag-trends-cloud::after {
-  inset: var(--bubble-frame-top) 30px 78px;
+  inset: var(--bubble-frame-top) 2px 78px;
 }
 
 body.agon-mobile-cloud-viewport #agon-cloud-loading-spinner {
@@ -25327,12 +25493,12 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
    "Ma mémoire", cf. .agon-memoire-frame) dans le même flex column — négatif de sa propre
    margin-bottom (24px, cf. .agon-memoire-frame) + l'inset bas du cadre décoratif (23px desktop /
    78px mobile, cf. .agon-tag-trends-cloud::before) + une petite marge pour rester bien à
-   l'intérieur plutôt que pile sur le bord. align-self:flex-start + margin-left 30px : sort du
+   l'intérieur plutôt que pile sur le bord. align-self:flex-start + margin-left 20px : sort du
    centrage par défaut de la section (align-items:center) et s'aligne sur l'inset gauche du
-   cadre (30px, même valeur que ::before). */
+   cadre (20px, même valeur que ::before). */
 #agon-memoire-embed-after {
   align-self: flex-start;
-  margin: -61px 0 0 30px;
+  margin: -61px 0 0 20px;
   z-index: 140;
 }
 
@@ -25345,7 +25511,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 @media (max-width: 768px) {
   #agon-memoire-embed-after {
     position: absolute;
-    left: 30px;
+    left: 20px;
     top: 437px;
     margin: 0;
   }
@@ -25361,8 +25527,8 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
      niveaux profonds où galaxie et système solaire sont affichés ensemble. */
   body.page-home-mobile.agon-memoire-cloud-mode #agon-memoire-embed-before {
     position: absolute;
-    left: 30px;
-    right: 30px;
+    left: 20px;
+    right: 20px;
     top: 52px;
   }
 
@@ -25405,19 +25571,27 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   /* Mêmes marges de sélecteur que les autres modes mobiles. */
   .agon-tag-trends-cloud.agon-cloud-mode-agon ~ #agon-cloud-mode-switch,
   .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
-    margin-top: -47px !important;
+    margin-top: -70px !important;
   }
   body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon ~ #agon-cloud-mode-switch,
   body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
     margin-top: -59px !important;
   }
 
-  /* Le navigateur mobile décale déjà le cloud de 14px vers le bas : le fil d'Ariane
-     et la flèche, positionnés en absolu, suivent exactement le même décalage. */
-  body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-before {
-    top: 52px;
+  /* Depuis le calage dynamique du cadre (syncMobileCloudFrameHeight, script.js), le haut de la
+     section colle désormais de très près au bandeau blanc du haut : un fil d'Ariane positionné
+     au-dessus du cadre (l'ancien top:52px) se retrouvait poussé hors écran / sous le bandeau,
+     invisible (demande du 16/08/2026). Repositionné DANS le cadre, en haut à gauche (top passe
+     l'inset du cadre décoratif ::before, cf. --bubble-frame-top:55px, + une petite marge).
+     Étendu au standalone (16/08/2026) : même calage live désormais utilisé dans les deux cas,
+     cette règle (plus tardive dans le fichier, même spécificité) prend donc le dessus sur
+     l'ancien top:-36px dédié au standalone ci-dessus. */
+  body.page-home-mobile.agon-mobile-cloud-viewport.agon-memoire-cloud-mode #agon-memoire-embed-before {
+    top: 68px;
+    left: 36px;
+    right: 36px;
   }
-  body.page-home-mobile.agon-mobile-cloud-viewport:not(.is-standalone).agon-memoire-cloud-mode #agon-memoire-embed-after {
+  body.page-home-mobile.agon-mobile-cloud-viewport.agon-memoire-cloud-mode #agon-memoire-embed-after {
     top: 451px;
   }
 }
@@ -25488,8 +25662,8 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
    ni la page Mon univers autonome ni l'affichage desktop. */
 @media (max-width: 768px) {
   body.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
-    height: 548px;
-    min-height: 548px;
+    height: 636px;
+    min-height: 636px;
     margin: 0 auto;
   }
 }
@@ -25541,7 +25715,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
 .agon-memoire-frame.agon-tag-trends-cloud::after {
   content: '';
   position: absolute;
-  inset: var(--bubble-frame-top) 30px 23px;
+  inset: var(--bubble-frame-top) 20px 23px;
   z-index: -1;
   pointer-events: none;
   border-radius: var(--bubble-frame-radius);
@@ -25564,7 +25738,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
 @media (max-width: 768px) {
   #agon-universe-cloud.agon-tag-trends-cloud::after,
   .agon-memoire-frame.agon-tag-trends-cloud::after {
-    inset: var(--bubble-frame-top) 30px 78px;
+    inset: var(--bubble-frame-top) 2px 78px;
   }
 }
 #agon-universe-cloud .agon-tag-center-btn:not(.agon-tag-center-btn-custom),
@@ -25980,7 +26154,7 @@ body.is-standalone.page-home-mobile #agon-tag-trends-cloud.agon-memoire-frame {
    cadre. Les gestes horizontaux et à deux doigts restent traités par la caméra. */
 .universe-zoom-viewport {
   position: absolute;
-  inset: var(--bubble-frame-top) 30px 23px;
+  inset: var(--bubble-frame-top) 20px 23px;
   overflow: hidden;
   border-radius: var(--bubble-frame-radius);
   touch-action: pan-y;
@@ -26003,7 +26177,7 @@ body.page-home:not(.agon-memoire-cloud-mode)
 }
 @media (max-width: 640px) {
   .universe-zoom-viewport {
-    inset: var(--bubble-frame-top) 30px 78px;
+    inset: var(--bubble-frame-top) 2px 78px;
   }
 }
 /* Fond infini synchronisé à la caméra. La couche couvre seulement le viewport ; l'infini vient
@@ -26847,67 +27021,67 @@ body.universe-star-panel-open {
    dimensions locales (74px sur Apprentissages/Ouvrir, par exemple). */
 @media (min-width: 769px) {
   html body .topbar.topbar--mnoria-uniform {
-    height: 152px !important;
-    min-height: 152px !important;
-    max-height: 152px !important;
-    padding-top: 5px !important;
+    height: 114px !important;
+    min-height: 114px !important;
+    max-height: 114px !important;
+    padding-top: 4px !important;
     padding-bottom: 0 !important;
     box-sizing: border-box !important;
   }
 
   html body .topbar.topbar--mnoria-uniform .topbar-inner.topbar-home {
-    height: 146px !important;
-    min-height: 146px !important;
-    max-height: 146px !important;
+    height: 110px !important;
+    min-height: 110px !important;
+    max-height: 110px !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     box-sizing: border-box !important;
   }
 
   html body .topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
-    width: 220px !important;
-    max-width: 220px !important;
-    height: 92px !important;
-    max-height: 92px !important;
+    width: 204px !important;
+    max-width: 204px !important;
+    height: 85px !important;
+    max-height: 85px !important;
     object-fit: contain !important;
   }
 }
 
 @media (max-width: 768px) {
   html body .topbar.topbar--mnoria-uniform {
-    height: 102px !important;
-    min-height: 102px !important;
-    max-height: 102px !important;
-    padding-top: 5px !important;
+    height: 76px !important;
+    min-height: 76px !important;
+    max-height: 76px !important;
+    padding-top: 4px !important;
     padding-bottom: 0 !important;
     box-sizing: border-box !important;
   }
 
   html body .topbar.topbar--mnoria-uniform .topbar-inner.topbar-home {
-    height: 96px !important;
-    min-height: 96px !important;
-    max-height: 96px !important;
+    height: 72px !important;
+    min-height: 72px !important;
+    max-height: 72px !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     box-sizing: border-box !important;
   }
 
   html body .topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
-    width: 128px !important;
-    max-width: 128px !important;
-    height: 96px !important;
-    max-height: 96px !important;
+    width: 184px !important;
+    max-width: 52vw !important;
+    height: 66px !important;
+    max-height: 66px !important;
     object-fit: contain !important;
   }
 }
 
-/* En standalone, la zone sûre iOS s'ajoute au-dessus des mêmes 96px de
+/* En standalone, la zone sûre iOS s'ajoute au-dessus des mêmes 72px de
    contenu que sur l'index, sans réduire le logo ni provoquer de saut. */
 @media (display-mode: standalone) and (max-width: 768px) {
   html body .topbar.topbar--mnoria-uniform {
-    height: calc(98px + env(safe-area-inset-top, 0px)) !important;
-    min-height: calc(98px + env(safe-area-inset-top, 0px)) !important;
-    max-height: calc(98px + env(safe-area-inset-top, 0px)) !important;
+    height: calc(74px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(74px + env(safe-area-inset-top, 0px)) !important;
+    max-height: calc(74px + env(safe-area-inset-top, 0px)) !important;
     padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
   }
 }

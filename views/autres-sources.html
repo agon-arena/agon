@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260815-uniform-mnoria-header-v34">
+  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -194,9 +194,7 @@
     }
     /* L'index applique Oswald à toute la page (body.page-home :where(...)) ;
        ici on ne le fait que dans la topbar répliquée. */
-    body.page-tribunes .topbar :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
-    body.page-tribunes .agon-user-score-widget,
-    body.page-tribunes .agon-user-score-widget :where(span) {
+    body.page-tribunes .topbar :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
       font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
     }
     body.page-tribunes .home-logo {
@@ -1332,7 +1330,7 @@
       }
     });
   </script>
-  <script src="/header-score-widget.min.js?v=20260815-universal-countdown-v3" defer></script>
+  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
 </head>
 <body class="page-tribunes">
 <!-- Bandeau du haut : réplique exacte de la page index. Le wrapper
@@ -1785,7 +1783,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260815-radial-star-layout-v31" defer></script>
+<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');

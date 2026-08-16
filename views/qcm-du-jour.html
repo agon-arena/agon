@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260815-universal-header-controls-v42">
+  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -74,7 +74,6 @@
       width: 116px !important;
       transform: translateY(2px) !important;
     }
-    body.page-qcm-du-jour .topbar > .agon-user-score-row,
     body.page-qcm-du-jour .topbar-inner > :not(.home-brand-block),
     body.page-qcm-du-jour .home-brand-block > :not(.home-brand-main) {
       display: none !important;
@@ -1473,11 +1472,19 @@
        "Moyen" mis en avant visuellement (plus grand, couleur pleine) comme
        choix par défaut/neutre ; Facile/Difficile en retrait de part et
        d'autre. */
+    .qcm-difficulty-wrap {
+      margin: 16px 0 0;
+    }
+    .qcm-difficulty-label {
+      margin: 0 0 6px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 13px;
+      color: #8a97a3;
+    }
     .qcm-difficulty-buttons {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin: 16px 0 0;
     }
     .qcm-difficulty-btn {
       flex: 1;
@@ -1703,7 +1710,7 @@
       letter-spacing: 0.03em;
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260815-universal-countdown-v3" defer></script>
+  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
 </head>
 <body class="page-qcm-du-jour">
 <a class="qcm-top-level-exit" href="/?skipStartup=1" aria-label="Retour à l'accueil"
@@ -1760,7 +1767,7 @@
     <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260815-pending-qcm-v37" defer></script>
+<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -2162,10 +2169,18 @@
   // l'ancien bouton "Valider" : option sélectionnée, paires toutes
   // renseignées, etc.) — cf. setDifficultyButtonsEnabled.
   function renderDifficultyButtonsHtml(idPrefix, hidden) {
-    return '<div class="qcm-difficulty-buttons" id="' + idPrefix + '-difficulty"' + (hidden ? ' hidden' : '') + '>' +
-      '<button type="button" class="qcm-difficulty-btn" data-difficulty="facile" disabled>Facile</button>' +
-      '<button type="button" class="qcm-difficulty-btn qcm-difficulty-btn-moyen" data-difficulty="moyen" disabled>Moyen</button>' +
-      '<button type="button" class="qcm-difficulty-btn" data-difficulty="difficile" disabled>Difficile</button>' +
+    // Libellé ajouté le 16/08/2026 (audit pédagogique) : les 3 boutons seuls
+    // ne précisaient pas si le ressenti porte sur la question elle-même ou
+    // sur la récupération de la réponse — pourtant seul ce second sens compte
+    // pour FSRS (cf. mapMnoriaReviewToFsrsRating). Un texte contextuel plutôt
+    // qu'un intitulé de bouton ambigu du type "Difficile" seul.
+    return '<div class="qcm-difficulty-wrap" id="' + idPrefix + '-difficulty"' + (hidden ? ' hidden' : '') + '>' +
+      '<p class="qcm-difficulty-label">Tu as retrouvé la réponse :</p>' +
+      '<div class="qcm-difficulty-buttons">' +
+      '<button type="button" class="qcm-difficulty-btn" data-difficulty="facile" disabled>Facilement</button>' +
+      '<button type="button" class="qcm-difficulty-btn qcm-difficulty-btn-moyen" data-difficulty="moyen" disabled>Normalement</button>' +
+      '<button type="button" class="qcm-difficulty-btn" data-difficulty="difficile" disabled>Difficilement</button>' +
+      '</div>' +
       '</div>';
   }
   // `onSubmit(difficulty)` appelé au clic sur l'un des 3 boutons. Retourne

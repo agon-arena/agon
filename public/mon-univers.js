@@ -1273,7 +1273,10 @@ document.addEventListener("click", (event) => {
 // ---- Fil d'Ariane ----
 function renderBreadcrumb(focusInfo) {
   breadcrumbEl.innerHTML = "";
-  const crumbs = [{ label: "Ma mémoire", action: () => zoomToRoot() }];
+  // « Ma mémoire » ne sert de repère que lorsqu'on est descendu d'au moins un niveau
+  // (ex. "Ma mémoire › Histoire") : à la racine, sans galaxie ouverte, le fil d'Ariane
+  // reste vide plutôt que d'afficher "Ma mémoire" seul.
+  const crumbs = focusInfo.galaxy ? [{ label: "Ma mémoire", action: () => zoomToRoot() }] : [];
   if (focusInfo.galaxy) crumbs.push({ label: focusInfo.galaxy.name, action: () => camera.focusOn(focusInfo.galaxy, focusScaleFor(focusInfo.galaxy)) });
   if (focusInfo.solarSystem) crumbs.push({ label: focusInfo.solarSystem.name, action: () => camera.focusOn(focusInfo.solarSystem, focusScaleFor(focusInfo.solarSystem)) });
   // À la racine, « Ma mémoire » reste volontairement grisé. Dès qu'un

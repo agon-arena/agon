@@ -29,14 +29,14 @@
     style.id = "agon-universal-time-widget-styles";
     style.textContent =
       ".topbar--mnoria-uniform .home-brand-main.agon-time-widget-anchor{position:relative!important;overflow:visible!important}" +
-      ".agon-time-widget-logo-overlay{position:absolute;top:4px;left:50%;z-index:18;transform:translateX(-50%);max-width:min(220px,calc(100vw - 40px))}" +
+      ".agon-time-widget-logo-overlay{position:absolute;top:7px;left:50%;z-index:18;transform:translateX(-50%);max-width:min(220px,calc(100vw - 40px))}" +
       ".agon-time-widget{display:inline-flex;align-items:center;gap:6px;margin:0;padding:4px 12px;border:0;border-radius:999px;background:transparent;color:#111827;font:700 11px/1 Arial,Helvetica,sans-serif!important;letter-spacing:normal;white-space:nowrap;cursor:pointer;box-sizing:border-box}" +
       ".agon-time-widget i{color:#9cc3f0;font-size:10px}" +
       ".agon-time-widget-warning{color:#d64545}" +
       ".agon-time-widget-warning i{color:#d64545}" +
       ".agon-time-widget-blinking{animation:agonUniversalTimeBlink .4s ease-in-out 3}" +
       "@keyframes agonUniversalTimeBlink{0%,100%{opacity:1}50%{opacity:.15}}" +
-      "@media(max-width:768px){.agon-time-widget-logo-overlay{top:-3px}}" +
+      "@media(max-width:768px){.agon-time-widget-logo-overlay{top:0px}}" +
       ".agon-time-explanation-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;background:rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}" +
       ".agon-time-explanation{width:min(100%,430px);padding:30px 24px 22px;box-sizing:border-box;border:1px solid #dbeafe;border-radius:24px;background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);box-shadow:0 24px 60px rgba(15,23,42,.22),0 8px 24px rgba(59,130,246,.1);color:#111827;text-align:center}" +
       ".agon-time-explanation h3{margin:0 0 20px;font-size:28px;line-height:1.2;font-weight:800}" +
@@ -239,74 +239,7 @@
     window.addEventListener("resize", function () { if (panel.classList.contains("is-open")) open(); }, { passive: true });
   }
 
-  function readLocal(key) {
-    try { return localStorage.getItem(key); } catch (e) { return null; }
-  }
-
-  function writeLocal(key, value) {
-    try { localStorage.setItem(key, String(value)); } catch (e) {}
-  }
-
-  function getUserKey() {
-    var key = readLocal("key");
-    if (!key) {
-      key = Math.random().toString(36);
-      writeLocal("key", key);
-    }
-    return key;
-  }
-
-  function numberOrNull(value) {
-    if (value === null || value === undefined) return null;
-    var parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  function formatPercent(value) {
-    if (value === null) return "";
-    return Number(value).toLocaleString("fr-FR", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 1
-    });
-  }
-
-  function render(scores) {
-    if (document.querySelector(".agon-user-score-widget")) return;
-    var brandMain = document.querySelector(".topbar--mnoria-uniform .home-brand-main");
-    if (!brandMain) return;
-
-    var rhetor = numberOrNull(scores && scores.votesScore);
-    var logos = numberOrNull(scores && scores.notesScore);
-    var gnosis = numberOrNull(scores && scores.gnosisScore);
-    if (rhetor === null && logos === null && gnosis === null) return;
-
-    var widget = document.createElement("a");
-    widget.className = "agon-user-score-widget agon-user-score-widget-triple agon-user-score-widget-logo-overlay";
-    widget.href = "/contributions";
-    if (window.self !== window.top) widget.target = "_top";
-    widget.setAttribute("aria-label", "Mes scores");
-    widget.innerHTML = [
-      '<i class="fa-solid fa-bolt"></i>Top ' + formatPercent(rhetor) + '% (Rhetor)',
-      '<i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>' + formatPercent(logos) + '% (Logos)',
-      '<i class="fa-solid fa-brain"></i>' + formatPercent(gnosis) + '% (Gnosis)'
-    ].join(' <span class="agon-user-score-separator">-</span> ');
-
-    brandMain.classList.add("agon-user-score-anchor");
-    brandMain.appendChild(widget);
-  }
-
   var uniformBrandMain = ensureUniformBrandAnchor();
   ensureUniversalHamburgerMenu();
   renderUniversalTimeWidget(uniformBrandMain);
-
-  // Les pages qui chargent script.min.js utilisent le widget complet (détail
-  // des scores + compteur de temps). Ce petit fichier ne prend le relais que
-  // sur la page historique isolée afin d'éviter un second appel API.
-  if (document.querySelector('script[src*="/script.min.js"]')) return;
-
-  var key = getUserKey();
-  fetch("/api/my-score?key=" + encodeURIComponent(key), { cache: "no-store" })
-    .then(function (response) { return response.ok ? response.json() : null; })
-    .then(function (scores) { if (scores) render(scores); })
-    .catch(function () {});
 })();

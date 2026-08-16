@@ -1292,12 +1292,6 @@ function formatPct(n) {
 const AGON_LOGOS_ICON = '<i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
 
 function renderUserScoreWidget(data) {
-  const topbar = document.querySelector(".topbar");
-  const topbarInner = document.querySelector(".topbar-inner");
-  const brandBlock = document.querySelector(".home-brand-block");
-  const brandMain = document.querySelector(".home-brand-main");
-  if (!topbar || document.querySelector(".agon-user-score-widget")) return;
-
   const votesScoreRaw = numOrNull(data?.votesScore);
   const notesScoreRaw = numOrNull(data?.notesScore);
   const gnosisScoreRaw = numOrNull(data?.gnosisScore);
@@ -1328,182 +1322,6 @@ function renderUserScoreWidget(data) {
   maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, () =>
     showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount)
   );
-
-  if (!document.getElementById("agon-user-score-styles")) {
-    const style = document.createElement("style");
-    style.id = "agon-user-score-styles";
-    style.textContent = `
-      .agon-user-score-row {
-        display: flex;
-        justify-content: center;
-        padding: 0 12px 6px;
-      }
-      .agon-user-score-widget {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 12px;
-        border-radius: 999px;
-        background: #fff;
-        color: #111827;
-        border: 1px solid #111827;
-        font-size: 11px;
-        font-weight: 700;
-        white-space: nowrap;
-        text-decoration: none;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .agon-user-score-widget i { font-size: 10px; color: #9cc3f0; }
-      .agon-user-score-widget-inline {
-        flex: 0 0 auto;
-      }
-      .agon-user-score-anchor {
-        position: relative;
-        overflow: visible;
-      }
-      .agon-user-score-widget-logo-overlay {
-        position: absolute;
-        left: 50%;
-        bottom: 12px;
-        z-index: 18;
-        transform: translateX(-50%);
-        justify-content: center;
-        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
-      }
-      body.page-home .agon-user-score-widget-logo-overlay,
-      body.page-home-mobile .agon-user-score-widget-logo-overlay,
-      body.page-tribunes .agon-user-score-widget-logo-overlay,
-      body.page-debate .agon-user-score-widget-logo-overlay {
-        max-width: min(210px, calc(100vw - 120px));
-      }
-      .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay {
-        max-width: min(210px, calc(100vw - 120px));
-      }
-      /* Avec les 3 scores (Rhetor + Logos + Gnosis), le texte dépasse le
-         plafond ci-dessus et se fait tronquer (ellipsis) — plafond élargi
-         uniquement pour ce cas, les badges à 1-2 scores restent inchangés. */
-      body.page-home .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
-      body.page-home-mobile .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
-      body.page-tribunes .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
-      body.page-debate .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
-        max-width: min(320px, calc(100vw - 40px));
-      }
-      .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
-        max-width: min(320px, calc(100vw - 40px));
-      }
-      @media (max-width: 768px) {
-        /* Variante "inline" (toutes les pages hors accueil/tribunes/débat,
-           qui utilisent la variante superposée au logo ci-dessous) : simple
-           décalage vertical, sans toucher au flux ni au transform horizontal
-           de la variante superposée (sélecteur exclu explicitement). */
-        .agon-user-score-widget:not(.agon-user-score-widget-logo-overlay) {
-          transform: translateY(2px);
-        }
-        body.page-home-mobile .agon-user-score-widget-logo-overlay,
-        body.page-tribunes .agon-user-score-widget-logo-overlay,
-        body.page-debate .agon-user-score-widget-logo-overlay {
-          bottom: 10px;
-        }
-        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay {
-          bottom: 10px;
-        }
-      }
-      @media (max-width: 480px) {
-        .agon-user-score-widget {
-          font-size: 9.5px;
-          padding: 3px 9px;
-        }
-        body.page-home-mobile .agon-user-score-widget-logo-overlay,
-        body.page-tribunes .agon-user-score-widget-logo-overlay,
-        body.page-debate .agon-user-score-widget-logo-overlay {
-          bottom: 9px;
-          transform: translateX(-50%);
-          max-width: min(168px, calc(100vw - 116px));
-          font-size: 8.5px;
-          padding: 2px 7px;
-          gap: 4px;
-        }
-        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay {
-          bottom: 9px;
-          transform: translateX(-50%);
-          max-width: min(168px, calc(100vw - 116px));
-          font-size: 8.5px;
-          padding: 2px 7px;
-          gap: 4px;
-        }
-        body.page-home-mobile .agon-user-score-widget-logo-overlay i,
-        body.page-tribunes .agon-user-score-widget-logo-overlay i,
-        body.page-debate .agon-user-score-widget-logo-overlay i {
-          font-size: 8px;
-        }
-        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay i {
-          font-size: 8px;
-        }
-        body.page-home-mobile .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
-        body.page-tribunes .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple,
-        body.page-debate .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
-          max-width: min(260px, calc(100vw - 40px));
-        }
-        .topbar--mnoria-uniform .agon-user-score-widget-logo-overlay.agon-user-score-widget-triple {
-          max-width: min(260px, calc(100vw - 40px));
-        }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  const widget = document.createElement("a");
-  // Les 3 scores existent toujours désormais (pire note tant qu'on n'a rien
-  // posté/répondu, cf. USER_SCORE_EMPTY côté serveur) : toujours 3 valeurs,
-  // toujours la variante large du badge.
-  widget.className = "agon-user-score-widget agon-user-score-widget-triple";
-  widget.href = "/contributions";
-  widget.setAttribute("aria-label", "Mes scores");
-  widget.addEventListener("click", (e) => {
-    e.preventDefault();
-    showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount);
-  });
-
-  widget.innerHTML = [
-    '<i class="fa-solid fa-bolt"></i>Top ' + formatPct(votesScore) + '% (Rhetor)',
-    AGON_LOGOS_ICON + formatPct(notesScore) + '% (Logos)',
-    '<i class="fa-solid fa-brain"></i>' + formatPct(gnosisScore) + '% (Gnosis)'
-  ].join(' <span style="opacity:.5">-</span> ');
-
-  const isDesktop = window.matchMedia("(min-width: 769px)").matches;
-  // page-tribunes / page-debate : le bandeau de ces pages est une réplique
-  // de celui de l'index (topbar dans un wrapper page-home/page-home-mobile),
-  // le badge s'y place donc pareil, en overlay sur le logo.
-  const isIndexPage = document.body.classList.contains("page-home")
-    || document.body.classList.contains("page-home-mobile")
-    || document.body.classList.contains("page-tribunes")
-    || document.body.classList.contains("page-debate");
-  const hasUniformMnoriaHeader = topbar.classList.contains("topbar--mnoria-uniform");
-  if ((isIndexPage || hasUniformMnoriaHeader) && brandMain) {
-    brandMain.classList.add("agon-user-score-anchor");
-    widget.classList.add("agon-user-score-widget-logo-overlay");
-    brandMain.appendChild(widget);
-  } else if (isDesktop && brandBlock && topbarInner && brandBlock.parentElement === topbarInner) {
-    // Desktop : en ligne juste après le logo, avant les icônes réseau / le
-    // reste de la barre (flex:1 sur .home-brand-block pousse tout ce qui
-    // suit contre le cluster de droite — donc "juste après" = collé au
-    // cluster, entre le logo et les icônes réseau).
-    widget.classList.add("agon-user-score-widget-inline");
-    brandBlock.insertAdjacentElement("afterend", widget);
-  } else {
-    // Mobile : nouvelle ligne dédiée sous le logo, pour ne jamais chevaucher
-    // le reste de la barre (menu, icônes) qui reste très compact sur mobile.
-    // Insérée juste après .topbar-inner (pas à la fin de .topbar, qui peut
-    // contenir d'autres blocs après — ex: admin-controls-row) pour rester
-    // collée au logo au lieu de dériver plus bas dans la page.
-    const row = document.createElement("div");
-    row.className = "agon-user-score-row";
-    row.appendChild(widget);
-    if (topbarInner) topbarInner.insertAdjacentElement("afterend", row);
-    else topbar.appendChild(row);
-  }
 }
 
 // Fenêtre visible dès qu'un des 3 scores a changé depuis la dernière visite
@@ -1771,8 +1589,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 const AGON_TIME_WIDGET_MINUTES = 60;
 const AGON_TIME_WIDGET_WARNING_S = 10 * 60;
 function renderAgonTimeWidget() {
-  const scoreWidget = document.querySelector(".agon-user-score-widget");
-  if (!scoreWidget || document.querySelector(".agon-time-widget")) return;
+  if (document.querySelector(".agon-time-widget")) return;
 
   const elapsedKey = "agon_time_widget_daily_v2";
   function getParisDayKey() {
@@ -19282,7 +19099,7 @@ function renderIndexActiveFilterTags() {
     `);
   }
 
-  if (currentTypeFilter && currentTypeFilter !== "all") {
+  if (currentTypeFilter && currentTypeFilter !== "all" && currentTypeFilter !== "agon" && currentTypeFilter !== "community") {
     tags.push(`
       <button type="button" class="index-active-filter-tag" onclick="removeIndexActiveFilterTag('type')" aria-label="Retirer le filtre ${escapeAttribute(getIndexTypeFilterLabel(currentTypeFilter))}">
         <span>${escapeHtml(getIndexTypeFilterLabel(currentTypeFilter))}</span>
@@ -19830,7 +19647,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260815-hierarchy-links-v34').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260816-breadcrumb-root-hidden').catch((error) => {
         console.warn('[Agôn] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -19941,11 +19758,11 @@ let _politicalCloudGroup = 'mixed';
 
 // Légende adaptée au nuage affiché : même lien "en savoir plus" dans les 3 cas,
 // seule la phrase d'intro change.
-const POLITICAL_CLOUD_CAPTION_LINK_HTML = '<br><a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:underline;cursor:pointer;">Cliquez ici pour en savoir plus.</a>';
+const POLITICAL_CLOUD_CAPTION_LINK_HTML = ' <a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal(\'/about#fonctionnement-feed\')" style="color:rgba(255,255,255,0.75);text-decoration:none;cursor:pointer;">En savoir plus.</a>';
 const POLITICAL_CLOUD_CAPTION_TEXT = {
-  mixed: "Les tendances de l'actualité française ces dernières heures.",
-  left: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à gauche ces dernières heures.",
-  right: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à droite ces dernières heures."
+  mixed: "Les tendances de l'actualité française.",
+  left: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à gauche.",
+  right: "Les tendances de l'actualité française dans les médias<br class=\"caption-mobile-br\"> plutôt orientés à droite."
 };
 
 function applyPoliticalCloudCaption(group) {
@@ -35267,6 +35084,39 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const scrollY = window.scrollY || 0;
   const navTop = nav.getBoundingClientRect().top;
   const sectionDocTop = section.getBoundingClientRect().top + scrollY;
+
+  // Mode "Ma mémoire" : le bouton "Autres actus" (référence de la logique
+  // symétrique-à-la-légende plus bas) est masqué (cf. toggleAgonCloud), donc
+  // contentBottomDoc reste toujours null et cette logique ne s'applique
+  // jamais dans ce mode (guard plus bas). Le bouton Trier/Rechercher et le
+  // bandeau "À la une" sont alors calés directement sur la section (nuage de
+  // bulles), avec le même écart fixe des deux côtés du bouton — demande du
+  // 16/08/2026 (harmoniser mobile classique/standalone, chacun symétrique à
+  // 24px). Idempotent d'une passe à l'autre, même principe que plus bas.
+  const isMemoireMode = body.classList.contains('agon-memoire-cloud-mode');
+  const sortBar = document.querySelector('.index-explorer-topbar');
+  const firstRowForSort = document.querySelector('#debates-list .theme-row-section');
+  if (isMemoireMode && sortBar && firstRowForSort) {
+    const AGON_SORT_BTN_GAP = 24;
+    const sectionBottomDoc = section.getBoundingClientRect().bottom + scrollY;
+    const sortRect = sortBar.getBoundingClientRect();
+    const sortTopDoc = sortRect.top + scrollY;
+    const currentSortMarginTop = parseFloat(window.getComputedStyle(sortBar).marginTop) || 0;
+    const nextSortMarginTop = Math.round(currentSortMarginTop + ((sectionBottomDoc + AGON_SORT_BTN_GAP) - sortTopDoc));
+    if (Number.isFinite(nextSortMarginTop)) {
+      root.style.setProperty('--agon-home-sort-btn-mt', `${nextSortMarginTop}px`);
+    }
+    const bandElForSort = firstRowForSort.querySelector('.theme-row-title') || firstRowForSort;
+    const bandDocTopForSort = bandElForSort.getBoundingClientRect().top + scrollY;
+    const currentBandMarginTop = parseFloat(window.getComputedStyle(firstRowForSort).marginTop) || 0;
+    const sortBottomDocAfterFix = sectionBottomDoc + AGON_SORT_BTN_GAP + sortRect.height;
+    const bandTargetTopFromSort = sortBottomDocAfterFix + AGON_SORT_BTN_GAP;
+    const nextBandMarginTop = Math.round(currentBandMarginTop + (bandTargetTopFromSort - bandDocTopForSort));
+    if (Number.isFinite(nextBandMarginTop)) {
+      root.style.setProperty('--agon-home-first-row-mt', `${nextBandMarginTop}px`);
+    }
+  }
+
   // Position document voulue = position viewport du bandeau au repos (+6px
   // pour glisser le haut de la légende juste sous son bord haut).
   let offset = Math.round(navTop + 6 - sectionDocTop);
@@ -35311,22 +35161,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const gapAbove = captionDocTop - contentBottomDoc;
   const captionHeight = caption.getBoundingClientRect().height;
   const captionBottomDoc = captionDocTop + captionHeight;
-  // Le bouton "Connaissances" est un vrai sibling en flux normal entre la section
-  // (dont la légende est sortie du flux, cf. ci-dessus) et #debates-list. Sa
-  // position réelle sert de référence : le bandeau "À la une" est ensuite placé
-  // sous lui avec exactement le même vide qu'entre la légende et lui — sinon,
-  // sans en tenir compte du tout, le bandeau se plaquerait sous la légende
-  // comme si le bouton n'existait pas et le recouvrirait.
-  const qcmBtn = document.getElementById('home-qcm-du-jour-btn');
-  const qcmBtnVisible = !!qcmBtn && isAgonVisibleElement(qcmBtn);
-  let bandTargetTop = captionBottomDoc + gapAbove;
-  if (qcmBtn && qcmBtnVisible) {
-    const qcmRect = qcmBtn.getBoundingClientRect();
-    const qcmTopDoc = qcmRect.top + scrollY;
-    const qcmBottomDoc = qcmRect.bottom + scrollY;
-    const gapAboveButton = Math.max(0, qcmTopDoc - captionBottomDoc);
-    bandTargetTop = qcmBottomDoc + gapAboveButton;
-  }
+  const bandTargetTop = captionBottomDoc + gapAbove;
   const bandEl = firstRow.querySelector('.theme-row-title') || firstRow;
   const bandDocTop = bandEl.getBoundingClientRect().top + scrollY;
   const currentMarginTop = parseFloat(window.getComputedStyle(firstRow).marginTop) || 0;
@@ -35338,7 +35173,6 @@ function syncAgonHomeTrendsCaptionAnchor() {
   __scrollJumpDiagLog('success', {
     offset,
     scrollY,
-    qcmBtnVisible,
     gapAbove,
     captionBottomDoc,
     bandTargetTop,
@@ -36398,6 +36232,119 @@ window.addEventListener('pageshow', (event) => {
 // Donne à .agon-tag-trends-section exactement la hauteur disponible sous son bord supérieur.
 // Le cloud (flex:1) remplit la section ; les bulles se repositionnent via ResizeObserver.
 var _cloudSectionBaseHeight = null;
+// ===== CLOUD FRAME — HAUTEUR DYNAMIQUE MOBILE NAVIGATEUR =====
+// Contrairement au calc(100dvh - ...) statique essayé d'abord (estimation de la hauteur du
+// bandeau bas fausse en pratique, cadre soit tronqué sous le bandeau soit trop court), on
+// mesure ici en live le bas réel du bandeau (getStableBottomBarOffset, même fonction que la
+// version desktop plus haut) et le bas réel du bandeau blanc du haut, puis on épingle le cloud
+// (marge haute de la section + hauteur) pour que le cadre décoratif (::before, inset
+// top:55px/bottom:78px, cf. style.css) tombe exactement à 3px de chacun. Le sélecteur de mode
+// (#agon-cloud-mode-switch) est ensuite recalé 8px sous ce même bord bas, plutôt que la marge
+// négative fixe précédente qui se déréglait dès que la hauteur du cadre changeait (demande du
+// 16/08/2026, "les boutons semblent accrochés au cadre").
+var AGON_MOBILE_FRAME_TOP_INSET = 55;
+var AGON_MOBILE_FRAME_BOTTOM_INSET = 78;
+// Calculé une seule fois à l'arrivée sur le site (premier affichage réel du cadre), puis
+// verrouillé : les appels suivants (resize, changement de mode Actu/Agôn/Ma mémoire) ne
+// recalculent plus rien — demande du 16/08/2026, "il bouge plus" après ce premier calage.
+var _mobileCloudFrameLocked = false;
+// Sentinelle distincte du timestamp numérique que requestAnimationFrame passe à cette
+// fonction quand elle lui est donnée directement en callback (cf. syncCloudSectionHeight) :
+// une comparaison stricte évite qu'un appel rAF normal soit pris pour la revérification.
+var MOBILE_CLOUD_FRAME_RECHECK = 'recheck';
+function syncMobileCloudFrameHeight(recheckToken) {
+  if (_mobileCloudFrameLocked) return;
+  if (!document.body.classList.contains('page-home-mobile')) return;
+  var isStandalone = document.body.classList.contains('is-standalone');
+  var section = document.getElementById('agon-tag-trends-section');
+  var cloud = document.getElementById('agon-tag-trends-cloud');
+  if (!section || !cloud || section.hidden) return;
+
+  // .offsetHeight (pas getBoundingClientRect) : le bandeau est en position:sticky top:0 et peut
+  // recevoir .topbar-hidden (translateY(-110%) + opacity:0, cf. initHomeTopbarAutoHide) dès
+  // qu'un scroll — même minime, y compris déclenché par ce recalcul lui-même — est détecté.
+  // getBoundingClientRect() aurait alors renvoyé sa position hors-écran (masquée), verrouillant
+  // un calcul faux pour toute la session (demande du 16/08/2026, "il n'y a plus rien"/cadre qui
+  // recouvre le bandeau). offsetHeight reste correct quel que soit ce transform.
+  var header = document.querySelector('.topbar.topbar--mnoria-uniform');
+  var headerBottom = header ? header.offsetHeight : 0;
+  // Lit directement le bord haut réel du bandeau bas (position:fixed) plutôt que de le déduire
+  // par soustraction depuis window.innerHeight : sur mobile, innerHeight peut ne pas refléter
+  // la hauteur visible actuelle (barre d'adresse repliée/dépliée), ce qui plaçait le calcul du
+  // bas du cadre au-delà du bandeau réel (recouvert, demande du 16/08/2026).
+  var bottomNavEl = document.querySelector('.home-bottom-nav');
+  var bottomBarTop = bottomNavEl ? bottomNavEl.getBoundingClientRect().top : window.innerHeight;
+
+  var desiredFrameTop = headerBottom - 8;
+  var desiredFrameBottom = bottomBarTop - 25;
+
+  // Neutralise la marge le temps de mesurer la position naturelle (sans elle) du bloc,
+  // comme alignStandaloneBubbleFrameToActiveFilter le fait pour le standalone.
+  section.style.marginTop = '0px';
+  var naturalTop = section.getBoundingClientRect().top;
+  var boxTop = desiredFrameTop - AGON_MOBILE_FRAME_TOP_INSET;
+  if (isStandalone) {
+    // body.is-standalone .agon-tag-trends-section pose margin-top:0 et un min-height calc()
+    // basé sur 100dvh en !important (cf. style.css) : un simple .style.marginTop= perdrait
+    // face à eux, comme pour le switch plus bas. setProperty(...,'important') les bat tous
+    // les deux ; min-height repasse à 'auto' pour laisser boxHeight (cloud, ci-dessous)
+    // piloter seul la hauteur réelle plutôt que ce calc() imprécis dès qu'un élément est
+    // ajouté au-dessus de la section (cf. commentaire de cette règle CSS).
+    section.style.setProperty('margin-top', (boxTop - naturalTop) + 'px', 'important');
+    section.style.setProperty('min-height', 'auto', 'important');
+  } else {
+    section.style.marginTop = (boxTop - naturalTop) + 'px';
+  }
+
+  var boxHeight = Math.max(200, (desiredFrameBottom + AGON_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
+  cloud.style.height = boxHeight + 'px';
+  cloud.style.minHeight = boxHeight + 'px';
+  if (isStandalone) {
+    // Annule le rapprochement dédié "Ma mémoire" (margin-top -84px !important sur le cloud,
+    // cf. style.css) : ce calage live remplace désormais ce calibrage fixe, qui date de
+    // l'ancien système min-height calc() de la section.
+    cloud.style.setProperty('margin-top', '0px', 'important');
+  }
+
+  var switchRow = document.getElementById('agon-cloud-mode-switch');
+  if (switchRow) {
+    // #agon-cloud-mode-switch n'est PAS un enfant flex de .agon-tag-trends-section (donc pas un
+    // frère direct du cloud) : c'est un item de grille séparé, après la section entière (qui
+    // contient aussi la légende après le cloud). Dériver sa marge depuis cloudBottom mesurait
+    // donc la mauvaise référence (écart de plusieurs dizaines de px, chevauchement constaté le
+    // 16/08/2026). Même technique que pour la section : neutraliser puis mesurer sa vraie
+    // position naturelle, plutôt que de la déduire d'un autre élément.
+    switchRow.style.setProperty('margin-top', '0px', 'important');
+    var switchNaturalTop = switchRow.getBoundingClientRect().top;
+    var desiredSwitchTop = desiredFrameBottom + 35;
+    // setProperty(...,'important') : la règle CSS dédiée à "Ma mémoire"
+    // (.agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch, mobile) est elle-même
+    // en !important — un simple .style.marginTop= perdait face à elle.
+    switchRow.style.setProperty('margin-top', (desiredSwitchTop - switchNaturalTop) + 'px', 'important');
+  }
+  _mobileCloudFrameLocked = true;
+
+  // En standalone, env(safe-area-inset-top) (padding du bandeau haut, cf. style.css
+  // body.is-standalone.page-home-mobile .topbar) peut mettre un instant à se stabiliser après
+  // un lancement à froid : mesuré trop tôt, headerBottom (donc tout le calage ci-dessus) sort
+  // trop petit et le cadre se verrouille trop haut, en partie caché sous le bandeau (constaté
+  // le 16/08/2026, "parfois" — pas systématique, dépend du moment exact du premier calcul).
+  // Une revérification unique, un instant plus tard, referme la fenêtre : si la hauteur réelle
+  // du bandeau a changé entre-temps, on déverrouille et on recalcule une seule fois — sans
+  // cette revérification, aucun autre appel ne recalculerait plus rien de toute la session.
+  if (isStandalone && recheckToken !== MOBILE_CLOUD_FRAME_RECHECK) {
+    var headerAtLock = header;
+    var headerBottomAtLock = headerBottom;
+    setTimeout(function() {
+      var headerBottomNow = headerAtLock ? headerAtLock.offsetHeight : 0;
+      if (Math.abs(headerBottomNow - headerBottomAtLock) > 1) {
+        _mobileCloudFrameLocked = false;
+        syncMobileCloudFrameHeight(MOBILE_CLOUD_FRAME_RECHECK);
+      }
+    }, 400);
+  }
+}
+
 function syncCloudSectionHeight(recomputeBase) {
   if (isAgonMobileCloudViewport()) {
     var mobileSection = document.getElementById('agon-tag-trends-section');
@@ -36405,8 +36352,8 @@ function syncCloudSectionHeight(recomputeBase) {
     if (mobileSection) mobileSection.style.height = '';
     if (mobileCloud) {
       mobileCloud.style.flex = '';
-      mobileCloud.style.height = '';
     }
+    requestAnimationFrame(syncMobileCloudFrameHeight);
     return;
   }
   if (window.innerWidth <= 768) return;
