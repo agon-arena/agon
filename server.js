@@ -1596,17 +1596,22 @@ function readDebateTrendsMap() { return _debateTrendsCache || {}; }
 // car getDebateTrend() est appelé sur le chemin chaud d'enrichissement des
 // débats (enrichDebateWithStoredImage), sans quoi chaque lecture de débat
 // déclencherait sa propre requête Supabase.
-async function initDebateTrendsCache() {
+async function initDebateTrendsCache(retryDelayMs = 30 * 1000) {
   try {
     const { data, error } = await fetchAllSupabaseRows(() =>
       supabase.from("debates").select("id, trend_data").not("trend_data", "is", null));
-    if (!error) {
-      const map = {};
-      for (const row of (data || [])) map[String(row.id)] = row.trend_data;
-      _debateTrendsCache = map;
-    }
+    if (error) throw error;
+    const map = {};
+    for (const row of (data || [])) map[String(row.id)] = row.trend_data;
+    _debateTrendsCache = map;
   } catch (e) {
-    console.error("[debate-trends] init error:", e.message);
+    // Ex: déploiement survenu pendant un blocage Supabase (quota egress dépassé,
+    // cf. audit du 18/08/2026) — un échec au boot ne doit pas laisser le cache
+    // vide pour toute la durée de vie du process. Backoff plafonné à 10 min.
+    console.error("[debate-trends] init error, retry dans", Math.round(retryDelayMs / 1000), "s :", e.message);
+    setTimeout(() => {
+      initDebateTrendsCache(Math.min(retryDelayMs * 2, 10 * 60 * 1000)).catch(() => {});
+    }, retryDelayMs).unref();
   }
 }
 
