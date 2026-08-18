@@ -12,9 +12,11 @@ const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { buildMemoryItemNaturalKey } = require("./lib/spaced-repetition/memory-model");
-const { reviewMemoryItem } = require("./lib/spaced-repetition/fsrs-scheduler");
+const { reviewMemoryItem, computeRetrievability } = require("./lib/spaced-repetition/fsrs-scheduler");
 const { mapMnoriaReviewToFsrsRating } = require("./lib/spaced-repetition/rating-mapper");
 const { resolveQuestionVariantLabel, resolveActiveQuestionVariant } = require("./lib/spaced-repetition/question-variant");
+const { HELP_LEVELS, deriveHelpLevel } = require("./lib/spaced-repetition/help-level");
+const { DEFAULT_PROJECTION_DAYS, computeLearningLoadGauge } = require("./lib/spaced-repetition/learning-load");
 const {
   QUESTION_TYPES,
   FILL_BLANK_MARKER,
@@ -28,11 +30,41 @@ const {
   validateQuestionItemCoreBase,
   validateAltVariant,
   validateQuestionItemCore,
+  validateKnowledgeCandidates,
+  filterQuestionsToAdmittedKnowledge,
+  filterVariantsByKnowledgeConstraints,
   isAssociationAnswerFullyCorrect,
   isQcmMultiAnswerFullyCorrect,
   isOrderAnswerFullyCorrect,
   gradeQuizSubmissionOptionIndex
 } = require("./lib/question-formats");
+const {
+  buildKnowledgeAdmissionPrompt,
+  buildQuestionsFromKnowledgePrompt,
+  buildFicheAndKnowledgeAdmissionPrompt,
+  buildKnowledgeVerificationPrompt,
+  applyKnowledgeVerificationDecisions,
+  sanitizeImageSearchQuery
+} = require("./lib/knowledge-admission");
+const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
+const {
+  cultureGeneraleNotionKey,
+  canonicalNotionLinkPair,
+  selectValidNotionLinks,
+  assembleComprehensionSession
+} = require("./lib/culture-generale-links");
+const {
+  filterUserActiveSolars,
+  filterUserActiveStars,
+  userActiveGalaxies,
+  buildKnownPlacementLookup,
+  isKnowledgeCandidate,
+  parseMatchDecision,
+  parseCreationDecision,
+  matchExistingStarByLabel,
+  validateStarLabelCandidate,
+  validateTaxonomyCreationCandidate
+} = require("./lib/knowledge-taxonomy/taxonomy-engine");
 const { validatePushSubscription, registerPushSubscription } = require("./lib/push-subscriptions");
 const { createNotificationEventSafe } = require("./lib/notification-events");
 const { sendTestPushToLatestSubscription, sendNotificationEventPushById, processPendingPushEvents, broadcastPush } = require("./lib/push-sender");
@@ -768,7 +800,6 @@ const MAX_DEBATE_VIDEO_BYTES = 80 * 1024 * 1024;
 const SUPABASE_DEBATE_MEDIA_BUCKET = String(process.env.SUPABASE_DEBATE_MEDIA_BUCKET || "debate-media").trim() || "debate-media";
 
 const debateContentMetaPath = path.join(__dirname, "data", "debate-content.json");
-const debateTrendsMetaPath = path.join(__dirname, "data", "debate-trends.json");
 
 
 // Postgres refuse le caractère nul dans les colonnes text/jsonb (erreur 22P05
@@ -1556,43 +1587,36 @@ async function removeDebateKeyword(debateId, keyword) {
 let _debateTrendsCache = null;
 
 function readDebateTrendsMap() { return _debateTrendsCache || {}; }
-function writeDebateTrendsMap(map) {
-  _debateTrendsCache = map;
-  supabase.from("app_config")
-    .upsert({ key: "debate_trends", value: map, updated_at: new Date().toISOString() })
-    .then(({ error }) => { if (error) console.error("[debate-trends] save error:", error.message); });
-}
 
+// Un blob JSON global (app_config, clé "debate_trends") était réécrit EN ENTIER
+// (~125 Ko) à chaque nouveau débat — identifié comme la plus grosse charge POST
+// REST lors de l'audit egress du 18/08/2026. La tendance vit maintenant sur la
+// colonne debates.trend_data (une ligne par débat, cf.
+// data/migration-debate-trends-column.sql) ; ce cache mémoire reste nécessaire
+// car getDebateTrend() est appelé sur le chemin chaud d'enrichissement des
+// débats (enrichDebateWithStoredImage), sans quoi chaque lecture de débat
+// déclencherait sa propre requête Supabase.
 async function initDebateTrendsCache() {
   try {
-    const { data, error } = await supabase
-      .from("app_config")
-      .select("value")
-      .eq("key", "debate_trends")
-      .maybeSingle();
-    if (!error && data?.value && typeof data.value === "object") {
-      _debateTrendsCache = data.value;
-      return;
+    const { data, error } = await fetchAllSupabaseRows(() =>
+      supabase.from("debates").select("id, trend_data").not("trend_data", "is", null));
+    if (!error) {
+      const map = {};
+      for (const row of (data || [])) map[String(row.id)] = row.trend_data;
+      _debateTrendsCache = map;
     }
-  } catch {}
-  // Migration one-shot depuis fichier local vers Supabase
-  try {
-    const local = _readJsonFile(debateTrendsMetaPath, {});
-    if (Object.keys(local).length) {
-      _debateTrendsCache = local;
-      supabase.from("app_config")
-        .upsert({ key: "debate_trends", value: local, updated_at: new Date().toISOString() })
-        .then(() => {}).catch(e => console.error("[debate-trends] migration error:", e.message));
-    }
-  } catch {}
+  } catch (e) {
+    console.error("[debate-trends] init error:", e.message);
+  }
 }
 
 function setDebateTrend(debateId, trendData) {
   const key = String(debateId || "").trim();
   if (!key) return;
-  const map = readDebateTrendsMap();
-  map[key] = { ...trendData, computedAt: new Date().toISOString() };
-  writeDebateTrendsMap(map);
+  const entry = { ...trendData, computedAt: new Date().toISOString() };
+  _debateTrendsCache = { ...readDebateTrendsMap(), [key]: entry };
+  supabase.from("debates").update({ trend_data: entry }).eq("id", key)
+    .then(({ error }) => { if (error) console.error("[debate-trends] save error:", key, error.message); });
 }
 
 function getDebateTrend(debateId) {
@@ -4572,90 +4596,191 @@ async function computeUserScores() {
     notesTierSizeByTier.set(tier, (notesTierSizeByTier.get(tier) || 0) + 1);
   }
 
-  // Score Gnosis : justesse au QCM du jour (part de bonnes réponses), sur le
-  // même principe que Logos (une moyenne/ratio, pas un total qui grossit
-  // avec le volume) — palier propre basé sur le nombre de questions
-  // répondues plutôt que sur le nombre d'idées postées.
+  // Réponses brutes au QCM — utilisées ci-dessous pour Gnosis (repasses
+  // "Ancrer") et plus bas pour Noesis (QCM "Relier").
   const { data: rawQuizAnswers, error: quizAnswersError } = await fetchAllSupabaseRows(() =>
     supabase.from("daily_quiz_answers").select("voter_key, quiz_date, question_id, option_index"));
   if (quizAnswersError) throw quizAnswersError;
 
-  // daily_quiz_answers n'a pas de colonne "slot" dédiée, mais question_id
-  // est toujours préfixé par son origine (ex. "revision-...", "cgreview-...",
-  // cf. getDailyQuizQuestions) : suffit à exclure ces repasses du score
-  // Gnosis (cf. DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES) sans
-  // migration de schéma.
-  const allQuizAnswers = (rawQuizAnswers || []).filter((a) =>
-    !DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES.some((prefix) => String(a.question_id || "").startsWith(prefix))
-  );
+  // Score Gnosis (redéfini le 17/08/2026 : ce n'est plus la justesse sur du
+  // contenu frais — voir git blame pour l'ancienne version — mais la justesse
+  // aux repasses du pseudo-slot "Ancrer" (DAILY_QUIZ_REINFORCEMENT_SLOT)
+  // uniquement, reprise de l'ancien score "Ancrage" sous ce nouveau nom).
+  // Toujours les deux formes affichées côté client : un taux de réussite BRUT
+  // (gnosisAnswered/gnosisCorrect) ET un classement percentile (gnosisScore,
+  // "Top X%", mêmes paliers de volume que Noesis ci-dessous).
+  //
+  // Ne rejoue jamais correctIndex/daily_quiz nous-mêmes : memory_review_events
+  // porte déjà is_correct, calculé une fois pour toutes au moment de la
+  // réponse (cf. applyFsrsReviewForDailyQuizAnswer). Seule question ouverte :
+  // cette table contient AUSSI la toute première review de chaque MemoryItem
+  // (l'exposition initiale via "Découvrir", jamais via "Ancrer" — cf.
+  // upsertMemoryItemForNotionAnswer, questionId préfixé "notion:" et non
+  // "cgreview-" à ce moment-là). On l'exclut donc explicitement : pour un
+  // (user_id, memory_item_id) donné, seule la PREMIÈRE ligne chronologique
+  // est une exposition Découvrir, toutes les suivantes sont nécessairement
+  // des repasses Ancrer (aucun autre chemin ne re-sert un memory_item déjà
+  // répondu — cf. la contrainte d'unicité de daily_quiz_answers combinée à
+  // isNewAnswer côté /answer, qui empêche même un second passage identique
+  // via "Découvrir" de générer un nouvel événement).
+  const { data: rawReviewEvents, error: reviewEventsError } = await fetchAllSupabaseRows(() =>
+    supabase.from("memory_review_events")
+      .select("user_id, memory_item_id, is_correct, reviewed_at")
+      .order("reviewed_at", { ascending: true }));
+  if (reviewEventsError) throw reviewEventsError;
 
-  const quizDates = [...new Set((allQuizAnswers || []).map((a) => a.quiz_date).filter(Boolean))];
-  const correctIndexByDateAndQuestion = new Map();
-  if (quizDates.length) {
-    const { data: quizRows, error: quizRowsError } = await fetchAllSupabaseRowsIn(quizDates, (chunk) =>
-      supabase.from("daily_quiz").select("quiz_date, questions").in("quiz_date", chunk));
-    if (quizRowsError) throw quizRowsError;
-    for (const row of quizRows || []) {
-      for (const q of (row.questions || [])) {
-        correctIndexByDateAndQuestion.set(`${row.quiz_date}:${q.id}`, q.correctIndex);
-      }
-    }
-  }
+  const { data: userRowsForAncrer, error: userRowsForAncrerError } = await fetchAllSupabaseRows(() =>
+    supabase.from("users").select("id, legacy_key"));
+  if (userRowsForAncrerError) throw userRowsForAncrerError;
+  const legacyKeyByUserId = new Map((userRowsForAncrer || []).map((u) => [u.id, u.legacy_key]));
 
-  const quizAnsweredByAuthorKey = new Map();
-  const quizCorrectByAuthorKey = new Map();
-  for (const a of allQuizAnswers || []) {
-    const voterKey = String(a.voter_key || "").trim();
-    if (!voterKey) continue;
-    quizAnsweredByAuthorKey.set(voterKey, (quizAnsweredByAuthorKey.get(voterKey) || 0) + 1);
-    const correctIndex = correctIndexByDateAndQuestion.get(`${a.quiz_date}:${a.question_id}`);
-    if (correctIndex !== undefined && Number(a.option_index) === Number(correctIndex)) {
-      quizCorrectByAuthorKey.set(voterKey, (quizCorrectByAuthorKey.get(voterKey) || 0) + 1);
-    }
+  const seenUserMemoryItemPairs = new Set();
+  const gnosisAnsweredByAuthorKey = new Map();
+  const gnosisCorrectByAuthorKey = new Map();
+  for (const ev of rawReviewEvents || []) {
+    const pairKey = `${ev.user_id}:${ev.memory_item_id}`;
+    const isFirstReview = !seenUserMemoryItemPairs.has(pairKey);
+    seenUserMemoryItemPairs.add(pairKey);
+    if (isFirstReview) continue; // exposition Découvrir, jamais une repasse Ancrer
+    const authorKey = legacyKeyByUserId.get(ev.user_id);
+    if (!authorKey) continue;
+    gnosisAnsweredByAuthorKey.set(authorKey, (gnosisAnsweredByAuthorKey.get(authorKey) || 0) + 1);
+    if (ev.is_correct) gnosisCorrectByAuthorKey.set(authorKey, (gnosisCorrectByAuthorKey.get(authorKey) || 0) + 1);
   }
 
   const gnosisTierByAuthorKey = new Map();
-  for (const [authorKey, count] of quizAnsweredByAuthorKey) {
+  for (const [authorKey, count] of gnosisAnsweredByAuthorKey) {
     gnosisTierByAuthorKey.set(authorKey, getGnosisTier(count));
   }
-
-  const accuracyByAuthorKey = new Map();
-  for (const [authorKey, answered] of quizAnsweredByAuthorKey) {
-    accuracyByAuthorKey.set(authorKey, ((quizCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
+  const gnosisAccuracyByAuthorKey = new Map();
+  for (const [authorKey, answered] of gnosisAnsweredByAuthorKey) {
+    gnosisAccuracyByAuthorKey.set(authorKey, ((gnosisCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
   }
-
   const gnosisTierRawSizeByTier = new Map();
-  for (const authorKey of accuracyByAuthorKey.keys()) {
+  for (const authorKey of gnosisAccuracyByAuthorKey.keys()) {
     const tier = gnosisTierByAuthorKey.get(authorKey) || 1;
     gnosisTierRawSizeByTier.set(tier, (gnosisTierRawSizeByTier.get(tier) || 0) + 1);
   }
-  // Point de départ affiché pour chaque palier Gnosis tant que les effectifs
-  // réels ne l'ont pas dépassé (cf. gnosisTierCountHint côté client) — évite
-  // d'afficher un palier à 2 ou 3 utilisateurs en tout début de vie du QCM.
   const gnosisTierSizeByTier = new Map();
   for (const t of GNOSIS_SCORE_TIERS) {
     gnosisTierSizeByTier.set(t.tier, Math.max(GNOSIS_TIER_MIN_USERS, gnosisTierRawSizeByTier.get(t.tier) || 0));
   }
   const gnosisTotalUsers = [...gnosisTierSizeByTier.values()].reduce((sum, size) => sum + size, 0);
 
+  // Score Noesis (demande du 17/08/2026) : compréhension des liens, QCM
+  // "Relier" (pseudo-slot DAILY_QUIZ_COMPREHENSION_SLOT) uniquement. Comme
+  // Gnosis ci-dessus : un taux de réussite BRUT ET un score percentile
+  // ("comparaison des utilisateurs sur 100"), mêmes paliers de volume
+  // (GNOSIS_SCORE_TIERS, mêmes proportions) puisque "Relier" suit le même
+  // rythme de réponse au QCM.
+  //
+  // Ne peut PAS réutiliser memory_review_events comme Gnosis ci-dessus : une
+  // question "comprendre:{pairHash}-qN" déjà répondue peut, une fois due,
+  // ressurgir plus tard dans "Ancrer" sous l'id "cgreview-comprendre:{pairHash}-qN"
+  // (fetchCultureGeneraleReviewInjectionForToday ne filtre pas les slots
+  // "notion:comprendre:%" hors de sa rotation) — un simple "1re review exclue"
+  // par memory_item confondrait alors une repasse Ancrer avec une réponse
+  // Relier. Le préfixe "comprendre:" sur daily_quiz_answers.question_id
+  // lui-même reste le seul signal fiable de "répondu depuis l'onglet Relier"
+  // (même logique de préfixe que cgreview- pour distinguer Ancrer/Découvrir).
+  //
+  // Résolution du correctIndex : identique à la branche "comprendre:" de
+  // applyFsrsReviewForDailyQuizAnswer (le pseudo-slot agrégateur "comprendre"
+  // transmis par le client n'est jamais le vrai slot où vit la question dans
+  // daily_quiz — reconstruit ici depuis le questionId lui-même), mais en
+  // groupé plutôt que question par question.
+  const relierAnswers = (rawQuizAnswers || []).filter((a) => /^comprendre:[0-9a-f]{20}-q\d+$/.test(String(a.question_id || "")));
+  const relierPairSlots = [...new Set(relierAnswers.map((a) => {
+    const m = /^comprendre:([0-9a-f]{20})-q\d+$/.exec(a.question_id);
+    return m ? `notion:comprendre:${m[1]}` : null;
+  }).filter(Boolean))];
+
+  const correctIndexByComprendreQuestionId = new Map();
+  if (relierPairSlots.length) {
+    const { data: comprendreQuizRows, error: comprendreQuizRowsError } = await fetchAllSupabaseRowsIn(relierPairSlots, (chunk) =>
+      supabase.from("daily_quiz").select("slot, quiz_date, questions").in("slot", chunk));
+    if (comprendreQuizRowsError) throw comprendreQuizRowsError;
+    // Un seul row par slot en pratique (jamais régénéré tant qu'il en existe déjà un, cf.
+    // ensureCultureGeneraleComprehensionQuizPersisted) — si plusieurs existaient quand même,
+    // garde le plus récent par slot (même convention "dernière génération gagne" que cgreview-).
+    const comprendreRowsBySlot = new Map();
+    for (const row of comprendreQuizRows || []) {
+      const existing = comprendreRowsBySlot.get(row.slot);
+      if (!existing || row.quiz_date > existing.quiz_date) comprendreRowsBySlot.set(row.slot, row);
+    }
+    for (const row of comprendreRowsBySlot.values()) {
+      for (const q of row.questions || []) correctIndexByComprendreQuestionId.set(q.id, q.correctIndex);
+    }
+  }
+
+  const relierAnsweredByAuthorKey = new Map();
+  const relierCorrectByAuthorKey = new Map();
+  for (const a of relierAnswers) {
+    const voterKey = String(a.voter_key || "").trim();
+    if (!voterKey) continue;
+    relierAnsweredByAuthorKey.set(voterKey, (relierAnsweredByAuthorKey.get(voterKey) || 0) + 1);
+    const correctIndex = correctIndexByComprendreQuestionId.get(a.question_id);
+    if (correctIndex !== undefined && Number(a.option_index) === Number(correctIndex)) {
+      relierCorrectByAuthorKey.set(voterKey, (relierCorrectByAuthorKey.get(voterKey) || 0) + 1);
+    }
+  }
+
+  const noesisTierByAuthorKey = new Map();
+  for (const [authorKey, count] of relierAnsweredByAuthorKey) {
+    noesisTierByAuthorKey.set(authorKey, getGnosisTier(count));
+  }
+
+  const relierAccuracyByAuthorKey = new Map();
+  for (const [authorKey, answered] of relierAnsweredByAuthorKey) {
+    relierAccuracyByAuthorKey.set(authorKey, ((relierCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
+  }
+
+  const noesisTierRawSizeByTier = new Map();
+  for (const authorKey of relierAccuracyByAuthorKey.keys()) {
+    const tier = noesisTierByAuthorKey.get(authorKey) || 1;
+    noesisTierRawSizeByTier.set(tier, (noesisTierRawSizeByTier.get(tier) || 0) + 1);
+  }
+  const noesisTierSizeByTier = new Map();
+  for (const t of GNOSIS_SCORE_TIERS) {
+    noesisTierSizeByTier.set(t.tier, Math.max(GNOSIS_TIER_MIN_USERS, noesisTierRawSizeByTier.get(t.tier) || 0));
+  }
+  const noesisTotalUsers = [...noesisTierSizeByTier.values()].reduce((sum, size) => sum + size, 0);
+
   return {
     votesScoreByAuthorKey: buildTieredPercentileScoreMap(votesTotalByAuthorKey, tierByAuthorKey),
     notesScoreByAuthorKey: buildTieredPercentileScoreMap(noteAvgByAuthorKey, tierByAuthorKey),
-    gnosisScoreByAuthorKey: buildTieredPercentileScoreMap(accuracyByAuthorKey, gnosisTierByAuthorKey, GNOSIS_SCORE_TIERS),
+    gnosisScoreByAuthorKey: buildTieredPercentileScoreMap(gnosisAccuracyByAuthorKey, gnosisTierByAuthorKey, GNOSIS_SCORE_TIERS),
+    noesisScoreByAuthorKey: buildTieredPercentileScoreMap(relierAccuracyByAuthorKey, noesisTierByAuthorKey, GNOSIS_SCORE_TIERS),
     tierByAuthorKey,
     gnosisTierByAuthorKey,
+    noesisTierByAuthorKey,
     votesTotalUsers: votesTotalByAuthorKey.size,
     notesTotalUsers: noteAvgByAuthorKey.size,
     gnosisTotalUsers,
+    noesisTotalUsers,
     votesTierSizeByTier,
     notesTierSizeByTier,
     gnosisTierSizeByTier,
+    noesisTierSizeByTier,
     // Valeurs brutes (pas seulement le percentile) — affichées telles quelles
     // dans la modale à côté du "Top X%".
     votesTotalByAuthorKey,
+    // Nombre d'idées postées par auteur (demande du 17/08/2026) : sert à
+    // dériver la moyenne de voix reçues par idée côté /api/my-score, en plus
+    // du score Rhetor sur 100 (jamais à la place) — déjà calculé plus haut
+    // pour les paliers de contribution, jamais exposé jusqu'ici.
+    contributionCountByAuthorKey,
     noteAvgByAuthorKey,
-    quizAnsweredByAuthorKey,
-    quizCorrectByAuthorKey
+    // Nombre d'idées notées par l'IA par auteur (demande du 17/08/2026) :
+    // affiché à côté de la moyenne Logos déjà exposée (notesValue), jamais à
+    // sa place — même principe que contributionCountByAuthorKey pour Rhetor.
+    // Peut différer du nombre total d'idées postées (contributionCountByAuthorKey) :
+    // seules les idées déjà analysées par l'IA comptent ici.
+    noteCountByAuthorKey,
+    gnosisAnsweredByAuthorKey,
+    gnosisCorrectByAuthorKey,
+    relierAnsweredByAuthorKey,
+    relierCorrectByAuthorKey
   };
 }
 
@@ -4693,15 +4818,17 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
 
   try {
     const {
-      votesScoreByAuthorKey, notesScoreByAuthorKey, gnosisScoreByAuthorKey,
-      tierByAuthorKey, gnosisTierByAuthorKey,
-      votesTotalUsers, notesTotalUsers, gnosisTotalUsers,
-      votesTierSizeByTier, notesTierSizeByTier, gnosisTierSizeByTier,
-      votesTotalByAuthorKey, noteAvgByAuthorKey,
-      quizAnsweredByAuthorKey, quizCorrectByAuthorKey
+      votesScoreByAuthorKey, notesScoreByAuthorKey, gnosisScoreByAuthorKey, noesisScoreByAuthorKey,
+      tierByAuthorKey, gnosisTierByAuthorKey, noesisTierByAuthorKey,
+      votesTotalUsers, notesTotalUsers, gnosisTotalUsers, noesisTotalUsers,
+      votesTierSizeByTier, notesTierSizeByTier, gnosisTierSizeByTier, noesisTierSizeByTier,
+      votesTotalByAuthorKey, contributionCountByAuthorKey, noteAvgByAuthorKey, noteCountByAuthorKey,
+      gnosisAnsweredByAuthorKey, gnosisCorrectByAuthorKey,
+      relierAnsweredByAuthorKey, relierCorrectByAuthorKey
     } = await getUserScoreData();
     const tier = tierByAuthorKey.get(key) || null;
     const gnosisTier = gnosisTierByAuthorKey.get(key) || null;
+    const noesisTier = noesisTierByAuthorKey.get(key) || null;
     // Rien posté / rien répondu sur un axe : pas encore de percentile
     // calculable, donc valeur initiale explicite à 100 %.
     res.json({
@@ -4714,16 +4841,44 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
       gnosisTierLabel: gnosisTier ? getGnosisTierLabel(gnosisTier) : null,
       gnosisTier: gnosisTier || null,
       gnosisTierCount: GNOSIS_SCORE_TIERS.length,
+      noesisScore: noesisScoreByAuthorKey.has(key) ? noesisScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
+      noesisTierLabel: noesisTier ? getGnosisTierLabel(noesisTier) : null,
+      noesisTier: noesisTier || null,
+      noesisTierCount: GNOSIS_SCORE_TIERS.length,
       votesTotalUsers,
       notesTotalUsers,
       gnosisTotalUsers,
+      noesisTotalUsers,
       votesTierUsers: tier ? (votesTierSizeByTier.get(tier) || 0) : null,
       notesTierUsers: tier ? (notesTierSizeByTier.get(tier) || 0) : null,
       gnosisTierUsers: gnosisTier ? (gnosisTierSizeByTier.get(gnosisTier) || 0) : null,
+      noesisTierUsers: noesisTier ? (noesisTierSizeByTier.get(noesisTier) || 0) : null,
       votesValue: votesTotalByAuthorKey.has(key) ? votesTotalByAuthorKey.get(key) : null,
+      // Moyenne de voix reçues par idée (demande du 17/08/2026) — en plus du
+      // score Rhetor sur 100 (votesScore) et du total brut (votesValue),
+      // jamais à leur place. contributionCountByAuthorKey ne peut être 0 ici
+      // (une entrée n'existe dans cette map que si l'auteur a posté au moins
+      // une idée, cf. computeUserScores), donc pas de division par zéro.
+      votesAveragePerIdea: (votesTotalByAuthorKey.has(key) && contributionCountByAuthorKey.has(key))
+        ? Math.round((votesTotalByAuthorKey.get(key) / contributionCountByAuthorKey.get(key)) * 10) / 10
+        : null,
+      votesIdeaCount: contributionCountByAuthorKey.has(key) ? contributionCountByAuthorKey.get(key) : null,
       notesValue: noteAvgByAuthorKey.has(key) ? Math.round(noteAvgByAuthorKey.get(key) * 10) / 10 : null,
-      gnosisAnswered: quizAnsweredByAuthorKey.has(key) ? quizAnsweredByAuthorKey.get(key) : null,
-      gnosisCorrect: quizCorrectByAuthorKey.has(key) ? quizCorrectByAuthorKey.get(key) : null
+      // Nombre d'idées ayant contribué à cette moyenne (demande du 17/08/2026),
+      // à côté de notesValue — même principe que votesIdeaCount pour Rhetor.
+      notesIdeaCount: noteCountByAuthorKey.has(key) ? noteCountByAuthorKey.get(key) : null,
+      // Gnosis (redéfini le 17/08/2026) : taux de réussite brut sur les
+      // repasses "Ancrer" uniquement, à côté du percentile gnosisScore
+      // ci-dessus — cf. computeUserScores pour le détail du calcul
+      // (memory_review_events, première review par (user, memory_item)
+      // exclue).
+      gnosisAnswered: gnosisAnsweredByAuthorKey.has(key) ? gnosisAnsweredByAuthorKey.get(key) : null,
+      gnosisCorrect: gnosisCorrectByAuthorKey.has(key) ? gnosisCorrectByAuthorKey.get(key) : null,
+      // Noesis (demande du 17/08/2026) : QCM "Relier" uniquement — valeurs
+      // brutes affichées à côté du "Top X%" de noesisScore, même principe que
+      // gnosisAnswered/gnosisCorrect.
+      relierAnswered: relierAnsweredByAuthorKey.has(key) ? relierAnsweredByAuthorKey.get(key) : null,
+      relierCorrect: relierCorrectByAuthorKey.has(key) ? relierCorrectByAuthorKey.get(key) : null
     });
   } catch (e) {
     console.error("Erreur /api/my-score:", e);
@@ -5584,13 +5739,41 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         console.warn("[intellectual universe] liens indisponibles :", linksError.message);
       } else {
         const seenLinkIds = new Set();
-        knowledgeLinks = [...(linksFromA.data || []), ...(linksFromB.data || [])]
+        const acquiredLinkRows = [...(linksFromA.data || []), ...(linksFromB.data || [])]
           .filter((link) => {
             if (seenLinkIds.has(link.id)) return false;
             seenLinkIds.add(link.id);
             return acquiredKnowledgeKeys.has(cultureGeneraleNotionKey(link.type_a, link.source_id_a))
               && acquiredKnowledgeKeys.has(cultureGeneraleNotionKey(link.type_b, link.source_id_b));
-          })
+          });
+
+        // Le trait ne s'affiche que si le QCM "Comprendre les liens" associé a déjà été
+        // réussi au moins une fois (demande du 16/08/2026) — même signal que "Mes acquis"
+        // (user_notion_quizzes, posé automatiquement sur une bonne réponse, cf.
+        // applyFsrsReviewForDailyQuizAnswer) : les deux connaissances acquises ne suffit plus,
+        // il faut avoir compris le lien entre elles pour qu'il apparaisse visuellement.
+        const slotByLinkId = new Map(acquiredLinkRows.map((link) => [
+          link.id,
+          `notion:comprendre:${cultureGeneraleComprehensionPairHash({
+            typeA: link.type_a, idA: String(link.source_id_a),
+            typeB: link.type_b, idB: String(link.source_id_b)
+          })}`
+        ]));
+        const candidateSlots = [...new Set(slotByLinkId.values())];
+        let validatedSlots = new Set();
+        if (candidateSlots.length) {
+          const { data: validatedRows, error: validatedError } = await fetchAllSupabaseRowsIn(candidateSlots, (slotsChunk) =>
+            supabase.from("user_notion_quizzes").select("slot").eq("user_id", user.id).in("slot", slotsChunk)
+          );
+          if (validatedError) {
+            console.warn("[intellectual universe] validation des liens indisponible :", validatedError.message);
+          } else {
+            validatedSlots = new Set((validatedRows || []).map((row) => row.slot));
+          }
+        }
+
+        knowledgeLinks = acquiredLinkRows
+          .filter((link) => validatedSlots.has(slotByLinkId.get(link.id)))
           .map((link) => ({
             typeA: link.type_a,
             sourceIdA: String(link.source_id_a),
@@ -5754,6 +5937,27 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
   } catch (error) {
     console.error("[intellectual universe]", error.message);
     return sendServerError(res, "Erreur chargement univers intellectuel.");
+  }
+});
+
+// Jauge de charge d'apprentissage (demande du 17/08/2026) : niveau
+// calme/modéré/chargé/surchargé selon la projection des échéances FSRS déjà
+// programmées sur les prochains jours (cf. fetchLearningLoadGaugeForUser,
+// lib/spaced-repetition/learning-load.js pour la simulation elle-même).
+// Lecture seule, aucune écriture, aucun appel IA. legacyKey uniquement,
+// même identité que le reste du projet.
+app.get("/api/users/learning-load", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+
+    const gauge = await fetchLearningLoadGaugeForUser(validation.legacyKey);
+    if (!gauge) return res.status(500).json({ error: "Erreur calcul charge d'apprentissage." });
+
+    res.json(gauge);
+  } catch (error) {
+    console.error("[learning-load]", error.message);
+    return sendServerError(res, "Erreur calcul charge d'apprentissage.");
   }
 });
 
@@ -9505,7 +9709,7 @@ function restoreMechanicallyTruncatedUniverseName(storedName, completeName) {
 // Le nom est conservé en entier. La consigne IA produit normalement un libellé court, mais
 // en cas de repli sur sourceName il vaut mieux afficher une phrase complète (dont la taille
 // sera adaptée dans la bulle) qu'un fragment grammatical incompréhensible.
-async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
+async function resolveOrCreateSolarSystem(galaxy, name, normalizedName, extra) {
   const { data: existing, error: selectError } = await supabase
     .from("solar_systems")
     .select("id")
@@ -9514,13 +9718,23 @@ async function resolveOrCreateSolarSystem(galaxy, name, normalizedName) {
     .maybeSingle();
   if (selectError) { console.warn("[solar-systems] lecture échouée :", selectError.message); return null; }
   if (existing) return existing.id;
+  // `extra` (description/taxonomy_scope) : uniquement fourni par le moteur de
+  // classification connaissances (cf. resolveCultureGeneraleSolarSystemWithAI) —
+  // les appelants "actu" existants passent 3 arguments comme avant, `extra`
+  // vaut alors undefined et la ligne garde le défaut DB taxonomy_scope='unknown',
+  // comportement inchangé pour ce pipeline.
   const { data: inserted, error: insertError } = await supabase
     .from("solar_systems")
-    .insert({ galaxy, name: cleanUniverseNodeName(name), normalized_name: normalizedName })
+    .insert({
+      galaxy,
+      name: cleanUniverseNodeName(name),
+      normalized_name: normalizedName,
+      ...(extra?.description ? { description: extra.description } : {}),
+      ...(extra?.taxonomyScope ? { taxonomy_scope: extra.taxonomyScope } : {})
+    })
     .select("id")
     .single();
   if (!insertError) {
-    invalidateCultureGeneraleHierarchyClassificationCache();
     return inserted.id;
   }
   const { data: retryExisting, error: retryError } = await supabase
@@ -12137,12 +12351,6 @@ function getDailyQuizSlotLabel(slot) {
   if (slot === DAILY_QUIZ_COMPREHENSION_SLOT) return DAILY_QUIZ_COMPREHENSION_LABEL;
   return null;
 }
-// Score Gnosis (justesse au QCM) : les repasses de répétition espacée
-// injectées dans Culture Générale ("cgreview-", cf. plus bas) ne sont pas un
-// test de connaissances fraîchement acquises sur l'actualité du jour —
-// exclues explicitement du calcul plus bas et via le message dédié côté
-// frontend (qcm-du-jour.html).
-const DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES = ["cgreview-", "comprendre:"];
 
 // Reconnaît une question de culture générale (fraîche "culture_generale-qN",
 // repasse "cgreview-..." ou QCM de notion "notion:...") — id toujours
@@ -12216,13 +12424,16 @@ function parisStartOfDayIso(date = new Date()) {
 // choisisse d'elle-même. Les formats les plus contraints (association/
 // qcm_multi/ordre, qui exigent une structure particulière du sujet) sont
 // sous-représentés dans la rotation plutôt qu'à parts égales avec qcm/
-// vrai_faux/texte_a_trous/intrus — l'IA garde par ailleurs la liberté de
+// texte_a_trous/intrus — l'IA garde par ailleurs la liberté de
 // repasser sur "qcm" si le sujet retenu pour une question précise ne se
 // prête vraiment pas au format suggéré (cf. consigne plus bas).
+// "vrai_faux" retiré le 16/08/2026 (section 5, interdiction absolue — ~50%
+// de réussite au hasard structurel) : ses 3 créneaux sont redistribués vers
+// texte_a_trous et intrus, jusque-là sous-représentés par rapport à qcm.
 const DAILY_QUIZ_FORMAT_ROTATION_POOL = [
-  "qcm", "qcm", "vrai_faux", "qcm", "texte_a_trous",
-  "intrus", "qcm", "association", "vrai_faux", "qcm_multi",
-  "qcm", "ordre", "vrai_faux", "qcm", "intrus"
+  "qcm", "qcm", "texte_a_trous", "qcm", "texte_a_trous",
+  "intrus", "qcm", "association", "qcm", "qcm_multi",
+  "qcm", "ordre", "intrus", "qcm", "intrus"
 ];
 
 // `excludeTypes` (demande du 13/08/2026, étendu le 16/08/2026) : retire un
@@ -12271,11 +12482,10 @@ function buildFormatAssignments(count, excludeTypes) {
 //   l'alphabet, pas une connaissance.
 const QUESTION_FORMAT_DEFS = [
   { type: "qcm", desc: "\"qcm\" : question à 4 options, une seule correcte, les 3 fausses plausibles mais clairement erronées au vu du texte. Les 4 options doivent appartenir à la MÊME catégorie conceptuelle que la bonne réponse (ex. si la bonne réponse est un nom de personne, les distracteurs sont d'autres noms de personnes plausibles dans ce contexte — jamais une option hors-sujet ou absurde qui n'a rien à voir avec la question). Les distracteurs doivent rester globalement comparables en longueur et en niveau de précision à la bonne réponse : n'ajoute jamais spontanément un détail, un nom propre ou une précision supplémentaire à la bonne réponse qui la rendrait reconnaissable par sa seule longueur ou sa seule précision au milieu d'options plus vagues." },
-  { type: "vrai_faux", desc: "\"vrai_faux\" : une affirmation à trancher, avec exactement 2 options [\"Vrai\",\"Faux\"] (dans cet ordre) et correctIndex 0 ou 1." },
   { type: "texte_a_trous", desc: "\"texte_a_trous\" : une phrase tirée du texte où un mot ou groupe de mots est remplacé par le marqueur exact \"___\" (le champ \"question\" doit contenir ce marqueur), avec 4 options pour le compléter, une seule correcte." },
   { type: "association", desc: "\"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 ENTITÉS DISTINCTES de la même catégorie (ex. plusieurs philosophes, plusieurs pays, plusieurs éléments chimiques) à apparier chacune à son propre correspondant. INTERDIT : combiner plusieurs sujets différents, ET combiner 3-4 attributs indépendants d'UNE SEULE entité (ex. jamais associer \"date de naissance de Louis IX\"/\"lieu de sa mort\"/\"date de sa canonisation\"/\"pape qui l'a canonisé\" — ce sont 4 connaissances séparées sur une même personne, pas un appariement ; préfère alors 4 questions \"qcm\" distinctes, une par fait). Sinon préfère un autre format." },
   { type: "intrus", desc: "\"intrus\" : 4 options dont une seule ne va pas avec les 3 autres (qui partagent un point commun clair au vu du texte) — la question formule ce qu'ont en commun les 3 bonnes et demande de trouver l'intrus ; correctIndex pointe vers l'intrus." },
-  { type: "qcm_multi", desc: "\"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\". N'utilise ce format QUE pour une vraie question d'APPARTENANCE À UNE CATÉGORIE COHÉRENTE ET CLAIREMENT DÉFINIE (ex. \"lesquelles de ces capitales sont en Asie ?\", \"lesquels sont membres permanents du Conseil de sécurité de l'ONU ?\") — jamais pour compresser plusieurs faits indépendants sur un même sujet en une seule question (ex. jamais \"lesquelles de ces affirmations sur le Piton de la Fournaise sont vraies ?\" avec des options portant chacune sur un aspect sans rapport — altitude, activité, localisation — préfère alors une question \"qcm\" ou \"vrai_faux\" séparée par fait). Sinon préfère un autre format." },
+  { type: "qcm_multi", desc: "\"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\". N'utilise ce format QUE pour une vraie question d'APPARTENANCE À UNE CATÉGORIE COHÉRENTE ET CLAIREMENT DÉFINIE (ex. \"lesquelles de ces capitales sont en Asie ?\", \"lesquels sont membres permanents du Conseil de sécurité de l'ONU ?\") — jamais pour compresser plusieurs faits indépendants sur un même sujet en une seule question (ex. jamais \"lesquelles de ces affirmations sur le Piton de la Fournaise sont vraies ?\" avec des options portant chacune sur un aspect sans rapport — altitude, activité, localisation — préfère alors une question \"qcm\" séparée par fait). Sinon préfère un autre format." },
   { type: "ordre", desc: "\"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents et ordonnés DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents, ni un ordre déduit de connaissances extérieures au texte fourni. N'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte — JAMAIS un tri alphabétique, une longueur de nom ou tout autre critère arbitraire utilisé comme substitut faute d'un vrai ordre disponible : un tri purement alphabétique ne teste aucune connaissance, seulement l'orthographe. Sinon préfère un autre format." }
 ];
 
@@ -12285,7 +12495,7 @@ const QUESTION_FORMAT_DEFS = [
 // question sous la même forme que la fois précédente (cf.
 // resolveActiveQuestionVariant, alternée sans appel IA supplémentaire à
 // chaque repasse — tout est généré une seule fois, ici, à la création).
-// Restreint à qcm/vrai_faux/texte_a_trous pour toute variante autre que la
+// Restreint à qcm/texte_a_trous pour toute variante autre que la
 // principale : les formats composites (association/intrus/qcm_multi/ordre)
 // ont besoin d'éléments supplémentaires qui n'existent pas pour une simple
 // reformulation d'un seul fait isolé.
@@ -12299,6 +12509,17 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     "=== Formats de question possibles ===",
     ...availableDefs.map((d) => "- " + d.desc),
     "",
+    // Interdiction absolue du vrai/faux (section 5 de l'audit pédagogique du
+    // 16/08/2026) : rappel explicite plutôt que de compter sur sa seule
+    // absence de la liste ci-dessus — sans cette ligne, rien n'empêche l'IA
+    // de recréer un format binaire équivalent sous un autre nom ou une autre
+    // apparence (ex. un \"qcm\" à 2 options \"Vrai\"/\"Faux\", une question
+    // fermée oui/non, correct/incorrect...). Le validateur programmatique
+    // (lib/question-formats.js) impose par ailleurs toujours 4 options pour
+    // qcm/texte_a_trous/intrus/qcm_multi : une tentative de contournement à 2
+    // options échoue mécaniquement, même si cette consigne était ignorée.
+    "INTERDICTION ABSOLUE : ne génère JAMAIS de question vrai/faux, oui/non, correct/incorrect, ni aucune formulation binaire équivalente qui donnerait artificiellement ~50% de chances de réussite au hasard — même sous un nom ou une apparence différente (ex. un \"qcm\" réduit à 2 options \"Vrai\"/\"Faux\", une question fermée dont la réponse est oui ou non). Toute question, quel que soit son format, doit toujours proposer au moins 3 options distinctes et sémantiquement plausibles (ou reposer sur un vrai appariement/une vraie séquence pour association/ordre).",
+    "",
     // "intrus" banni (cf. excludeTypes) : rappel explicite plutôt que de
     // compter sur sa seule absence ci-dessus — sans cette ligne, rien
     // n'empêche l'IA de choisir "intrus" quand même en se référant au nom
@@ -12308,9 +12529,17 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
       ""
     ] : []),
     "=== Format suggéré, question par question (dans l'ordre) ===",
-    "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions :",
+    "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions" + (includeVariants ? " (uniquement pour variants[0], la variante principale — n'influence pas le choix des variantes suivantes, cf. plus bas)" : "") + " :",
     assignments.map((f, i) => (i + 1) + ". " + f).join(" · "),
-    "Respecte cette suggestion. Exception : si le sujet retenu pour UNE question précise ne se prête vraiment pas au format suggéré (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée), utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet" + (excludeTypes && excludeTypes.length ? ", et jamais l'un des formats interdits ci-dessus" : "") + ".",
+    // "Préférence de départ", pas "Respecte cette suggestion" (demande du
+    // 17/08/2026, généralisation des variantes à Éclairages/Histoire) : cette
+    // rotation ignore tout du contenu réel de chaque connaissance (assignée à
+    // l'aveugle avant même l'admission) — depuis l'ajout de sequential/
+    // clearBoundary (contraintes qui, elles, connaissent le contenu), la
+    // formulation impérative précédente pouvait laisser croire à une
+    // obligation entrant en tension avec ces signaux. Priorité explicite à la
+    // compatibilité connaissance/format, jamais à cette suggestion seule.
+    "Cette suggestion n'est qu'une préférence de départ pour éviter que tout retombe sur \"qcm\" par défaut — elle ne prime JAMAIS sur les contraintes liées au contenu réel de la connaissance testée (notamment les signaux sequential/clearBoundary indiqués plus loin, quand applicables). Écarte-la sans hésiter dès que le sujet retenu pour UNE question précise ne s'y prête vraiment pas (ex. \"association\" sans 3-4 éléments distincts à apparier, \"ordre\" sans séquence objective, \"qcm_multi\" sans plusieurs bonnes réponses nettes, \"texte_a_trous\" sans phrase adaptée) : utilise \"qcm\" à la place pour CETTE question uniquement — jamais un format forcé avec des éléments qui ne collent pas artificiellement au sujet" + (excludeTypes && excludeTypes.length ? ", et jamais l'un des formats interdits ci-dessus" : "") + ".",
     "",
     ...(includeVariants ? [
       // "jusqu'à 3 variantes pertinentes" (refonte du 16/08/2026) : remplace
@@ -12336,17 +12565,36 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
       "- \"direct\" : du fait vers la réponse (ex. \"En quelle année tombe le mur de Berlin ?\").",
       "- \"inverse\" : de la réponse vers le fait, en restant SANS AMBIGUÏTÉ même si plusieurs faits partagent une réponse proche (ex. \"Quel événement majeur concernant Berlin a lieu en 1989 ?\" — jamais \"Que s'est-il passé en 1989 ?\", trop vague si plusieurs événements importants partagent cette année).",
       "- \"contextual\" : une mise en situation qui mène à la même réponse sans se contenter de reformuler la question posée par \"direct\" (ex. \"Quel événement de 1989 symbolise la fin de la division de l'Allemagne ?\").",
-      "Règles impératives : jamais deux variantes qui ne sont que des paraphrases l'une de l'autre (\"Quand ?\"/\"En quelle année ?\"/\"Quelle année ?\" ne comptent que pour UNE seule variante) ; jamais deux variantes du même type exact ; seule la variante à l'index 0 du tableau (la plus claire, montrée en premier) peut être un format composite (association/intrus/qcm_multi/ordre) — les variantes suivantes restent \"qcm\", \"vrai_faux\" ou \"texte_a_trous\", et si l'index 0 est déjà composite, n'ajoute aucune autre variante (une reformulation partielle d'un ensemble/séquence/catégorie ne peut pas rester honnête).",
+      // "jamais deux variantes du même type exact" assouplie (demande du
+      // 17/08/2026) : format technique ≠ mode de récupération — deux "qcm"
+      // (direct + contextual, par exemple) ne sont PAS redondants si l'angle
+      // de récupération diffère réellement. La vraie règle à faire respecter
+      // est l'absence de paraphrase, déjà énoncée juste avant ; le
+      // dédoublonnage strict sur "type" seul l'a toujours été en trop côté
+      // prompt (lib/question-formats.js validateVariantsArray, lui, dédoublonne
+      // déjà sur type+question, jamais sur le seul type — inchangé ici).
+      "Règles impératives : jamais deux variantes qui ne sont que des paraphrases l'une de l'autre (\"Quand ?\"/\"En quelle année ?\"/\"Quelle année ?\" ne comptent que pour UNE seule variante) ; deux variantes PEUVENT en revanche utiliser le même \"type\" si leur \"retrievalMode\" et leur angle de récupération sont réellement distincts (ex. \"qcm\"/direct + \"qcm\"/contextual sont légitimes si la seconde met la connaissance en situation plutôt que de redemander la même chose autrement) — favorise des formats différents quand ils sont également pertinents, mais ne change jamais artificiellement de format juste pour obtenir 3 types différents : deux variantes du même type, réellement complémentaires, valent mieux qu'un format mal adapté forcé pour diversifier. Priorité, dans l'ordre : fidélité au \"knowledgeTarget\" > pertinence pédagogique > angle de récupération distinct > diversité de format. Seule la variante à l'index 0 du tableau (la plus claire, montrée en premier) peut être un format composite (association/intrus/qcm_multi/ordre) — les variantes suivantes restent \"qcm\" ou \"texte_a_trous\" (jamais \"vrai_faux\", interdit sous toute forme), et si l'index 0 est déjà composite, n'ajoute aucune autre variante (une reformulation partielle d'un ensemble/séquence/catégorie ne peut pas rester honnête).",
       "Chaque variante porte ses propres champs complets (\"type\", \"question\", \"options\"/\"correctIndex\" ou équivalent selon le type, \"explanation\", \"selfContained\" pour qcm/texte_a_trous/qcm_multi UNIQUEMENT — cf. règle ci-dessous) — jamais de champ \"" + sourceIdField + "\" à l'intérieur d'une variante (implicite, commun à toutes).",
       ""
     ] : []),
+    ...(includeVariants ? [] : [
+      // Demande du 17/08/2026 (audit du pipeline mnésique) : knowledgeTarget
+      // n'était jusqu'ici demandé qu'avec includeVariants (sujet libre) —
+      // étendu à toutes les questions, y compris Éclairages/Histoire, pour
+      // que buildNotionQuestions/generateNotionLevelQuiz puisse vérifier
+      // programmatiquement (cf. leurs commentaires) que chaque question
+      // générée correspond bien à une connaissance déjà admise, jamais une
+      // connaissance inventée à ce stade.
+      "Pour chaque question, écris dans le champ \"knowledgeTarget\" le texte EXACT de la connaissance admise (fournie plus bas) qu'elle teste, sans le reformuler.",
+      ""
+    ]),
     "=== Répondable sans voir les propositions ? ===",
     (includeVariants
       ? "Pour chaque VARIANTE de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) sur cette variante — une décision qui dépend du CONTENU de cette formulation précise, jamais de son seul type ni héritée d'une autre variante de la même question."
       : "Pour chaque question de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) : l'interface l'utilise pour proposer ou non de réfléchir à la réponse avant d'afficher les propositions — une décision qui dépend du CONTENU de la question, jamais de son seul type."),
     "- true : la réponse existe indépendamment des propositions, un lecteur qui connaît le sujet peut la deviner seul avant de les voir (ex. \"Quel est l'historien qui a écrit « Le Fromage et les Vers » ?\").",
     "- false : la question ne peut être comprise ou résolue qu'en comparant les propositions entre elles, ou y fait explicitement référence (ex. \"Lequel de ces historiens n'a pas travaillé sur le Moyen Âge ?\", \"Parmi ces éléments, lequel...\", toute question de type comparatif ou par élimination). Sois honnête et strict : en cas de doute réel, réponds false plutôt que true — mieux vaut afficher les propositions à tort que de bloquer une question à laquelle on ne peut objectivement pas répondre sans elles.",
-    "Aucun champ \"selfContained\" pour les autres types (vrai_faux, association, intrus, ordre) — la question n'est jamais concernée par ce choix.",
+    "Aucun champ \"selfContained\" pour les autres types (association, intrus, ordre) — la question n'est jamais concernée par ce choix.",
     "",
     includeVariants
       // Exemple à DEUX objets dans "variants" (pas un seul) : un modèle
@@ -12356,8 +12604,8 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
       // prose demandant d'en viser 2 (constaté le 16/08/2026 : 18/18
       // questions à 1 variante sur deux générations réelles avant ce
       // correctif). L'exemple est donc explicitement direct+inverse.
-      ? `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...","variants":[{"type":"${availableTypes.join("|")}","question":"(formulation directe)","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"retrievalMode":"direct"},{"type":"qcm|vrai_faux|texte_a_trous","question":"(formulation inverse ou contextuelle, PAS une paraphrase de la première)","options":["..."],"correctIndex":0,"explanation":"...","selfContained":true|false,"retrievalMode":"inverse"}],"${sourceIdField}":"id fourni"}]} — 2 variantes dans cet exemple, mais rappel : 1 seule si aucun second angle honnête n'existe, 3 si un troisième chemin apporte vraiment quelque chose.`
-      : `Réponds uniquement en JSON strict, sous la forme {"questions":[{"type":"${availableTypes.join("|")}","question":"...","options":["..."] (qcm/vrai_faux/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/vrai_faux/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"}]}.`
+      ? `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...","variants":[{"type":"${availableTypes.join("|")}","question":"(formulation directe)","options":["..."] (qcm/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"retrievalMode":"direct"},{"type":"qcm|texte_a_trous","question":"(formulation inverse ou contextuelle, PAS une paraphrase de la première)","options":["..."],"correctIndex":0,"explanation":"...","selfContained":true|false,"retrievalMode":"inverse"}],"${sourceIdField}":"id fourni"}]} — 2 variantes dans cet exemple, mais rappel : 1 seule si aucun second angle honnête n'existe, 3 si un troisième chemin apporte vraiment quelque chose.`
+      : `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...","type":"${availableTypes.join("|")}","question":"...","options":["..."] (qcm/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"}]}.`
   ];
 }
 
@@ -12383,7 +12631,16 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
 // atteint en pratique sur une seule notion) ; DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC
 // est le budget réel visé.
 const DAILY_QUIZ_QUESTION_COUNT_NARRATIVE = 45;
-const DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE = 3;
+// 1, jamais plus (demande du 17/08/2026, audit du pipeline mnésique) : ce
+// n'était plus un vrai plancher qualité mais un quota de remplissage — un
+// sujet qui n'admet légitimement qu'1 ou 2 connaissances solides doit
+// pouvoir produire 1 ou 2 questions, jamais être rejeté en bloc (return [])
+// faute d'atteindre un minimum arbitraire. La seule exigence technique
+// restante est qu'il existe AU MOINS une question valide à montrer.
+const DAILY_QUIZ_MIN_VALID_QUESTIONS_NARRATIVE = 1;
+// target reste un budget "jusqu'à" indicatif pour le prompt (cf.
+// buildCultureGeneraleQuizPrompt) — jamais une obligation depuis le même
+// correctif : la qualité prime sur l'atteinte de ce chiffre.
 const DAILY_QUIZ_TARGET_QUESTIONS_PER_RUBRIC = 4;
 const DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC = 5;
 
@@ -12398,24 +12655,32 @@ const DAILY_QUIZ_MAX_QUESTIONS_PER_RUBRIC = 5;
 // dimensionnent la fiche associée (elle doit contenir tous les faits
 // nécessaires pour répondre aux questions, cf. buildLeveledFicheAndQuizPrompt)
 // : plus le niveau est avancé, plus elle peut être longue.
+// min uniformément à 1 sur les 4 niveaux (demande du 17/08/2026, audit du
+// pipeline mnésique) : c'était jusqu'ici un plancher de remplissage (3/8/15/
+// 15) qui rejetait le quiz ENTIER (parseLeveledFicheAndQuiz retourne null,
+// cf. son commentaire) dès que la sélection qualité produisait moins que ce
+// chiffre — poussant mécaniquement vers des connaissances secondaires
+// juste pour l'atteindre, l'exact inverse de l'objectif "la qualité prime
+// sur la quantité". "target"/"max" restent inchangés : ils bornent haut
+// (combien de facettes couvrir au mieux), jamais bas.
 const NOTION_QUIZ_LEVELS = {
   elementaire: {
     label: "Élémentaire",
-    target: 5, max: 6, min: 3,
+    target: 5, max: 6, min: 1,
     instruction: "Niveau élémentaire : ne retiens que les quelques faits vraiment essentiels du sujet — questions simples et directement accessibles, vocabulaire courant, pour poser les bases sans détail secondaire.",
     sectionsRange: "1 à 2", maxSections: 2, sectionTextLimit: 600,
     lengthHint: "reste très brève, l'essentiel condensé en quelques phrases par bloc."
   },
   avance: {
     label: "Avancé",
-    target: 10, max: 12, min: 8,
+    target: 10, max: 12, min: 1,
     instruction: "Niveau avancé : couvre l'essentiel du sujet sous plusieurs angles différents (contexte, mécanisme, exemples ou chiffres clés, conséquences) pour vérifier une compréhension solide — jamais plusieurs questions qui reformulent le même angle.",
     sectionsRange: "2 à 4", maxSections: 4, sectionTextLimit: 1000,
     lengthHint: "peut développer chaque bloc en quelques phrases pour donner du contexte et de la nuance."
   },
   expert: {
     label: "Expert",
-    target: 20, max: 22, min: 15,
+    target: 20, max: 22, min: 1,
     instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet (origine, mécanismes précis, controverses ou nuances, chiffres et exemples précis, conséquences, comparaisons) pour vérifier une maîtrise fine et complète — chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée.",
     sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
     lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
@@ -12431,7 +12696,7 @@ const NOTION_QUIZ_LEVELS = {
   // pas un nombre de questions plus élevé par défaut sur un sujet narratif.
   exhaustif: {
     label: "Exhaustif",
-    target: 20, max: 22, min: 15,
+    target: 20, max: 22, min: 1,
     instruction: "Niveau exhaustif : vise la couverture la plus complète possible du sujet — s'il s'agit d'une vraie liste d'éléments à mémoriser un par un, couvre-la en entier ; sinon, couvre un maximum de facettes et de détails précis et vérifiables du sujet, sans jamais sacrifier l'exactitude à la quantité.",
     sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
     lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
@@ -12462,6 +12727,14 @@ const NOTION_QUIZ_LEGACY_LEVEL_CONFIG = {
 // questions) plutôt que par le flux standard buildLeveledFicheAndQuizPrompt.
 const NOTION_QUIZ_ENUMERABLE_MAX_ITEMS = 200;
 const NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE = 20;
+// Volontairement PAS ramené à 1 comme NOTION_QUIZ_LEVELS.*.min (demande du
+// 17/08/2026, audit du pipeline mnésique) : ce seuil ne mesure pas
+// l'importance de connaissances sélectionnées mais la complétude technique
+// d'une énumération déjà reconnue comme une vraie liste finie (capitales,
+// verbes irréguliers...) — 10/200 capitales renvoyées à cause d'erreurs de
+// lots successifs est un échec de génération, pas un choix qualité légitime
+// à respecter. Reste donc un garde-fou de fiabilité, hors périmètre de ce
+// correctif (cf. rapport final, section quotas).
 const NOTION_QUIZ_ENUMERABLE_MIN_VALID = 10;
 // Plafond dur du nombre de lots d'énumération (fetchEnumerableItems) — borne
 // le coût en appels IA même sur un sujet mal classé "bounded" : au-delà, on
@@ -12667,43 +12940,14 @@ function extractCultureGeneraleItemDetail(item) {
   }
 }
 
-function buildCultureGeneraleQuizPrompt(items, quotaByItemId, levelInstruction) {
-  const list = items.map(formatCultureGeneraleItemForPrompt).join("\n");
-  const quotaLines = items
-    .map((item) => {
-      const id = String(item.id || item.current_topic_id);
-      const quota = quotaByItemId.get(id) || 0;
-      return `id:${id} → ${quota} question${quota > 1 ? "s" : ""}`;
-    })
-    .join("\n");
-  const totalQuota = items.reduce((sum, item) => sum + (quotaByItemId.get(String(item.id || item.current_topic_id)) || 0), 0);
-  return [
-    `Tu écris un QCM de culture générale en français à partir des éléments ci-dessous — des événements "Ce jour dans l'Histoire" et des éclairages (une actualité du jour éclairée par un précédent historique, un concept philosophique, un mécanisme sociologique, un concept transversal, une citation d'auteur, une œuvre d'art ou un mot latin).`,
-    "Règles strictes :",
-    "- Base-toi uniquement sur les faits présents dans le texte fourni, n'invente rien. En cas de doute sur l'exactitude d'un fait du texte (chiffre, date, nom), préfère une formulation plus générale plutôt qu'une précision incertaine présentée comme certaine.",
-    "- Ne retiens que les faits qui méritent vraiment d'être sus — utiles en culture générale, ceux qu'une personne cultivée retiendrait — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir les grands enjeux et les grandes caractéristiques du sujet. Un fait étonnant ou curieux est un plus s'il est vrai et pertinent, mais jamais au détriment de l'utilité — ne choisis jamais un détail insolite à la place d'un fait structurant.",
-    "- Pour un élément de type \"citation du jour\" : si tu cites le texte de la citation dans une question ou une option, recopie-le exactement tel que fourni, sans le modifier ; ne change ni l'auteur ni le contexte indiqués.",
-    "- Pour un élément \"mot latin du jour\" dont la provenance indiquée est \"traduction composée pour l'occasion\" : ne le présente JAMAIS comme une expression latine ancienne, un proverbe ou une citation historique — les questions ne peuvent porter que sur sa grammaire (cas, déclinaison, conjugaison, sens des mots), jamais sur une prétendue origine ou un prétendu auteur.",
-    "- Pour un élément \"Ce jour dans l'Histoire\", les questions portent sur les faits de l'événement lui-même — pas de détails insignifiants (dates exactes au jour près, chiffres secondaires).",
-    "- Pour un élément d'éclairage, les questions portent UNIQUEMENT sur l'événement/concept/citation/œuvre lui-même (son contexte, son origine, son explication) — jamais sur un simple détail anecdotique, et jamais sur l'actualité du jour qui lui fait écho.",
-    "- Interdiction absolue de mentionner l'actualité du jour dans une question ou une option : ni le sujet d'actualité, ni le \"mécanisme commun\", ni la \"différence essentielle\" avec cette actualité ne doivent apparaître — ces champs ne sont qu'un contexte interne pour toi, jamais une matière à question. Le lecteur qui n'a pas suivi l'actualité doit pouvoir répondre sans le savoir.",
-    "- Pour les formats à options (voir formats possibles ci-dessous), les options doivent être clairement distinctes les unes des autres, dans leur sens comme dans leur formulation. N'écris JAMAIS deux options qui ne diffèrent que par un mot ou un sujet interchangeable dans une phrase par ailleurs identique : ce genre de piège teste la lecture attentive des options, pas la compréhension du texte.",
-    "- Formule chaque question et chaque option dans un français naturel et directement compréhensible, jamais un copié-collé télégraphique du texte source.",
-    "- Pour le format \"qcm\", pas de question fermée oui/non — ce cas relève du format \"vrai_faux\" prévu ci-dessous.",
-    "- Difficulté grand public, formulation neutre, sans jugement de valeur.",
-    ...(levelInstruction ? [`- ${levelInstruction}`] : []),
-    "",
-    "=== Nombre de questions par sujet (obligatoire) ===",
-    `Génère EXACTEMENT ce nombre de questions pour chaque sujet ci-dessous (${totalQuota} questions au total) — ne saute AUCUN sujet, chacun doit être couvert :`,
-    quotaLines,
-    "Exception : si un sujet précis ne permet vraiment de poser aucune question sérieuse sans se répéter ou inventer un fait absent du texte, tu peux lui donner 1 question de moins que prévu — mais ne le saute jamais entièrement sans raison sérieuse, et ne dépasse jamais le nombre indiqué pour un sujet.",
-    "",
-    ...buildQuestionFormatsPromptBlock("sourceId", totalQuota),
-    "",
-    "Éléments disponibles :",
-    list
-  ].join("\n");
-}
+// ── Sélection des connaissances (admission), séparée de la génération des
+// questions (demande du 17/08/2026, audit du pipeline mnésique) — extraites
+// dans lib/knowledge-admission.js (comme lib/question-formats.js le 16/08),
+// pour être testables sans démarrer tout server.js : buildKnowledgeAdmissionPrompt,
+// buildQuestionsFromKnowledgePrompt, buildFicheAndKnowledgeAdmissionPrompt,
+// buildKnowledgeVerificationPrompt, applyKnowledgeVerificationDecisions
+// (importées plus haut). Cf. ce fichier pour le détail de l'architecture
+// (admission → vérification indépendante pour le sujet libre → génération).
 
 // Validation adaptée aux QCM narratifs : une même source peut porter
 // plusieurs questions (maxPerSource), utile sur un QCM de notion où une
@@ -12734,83 +12978,25 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
 }
 
 // QCM d'une seule notion (un événement "Ce jour dans l'Histoire" ou un item
-// Éclairages), généré à la demande au clic sur "Mémoriser" (cf.
-// POST /api/users/notion-quizzes) — jamais par lot ni planifié. `rawItem` est
-// l'objet brut déjà en mémoire côté client au moment du clic (mêmes champs
-// que ceux consommés par extractCultureGeneraleItemName/Detail et
-// formatCultureGeneraleItemForPrompt) ; `sourceId` est son identifiant
-// stable (current_topic_id pour un Éclairage, id pour un événement
-// historique), repris tel quel comme sourceDebateId des questions générées.
-// Rédige en un seul appel IA la fiche de révision ET le quiz d'un sujet
-// désigné par son seul nom — sujet libre tapé par un visiteur, ou notion déjà
-// extraite d'un débat (demande du 12/08/2026 : la fiche doit contenir tous
-// les faits nécessaires pour répondre aux questions, et sa longueur doit
-// suivre le niveau, cf. NOTION_QUIZ_LEVELS). Un seul appel garantit que les
-// questions restent fondées sur les mêmes faits que la fiche affichée
-// (jamais deux appels séparés qui pourraient diverger sur le contenu).
-// `contextHint` donne un point de départ factuel (ex. le débat d'origine
-// d'une notion) sans borner le sujet à ce seul contexte : la fiche reste une
-// présentation autonome et complète du sujet lui-même. `requireValidation`
-// est désactivé pour une notion de débat (déjà vérifiée réelle et sérieuse
-// à l'extraction, cf. buildDebateTopicNotionsPrompt) — inutile d'exposer ce
-// deuxième point de rejet possible pour un sujet déjà fiable.
-function buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, requireValidation) {
-  const { target, instruction, sectionsRange, lengthHint } = levelConfig;
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target, true).slice(0, -1);
-  const lines = [`Tu es un rédacteur pédagogique francophone. Un visiteur veut mémoriser ce sujet : "${subject}".`];
-  if (contextHint) lines.push(`Contexte d'origine (pour t'aider à cerner le sujet, mais la fiche doit rester une présentation autonome et complète du sujet lui-même, pas un résumé de ce contexte) : ${contextHint}`);
-  lines.push("");
-  if (requireValidation) {
-    lines.push("Étape 1 : vérifie que ce sujet désigne bien un sujet de connaissance réel et sérieux (fait historique, scientifique, culturel, géographique, technique, etc.) sur lequel on peut écrire une fiche factuelle vérifiable. Refuse (valid:false) s'il est vide, absurde, injurieux, dangereux, illégal, à caractère sexuel, ou trop vague/générique pour donner une fiche précise (ex. \"tout\", \"la vie\").");
-    lines.push("Si le sujet n'est pas valide, réponds uniquement : {\"valid\":false,\"reason\":\"phrase courte en français expliquant pourquoi, destinée à être affichée à l'utilisateur\"}");
-    lines.push("");
-    lines.push("Étape 2 : si le sujet est valide, rédige :");
-  } else {
-    lines.push("Rédige :");
-  }
-  lines.push("1. Une fiche de mémorisation synthétique et strictement factuelle en français (esprit fiche de révision : dense, claire, sans blabla, aucune approximation présentée comme un fait établi, aucune invention) — elle doit contenir tous les faits nécessaires pour répondre seule à chacune des questions du quiz ci-dessous : chaque réponse doit être vérifiable en la relisant.");
-  lines.push(`2. Un quiz de ${target} questions permettant de vérifier la compréhension de cette fiche — chaque question et sa réponse doivent être intégralement fondées sur le contenu de la fiche que tu rédiges, jamais sur un fait absent de cette fiche.`);
-  lines.push("3. Ne retiens, pour la fiche comme pour les questions, que les faits qui méritent vraiment d'être sus — utiles en culture générale, ceux qu'une personne cultivée retiendrait sur ce sujet — l'essentiel structurant, jamais un détail insignifiant ou anecdotique : chaque question doit aider le lecteur à bien saisir les grands enjeux et les grandes caractéristiques du sujet (pourquoi il compte, ce qui s'y joue, ce qui le définit), pas seulement des dates ou des noms isolés.");
-  lines.push("4. Priorité à l'utilité, jamais au simple effet : un fait étonnant, curieux ou peu connu est un vrai plus s'il est réellement vrai et aide à comprendre le sujet, mais ne remplace jamais un fait utile et structurant par un détail choisi seulement parce qu'il est original ou insolite.");
-  lines.push("5. Vérifie l'exactitude de chaque fait avant de l'utiliser (dates, chiffres, noms, mécanismes) — en cas de doute réel sur un fait précis, écarte-le ou reste plus général plutôt que de risquer une erreur présentée comme certaine. Aucune approximation, aucune invention, même partielle.");
-  if (instruction) lines.push(`6. ${instruction}`);
-  lines.push("");
-  lines.push("Champs de la fiche :");
-  lines.push("- \"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Guerre de Cent Ans\", \"Photosynthèse\") — reformule si la saisie de départ est une question ou une phrase (ex. \"c'est quoi la photosynthèse\" → \"Photosynthèse\"), jamais recopiée telle quelle dans ce cas.");
-  lines.push("- \"meta\" : une ligne courte de repères (dates, lieu, auteur...) si pertinent, sinon null.");
-  lines.push(`- "sections" : ${sectionsRange} blocs {"label": string ou null, "text": string} — la fiche ${lengthHint}`);
-  lines.push("");
-  lines.push(...formatBlock);
-  lines.push("");
-  lines.push(`Pour chaque question, le champ "sourceId" doit valoir exactement la chaîne : "${id}".`);
-  lines.push("");
-  // Exemple concret de forme de "questions" (pas un simple {...}) :
-  // indispensable pour que le modèle suive vraiment la structure
-  // variants/knowledgeTarget décrite en prose plus haut — un placeholder
-  // vague en toute fin de prompt l'emportait sinon sur la consigne
-  // détaillée (constaté le 16/08/2026 : le modèle retombait sur l'ancienne
-  // forme altVariant malgré des instructions "variants" explicites).
-  // Exemple à DEUX objets dans "variants" (direct + inverse), pas un seul :
-  // un modèle pattern-matche fortement sur la forme littérale de l'exemple
-  // final — un tableau à un seul élément produisait systématiquement 1 seule
-  // variante partout malgré la consigne en prose (constaté le 16/08/2026).
-  const questionShapeExample = '{"knowledgeTarget":"...","variants":[{"type":"qcm|vrai_faux|texte_a_trous|intrus|qcm_multi|association|ordre","question":"(formulation directe)","options":[...],"correctIndex":0,"explanation":"...","selfContained":true,"retrievalMode":"direct"},{"type":"qcm|vrai_faux|texte_a_trous","question":"(formulation inverse ou contextuelle, PAS une paraphrase)","options":[...],"correctIndex":0,"explanation":"...","selfContained":true,"retrievalMode":"inverse"}],"sourceId":"' + id + '"}';
-  if (requireValidation) {
-    lines.push("Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces deux formes exactement :");
-    lines.push("- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}");
-    lines.push(`- Sujet accepté : {"valid":true,"sourceName":"...","meta":"..."|null,"sections":[{"label":"..."|null,"text":"..."}],"questions":[${questionShapeExample}, "... (${target} objets de cette forme au total)"]}`);
-  } else {
-    lines.push(`Réponds uniquement en JSON strict, sans aucun texte autour, sous cette forme exactement : {"sourceName":"...","meta":"..."|null,"sections":[{"label":"..."|null,"text":"..."}],"questions":[${questionShapeExample}, "... (${target} objets de cette forme au total)"]}`);
-  }
-  return lines.join("\n");
-}
+// Éclairages, cf. buildNotionQuestions plus bas) ou d'un sujet libre/notion
+// de débat avec niveau (cf. generateNotionLevelQuiz plus bas), généré à la
+// demande au clic sur "Mémoriser" — jamais par lot ni planifié.
+// buildFicheAndKnowledgeAdmissionPrompt/buildKnowledgeVerificationPrompt/
+// applyKnowledgeVerificationDecisions (sujet libre) et
+// buildKnowledgeAdmissionPrompt/buildQuestionsFromKnowledgePrompt
+// (Éclairages/Histoire + sujet libre) vivent désormais dans
+// lib/knowledge-admission.js — cf. ce fichier pour le détail de
+// l'architecture (admission → vérification indépendante pour le sujet libre
+// → génération des questions à partir des seules connaissances admises).
 
-// Parse et valide la réponse commune à buildLeveledFicheAndQuizPrompt (fiche
-// + questions) — factorisé entre buildNotionQuestions (notion de débat avec
-// niveau) et buildCustomTopicQuiz (sujet libre), seul le gabarit `id` de
-// question diffère entre les deux appelants.
-function parseLeveledFicheAndQuiz(parsed, fallbackName, id, levelConfig) {
-  const { max, min, maxSections, sectionTextLimit } = levelConfig;
+// Parse la fiche + les connaissances candidates communes à
+// buildFicheAndKnowledgeAdmissionPrompt — factorisé entre buildNotionQuestions
+// (notion de débat avec niveau) et buildCustomTopicQuiz (sujet libre). Ne
+// tranche PAS ici le sort des candidats (cf. buildKnowledgeVerificationPrompt,
+// une passe séparée) : se contente de la structure fiche + validation
+// structurelle des candidats (validateKnowledgeCandidates).
+function parseFicheAndKnowledgeCandidates(parsed, fallbackName, levelConfig) {
+  const { maxSections, sectionTextLimit, max } = levelConfig;
   const sourceName = capitalizeFirstLetter(String(parsed?.sourceName || fallbackName).trim()).slice(0, 120);
   const sections = Array.isArray(parsed?.sections)
     ? parsed.sections
@@ -12820,9 +13006,133 @@ function parseLeveledFicheAndQuiz(parsed, fallbackName, id, levelConfig) {
     : [];
   if (!sourceName || !sections.length) return null;
   const sourceDetail = { meta: parsed?.meta ? String(parsed.meta).trim().slice(0, 200) : null, sections, image: null };
+  const candidates = validateKnowledgeCandidates(parsed?.knowledge, { max });
+  // imageSearchQuery : fournie par le MÊME appel IA que la fiche (aucun appel
+  // dédié, cf. lib/knowledge-image-search.js) — résolue par l'appelant
+  // (generateNotionLevelQuiz) en une seule recherche externe, jamais ici.
+  const imageSearchQuery = sanitizeImageSearchQuery(parsed?.imageSearchQuery);
+  return { sourceName, sourceDetail, candidates, imageSearchQuery };
+}
 
-  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], max, max);
-  if (validated.length < min) return null;
+// ── Orchestration complète du sujet libre / notion de débat avec niveau
+// (demande du 17/08/2026) : fiche + candidats → vérification indépendante
+// batchée (EN PARALLÈLE d'une éventuelle recherche d'image, cf.
+// lib/knowledge-image-search.js et imageSearchQuery ci-dessus, résolue une
+// seule fois ici) → questions à partir des seuls candidats acceptés.
+// Factorisé entre buildNotionQuestions (notion de débat) et
+// buildCustomTopicQuiz (recherche libre), qui ne différaient déjà que par
+// `subject`/`contextHint`/`requireValidation`/le préfixe de l'id de
+// question. Retourne :
+// - {error:"rejected", reason} : sujet refusé à l'étape 1 (requireValidation) ;
+// - {error:"failed", reason} : échec technique OU aucune connaissance
+//   n'a passé l'admission+vérification (cas normal, cf. §26 — jamais un
+//   contenu de repli fabriqué pour éviter une liste vide) ;
+// - {sourceName, sourceDetail, validated} : succès.
+async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, requireValidation) {
+  const { target, instruction, max, min } = levelConfig;
+  const timeoutMs = Math.min(120_000, 45_000 + target * 3_000);
+
+  let parsed;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildFicheAndKnowledgeAdmissionPrompt(subject, contextHint, levelConfig, requireValidation) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" },
+      timeoutMs
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error(`[notion-quiz:${id}] fiche + admission :`, error.message);
+    return { error: "failed" };
+  }
+  if (requireValidation && parsed?.valid === false) {
+    const reason = String(parsed?.reason || "").trim().slice(0, 300);
+    return { error: "rejected", reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
+  }
+
+  const ficheResult = parseFicheAndKnowledgeCandidates(parsed, subject, levelConfig);
+  if (!ficheResult) {
+    console.warn(`[notion-quiz:${id}] fiche invalide.`);
+    return { error: "failed" };
+  }
+  const { sourceName, sourceDetail, candidates, imageSearchQuery } = ficheResult;
+  // Cas normal (cf. §26 du cahier des charges), jamais une erreur en soi :
+  // rien dans ce que le modèle a rédigé ne méritait d'être admis. Ne
+  // JAMAIS enchaîner sur une génération de questions dans ce cas.
+  if (!candidates.length) {
+    console.warn(`[notion-quiz:${id}] aucune connaissance candidate après admission.`);
+    return { error: "failed", reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." };
+  }
+
+  // Recherche d'image (cf. lib/knowledge-image-search.js) menée EN PARALLÈLE
+  // de la vérification indépendante — indépendante par nature (aucun besoin
+  // d'attendre l'issue de la vérification) — plutôt qu'un appel séquentiel
+  // supplémentaire qui allongerait la latence perçue. `.catch(() => null)` :
+  // un échec de la recherche d'image ne doit JAMAIS faire échouer
+  // Promise.all ni donc la vérification qui tourne à côté (§8 du cahier des
+  // charges — jamais bloquant pour la génération principale).
+  let accepted;
+  let resolvedImage = null;
+  try {
+    const [verifyContent, imageResult] = await Promise.all([
+      _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(candidates, sourceName) }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.2,
+        responseFormat: { type: "json_object" }
+      }),
+      imageSearchQuery
+        ? searchKnowledgeImage(imageSearchQuery, { logLabel: `${id}:${sourceName}` }).catch((error) => {
+            console.warn(`[notion-quiz:${id}] recherche image :`, error.message);
+            return null;
+          })
+        : Promise.resolve(null)
+    ]);
+    accepted = applyKnowledgeVerificationDecisions(candidates, JSON.parse(verifyContent)?.decisions);
+    resolvedImage = imageResult;
+  } catch (error) {
+    // Passe de vérification indisponible : conservateur par défaut, on
+    // n'admet RIEN plutôt que de se rabattre sur les candidats non
+    // vérifiés (jamais de repli qui contournerait le contrôle demandé).
+    console.error(`[notion-quiz:${id}] vérification indépendante :`, error.message);
+    return { error: "failed" };
+  }
+  sourceDetail.image = resolvedImage;
+  if (!accepted.length) {
+    console.warn(`[notion-quiz:${id}] aucune connaissance n'a passé la vérification indépendante (${candidates.length} candidate(s)).`);
+    return { error: "failed", reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." };
+  }
+
+  let questionsParsed;
+  try {
+    const formatBlock = buildQuestionFormatsPromptBlock("sourceId", accepted.length, true);
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildQuestionsFromKnowledgePrompt("sourceId", id, accepted, instruction, formatBlock) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" },
+      timeoutMs
+    });
+    questionsParsed = JSON.parse(content);
+  } catch (error) {
+    console.error(`[notion-quiz:${id}] génération des questions :`, error.message);
+    return { error: "failed" };
+  }
+  // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
+  // structurel en plus de la consigne de prompt — retire toute question dont
+  // le knowledgeTarget ne correspond à AUCUNE connaissance acceptée.
+  // filterVariantsByKnowledgeConstraints (demande du 17/08/2026, second
+  // mini-patch) : ensuite seulement — retire toute variante "ordre"/"intrus"
+  // non justifiée par sequential/clearBoundary, indépendamment du prompt.
+  const validated = filterVariantsByKnowledgeConstraints(
+    filterQuestionsToAdmittedKnowledge(
+      validateNarrativeQuizQuestions(questionsParsed?.questions, [id], max, max),
+      accepted
+    ),
+    accepted
+  );
+  if (validated.length < min) {
+    console.warn(`[notion-quiz:${id}] seulement ${validated.length} question(s) valide(s) et traçable(s) sur ${accepted.length} connaissance(s) acceptée(s).`);
+    return { error: "failed" };
+  }
 
   return { sourceName, sourceDetail, validated };
 }
@@ -12834,7 +13144,7 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
   if (!id) return [];
   const item = { ...rawItem, type: sourceType, id, current_topic_id: id };
   const levelConfig = resolveNotionQuizLevel(rawLevel);
-  const { level, target, instruction } = levelConfig;
+  const { level, instruction } = levelConfig;
 
   // Notion de débat avec niveau choisi (toujours le cas depuis le
   // 12/08/2026, cf. activateDebateNotion côté client) : fiche ET quiz
@@ -12851,35 +13161,18 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
       seedExplanation ? `point de départ : ${seedExplanation}` : null
     ].filter(Boolean).join(" ; ") || null;
 
-    let parsed;
-    try {
-      const content = await _callOpenAI(apiKey, [{ role: "user", content: buildLeveledFicheAndQuizPrompt(subject, contextHint, id, levelConfig, false) }], {
-        model: DAILY_QUIZ_NARRATIVE_MODEL,
-        temperature: 0.4,
-        responseFormat: { type: "json_object" },
-        // Proportionnel au nombre de questions demandées (jusqu'à 3
-        // variantes chacune, cf. buildQuestionFormatsPromptBlock) : un
-        // niveau Expert (20 questions) produit une sortie sensiblement plus
-        // longue qu'un niveau Élémentaire (5 questions) — un budget fixe
-        // pénalisait les petits niveaux ou était trop court pour les grands
-        // (constaté le 16/08/2026 : timeout systématique à 45s puis 75s sur
-        // Expert). Plafonné à 120s pour rester sous les limites usuelles de
-        // proxy/hébergement.
-        timeoutMs: Math.min(120_000, 45_000 + target * 3_000)
-      });
-      parsed = JSON.parse(content);
-    } catch (error) {
-      console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
-      return [];
-    }
-
-    const result = parseLeveledFicheAndQuiz(parsed, subject, id, levelConfig);
-    if (!result) {
-      console.warn(`[notion-quiz:${sourceType}:${id}] fiche ou QCM invalide.`);
+    // generateNotionLevelQuiz (demande du 17/08/2026, audit du pipeline
+    // mnésique) : fiche + admission des connaissances → vérification
+    // indépendante batchée → questions à partir des seules connaissances
+    // acceptées, au lieu d'un seul appel qui décidait et questionnait à la
+    // fois (cf. le commentaire de generateNotionLevelQuiz pour le détail).
+    const result = await generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, false);
+    if (result.error) {
+      console.warn(`[notion-quiz:${sourceType}:${id}] ${result.error} : ${result.reason || "fiche ou QCM invalide."}`);
       return [];
     }
     const { sourceName, sourceDetail, validated } = result;
-    const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail);
+    const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail, userId, id);
     const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
     return validated.map((q, index) => ({
       id: `notion:${sourceType}:${id}-${level}-q${index + 1}`,
@@ -12899,37 +13192,88 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
   // dans l'Histoire, cf. views/eclairages.html) : aucun choix de niveau,
   // fiche déjà écrite en base (extractCultureGeneraleItemDetail) réutilisée
   // telle quelle, seules les questions sont générées par IA. ──
+  // Garde-fou "Ce jour dans l'Histoire" (cf. isHistoricalEventMemorizable) :
+  // rejette AVANT tout appel IA un événement pas suffisamment validé, sans
+  // jamais faire confiance au `rawItem` envoyé par le client. Éclairages
+  // (sourceType ≠ "histoire") n'a pas d'équivalent aujourd'hui — hors
+  // périmètre de cette demande, qui ne portait que sur review_status/
+  // date_certainty, propres au jeu de données historique.
+  if (sourceType === "histoire" && !isHistoricalEventMemorizable(id)) {
+    console.warn(`[notion-quiz:histoire:${id}] événement pas suffisamment validé (review_status/date_certainty), génération refusée.`);
+    return [];
+  }
   const sourceName = extractCultureGeneraleItemName(item);
   const sourceDetail = extractCultureGeneraleItemDetail(item);
   const sourceScope = sourceType === "histoire" ? (["france", "europe"].includes(item.category) ? item.category : "world") : null;
 
-  const quotaByItemId = new Map([[id, target]]);
-  let parsed;
   let sourceThemes = [];
   let sourcePlacement = null;
+  let admissionParsed;
   try {
     // Le placement complet (thématique unique → solar → étoile) est mené en
-    // parallèle de la génération du contenu. Il est figé dans le QCM pour
-    // que toutes ses questions et sa future acquisition partagent la même
-    // branche de la mémoire.
-    const [content, placement] = await Promise.all([
-      _callOpenAI(apiKey, [{ role: "user", content: buildCultureGeneraleQuizPrompt([item], quotaByItemId, instruction) }], {
+    // parallèle de l'admission des connaissances. Il est figé dans le QCM
+    // pour que toutes ses questions et sa future acquisition partagent la
+    // même branche de la mémoire.
+    const [admissionContent, placement] = await Promise.all([
+      _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeAdmissionPrompt(formatCultureGeneraleItemForPrompt(item), instruction) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
-        temperature: 0.4,
+        temperature: 0.3,
         responseFormat: { type: "json_object" }
       }),
-      classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail)
+      classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail, userId, id)
     ]);
-    parsed = JSON.parse(content);
+    admissionParsed = JSON.parse(admissionContent);
     sourcePlacement = placement;
     sourceThemes = placement?.category ? [placement.category] : [];
   } catch (error) {
-    console.error(`[notion-quiz:${sourceType}:${id}] génération IA :`, error.message);
+    console.error(`[notion-quiz:${sourceType}:${id}] admission des connaissances :`, error.message);
     return [];
   }
-  const validated = validateNarrativeQuizQuestions(parsed?.questions, [id], levelConfig.max, levelConfig.max);
+  // Cas normal, jamais une erreur (cf. buildKnowledgeAdmissionPrompt) : rien
+  // dans cet élément ne méritait une mémorisation durable. Ne JAMAIS
+  // enchaîner sur une génération de questions dans ce cas — il n'y a rien à
+  // questionner par construction.
+  const admittedKnowledge = validateKnowledgeCandidates(admissionParsed?.knowledge, { max: levelConfig.max });
+  if (!admittedKnowledge.length) {
+    console.warn(`[notion-quiz:${sourceType}:${id}] aucune connaissance admise, pas de QCM généré.`);
+    return [];
+  }
+
+  let parsed;
+  try {
+    // includeVariants:true (demande du 17/08/2026, généralisation des variantes) :
+    // Éclairages/Histoire utilisaient jusqu'ici includeVariants:false (une seule
+    // formulation par connaissance) — bascule sur le même mécanisme variants[]/
+    // knowledgeTarget déjà utilisé par le sujet libre (cf. buildQuestionFormatsPromptBlock,
+    // lib/knowledge-admission.js), réutilisé tel quel : rien de dupliqué. 1 à 3
+    // variantes par connaissance admise, jamais un quota (cf. son propre commentaire
+    // "vise 2 variantes par défaut... redescends à 1 seulement quand...").
+    const formatBlock = buildQuestionFormatsPromptBlock("sourceId", admittedKnowledge.length, true);
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, instruction, formatBlock) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" }
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error(`[notion-quiz:${sourceType}:${id}] génération des questions :`, error.message);
+    return [];
+  }
+  // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
+  // structurel en plus de la consigne de prompt — retire toute question dont
+  // le knowledgeTarget ne correspond à AUCUNE connaissance admise.
+  // filterVariantsByKnowledgeConstraints (demande du 17/08/2026, second
+  // mini-patch) : ensuite seulement — retire toute variante "ordre"/"intrus"
+  // non justifiée par sequential/clearBoundary, indépendamment du prompt.
+  const validated = filterVariantsByKnowledgeConstraints(
+    filterQuestionsToAdmittedKnowledge(
+      validateNarrativeQuizQuestions(parsed?.questions, [id], levelConfig.max, levelConfig.max),
+      admittedKnowledge
+    ),
+    admittedKnowledge
+  );
   if (validated.length < levelConfig.min) {
-    console.warn(`[notion-quiz:${sourceType}:${id}] seulement ${validated.length} question(s) valide(s).`);
+    console.warn(`[notion-quiz:${sourceType}:${id}] seulement ${validated.length} question(s) valide(s) et traçable(s) sur ${admittedKnowledge.length} connaissance(s) admise(s).`);
     return [];
   }
 
@@ -13126,8 +13470,8 @@ function buildEnumerableQuizChunkPrompt(subject, itemsChunk, id) {
   // alphabétique des capitales (ne teste que l'orthographe), et
   // "association"/"qcm_multi" bricolaient un regroupement de 3-4 éléments
   // choisis au hasard dans la liste plutôt qu'un ensemble réellement
-  // cohérent. Ce contexte reste "qcm"/"vrai_faux"/"texte_a_trous" — les trois
-  // formats qui testent honnêtement UN élément à la fois.
+  // cohérent. Ce contexte reste "qcm"/"texte_a_trous" — les formats qui
+  // testent honnêtement UN élément à la fois.
   const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count, true, ["intrus", "ordre", "association", "qcm_multi"]).slice(0, -1);
   return [
     `Tu écris un quiz de mémorisation en français sur : "${subject}".`,
@@ -13175,7 +13519,7 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
     console.warn(`[notion-quizzes:custom:${id}] sujet énumérable : seulement ${validated.length} question(s) valide(s).`);
     return { error: "failed" };
   }
-  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", finalSourceName, sourceDetail);
+  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", finalSourceName, sourceDetail, userId, id);
   const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}-exhaustif-q${index + 1}`,
@@ -13218,33 +13562,19 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
     }
   }
 
-  let parsed;
-  try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildLeveledFicheAndQuizPrompt(topic, null, id, levelConfig, true) }], {
-      model: DAILY_QUIZ_NARRATIVE_MODEL,
-      temperature: 0.4,
-      responseFormat: { type: "json_object" },
-      // Proportionnel au nombre de questions (cf. commentaire équivalent
-      // dans buildNotionQuestions) : Expert/Exhaustif (20 questions, jusqu'à
-      // 3 variantes chacune) produisent une sortie sensiblement plus longue
-      // qu'Élémentaire (5 questions).
-      timeoutMs: Math.min(120_000, 45_000 + levelConfig.target * 3_000)
-    });
-    parsed = JSON.parse(content);
-  } catch (error) {
-    console.error(`[notion-quizzes:custom:${id}] génération IA :`, error.message);
-    return { error: "failed" };
-  }
-
-  if (!parsed || parsed.valid === false) {
-    const reason = String(parsed?.reason || "").trim().slice(0, 300);
-    return { error: "rejected", reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
-  }
-
-  const result = parseLeveledFicheAndQuiz(parsed, topic, id, levelConfig);
-  if (!result) {
-    console.warn(`[notion-quizzes:custom:${id}] fiche ou QCM invalide.`);
-    return { error: "failed" };
+  // generateNotionLevelQuiz (demande du 17/08/2026, audit du pipeline
+  // mnésique) : fiche + admission des connaissances → vérification
+  // indépendante batchée → questions à partir des seules connaissances
+  // acceptées — cf. son commentaire pour le détail de l'architecture.
+  const result = await generateNotionLevelQuiz(apiKey, topic, null, id, levelConfig, true);
+  if (result.error) {
+    // `reason` conservé (pas seulement pour "rejected") : POST
+    // /api/users/notion-quizzes/custom l'affiche aussi sur un "failed" avec
+    // reason (cf. son repli "Génération de la fiche impossible..." sinon) —
+    // notamment le message précis "aucune connaissance suffisamment fiable"
+    // (cf. generateNotionLevelQuiz), plus utile qu'un message générique.
+    console.warn(`[notion-quizzes:custom:${id}] ${result.error} : ${result.reason || "fiche ou QCM invalide."}`);
+    return result;
   }
   const { sourceName, sourceDetail, validated } = result;
   // Contrairement à buildNotionQuestions, ce chemin (sujet libre, hors "Expert"
@@ -13252,7 +13582,7 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   // contenu (bug distinct du budget de tokens insuffisant, cf.
   // fetchGpt5JsonContentWithRetry) : constaté en pratique le 12/08/2026, cause
   // principale des sujets libres tombés dans "Autres" sur "Mes apprentissages".
-  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", sourceName, sourceDetail);
+  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", sourceName, sourceDetail, userId, id);
   const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}${level ? `-${level}` : ""}-q${index + 1}`,
@@ -13607,7 +13937,7 @@ function computeCultureGeneraleStreaks(events) {
 // au prochain appel tant qu'elles n'auront pas été répondues. Id
 // "cgreview-{questionId}" — jamais persistées dans daily_quiz, recalculées à
 // chaque appel (pas de cache, cf. getDailyQuizQuestions).
-const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 10;
+const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 20;
 
 // Questions qu'un visiteur a explicitement écartées de ses futures repasses
 // (cf. POST /api/daily-quiz/exclude-question) — il les connaît déjà ou n'est
@@ -13652,7 +13982,12 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
 
   const [{ data: dueStates, error: dueError }, excludedIds] = await Promise.all([
     supabase.from("memory_item_fsrs_states")
-      .select("reps, memory_items(slot, quiz_date, question_id)")
+      // state/stability : ajoutés pour la gradation de l'aide (cf.
+      // lib/spaced-repetition/help-level.js, deriveHelpLevel) — lus ici en
+      // même temps que reps (déjà utilisé pour la rotation de variante),
+      // jamais réécrits, jamais transmis tels quels au client (seul le
+      // helpLevel dérivé l'est, cf. plus bas et stripQuestionForClient).
+      .select("reps, state, stability, memory_items(slot, quiz_date, question_id)")
       .eq("user_id", userRow.id)
       .lte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true })
@@ -13663,7 +13998,7 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
   if (!dueStates || !dueStates.length) return [];
 
   const dueItems = dueStates
-    .map((s) => ({ reps: s.reps, memoryItem: s.memory_items }))
+    .map((s) => ({ reps: s.reps, helpLevel: deriveHelpLevel({ state: s.state, stability: s.stability }), memoryItem: s.memory_items }))
     .filter((s) => s.memoryItem && !excludedIds.has(s.memoryItem.question_id));
   if (!dueItems.length) return [];
 
@@ -13683,15 +14018,72 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
   }
 
   const due = [];
-  for (const { reps, memoryItem } of dueItems) {
+  for (const { reps, helpLevel, memoryItem } of dueItems) {
     const question = questionByDateSlotId.get(`${memoryItem.quiz_date}:${memoryItem.slot}:${memoryItem.question_id}`);
     if (!question) continue; // contenu hors fenêtre de rétention (cas des anciens slots hors "notion:%", jamais backfillés)
     due.push({
       ...resolveActiveQuestionVariant(question, reps),
-      id: `cgreview-${memoryItem.question_id}`
+      id: `cgreview-${memoryItem.question_id}`,
+      // helpLevel : distinct de resolveActiveQuestionVariant (variant =
+      // quelle formulation, helpLevel = combien d'aide) — jamais fusionné
+      // dans son calcul, jamais lu par selectVariantIndex.
+      helpLevel
     });
   }
   return due;
+}
+
+// Jauge de charge d'apprentissage (demande du 17/08/2026) : projette les
+// échéances FSRS déjà programmées de cet utilisateur sur les prochains
+// DEFAULT_PROJECTION_DAYS jours et simule le report en cascade au-delà du
+// plafond quotidien (cf. computeLearningLoadGauge,
+// lib/spaced-repetition/learning-load.js — toute la logique de simulation
+// vit là-bas, pure et testée ; cette fonction ne fait que lire/agréger).
+// Lecture seule : aucun état FSRS modifié, aucune carte choisie ici.
+async function fetchLearningLoadGaugeForUser(voterKey) {
+  const key = String(voterKey || "").trim();
+  if (!key) return null;
+
+  // Lecture seule (jamais resolveLegacyUser, qui crée la ligne) : même
+  // principe que fetchCultureGeneraleReviewInjectionForToday — un visiteur
+  // sans historique n'a par définition aucun état FSRS, inutile de lui créer
+  // une ligne users ici.
+  const { data: userRow, error: userError } = await supabase.from("users").select("id").eq("legacy_key", key).maybeSingle();
+  if (userError) { console.warn("[learning-load] lecture user échouée :", userError.message); return null; }
+  if (!userRow) return { level: "calm", ratio: 0, peakDayIndex: -1, peakLoad: 0, dueCountsByDay: [] };
+
+  const now = new Date();
+  // Borne haute unique (fin du dernier jour de la fenêtre) : une seule
+  // requête plutôt que DEFAULT_PROJECTION_DAYS requêtes séparées, le
+  // bucketing par jour se fait ensuite en mémoire (volume par utilisateur
+  // toujours restreint, cf. plafond quotidien de repasses).
+  const windowEndIso = parisStartOfDayIso(new Date(now.getTime() + DEFAULT_PROJECTION_DAYS * 24 * 60 * 60 * 1000));
+  const { data: dueRows, error: dueError } = await supabase
+    .from("memory_item_fsrs_states")
+    .select("due_at")
+    .eq("user_id", userRow.id)
+    .lt("due_at", windowEndIso);
+  if (dueError) { console.warn("[learning-load] lecture memory_item_fsrs_states échouée :", dueError.message); return null; }
+
+  // dayBoundaries[i] = minuit Paris du jour i (0 = aujourd'hui) ; le jour 0
+  // regroupe tout ce qui est dû AVANT la fin du jour 0, retard déjà
+  // accumulé inclus (due_at au passé) — comme fetchCultureGeneraleReviewInjectionForToday,
+  // jamais une comparaison sur une date arrondie.
+  const dayBoundaries = [];
+  for (let i = 0; i <= DEFAULT_PROJECTION_DAYS; i++) {
+    dayBoundaries.push(new Date(parisStartOfDayIso(new Date(now.getTime() + i * 24 * 60 * 60 * 1000))).getTime());
+  }
+  const dueCountsByDay = new Array(DEFAULT_PROJECTION_DAYS).fill(0);
+  for (const row of dueRows || []) {
+    const dueMs = new Date(row.due_at).getTime();
+    if (!Number.isFinite(dueMs)) continue;
+    let dayIndex = dayBoundaries.findIndex((boundary, i) => dueMs < dayBoundaries[i + 1]);
+    if (dayIndex === -1) dayIndex = DEFAULT_PROJECTION_DAYS - 1; // garde-fou, ne devrait pas arriver (borne haute déjà filtrée côté requête)
+    dueCountsByDay[dayIndex] += 1;
+  }
+
+  const gauge = computeLearningLoadGauge(dueCountsByDay, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY);
+  return { ...gauge, dueCountsByDay };
 }
 
 // Rubrique Éclairages -> service de lecture + clé du tableau de contenu
@@ -13716,9 +14108,29 @@ const CULTURE_GENERALE_ECLAIRAGES_TYPES = ["parallele", "pensee", "mecanisme", "
 
 // Index (mémoïsé le temps d'un appel) des événements "Ce jour dans l'Histoire"
 // par id — évènements globaux, jamais scopés à une date de génération de QCM.
+// Non filtré (garde les "draft") : usage réservé à la résolution rétroactive
+// de sourceName/sourceDetail pour des acquis DÉJÀ existants (cf.
+// resolveMissingAcquisSourceNames) — un acquis déjà en base doit rester
+// affichable quel que soit le review_status de son événement source
+// aujourd'hui, jamais le garde-fou de génération de nouvelles questions
+// (cf. isHistoricalEventMemorizable, qui filtre lui, juste en dessous).
 function buildHistoricalEventsIndex() {
   if (!historicalEventsRepository) return new Map();
   return new Map(historicalEventsRepository.getAll().map((e) => [String(e.id), e]));
+}
+
+// Garde-fou de génération (demande du 17/08/2026, audit du pipeline
+// mnésique) : un événement "Ce jour dans l'Histoire" ne doit alimenter une
+// NOUVELLE question mémorisable que s'il est suffisamment validé — cf.
+// getAll({onlyMemorizable}) pour la définition exacte et sa justification
+// transitoire. Relit toujours le repository plutôt que de faire confiance à
+// `rawItem` (fourni par le CLIENT dans le corps de POST
+// /api/users/notion-quizzes, cf. buildNotionQuestions) : un item "draft"
+// affiché puis envoyé tel quel par un client ne doit jamais suffire à
+// déclencher une génération, quel que soit son contenu.
+function isHistoricalEventMemorizable(id) {
+  if (!historicalEventsRepository) return false;
+  return historicalEventsRepository.getAll({ onlyMemorizable: true }).some((e) => String(e.id) === String(id));
 }
 
 // Relit le contenu Éclairages déjà publié un jour donné pour une rubrique
@@ -14782,7 +15194,16 @@ function stripQuestionForClient(q) {
   const origin = String(q.id || "").startsWith("comprendre:")
     ? "comprendre"
     : (isCultureGeneraleQuestionId(q.id) ? "culture_generale" : "actu");
-  const originFields = { origin, ...(q.sourceType ? { sourceType: q.sourceType } : {}) };
+  // image (demande du 18/08/2026) : fond de la question pendant le QCM
+  // (Découvrir/Ancrer/Relier), cf. applyQuestionBackgroundImage côté client.
+  // Réutilise q.sourceDetail.image déjà stocké sur CHAQUE question depuis sa
+  // génération (cf. buildNotionQuestions) — jamais une nouvelle recherche
+  // d'image ici, ni un appel supplémentaire à lib/knowledge-image-search.js.
+  // Sur Ancrer/Relier, deux questions consécutives d'une même session
+  // peuvent venir de sujets différents, donc avoir des images différentes
+  // (ou aucune) : c'est voulu, jamais lissé/uniformisé côté serveur.
+  const image = q.sourceDetail && q.sourceDetail.image && q.sourceDetail.image.url ? q.sourceDetail.image : null;
+  const originFields = { origin, ...(q.sourceType ? { sourceType: q.sourceType } : {}), ...(image ? { image } : {}) };
   if (type === "association") {
     const pairs = Array.isArray(q.pairs) ? q.pairs : [];
     return {
@@ -14799,13 +15220,27 @@ function stripQuestionForClient(q) {
     // doit jamais le recevoir tel quel, seulement mélangé.
     return { id: q.id, type, question: q.question, items: shuffleArray(Array.isArray(q.items) ? q.items : []), ...originFields };
   }
-  // qcm/vrai_faux/texte_a_trous/intrus/qcm_multi partagent tous "options" —
-  // correctIndex/correctIndexes ne sont jamais inclus ici, seulement révélés
-  // après réponse (cf. POST /answer et GET /results). selfContained (cf.
-  // validateQuestionItemCore) sert au client à décider d'afficher ou non
-  // l'écran "réfléchis avant de voir les propositions" — transmis même pour
-  // les types qui l'ignorent (vrai_faux/intrus), sans effet côté client.
-  return { id: q.id, type, question: q.question, options: q.options, selfContained: q.selfContained === true, ...originFields };
+  // qcm/texte_a_trous/intrus/qcm_multi partagent tous "options" — tout comme
+  // le format "vrai_faux" (retiré de la génération le 16/08/2026, section 5 :
+  // interdiction absolue, mais MemoryItems historiques jamais retouchés,
+  // toujours rendus/corrigés à l'identique ici). correctIndex/correctIndexes
+  // ne sont jamais inclus ici, seulement révélés après réponse (cf. POST
+  // /answer et GET /results). selfContained (cf. validateQuestionItemCore)
+  // sert au client à décider d'afficher ou non l'écran "réfléchis avant de
+  // voir les propositions" — transmis même pour les types qui l'ignorent
+  // (vrai_faux/intrus), sans effet côté client.
+  // helpLevel (cf. lib/spaced-repetition/help-level.js) : uniquement attaché
+  // par fetchCultureGeneraleReviewInjectionForToday (seul point qui a accès à
+  // l'état FSRS au moment de servir une question) — absent pour toute autre
+  // question (premier passage jamais encore revu, QCM actu hors FSRS...) ;
+  // repli "guided" ici (jamais undefined) pour que le front n'ait jamais à
+  // gérer une valeur manquante.
+  return {
+    id: q.id, type, question: q.question, options: q.options,
+    selfContained: q.selfContained === true,
+    helpLevel: HELP_LEVELS.includes(q.helpLevel) ? q.helpLevel : "guided",
+    ...originFields
+  };
 }
 
 // Un QCM de notion vit sous sa date de création (cf. buildNotionQuestions),
@@ -15296,25 +15731,28 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // ses questions (memory_item_fsrs_states, cf. lib/spaced-repetition/),
     // jamais l'inverse — ce calcul ne réinjecte rien dans le scheduler
     // (invariant D de la refonte FSRS, 13-16/08/2026). Chaque question compte
-    // pour 0 (jamais répondue), 0.5 (encore en apprentissage/réapprentissage,
-    // state Learning/Relearning) ou 1 (passée en cycle de révision long
-    // terme, state Review) ; le "% d'ancrage" affiché est la moyenne sur
-    // toutes les questions de la notion. Remplace l'ancien streak-de-4 par
-    // question (computeQuestionStreaks), qui ne reflétait plus le rythme réel
-    // des repasses une fois celui-ci piloté par due_at plutôt que par des
+    // pour sa rétrivabilité actuelle (computeRetrievability, courbe d'oubli
+    // FSRS basée sur stability + temps écoulé depuis la dernière review — 0
+    // si jamais répondue) ; le "% d'ancrage" affiché est la moyenne sur
+    // toutes les questions de la notion. Remplace l'ancien crédit fixe par
+    // état (0.5 Learning/Relearning, 1 Review, demande du 17/08/2026) qui ne
+    // tenait pas compte de l'oubli progressif d'une carte en retard de
+    // repasse, et avant lui l'ancien streak-de-4 par question
+    // (computeQuestionStreaks), qui ne reflétait plus le rythme réel des
+    // repasses une fois celui-ci piloté par due_at plutôt que par des
     // paliers fixes.
     const { data: fsrsStates, error: fsrsStatesError } = await supabase
       .from("memory_item_fsrs_states")
-      .select("state, memory_items(slot, quiz_date, question_id)")
+      .select("state, stability, last_review_at, memory_items(slot, quiz_date, question_id)")
       .eq("user_id", userRow.id);
     if (fsrsStatesError) throw new Error(fsrsStatesError.message);
-    const FSRS_STATE_PROGRESS_CREDIT = { Learning: 0.5, Relearning: 0.5, Review: 1 };
     const stateByQuestionKey = new Map();
     for (const row of fsrsStates || []) {
       const mi = row.memory_items;
       if (!mi) continue;
-      stateByQuestionKey.set(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`, row.state);
+      stateByQuestionKey.set(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`, row);
     }
+    const retrievabilityNow = new Date();
 
     const quizzes = [];
     for (const link of links) {
@@ -15323,9 +15761,12 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       let creditSum = 0;
       let answeredCount = 0;
       for (const q of questions) {
-        const state = stateByQuestionKey.get(`${link.quiz_date}:${link.slot}:${q.id}`);
-        if (!state) continue;
-        creditSum += FSRS_STATE_PROGRESS_CREDIT[state] || 0;
+        const row = stateByQuestionKey.get(`${link.quiz_date}:${link.slot}:${q.id}`);
+        if (!row) continue;
+        creditSum += computeRetrievability(
+          { state: row.state, stability: row.stability, lastReviewAt: row.last_review_at },
+          retrievabilityNow
+        );
         answeredCount += 1;
       }
       const progressPct = Math.round((creditSum / questions.length) * 100);
@@ -15340,7 +15781,14 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         // sourceThemes.
         themes: primaryTheme ? [primaryTheme] : [],
         questionCount: questions.length,
-        realized: answeredCount > 0,
+        answeredCount,
+        // "Réalisé" seulement une fois TOUTES les questions répondues au moins
+        // une fois (juste ou fausse) — pas dès la première réponse (demande du
+        // 17/08/2026) : un QCM commencé puis abandonné en route doit rester
+        // visible et repris depuis "Mes apprentissages en cours" (Découvrir),
+        // pas disparaître prématurément dans "Mes acquis".
+        realized: answeredCount >= questions.length,
+        inProgress: answeredCount > 0 && answeredCount < questions.length,
         progressPct,
         validated: progressPct >= 100
       });
@@ -15496,116 +15944,235 @@ async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, {
   return "";
 }
 
-// Retrouve la rubrique officielle correspondant à une galaxie stockée. Pour
-// les quatre rubriques hybrides, restitue aussi la précision qui a produit
-// cette galaxie (ex. galaxie "Philosophie" → rubrique
-// "Philosophie - sciences sociales", précision "Philosophie").
-function getOpinionArticleCategoryForGalaxy(galaxy) {
-  const cleanGalaxy = String(galaxy || "").trim();
-  if (!cleanGalaxy) return null;
-  if (OPINION_ARTICLE_CATEGORY_OPTIONS.includes(cleanGalaxy) && !OPINION_ARTICLE_GALAXY_BY_PRECISION[cleanGalaxy]) {
-    return { category: cleanGalaxy, categoryPrecision: null };
-  }
-  for (const [category, byPrecision] of Object.entries(OPINION_ARTICLE_GALAXY_BY_PRECISION)) {
-    const match = Object.entries(byPrecision).find(([, mappedGalaxy]) => mappedGalaxy === cleanGalaxy);
-    if (match) return { category, categoryPrecision: match[0] };
-  }
-  return null;
+// getOpinionArticleCategoryForGalaxy/fetchCultureGeneraleHierarchyForClassification
+// (arbre cross-utilisateurs envoyé au classifieur) supprimées le 16/08/2026 :
+// exactement le mécanisme qui laissait un Solar créé par un autre utilisateur
+// influencer la classification d'un nouveau contenu (diagnostic "Atlas
+// Mnoria", §1/§2 — jamais la taxonomie d'un autre utilisateur). Remplacées
+// par fetchUserActiveKnowledgeSolars(userId), scopée à l'utilisateur courant.
+
+// ── Galaxies de connaissance (refonte du 16/08/2026, diagnostic "Atlas Mnoria") ──
+// Catalogue INDÉPENDANT de OPINION_ARTICLE_CATEGORY_OPTIONS (qui reste dédié
+// aux articles d'actualité, jamais touché ici) : les deux pipelines
+// partagent le stockage (solar_systems/stars, cf. taxonomy_scope) mais plus
+// le vocabulaire de classification. Volontairement peu nombreuses et très
+// larges (§3/§19 du plan : une Galaxy doit pouvoir accueillir de nombreux
+// Solars) — la création d'une nouvelle Galaxy n'est pas implémentée dans
+// cette refonte (jugée "encore plus rare" que celle d'un Solar, cf. §19) :
+// le classifieur choisit toujours parmi cette liste fixe.
+//
+// Chaque description encode explicitement la frontière qui a fait échouer
+// l'ancien système sur le cas "dieux romains" (religion/mythologie antique
+// comme FAIT HISTORIQUE vs. sa REPRÉSENTATION ARTISTIQUE) — cf. §14 du plan,
+// "le mot ne suffit pas, ce qui compte est ce que la Star enseigne".
+// Noms de Galaxy VOLONTAIREMENT identiques à ceux déjà utilisés (les 3
+// galaxies déjà réellement classées par le QCM : Histoire/Arts/Politique) ou
+// déjà pré-créés côté solars de départ (CULTURE_GENERALE_SEED_SOLAR_SYSTEMS
+// ci-dessous, ex. "Sciences - technologie", "Société - éducation") — jamais
+// une simplification cosmétique de ces libellés, qui aurait fait pointer ce
+// nouveau moteur vers une galaxy différente de celle déjà semée en base et
+// dupliqué inutilement les solars existants au prochain redémarrage.
+//
+// Liste complète des 20 valeurs de galaxy que l'ANCIEN mécanisme (dérivation
+// depuis OPINION_ARTICLE_CATEGORY_OPTIONS + OPINION_ARTICLE_GALAXY_BY_PRECISION)
+// pouvait théoriquement atteindre pour une connaissance — restaurée en entier
+// ici après un premier passage qui n'en gardait que 10 (constaté à la
+// vérification finale du 16/08/2026, "ne réduis aucune Galaxy silencieusement") :
+// retirer un domaine (Sport, Santé, Climat, Médias...) sans le dire aurait
+// forcé toute future connaissance de ce domaine dans une Galaxy voisine
+// inadaptée. Aucune de ces 10 galaxies restaurées n'a de Solar de départ
+// pré-semé (comme Arts/Politique déjà en usage réel) : la première
+// connaissance qui les atteint déclenche simplement une création normale.
+const KNOWLEDGE_GALAXY_DEFINITIONS = [
+  { name: "Histoire", description: "Faits, événements, sociétés, États, civilisations, religions et croyances DU PASSÉ étudiés comme connaissance historique (qui, quand, quel contexte) — une religion ou une mythologie ancienne appartient ici en tant que fait de civilisation, même si elle a aussi une dimension religieuse ou artistique." },
+  { name: "Arts", description: "La représentation esthétique ou artistique d'un sujet (peinture, sculpture, musique, littérature, cinéma, architecture) — ex. la façon dont une religion ou une mythologie ancienne est représentée DANS L'ART appartient ici, jamais la religion/mythologie elle-même comme fait historique." },
+  { name: "Sciences - technologie", description: "Concepts, découvertes, mécanismes et méthodes des sciences exactes et naturelles : mathématiques, physique, chimie, biologie, sciences de la Terre, astronomie, informatique, ingénierie, énergie." },
+  { name: "Philosophie", description: "Concepts, courants de pensée, questionnements et raisonnements philosophiques (éthique, épistémologie, logique, métaphysique) — la pensée en tant que telle, pas un fait qu'elle décrit." },
+  { name: "Sciences sociales", description: "Sociologie, psychologie sociale, anthropologie — l'étude des comportements et structures sociales comme discipline, distincte de la philosophie (raisonnement) et de la société contemporaine (faits)." },
+  { name: "Société - éducation", description: "École, enseignement, famille, démographie, immigration, religions et croyances CONTEMPORAINES, discriminations, genre — le pendant contemporain de ce que \"Histoire\" couvre pour le passé." },
+  { name: "Économie - emploi", description: "Mécanismes économiques, monnaie, emploi, entreprises, finances publiques, commerce, immobilier." },
+  { name: "Politique", description: "Institutions politiques, pouvoirs, régimes, partis, relations internationales contemporaines." },
+  { name: "International", description: "Régions, pays et zones géographiques du monde et leurs caractéristiques propres (géographie, culture locale)." },
+  { name: "Justice - faits divers", description: "Système judiciaire, droit, criminalité, enquêtes policières, procédures." },
+  { name: "Climat - environnement", description: "Climat, écosystèmes, ressources naturelles, biodiversité, enjeux environnementaux." },
+  { name: "Culture", description: "Pratiques et objets culturels (traditions, gastronomie, mode, patrimoine) — hors œuvres d'art à proprement parler (cf. Arts) et hors faits historiques (cf. Histoire)." },
+  { name: "Sport", description: "Disciplines sportives, compétitions, records — le sport comme pratique et comme discipline." },
+  { name: "Loisirs", description: "Activités de loisir et de divertissement pratiquées (jeux, activités de plein air...) — hors productions médiatiques (cf. Médias - divertissements)." },
+  { name: "Langues", description: "Langues, grammaire, étymologie, linguistique." },
+  { name: "Lettres", description: "Littérature, œuvres écrites, auteurs et courants littéraires." },
+  { name: "Médias - divertissements", description: "Cinéma, télévision, musique, jeux vidéo, presse — productions et industries culturelles diffusées, pas la pratique elle-même (cf. Loisirs)." },
+  { name: "Santé - bien-être", description: "Corps humain, médecine, maladies, bien-être physique et mental." },
+  { name: "Vie personnelle - modes de vie", description: "Habitudes de vie quotidienne, consommation, relations, choix personnels contemporains." },
+  { name: "Espace jeunes", description: "Contenus destinés spécifiquement à un jeune public." }
+];
+
+function findKnowledgeGalaxyDefinition(name) {
+  const clean = String(name || "").trim();
+  return KNOWLEDGE_GALAXY_DEFINITIONS.find((g) => g.name === clean) || null;
 }
 
-let cultureGeneraleHierarchyClassificationCache = null;
-const CULTURE_GENERALE_HIERARCHY_CLASSIFICATION_CACHE_MS = 30_000;
-
-function invalidateCultureGeneraleHierarchyClassificationCache() {
-  cultureGeneraleHierarchyClassificationCache = null;
+// Solars de connaissance déjà actifs pour CET utilisateur uniquement (jamais
+// tous les solars de la table, cf. lib/knowledge-taxonomy/taxonomy-engine.js
+// filterUserActiveSolars/userActiveGalaxies — c'est le périmètre décisionnel
+// du moteur, §1/§2 du plan). `user_solar_activations` définit cet univers ;
+// solar_systems reste le catalogue canonique partagé (option "catalogue +
+// membership" retenue en design, cf. data/migration-user-solar-activations.sql).
+async function fetchUserActiveKnowledgeSolars(userId) {
+  if (!userId) return [];
+  // "knowledge" ET "both" (correctif point 2 de la vérification du
+  // 16/08/2026) : un Solar référencé aussi par le pipeline actu (9 cas réels
+  // mesurés) reste un candidat knowledge légitime — le masquer serait une
+  // régression, pas une prudence (cf. isKnowledgeCandidate, seule porte
+  // d'entrée pour cette décision ; répliquée ici côté requête SQL pour ne
+  // filtrer qu'une fois côté serveur plutôt que de rapatrier "unknown"/"news"
+  // pour les exclure ensuite en mémoire).
+  const { data, error } = await supabase
+    .from("user_solar_activations")
+    .select("solar_system_id, solar_systems!inner(id, galaxy, name, description, taxonomy_scope)")
+    .eq("user_id", userId)
+    .in("solar_systems.taxonomy_scope", ["knowledge", "both"]);
+  if (error) {
+    console.warn("[knowledge taxonomy] lecture univers utilisateur échouée :", error.message);
+    return [];
+  }
+  return (data || []).map((row) => ({
+    id: row.solar_systems.id,
+    galaxy: row.solar_systems.galaxy,
+    name: row.solar_systems.name,
+    description: row.solar_systems.description || null,
+    taxonomyScope: row.solar_systems.taxonomy_scope
+  }));
 }
 
-// Arbre existant présenté au classifieur dès la création du QCM. Il ne voit
-// plus seulement 16 libellés abstraits : il peut repérer qu'un sujet existe
-// déjà sous une étoile, retrouver son solar parent et choisir la même
-// thématique. Les ids restent validés côté serveur après la réponse IA. Le
-// cache très court évite de relire des milliers de lignes pour plusieurs QCM
-// créés à la suite ; toute création locale de solar/étoile l'invalide.
-async function fetchCultureGeneraleHierarchyForClassification() {
+// Solars "de départ" (cf. CULTURE_GENERALE_SEED_SOLAR_SYSTEMS) : un socle
+// canonique PARTAGÉ, jamais un espace personnel — contrairement aux Solars
+// ad hoc créés à la volée (ceux-là restent strictement scopés à
+// fetchUserActiveKnowledgeSolars, jamais visibles d'un autre utilisateur).
+// Correctif du 17/08/2026 (cas réel "fête de Vaux-le-Vicomte" classée en
+// nouveau Solar "Cérémonies royales anciennes" alors que "Temps modernes"
+// existait) : ce socle doit être proposé à TOUT LE MONDE, pas seulement à
+// l'utilisateur qui l'a déjà personnellement "activé" par hasard — sinon
+// chaque nouvel utilisateur recrée sa propre variante des mêmes périodes
+// avant d'être exposé une première fois par coïncidence à la bonne.
+// Cache court (60s, même principe que l'ancienne fetchCultureGeneraleHierarchyForClassification) :
+// liste petite et identique pour tous, aucune raison de la relire à chaque
+// appel.
+let _cultureGeneraleSeedSolarsCache = null;
+const CULTURE_GENERALE_SEED_SOLARS_CACHE_MS = 60_000;
+async function fetchCultureGeneraleSeedSolars() {
   const now = Date.now();
-  if (cultureGeneraleHierarchyClassificationCache &&
-      now - cultureGeneraleHierarchyClassificationCache.loadedAt < CULTURE_GENERALE_HIERARCHY_CLASSIFICATION_CACHE_MS) {
-    return cultureGeneraleHierarchyClassificationCache.value;
+  if (_cultureGeneraleSeedSolarsCache && now - _cultureGeneraleSeedSolarsCache.loadedAt < CULTURE_GENERALE_SEED_SOLARS_CACHE_MS) {
+    return _cultureGeneraleSeedSolarsCache.value;
   }
-  const [{ data: solarRows, error: solarError }, { data: starRows, error: starError }] = await Promise.all([
-    supabase.from("solar_systems").select("id, name, galaxy").order("id", { ascending: true }).limit(5000),
-    supabase.from("stars").select("id, name, solar_system_id").order("id", { ascending: true }).limit(10000)
-  ]);
-  if (solarError || starError) {
-    console.warn("[culture-generale hierarchy] lecture incomplète :", (solarError || starError).message);
+  const seedGalaxies = Object.keys(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS);
+  const { data, error } = await supabase
+    .from("solar_systems")
+    .select("id, galaxy, name, normalized_name, description, taxonomy_scope")
+    .in("galaxy", seedGalaxies);
+  if (error) {
+    console.warn("[knowledge taxonomy] lecture solars de départ échouée :", error.message);
+    return _cultureGeneraleSeedSolarsCache?.value || [];
   }
-  const solarSystems = solarRows || [];
-  const stars = starRows || [];
-  const starsBySolarId = new Map();
-  for (const star of stars) {
-    const key = Number(star.solar_system_id);
-    if (!starsBySolarId.has(key)) starsBySolarId.set(key, []);
-    starsBySolarId.get(key).push(star);
+  const seedNormalizedByGalaxy = {};
+  for (const [galaxy, names] of Object.entries(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)) {
+    seedNormalizedByGalaxy[galaxy] = new Set(names.map(normalizeSolarSystemName));
   }
-  const lines = [];
-  for (const solar of solarSystems) {
-    const categoryPlacement = getOpinionArticleCategoryForGalaxy(solar.galaxy);
-    if (!categoryPlacement) continue;
-    const precision = categoryPlacement.categoryPrecision ? ` (${categoryPlacement.categoryPrecision})` : "";
-    const childStars = starsBySolarId.get(Number(solar.id)) || [];
-    const starsText = childStars.length
-      ? childStars.map((star) => `${star.id}:${star.name}`).join(" ; ")
-      : "aucune";
-    lines.push(`${categoryPlacement.category}${precision} > ${solar.galaxy} > solar ${solar.id}:${solar.name} > étoiles ${starsText}`);
-  }
-  const value = {
-    solarSystems,
-    stars,
-    promptText: lines.join("\n") || "(hiérarchie encore vide)"
-  };
-  cultureGeneraleHierarchyClassificationCache = { loadedAt: now, value };
+  const value = (data || [])
+    .filter((s) => isKnowledgeCandidate({ taxonomyScope: s.taxonomy_scope }) && seedNormalizedByGalaxy[s.galaxy]?.has(s.normalized_name))
+    .map((s) => ({ id: s.id, galaxy: s.galaxy, name: s.name, description: s.description || null, taxonomyScope: s.taxonomy_scope }));
+  _cultureGeneraleSeedSolarsCache = { loadedAt: now, value };
   return value;
 }
 
-// Classe un contenu Culture Générale dans une des 16 OPINION_ARTICLE_CATEGORY_OPTIONS
-// (mêmes rubriques que "Autres actus", cf. classifyOpinionArticlesWithAI ~9757) pour en
-// dériver la galaxie (cf. getOpinionArticleGalaxy) — remplace l'ancien mapping fixe
-// CULTURE_GENERALE_SOURCE_TYPE_GALAXY (sourceType -> 1 des 6 anciennes galaxies) par une
-// vraie classification, un seul item à la fois (pas de lot, contrairement à la
-// classification d'articles : cette fonction tourne à l'acquisition, pas en amont sur un
-// pool). Retourne null (jamais une catégorie inventée) si l'appel échoue.
-async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sourceDetail) {
+// Choisit la Galaxy d'une connaissance PARMI KNOWLEDGE_GALAXY_DEFINITIONS
+// (jamais une invention libre, cf. §19 : la création de Galaxy n'est pas
+// implémentée ici). MATCH pur : un seul appel, jamais de solar/étoile décidé
+// à cette étape (séparation match/création, cf. rapport de design §8). Le
+// périmètre utilisateur n'a de sens qu'au niveau Solar (§17 : une Galaxy
+// canonique peut toujours être "activée" par un nouvel utilisateur, ce n'est
+// jamais un espace personnel isolé) — la liste proposée reste donc la liste
+// canonique complète, seules les galaxies déjà actives chez cet utilisateur
+// sont signalées comme préférables à égalité de pertinence.
+// Fusion Galaxy+Solar en UN SEUL appel (correctif du 16/08/2026, vérification
+// finale post-implémentation) : l'ancienne paire classifyCultureGeneraleCategoryWithAI
+// + resolveCultureGeneraleSolarSystemWithAI coûtait 2 appels IA sur le chemin
+// "reuse" (cible : 1 maximum) et 3 sur le chemin "create" (cible : 2). Un seul
+// appel MATCH choisit désormais la Galaxy ET, dans la foulée, le Solar
+// existant le plus cohérent — la création de Solar reste un second appel
+// séparé, déclenché UNIQUEMENT sur no_match (cf. resolveCultureGeneraleSolarSystemWithAI
+// plus bas, désormais dédiée à la seule validation de création).
+// La création de Galaxy reste hors périmètre (§19 : encore plus rare qu'un
+// Solar) — le choix porte toujours sur KNOWLEDGE_GALAXY_DEFINITIONS, jamais
+// une Galaxy inventée.
+async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, sourceDetail, userSolars) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const hierarchy = await fetchCultureGeneraleHierarchyForClassification();
+  const subjectTitle = String(sourceName || "").slice(0, 160);
+  const subjectDetail = flattenCultureGeneraleDetail(sourceDetail).slice(0, 400);
+  // Candidats = Solars personnels déjà activés par CET utilisateur UNION le
+  // socle canonique "de départ" de cette Galaxy (cf. fetchCultureGeneraleSeedSolars,
+  // correctif du 17/08/2026 — sans l'union, "Temps modernes" restait invisible
+  // tant que l'utilisateur ne l'avait pas lui-même déjà rencontré une
+  // première fois). candidatesByGalaxy conserve la liste EXACTE proposée à
+  // l'IA pour chaque Galaxy, réutilisée telle quelle à l'étape de parsing
+  // plus bas — jamais recalculée séparément, pour ne jamais rejeter un choix
+  // IA valide (un Solar de départ) faute de figurer dans un second calcul
+  // strictement personnel.
+  const seedSolars = await fetchCultureGeneraleSeedSolars();
+  const candidatesByGalaxy = new Map();
+  const galaxiesPayload = KNOWLEDGE_GALAXY_DEFINITIONS.map((g) => {
+    const personalSolars = filterUserActiveSolars(userSolars, userSolars.map((s) => ({ solarSystemId: s.id })), g.name);
+    const seedSolarsInGalaxy = seedSolars.filter((s) => s.galaxy === g.name);
+    const merged = [];
+    const seenIds = new Set();
+    for (const s of [...personalSolars, ...seedSolarsInGalaxy]) {
+      if (seenIds.has(s.id)) continue;
+      seenIds.add(s.id);
+      merged.push(s);
+    }
+    candidatesByGalaxy.set(g.name, merged);
+    return {
+      name: g.name,
+      description: g.description,
+      existingSolars: merged.map((s) => ({ id: s.id, name: s.name, description: s.description || null }))
+    };
+  });
 
-  const compact = {
-    type: sourceType,
-    title: String(sourceName || "").slice(0, 160),
-    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
-    existing_memory_hierarchy: hierarchy.promptText
-  };
+  // starLabel : fusionne la proposition d'Étoile dans ce même appel (§3 de la
+  // vérification finale du 16/08/2026, cible 0/1/2 appels IA au total) — le
+  // serveur décidera ENSUITE, déterministement, si ce libellé correspond à
+  // une étoile déjà connue de cet utilisateur (cf. matchExistingStarByLabel)
+  // ou doit être créée telle quelle. Les règles de qualité (large, durable,
+  // jamais une redite du Solar) sont conservées de l'ancien
+  // resolveCultureGeneraleStarWithAI ; seule la comparaison à l'existant
+  // change de méthode (déterministe plutôt qu'un jugement IA sur la liste
+  // complète des étoiles, qui romprait la scalabilité prouvée au point 8 de
+  // la vérification précédente — jusqu'à 10 000 étoiles chez un même
+  // utilisateur, jamais envoyées ici).
+  const domainGalaxyNames = Object.keys(CULTURE_GENERALE_DOMAIN_GALAXIES).join(", ");
   const prompt = [
     "Réponds uniquement en json valide.",
-    "Classe ce contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) dans UNE seule rubrique.",
-    "Rubriques autorisées : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
-    "Recopie le libellé de rubrique EXACTEMENT comme dans la liste, sans le modifier.",
-    "4 rubriques sont volontairement hybrides et couvrent deux branches : \"Sports - loisirs\" (Sports ou Loisirs), \"Culture - arts\" (Culture ou Arts), \"Philosophie - sciences sociales\" (Philosophie ou Sciences sociales), \"Langues et Lettres\" (Langues ou Lettres).",
-    "Ajoute un champ \"category_precision\" : pour ces 4 rubriques hybrides uniquement, indique la branche dominante (recopie exactement un des deux mots listés ci-dessus) ; pour toutes les autres rubriques, category_precision doit être null.",
-    "Explore aussi TOUTE existing_memory_hierarchy (thématiques, galaxies, solars et étoiles) avant de décider. Si le même sujet existe déjà dans une étoile — même sous un synonyme ou une reformulation — choisis obligatoirement la rubrique de cette branche et recopie les ids de son solar et de son étoile dans existing_solar_system_id et existing_star_id.",
-    "Si aucun sujet identique n'existe mais qu'un solar existant est clairement le bon parent, recopie seulement son id dans existing_solar_system_id et laisse existing_star_id à null.",
-    "Ne renvoie jamais un id absent de existing_memory_hierarchy et ne mélange jamais une étoile avec un autre solar. Si aucune branche existante n'est adaptée, laisse les deux ids à null et choisis simplement la rubrique la plus pertinente d'après le titre et le détail.",
-    "Format obligatoire : {\"category\":\"...\",\"category_precision\":null,\"existing_solar_system_id\":null,\"existing_star_id\":null}",
+    "Cette connaissance de culture générale doit être classée selon ce qu'elle ENSEIGNE RÉELLEMENT — jamais un simple mot-clé isolé. Lis bien la description de chaque Galaxy : certaines précisent explicitement une frontière à respecter (ex. un fait religieux/historique ancien vs. sa représentation artistique).",
+    "Étape 1 : choisis la Galaxy la plus pertinente parmi \"galaxies\" (recopie \"name\" EXACTEMENT comme fourni, sans le modifier). Cas particulier : si le sujet ou son détail montrent clairement qu'il s'agit d'un contenu conçu POUR un jeune public (conte pour enfants, dessin animé ou personnage jeunesse, vie scolaire d'un enfant/collégien/lycéen, sujet explicitement adressé/expliqué aux enfants ou aux ados...), choisis la Galaxy \"Espace jeunes\" plutôt qu'une Galaxy thématique concurrente (Histoire, Société - éducation, Médias - divertissements...), même si le sujet recoupe aussi cette dernière — le public visé prime alors sur le thème.",
+    "Étape 2 : DANS cette Galaxy uniquement, cherche si l'un de ses \"existingSolars\" est raisonnablement cohérent avec cette connaissance — même s'il est plus large ou moins précis qu'un intitulé idéal. La cohérence de la taxonomie prime sur la précision maximale du libellé : un Solar plus précis n'est jamais une raison de préférer no_match si un Solar existant convient déjà.",
+    `Étape 3 : propose dans "starLabel" le nom d'une "Étoile" — une sous-catégorie précise mais RÉUTILISABLE pour plusieurs contenus, jamais le fait atomique de cette seule connaissance (2 à 4 mots, jamais une phrase). Si la Galaxy choisie fait partie de [${domainGalaxyNames}], l'Étoile doit rester une sous-catégorie encore assez large du Solar (imagine dix autres contenus différents rattachés au même Solar : ton Étoile doit convenir à plusieurs d'entre eux, pas seulement à celui-ci) ; pour les autres Galaxies, l'Étoile peut être la notion précise elle-même. Dans tous les cas, l'Étoile ne doit JAMAIS reprendre les mots du Solar lui-même (ex. sous \"Révolution française & Empire\", \"Révolution française\" est interdit — \"Directoire\" ou \"Terreur\" conviennent).`,
+    "Si un Solar existant convient : {\"decision\":\"existing\",\"galaxy\":\"...\",\"solarId\":123,\"confidence\":0.8,\"starLabel\":\"...\"}.",
+    "Si et seulement si AUCUN \"existingSolars\" de la Galaxy choisie ne convient (ou si elle n'en a encore aucun) : {\"decision\":\"no_match\",\"galaxy\":\"...\",\"bestExistingSolarId\":123 ou null,\"confidence\":0.2,\"starLabel\":\"...\"} — tu ne peux JAMAIS créer de Solar toi-même dans cette réponse, seulement signaler qu'aucun n'est cohérent (starLabel reste utile, il sera réexaminé une fois le Solar créé).",
     "",
-    JSON.stringify(compact)
+    JSON.stringify({ type: sourceType, title: subjectTitle, detail: subjectDetail, galaxies: galaxiesPayload })
   ].join("\n");
 
   try {
+    // Log de comptage (Phase 5 / observabilité, 16-17/08/2026) : aucun log
+    // n'existait avant sur le chemin succès, seulement sur échec — impossible
+    // de vérifier depuis les logs serveur qu'un appel a bien eu lieu et
+    // combien. Un log par appel réel, jamais par tentative de parsing.
+    console.log(`[ia-call] galaxy+solar match: type=${sourceType} title="${subjectTitle.slice(0, 60)}"`);
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
     let content;
     if (isGpt5) {
-      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale category]");
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[knowledge-taxonomy match]", { reasoningEffort: "medium", initialBudget: 1200 });
     } else {
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -15622,53 +16189,36 @@ async function classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sou
       const data = await r.json();
       content = data?.choices?.[0]?.message?.content;
     }
-    const parsed = content ? JSON.parse(content) : null;
-    let category = normalizeOpinionArticleCategory(parsed?.category);
-    let categoryPrecision = normalizeOpinionArticleCategoryPrecision(category, parsed?.category_precision);
-    const requestedSolarSystemId = Number(parsed?.existing_solar_system_id);
-    const requestedStarId = Number(parsed?.existing_star_id);
-    const requestedSolar = hierarchy.solarSystems.find((solar) => Number(solar.id) === requestedSolarSystemId);
-    const requestedStar = requestedSolar && hierarchy.stars.find((star) =>
-      Number(star.id) === requestedStarId && Number(star.solar_system_id) === Number(requestedSolar.id)
-    );
-
-    // Lorsqu'une branche existante a été explicitement reconnue, sa galaxie
-    // est l'autorité : on réaligne la rubrique sur l'arbre au lieu de rejeter
-    // un bon id parce que l'IA a mal recopié le libellé hybride.
-    const categoryFromExistingTree = requestedSolar
-      ? getOpinionArticleCategoryForGalaxy(requestedSolar.galaxy)
-      : null;
-    if (categoryFromExistingTree) {
-      category = categoryFromExistingTree.category;
-      categoryPrecision = categoryFromExistingTree.categoryPrecision;
-    }
-    if (!category) {
-      console.warn("[culture-generale category] catégorie IA non reconnue :", parsed?.category);
+    const raw = content ? JSON.parse(content) : null;
+    const galaxyDef = findKnowledgeGalaxyDefinition(raw?.galaxy);
+    if (!galaxyDef) {
+      console.warn("[knowledge-taxonomy match] galaxy IA non reconnue :", raw?.galaxy);
       return null;
     }
-    const galaxy = getOpinionArticleGalaxy(category, categoryPrecision);
-    const matchingSolar = requestedSolar?.galaxy === galaxy ? requestedSolar : null;
-    const matchingStar = matchingSolar ? requestedStar : null;
-    return {
-      category,
-      categoryPrecision,
-      solarSystemId: matchingSolar ? Number(matchingSolar.id) : null,
-      starId: matchingStar ? Number(matchingStar.id) : null
-    };
+    // starLabel est du texte libre proposé par l'IA — jamais consommé tel
+    // quel : validé/comparé déterministement par l'appelant (matchExistingStarByLabel
+    // / validateStarLabelCandidate), jamais ici.
+    const starLabel = typeof raw?.starLabel === "string" ? raw.starLabel.trim().slice(0, 80) : "";
+    // Exactement la même liste que celle proposée dans le payload plus haut
+    // (personnel + socle de départ) — jamais recalculée en ne gardant que le
+    // périmètre personnel, sinon un choix IA valide sur un Solar de départ
+    // serait rejeté ici faute de figurer dans un second calcul plus étroit.
+    const candidatesInGalaxy = candidatesByGalaxy.get(galaxyDef.name) || [];
+    const decision = parseMatchDecision(
+      { decision: raw.decision, id: raw.decision === "existing" ? raw.solarId : raw.bestExistingSolarId, confidence: raw.confidence },
+      candidatesInGalaxy.map((c) => c.id)
+    );
+    if (!decision) {
+      // Décision malformée (galaxy reconnue mais id hors candidats, etc.) :
+      // traité comme no_match plutôt que rejeté en bloc — la Galaxy, elle,
+      // reste valide et exploitable par l'appelant.
+      return { galaxy: galaxyDef.name, decision: "no_match", candidates: candidatesInGalaxy, starLabel };
+    }
+    return { galaxy: galaxyDef.name, decision: decision.decision, solarId: decision.id ?? null, candidates: candidatesInGalaxy, starLabel };
   } catch (error) {
-    console.warn("[culture-generale category] classification IA ignorée :", error.message);
+    console.warn("[knowledge-taxonomy match] classification IA ignorée :", error.message);
     return null;
   }
-}
-
-// Une connaissance appartient désormais à UNE seule thématique, la plus
-// pertinente. Cette fonction reste disponible comme repli léger, mais les
-// nouveaux QCM passent par classifyCultureGeneraleKnowledgePlacementWithAI :
-// le même choix unique pilote alors aussi galaxie → solar → étoile, au lieu
-// de lancer deux classifications indépendantes susceptibles de diverger.
-async function classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourceDetail) {
-  const classification = await classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sourceDetail);
-  return classification?.category ? [classification.category] : [];
 }
 
 // ---- Liens entre connaissances (ex. "Voltaire" ↔ "Les Lumières") : détectés
@@ -15677,22 +16227,15 @@ async function classifyCultureGeneraleThemesWithAI(sourceType, sourceName, sourc
 // cet utilisateur, jamais aux simples QCM encore en attente dans sa liste.
 // Les liens sont stockés à part puis relus entre l'explication et le QCM.
 
-// Identité canonique d'une notion, indépendante du niveau (élémentaire/avancé) ou de la
-// date de génération — même paire que eclairage_type/eclairage_source_id dans
-// user_article_acquisitions (cf. recordDailyQuizEclairageAcquisition).
-function cultureGeneraleNotionKey(sourceType, sourceId) {
-  return `${sourceType}::${sourceId}`;
-}
-
-// Ordre canonique (indépendant du sens de création A→B ou B→A) pour ne jamais stocker deux
-// fois le même lien — la contrainte UNIQUE (type_a,source_id_a,type_b,source_id_b) protège
-// contre une course entre deux créations simultanées.
+// cultureGeneraleNotionKey/canonicalNotionLinkPair (identité canonique d'une notion et ordre
+// stable A/B pour ne jamais stocker deux fois le même lien) vivent désormais dans
+// lib/culture-generale-links.js (extrait le 17/08/2026, renforcement des liens) — fonctions
+// pures, testées unitairement là-bas (test/culture-generale-links.test.js).
 async function resolveOrCreateCultureGeneraleNotionLink(typeA, idA, nameA, typeB, idB, nameB, label) {
-  const keyA = cultureGeneraleNotionKey(typeA, idA);
-  const keyB = cultureGeneraleNotionKey(typeB, idB);
-  const [type1, id1, name1, type2, id2, name2] = keyA < keyB
-    ? [typeA, idA, nameA, typeB, idB, nameB]
-    : [typeB, idB, nameB, typeA, idA, nameA];
+  const {
+    typeA: type1, idA: id1, nameA: name1,
+    typeB: type2, idB: id2, nameB: name2
+  } = canonicalNotionLinkPair(typeA, idA, nameA, typeB, idB, nameB);
   const { error } = await supabase.from("culture_generale_notion_links").upsert(
     { type_a: type1, source_id_a: id1, name_a: name1, type_b: type2, source_id_b: id2, name_b: name2, label },
     { onConflict: "type_a,source_id_a,type_b,source_id_b", ignoreDuplicates: true }
@@ -15796,17 +16339,20 @@ function cultureGeneraleComprehensionQuizSlot(link) {
 
 // Un quiz relationnel n'interroge jamais les deux fiches séparément : chaque question doit
 // obliger à comprendre le pont causal, conceptuel, chronologique ou illustratif entre elles.
-// La richesse factuelle détermine une cible de 2, 4 ou 6 questions, toujours dans la fourchette
-// demandée et sans gonfler artificiellement un lien simple.
+// Le nombre de questions n'est plus calé sur un palier fixe (2/4/6 selon la richesse) : il va
+// de 1 à COMPREHENSION_QUIZ_MAX_QUESTIONS, et c'est la richesse RÉELLE du lien — jamais un
+// quota — qui doit déterminer combien de questions sont vraiment nécessaires (renforcé le
+// 17/08/2026). Une seule question valide suffit à publier le QCM : voir aussi
+// assembleComprehensionSession (lib/culture-generale-links.js), qui n'exclut plus les banques
+// à une question de la session de révision.
+const COMPREHENSION_QUIZ_MAX_QUESTIONS = 4;
 async function buildCultureGeneraleComprehensionQuiz(link) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
   const pairHash = cultureGeneraleComprehensionPairHash(link);
   const detailA = String(link.detailA || "").slice(0, 2200);
   const detailB = String(link.detailB || "").slice(0, 2200);
-  const richness = detailA.length + detailB.length;
-  const target = richness >= 2800 ? 6 : (richness >= 1200 ? 4 : 2);
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", target, false, ["intrus", "ordre"]);
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", COMPREHENSION_QUIZ_MAX_QUESTIONS, false, ["intrus", "ordre"]);
   const prompt = [
     "Tu es un pédagogue francophone. Crée un QCM qui vérifie qu'un utilisateur comprend réellement le LIEN entre deux connaissances déjà acquises — jamais deux mini-quiz indépendants.",
     "",
@@ -15817,7 +16363,9 @@ async function buildCultureGeneraleComprehensionQuiz(link) {
     detailB || "Aucun détail supplémentaire disponible.",
     "",
     `Relation détectée : ${link.label || "relation intellectuelle directe"}.`,
-    `Produis exactement ${target} questions. Chaque question doit mobiliser explicitement A ET B, ou demander la nature/la conséquence/le mécanisme du lien entre elles. Une question portant seulement sur A ou seulement sur B est interdite.`,
+    `Produis entre 1 et ${COMPREHENSION_QUIZ_MAX_QUESTIONS} questions — UNIQUEMENT celles réellement nécessaires pour comprendre CE lien précis, jamais pour atteindre un quota. La richesse réelle du lien détermine seule ce nombre : si un seul angle suffit à en vérifier la compréhension, produis UNE SEULE question ; n'en ajoute une deuxième, une troisième... que si elle apporte un élément VRAIMENT distinct et important du pont entre A et B. La suggestion de formats ci-dessous en liste jusqu'à " + COMPREHENSION_QUIZ_MAX_QUESTIONS + ", à titre d'inspiration seulement si tu vas jusque-là — utilise uniquement les premières si tu en produis moins.`,
+    "Chaque question doit mobiliser explicitement A ET B, ou demander la nature/la conséquence/le mécanisme du lien entre elles. Sont INTERDITES : une question portant seulement sur A ou seulement sur B ; une question sur une date, un lieu ou une personne secondaire périphérique ; une question de contexte général ou d'anecdote ; une question sur une information présente dans les fiches mais inutile pour comprendre CE lien précis ; une reformulation artificielle d'une question déjà posée sur le même angle.",
+    "TEST OBLIGATOIRE avant de conserver chaque question : \"Si cette question était supprimée, perdrait-on une information importante pour comprendre pourquoi ces deux connaissances sont reliées ?\" Si la réponse est NON, ne génère pas cette question — le seul fait qu'il reste des informations disponibles dans les fiches n'est jamais, à lui seul, une justification suffisante.",
     "Les mauvaises réponses doivent représenter des liens plausibles mais faux, afin de vérifier la compréhension du rapprochement et non la simple reconnaissance d'un mot.",
     "L'explication de chaque réponse doit nommer clairement les deux connaissances et expliciter leur relation en une ou deux phrases.",
     `Pour chaque question, sourceId doit valoir exactement "${pairHash}".`,
@@ -15832,12 +16380,12 @@ async function buildCultureGeneraleComprehensionQuiz(link) {
       responseFormat: { type: "json_object" }
     });
     const parsed = JSON.parse(content);
-    const validated = validateNarrativeQuizQuestions(parsed?.questions, [pairHash], target, target);
-    if (validated.length < 2) {
-      console.warn(`[culture-generale comprehension:${pairHash}] seulement ${validated.length} question(s) valide(s).`);
+    const validated = validateNarrativeQuizQuestions(parsed?.questions, [pairHash], COMPREHENSION_QUIZ_MAX_QUESTIONS, COMPREHENSION_QUIZ_MAX_QUESTIONS);
+    if (validated.length < 1) {
+      console.warn(`[culture-generale comprehension:${pairHash}] aucune question valide.`);
       return [];
     }
-    return validated.slice(0, 6).map((question, index) => ({
+    return validated.slice(0, COMPREHENSION_QUIZ_MAX_QUESTIONS).map((question, index) => ({
       id: `comprendre:${pairHash}-q${index + 1}`,
       ...question,
       sourceType: "comprendre",
@@ -15875,7 +16423,7 @@ async function ensureCultureGeneraleComprehensionQuizPersisted(link, slot) {
   if (existingRows?.[0]?.questions?.length) return existingRows[0].questions;
 
   const questions = await buildCultureGeneraleComprehensionQuiz(link);
-  if (questions.length < 2) return [];
+  if (questions.length < 1) return [];
   const quizDate = parisDateKey();
   const { error: insertError } = await supabase.from("daily_quiz").insert({
     quiz_date: quizDate,
@@ -15929,10 +16477,10 @@ async function hasCultureGeneraleComprehensionLinks(legacyKey) {
   return links.length > 0;
 }
 
-// Parcours « Comprendre » : au plus six questions par session, en tournant chaque jour entre
-// les liens disponibles. Le tri haché est stable pendant toute la journée (reprise/réponse
-// toujours sur le même lot), mais varie le lendemain pour ne pas privilégier éternellement les
-// premières relations d'un utilisateur très fourni.
+// Parcours « Comprendre » : au plus COMPREHENSION_QUIZ_MAX_QUESTIONS questions par session, en
+// tournant chaque jour entre les liens disponibles. Le tri haché est stable pendant toute la
+// journée (reprise/réponse toujours sur le même lot), mais varie le lendemain pour ne pas
+// privilégier éternellement les premières relations d'un utilisateur très fourni.
 async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
   const user = await resolveLegacyUserForComprehension(legacyKey);
   if (!user) return [];
@@ -15948,32 +16496,38 @@ async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
     .sort((a, b) => a.rank.localeCompare(b.rank))
     .slice(0, 6)
     .map((entry) => entry.link);
-  // Trois relations valides suffisent déjà à fournir six questions (minimum deux chacune).
-  // Procède donc par petits lots : un utilisateur possédant beaucoup d'anciens liens ne
-  // déclenche jamais six générations IA simultanées lors de sa toute première ouverture.
+  // COMPREHENSION_QUIZ_MAX_QUESTIONS relations valides suffisent déjà à fournir autant de
+  // questions (au moins une chacune — une banque à une seule question reste pleinement
+  // éligible, cf. assembleComprehensionSession ci-dessous, renforcé le 17/08/2026 : un lien fort
+  // mais simple ne doit jamais être exclu de la session faute d'atteindre un ancien quota de 2
+  // questions). Le pool de liens candidats (slice ci-dessus) reste plus large que ce plafond :
+  // certains liens ne contribuant parfois qu'une seule question, il faut pouvoir piocher parmi
+  // plusieurs pour le remplir. Procède par petits lots : un utilisateur possédant beaucoup
+  // d'anciens liens ne déclenche jamais toutes les générations IA simultanément lors de sa toute
+  // première ouverture.
   const banks = [];
-  for (let start = 0; start < selectedLinks.length && banks.reduce((sum, bank) => sum + bank.length, 0) < 6; start += 3) {
+  for (let start = 0; start < selectedLinks.length && banks.reduce((sum, bank) => sum + bank.length, 0) < COMPREHENSION_QUIZ_MAX_QUESTIONS; start += 3) {
     const batch = await Promise.all(selectedLinks.slice(start, start + 3).map(ensureCultureGeneraleComprehensionQuiz));
-    banks.push(...batch.filter((questions) => questions.length >= 2));
+    banks.push(...batch);
   }
-  const session = [];
-  for (let questionIndex = 0; session.length < 6; questionIndex += 1) {
-    let added = false;
-    for (const bank of banks) {
-      if (bank[questionIndex]) {
-        session.push(bank[questionIndex]);
-        added = true;
-        if (session.length >= 6) break;
-      }
-    }
-    if (!added) break;
-  }
-  return session;
+  return assembleComprehensionSession(banks, COMPREHENSION_QUIZ_MAX_QUESTIONS);
 }
 
 // Recherche jusqu'à trois liens pédagogiquement très pertinents entre la
 // nouvelle acquisition et TOUTES les autres connaissances déjà acquises par
-// ce visiteur. Aucun lien vague n'est forcé.
+// ce visiteur. Un lien doit être à la fois FACTUEL (relation vérifiable) et
+// SIGNIFICATIF (il aide vraiment à mieux comprendre l'une des deux
+// connaissances grâce à l'autre) — un fait exact mais purement circonstanciel
+// (même lieu, même époque, biographie...) ne suffit pas (renforcé le
+// 17/08/2026 : cas réel observé "Rome capitale de l'Italie" ↔ "Aldo Moro" via
+// "Rome", techniquement vrai mais beaucoup trop générique — Rome pourrait
+// relier cette même connaissance à des centaines d'autres notions). Aucun
+// lien vague n'est forcé ; 0 ou 1 lien reste le résultat le plus fréquent et
+// normal. La sélection mécanique de la réponse IA (parsing/dédoublonnage/
+// plafond à 3) vit dans selectValidNotionLinks (lib/culture-generale-links.js)
+// — le filtre de pertinence lui-même reste entièrement sémantique, assuré par
+// ce prompt, jamais par une heuristique de mots-clés côté serveur (fragile et
+// aveugle aux cas légitimes, ex. "Napoléon" ↔ "Waterloo").
 async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourceName, sourceDetail, userId) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || !sourceId || !userId) return;
@@ -15991,9 +16545,16 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
   const prompt = [
     "Réponds uniquement en json valide.",
     "Un nouveau contenu de culture générale vient d'être acquis. Examine TOUTES les connaissances déjà acquises de cet utilisateur, listées dans existing_notions.",
-    "Ce lien doit être une vraie relation intellectuelle directe et non triviale — ex. une personne appartenant à un mouvement, une cause et sa conséquence directe, un concept illustré par un événement précis. Un simple point commun vague (même siècle, même pays, même discipline générale) NE SUFFIT JAMAIS.",
-    "Retourne au maximum 3 liens, uniquement s'ils sont tous très pertinents. Pour chacun, recopie exactement le champ key dans related_key et écris un libellé de 2 à 5 mots expliquant le lien (ex. \"Figure des Lumières\", \"Cause directe\").",
-    "S'il n'existe aucun lien vraiment pertinent, retourne un tableau links vide. Ne force jamais un rapprochement.",
+    "Un lien valide doit satisfaire DEUX critères SIMULTANÉMENT :",
+    "1. FACTUEL : il relie deux faits précis par une relation concrète et vérifiable — la même personne/œuvre/événement directement impliquée, une cause et sa conséquence directe, un concept illustré par un exemple précis qui en découle vraiment, une chronologie réellement explicative (l'un provoque, précède ou explique directement l'autre). Cette relation doit pouvoir s'expliquer en une phrase factuelle et spécifique, jamais par une généralité.",
+    "2. SIGNIFICATIF (critère essentiel, pas seulement décoratif) : ce lien doit permettre de mieux comprendre A grâce à B, ou B grâce à A — pas seulement être vrai. Un fait exact mais purement circonstanciel (même lieu, même époque, même institution, simple élément de biographie) sans apport réel de compréhension doit être REJETÉ même s'il est parfaitement vérifiable.",
+    "TEST DE GÉNÉRICITÉ, à appliquer à chaque lien avant de le retenir : si la même relation pourrait tout aussi bien être vraie avec de très nombreuses autres connaissances similaires, le lien est trop générique — REJETTE-le. La relation doit être DISTINCTIVE de cette paire précise, pas transposable telle quelle à des dizaines d'autres paires.",
+    "REJETTE explicitement toute relation qui ne repose que sur : même ville, même pays, même région, même époque, même discipline, même catégorie, même environnement culturel, même institution sans lien causal ou événementiel précis, une personnalité qui a simplement vécu, travaillé, étudié, exercé une fonction, est née ou morte dans un lieu, une œuvre simplement conservée ou exposée dans un musée d'une ville, un événement ayant simplement eu lieu au même endroit, une proximité géographique ou biographique, ou un rapprochement thématique général. Ces relations ne redeviennent acceptables QUE si le fait précis constitue un élément vraiment majeur des DEUX connaissances et explique directement leur relation (pas juste un décor commun).",
+    "Exemples À REJETER : \"Rome, capitale de l'Italie\" ↔ \"Aldo Moro\" via \"Rome\" — Rome pourrait tout aussi bien relier cette connaissance à des centaines d'autres responsables politiques, papes, artistes ou événements italiens, la relation n'est pas distinctive. \"Piton de la Fournaise\" ↔ \"viticulture à La Réunion\" — simple proximité géographique/terroir. \"Victor Hugo\" ↔ \"Paris, capitale de la France\" si la seule justification est qu'il y a vécu ou travaillé.",
+    "Exemples À ACCEPTER : \"Jules César\" ↔ \"Assassinat aux Ides de mars\" (César en est la victime directe). \"Guernica\" ↔ \"Guerre civile espagnole\" (le tableau est directement inspiré du bombardement de Guernica pendant cette guerre). \"Louis XVI\" ↔ \"Révolution française\" (la Révolution entraîne directement la chute de sa monarchie). \"Pasteur\" ↔ \"Vaccination contre la rage\" (ses travaux sont directement à l'origine de ce vaccin).",
+    "En cas de doute, ne crée aucun lien plutôt qu'un lien approximatif ou générique : un tableau vide est un résultat NORMAL et FRÉQUENT, pas un échec. Ne cherche JAMAIS à atteindre 3 liens à tout prix — 0 ou 1 lien est parfaitement normal dans la majorité des cas ; un 2e ou 3e lien n'est légitime que s'il est, lui aussi, indépendamment aussi fort que le premier selon ces mêmes critères stricts.",
+    "Retourne au maximum 3 liens, uniquement s'ils sont TOUS très pertinents selon ces critères stricts. Pour chacun, recopie exactement le champ key dans related_key et écris un libellé de 2 à 5 mots nommant précisément la relation factuelle (ex. \"Cause directe\", \"Même auteur\", \"Illustre ce concept\") — jamais un libellé thématique vague.",
+    "S'il n'existe aucun lien remplissant ces critères, retourne un tableau links vide.",
     "Format obligatoire : {\"links\":[{\"related_key\":\"type::id\",\"label\":\"...\"}]}",
     "",
     JSON.stringify(compact)
@@ -16003,17 +16564,7 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
     const content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale notion-links]");
     const parsed = content ? JSON.parse(content) : null;
     const candidateByKey = new Map(candidates.map((c) => [cultureGeneraleNotionKey(c.type, c.id), c]));
-    const seenRelated = new Set();
-    const validLinks = [];
-    for (const rawLink of Array.isArray(parsed?.links) ? parsed.links : []) {
-      const relatedKey = String(rawLink?.related_key || "").trim();
-      const label = String(rawLink?.label || "").trim().slice(0, 60);
-      const match = candidateByKey.get(relatedKey);
-      if (!match || !label || seenRelated.has(relatedKey)) continue;
-      seenRelated.add(relatedKey);
-      validLinks.push({ match, label });
-      if (validLinks.length >= 3) break;
-    }
+    const validLinks = selectValidNotionLinks(parsed?.links, candidateByKey, 3);
     await Promise.all(validLinks.map(async ({ match, label }) => {
       const savedLink = await resolveOrCreateCultureGeneraleNotionLink(
         sourceType,
@@ -16110,6 +16661,197 @@ const CULTURE_GENERALE_SEED_SOLAR_SYSTEMS = {
     "Océanie & Pacifique",
     "Régions polaires"
   ],
+  "Politique": [
+    "Institutions & Constitution",
+    "Élections",
+    "Partis politiques",
+    "Territoires",
+    "Idéologies",
+    "Démocratie & participation"
+  ],
+  "Arts": [
+    "Arts visuels",
+    "Architecture",
+    "Musique",
+    "Cinéma & audiovisuel",
+    "Littérature",
+    "Théâtre & arts de la scène",
+    "Danse",
+    "Design & arts décoratifs",
+    "Bande dessinée & illustration",
+    "Arts numériques & nouveaux médias",
+    "Arts du cirque & performance"
+  ],
+  "Climat - environnement": [
+    "Climat",
+    "Biodiversité & écosystèmes",
+    "Énergie & transition énergétique",
+    "Pollution & déchets",
+    "Eau & océans",
+    "Forêts, sols & milieux naturels",
+    "Agriculture & ressources naturelles",
+    "Risques naturels",
+    "Villes & transition écologique",
+    "Politiques environnementales"
+  ],
+  "Sport": [
+    "Football",
+    "Rugby",
+    "Basketball",
+    "Tennis",
+    "Cyclisme",
+    "Athlétisme",
+    "Natation",
+    "Handball",
+    "Volleyball",
+    "Sports automobiles",
+    "Sports de combat",
+    "Gymnastique",
+    "Sports d’hiver",
+    "Sports nautiques",
+    "Sports de raquette",
+    "Sports équestres",
+    "Golf",
+    "Cricket",
+    "Baseball & softball",
+    "Hockey",
+    "Sports de glisse",
+    "Escalade & alpinisme",
+    "Triathlon & sports d’endurance",
+    "Escrime",
+    "Sports de force",
+    "Autres sports"
+  ],
+  "Langues": [
+    "Langues romanes",
+    "Langues germaniques",
+    "Langues slaves",
+    "Langues anciennes",
+    "Langues sémitiques",
+    "Langues d’Asie de l’Est",
+    "Langues d’Asie du Sud",
+    "Langues d’Asie centrale & turciques",
+    "Langues d’Asie du Sud-Est",
+    "Langues africaines",
+    "Langues celtiques",
+    "Langues régionales & minoritaires",
+    "Langues océaniennes"
+  ],
+  "Loisirs": [
+    "Jeux vidéo",
+    "Jeux de société & jeux de cartes",
+    "Échecs, stratégie & casse-têtes",
+    "Lecture",
+    "Cinéma, séries & animation",
+    "Musique & podcasts",
+    "Cuisine & gastronomie",
+    "Bricolage & DIY",
+    "Jardinage",
+    "Collection & modélisme",
+    "Photographie",
+    "Nature & plein air",
+    "Voyages & tourisme",
+    "Pêche & activités de nature",
+    "Animaux & loisirs animaliers",
+    "Astronomie & observation",
+    "Technologie & loisirs numériques",
+    "Culture geek & pop culture",
+    "Parcs, attractions & divertissements",
+    "Loisirs créatifs"
+  ],
+  "Santé - bien-être": [
+    "Médecine & maladies",
+    "Épidémies & infections",
+    "Prévention & santé publique",
+    "Nutrition",
+    "Activité physique",
+    "Sommeil",
+    "Santé mentale",
+    "Sexualité & reproduction",
+    "Addictions",
+    "Médicaments & traitements",
+    "Urgences & premiers secours",
+    "Enfance & vieillissement",
+    "Handicap & santé fonctionnelle",
+    "Santé environnementale"
+  ],
+  "Vie personnelle - modes de vie": [
+    "Famille & parentalité",
+    "Couple & relations",
+    "Habitat & maison",
+    "Organisation & vie pratique",
+    "Finances personnelles",
+    "Consommation",
+    "Mode & beauté",
+    "Alimentation & habitudes",
+    "Mobilité & voyages",
+    "Travail & équilibre de vie",
+    "Développement personnel",
+    "Vie numérique",
+    "Savoir-vivre & traditions",
+    "Animaux de compagnie",
+    "Modes de vie & écologie"
+  ],
+  "Lettres": [
+    "Littérature française",
+    "Littératures francophones",
+    "Littératures étrangères",
+    "Littératures antiques",
+    "Littérature comparée",
+    "Roman & récit",
+    "Poésie",
+    "Théâtre",
+    "Essai & littérature d’idées",
+    "Contes, mythes & traditions orales",
+    "Biographies, autobiographies & mémoires",
+    "Littérature jeunesse",
+    "Genres populaires",
+    "Histoire & mouvements littéraires",
+    "Auteurs & grandes œuvres",
+    "Analyse & critique littéraire",
+    "Rhétorique & argumentation",
+    "Stylistique & figures de style",
+    "Langue, grammaire & syntaxe",
+    "Lexique, étymologie & histoire de la langue",
+    "Linguistique",
+    "Philologie & manuscrits",
+    "Traduction",
+    "Écriture & création littéraire",
+    "Livre, édition & institutions littéraires"
+  ],
+  "Médias - divertissements": [
+    "Télévision",
+    "Cinéma & séries",
+    "Streaming",
+    "Presse & journalisme",
+    "Radio & podcasts",
+    "Réseaux sociaux",
+    "Créateurs de contenu",
+    "Jeux vidéo",
+    "Musique populaire",
+    "Animation & mangas",
+    "BD & comics",
+    "Célébrités",
+    "Humour & spectacles",
+    "Culture populaire",
+    "Internet & culture numérique",
+    "Publicité & communication",
+    "Événements & cérémonies",
+    "Industrie des médias",
+    "Information & désinformation"
+  ],
+  "Espace jeunes": [
+    "Contes & histoires pour enfants",
+    "Éveil & petite enfance",
+    "Héros & personnages jeunesse",
+    "Émissions & contenus jeunesse",
+    "Actu expliquée aux jeunes",
+    "Vie scolaire & apprentissage",
+    "Adolescence & vie quotidienne des jeunes",
+    "Sécurité & prévention jeunesse",
+    "Orientation & avenir des jeunes",
+    "Jeux & activités éducatives"
+  ],
   "Histoire": [
     "Préhistoire",
     "Antiquité",
@@ -16192,6 +16934,61 @@ const CULTURE_GENERALE_DOMAIN_GALAXIES = {
     matchExample: "ex. un contenu sur le Maroc correspond à \"Maghreb\", un contenu sur le Japon correspond à \"Asie de l’Est\", un contenu sur les Caraïbes correspond à \"Amérique centrale & Caraïbes\"",
     newExample: "le nom d’une région géographique internationale autonome et complète (2 à 4 mots, jamais une phrase)"
   },
+  "Politique": {
+    unitLabel: "le sous-domaine institutionnel ou politique dont il relève",
+    matchExample: "ex. un contenu sur le mode de scrutin correspond à \"Élections\", un contenu sur le fonctionnement du Conseil constitutionnel correspond à \"Institutions & Constitution\"",
+    newExample: "le nom de ce sous-domaine politique (2 à 4 mots, jamais une phrase)"
+  },
+  "Arts": {
+    unitLabel: "la discipline artistique dont il relève",
+    matchExample: "ex. un contenu sur un tableau ou une sculpture correspond à \"Arts visuels\", un contenu sur un film correspond à \"Cinéma & audiovisuel\", un contenu sur un roman ou un poème correspond à \"Littérature\"",
+    newExample: "le nom de cette discipline artistique (2 à 4 mots, jamais une phrase)"
+  },
+  "Climat - environnement": {
+    unitLabel: "le sous-domaine climatique ou environnemental dont il relève",
+    matchExample: "ex. un contenu sur le réchauffement climatique correspond à \"Climat\", un contenu sur la disparition d'une espèce correspond à \"Biodiversité & écosystèmes\", un contenu sur les panneaux solaires correspond à \"Énergie & transition énergétique\"",
+    newExample: "le nom de ce sous-domaine climatique ou environnemental (2 à 4 mots, jamais une phrase)"
+  },
+  "Sport": {
+    unitLabel: "la discipline sportive dont il relève",
+    matchExample: "ex. un contenu sur un match ou un championnat de ballon rond correspond à \"Football\", un contenu sur le Tour de France correspond à \"Cyclisme\", un contenu sur un combat de boxe correspond à \"Sports de combat\"",
+    newExample: "le nom de cette discipline sportive (2 à 4 mots, jamais une phrase)"
+  },
+  "Langues": {
+    unitLabel: "la famille de langues dont il relève",
+    matchExample: "ex. un contenu sur l'espagnol ou l'italien correspond à \"Langues romanes\", un contenu sur le japonais correspond à \"Langues d’Asie de l’Est\", un contenu sur le latin correspond à \"Langues anciennes\"",
+    newExample: "le nom de cette famille de langues (2 à 4 mots, jamais une phrase)"
+  },
+  "Loisirs": {
+    unitLabel: "le sous-domaine de loisir dont il relève",
+    matchExample: "ex. un contenu sur un jeu vidéo correspond à \"Jeux vidéo\", un contenu sur une recette de cuisine correspond à \"Cuisine & gastronomie\", un contenu sur la randonnée correspond à \"Nature & plein air\"",
+    newExample: "le nom de ce sous-domaine de loisir (2 à 4 mots, jamais une phrase)"
+  },
+  "Santé - bien-être": {
+    unitLabel: "le sous-domaine de santé ou de bien-être dont il relève",
+    matchExample: "ex. un contenu sur un virus ou une épidémie correspond à \"Épidémies & infections\", un contenu sur l'alimentation équilibrée correspond à \"Nutrition\", un contenu sur l'anxiété ou la dépression correspond à \"Santé mentale\"",
+    newExample: "le nom de ce sous-domaine de santé ou de bien-être (2 à 4 mots, jamais une phrase)"
+  },
+  "Vie personnelle - modes de vie": {
+    unitLabel: "le sous-domaine de vie personnelle ou de mode de vie dont il relève",
+    matchExample: "ex. un contenu sur l'éducation des enfants correspond à \"Famille & parentalité\", un contenu sur la gestion d'un budget correspond à \"Finances personnelles\", un contenu sur le télétravail correspond à \"Travail & équilibre de vie\"",
+    newExample: "le nom de ce sous-domaine de vie personnelle ou de mode de vie (2 à 4 mots, jamais une phrase)"
+  },
+  "Lettres": {
+    unitLabel: "le sous-domaine littéraire ou linguistique dont il relève",
+    matchExample: "ex. un contenu sur un roman français correspond à \"Littérature française\", un contenu sur les figures de style correspond à \"Stylistique & figures de style\", un contenu sur l'étymologie d'un mot correspond à \"Lexique, étymologie & histoire de la langue\"",
+    newExample: "le nom de ce sous-domaine littéraire ou linguistique (2 à 4 mots, jamais une phrase)"
+  },
+  "Médias - divertissements": {
+    unitLabel: "le sous-domaine médiatique ou de divertissement dont il relève",
+    matchExample: "ex. un contenu sur une série télévisée correspond à \"Cinéma & séries\", un contenu sur un influenceur correspond à \"Créateurs de contenu\", un contenu sur une fake news correspond à \"Information & désinformation\"",
+    newExample: "le nom de ce sous-domaine médiatique ou de divertissement (2 à 4 mots, jamais une phrase)"
+  },
+  "Espace jeunes": {
+    unitLabel: "le sous-domaine de contenu jeunesse dont il relève",
+    matchExample: "ex. un contenu sur un dessin animé ou un personnage jeunesse correspond à \"Héros & personnages jeunesse\", un contenu sur le harcèlement scolaire correspond à \"Sécurité & prévention jeunesse\", un contenu sur la vie au collège correspond à \"Vie scolaire & apprentissage\"",
+    newExample: "le nom de ce sous-domaine de contenu jeunesse (2 à 4 mots, jamais une phrase)"
+  },
   "Histoire": {
     unitLabel: "la période ou l'époque historique à laquelle il appartient",
     matchExample: "ex. un événement de 1850 correspond à \"XIXe siècle\", un philosophe grec antique correspond à \"Antiquité\"",
@@ -16229,133 +17026,142 @@ const CULTURE_GENERALE_DOMAIN_GALAXIES = {
   }
 };
 
+// Ces solars ne sont JAMAIS des articles d'actu (ils n'existent que pour ce
+// socle canonique connaissances) : taxonomy_scope='knowledge' explicite dès
+// la création, plutôt que de laisser le défaut prudent 'unknown' se résoudre
+// (ou pas) au hasard d'un futur backfill selon l'usage observé — sans quoi
+// un solar de départ jamais encore utilisé restait invisible du moteur
+// (isKnowledgeCandidate), constaté en pratique le 17/08/2026 sur plusieurs
+// solars de départ (ex. "Préhistoire", "Philosophie politique") encore
+// 'unknown' malgré leur pré-création.
 async function ensureCultureGeneraleSeedSolarSystems() {
   for (const [galaxy, names] of Object.entries(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)) {
     for (const name of names) {
-      await resolveOrCreateSolarSystem(galaxy, name, normalizeSolarSystemName(name));
+      await resolveOrCreateSolarSystem(galaxy, name, normalizeSolarSystemName(name), { taxonomyScope: "knowledge" });
     }
+  }
+  // Backfill ciblé (jamais une reclassification massive) : corrige les
+  // lignes de départ déjà créées AVANT ce correctif et restées 'unknown'
+  // faute d'avoir jamais été utilisées — ensemble fermé et connu (les noms
+  // de CULTURE_GENERALE_SEED_SOLAR_SYSTEMS eux-mêmes), aucune ambiguïté.
+  for (const [galaxy, names] of Object.entries(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)) {
+    const normalizedNames = names.map(normalizeSolarSystemName);
+    const { error } = await supabase.from("solar_systems")
+      .update({ taxonomy_scope: "knowledge" })
+      .eq("galaxy", galaxy)
+      .eq("taxonomy_scope", "unknown")
+      .in("normalized_name", normalizedNames);
+    if (error) console.warn(`[culture-generale solar-system] backfill scope départ (${galaxy}) :`, error.message);
   }
 }
 ensureCultureGeneraleSeedSolarSystems().catch((err) => console.error("[culture-generale solar-system] pré-création systèmes de départ :", err.message));
 
-// Prompt "large" (galaxies de CULTURE_GENERALE_DOMAIN_GALAXIES) : le critère
-// de correspondance porte sur l'appartenance à un domaine large (période,
-// discipline...), jamais sur "exactement la même notion" comme pour les
-// autres galaxies.
-function buildDomainSolarSystemPrompt(compact, domainConfig) {
-  return [
-    "Réponds uniquement en json valide.",
-    `Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un "système" : ici, ${domainConfig.unitLabel}.`,
-    "Examine TOUS les éléments de existing_systems avant d'envisager une création. Si le même sujet, domaine ou période pertinente existe déjà, tu DOIS réutiliser son solar_system_id : créer un doublon ou une variante de libellé est interdit.",
-    `Vérifie d'abord si un système de existing_systems correspond à ce contenu (${domainConfig.matchExample}) — dans ce cas renvoie son id dans solar_system_id. Il ne s'agit pas de retrouver EXACTEMENT la même notion mais le bon système : une correspondance de domaine suffit.`,
-    `Sinon (aucun système existant ne correspond vraiment), propose dans new_solar_system ${domainConfig.newExample}.`,
-    "RÈGLE OBLIGATOIRE : réponds avec soit \"solar_system_id\" (nombre), soit \"new_solar_system\" (texte court) — jamais les deux, jamais aucun des deux.",
-    "Format obligatoire : {\"solar_system_id\":null,\"new_solar_system\":\"...\"}",
-    "",
-    JSON.stringify(compact)
-  ].join("\n");
-}
+// buildDomainSolarSystemPrompt (générait le prompt de résolution de Solar
+// pour les galaxies "à domaine") supprimée le 16/08/2026 : la nouvelle
+// resolveCultureGeneraleSolarSystemWithAI applique désormais le MÊME contrat
+// MATCH/CREATE à toutes les Galaxies, cf. plus bas — CULTURE_GENERALE_DOMAIN_GALAXIES
+// reste utilisée par resolveCultureGeneraleStarWithAI (granularité des
+// Étoiles, hors périmètre de cette refonte).
 
-async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, sourceDetail) {
-  const { data: existingRows, error: existingError } = await supabase
-    .from("solar_systems")
-    .select("id, name")
-    .eq("galaxy", galaxy);
-  if (existingError) console.warn("[culture-generale solar-system] lecture solar_systems échouée :", existingError.message);
-  const existing = existingRows || [];
-
+// Valide/crée un nouveau Solar — UNIQUEMENT appelée après un no_match du
+// MATCH fusionné (matchCultureGeneraleGalaxyAndSolarWithAI), jamais sur le
+// chemin normal (cf. correctif du 16/08/2026, vérification finale : le MATCH
+// Galaxy+Solar était auparavant scindé en 2 appels même sur le chemin reuse
+// — fusionné plus haut, cette fonction ne porte plus que l'exception
+// "création", 1 seul appel IA supplémentaire, jamais 2).
+//
+// `candidates` provient du MATCH déjà exécuté par l'appelant (jamais
+// re-fetché ici) — toujours le périmètre de l'utilisateur courant (§1/§29).
+// Renvoie désormais { solarSystemId, starId } (plus un simple id) : depuis le
+// correctif du 16/08/2026 (vérification finale point 3), cet appel produit
+// AUSSI l'Étoile dans la même réponse IA — plus de 3e appel dédié sur le
+// chemin "create" (Galaxy+Solar match, puis create = ce seul appel = 2 au
+// total). C'est en réalité le meilleur moment pour décider l'Étoile : ce
+// Solar tout juste nommé/décrit est un contexte bien plus riche qu'une
+// hypothèse formée avant même sa création.
+async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, sourceDetail, rawCandidates) {
+  const candidates = rawCandidates || [];
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return resolveOrCreateSolarSystem(galaxy, sourceName, normalizeSolarSystemName(sourceName));
+  if (!apiKey) return null; // jamais de repli aveugle sur sourceName : mieux vaut ne pas classer que créer un solar à côté du contrat
 
-  const compact = {
-    type: sourceType,
-    title: String(sourceName || "").slice(0, 160),
-    detail: flattenCultureGeneraleDetail(sourceDetail).slice(0, 400),
-    existing_systems: existing.map((s) => `${s.id}:${s.name}`).join(", ") || "(aucun système existant dans cette galaxie)"
-  };
-  const domainConfig = CULTURE_GENERALE_DOMAIN_GALAXIES[galaxy];
-  const prompt = domainConfig ? buildDomainSolarSystemPrompt(compact, domainConfig) : [
+  const subjectTitle = String(sourceName || "").slice(0, 160);
+  const subjectDetail = flattenCultureGeneraleDetail(sourceDetail).slice(0, 400);
+  const candidatesPayload = candidates.map((c) => ({ id: c.id, name: c.name, description: c.description || null }));
+  const domainGalaxyNames = Object.keys(CULTURE_GENERALE_DOMAIN_GALAXIES).join(", ");
+
+  // ── Validation de création (exception, cf. §13/§14 du plan) + Étoile ──
+  const creationPrompt = [
     "Réponds uniquement en json valide.",
-    "Un contenu de culture générale (concept, pensée, mécanisme, citation, œuvre, mot latin ou événement historique) doit être rattaché à un \"système\" : la notion précise qu'il illustre.",
-    "Examine TOUS les éléments de existing_systems avant d'envisager une création. Si le sujet existe déjà sous un libellé identique, synonyme ou reformulé, tu DOIS réutiliser son solar_system_id : créer un doublon ou une variante de libellé est interdit.",
-    "Vérifie d'abord si une notion de existing_systems désigne EXACTEMENT la même notion, quitte à être reformulée différemment (ex. \"Résilience\" et \"La résilience face à l'adversité\" sont la même notion) — dans ce cas renvoie son id dans solar_system_id.",
-    "Un simple lien thématique, un vocabulaire commun ou un domaine voisin NE SUFFISENT JAMAIS : \"Résilience\" (capacité psychologique/sociologique à surmonter un choc) n'est PAS \"Développement durable\" même si le mot \"résilience\" apparaît parfois dans ce contexte écologique — ce sont deux notions différentes, pas la même reformulée. En cas du moindre doute, ne réutilise jamais : propose un nouveau système plutôt qu'un rattachement hasardeux (un système en trop est sans conséquence, une fusion erronée mélange deux notions distinctes).",
-    "Sinon, propose dans new_solar_system un libellé autonome et complet de 2 à 4 mots, idéalement 35 caractères maximum, jamais une phrase, qui résume la notion elle-même et jamais l'anecdote ou l'actualité du jour qui l'illustre (ex. \"La campagne de désinformation soviétique pendant la Guerre froide\" → \"Désinformation soviétique\").",
-    "Le libellé doit rester compréhensible isolément et ne doit jamais se terminer par un article, une préposition ou un mot de liaison comme de, du, des, le, la, les, à, au, aux, et ou en.",
-    "RÈGLE OBLIGATOIRE : réponds avec soit \"solar_system_id\" (nombre), soit \"new_solar_system\" (texte court) — jamais les deux, jamais aucun des deux.",
-    "Format obligatoire : {\"solar_system_id\":null,\"new_solar_system\":\"Résilience\"}",
+    `Un premier examen n'a trouvé AUCUN Solar existant cohérent parmi ${candidates.length ? "les Solars déjà utilisés par cet utilisateur dans cette Galaxy" : "aucun Solar (cet utilisateur n'a encore rien dans cette Galaxy)"} pour cette connaissance. Confirme ce diagnostic puis, seulement s'il est réellement confirmé, propose un nouveau Solar ET l'Étoile qui accueillera cette connaissance sous ce nouveau Solar.`,
+    "Vérifie explicitement pour le Solar : (1) aucun des candidats fournis n'est raisonnablement cohérent, même en étant un peu plus large que l'idéal ; (2) le Solar que tu vas proposer est assez large pour accueillir plusieurs connaissances différentes à l'avenir, pas seulement celle-ci ; (3) il n'est pas une simple reformulation du sujet précis de cette connaissance.",
+    "Si un candidat est finalement acceptable une fois ce test appliqué, réponds quand même avec noExistingMatch:false et l'id de ce candidat plutôt que de forcer une création (dans ce cas, ne renvoie pas starName : l'Étoile sera résolue séparément).",
+    "Sinon, réponds avec noExistingMatch:true, un \"name\" court (2 à 4 mots, jamais une phrase, jamais le fait précis de cette connaissance) et une \"description\" d'une phrase expliquant ce que ce Solar couvre durablement.",
+    `Propose aussi "starName" : le nom de l'Étoile sous ce nouveau Solar — une sous-catégorie précise mais RÉUTILISABLE pour plusieurs contenus futurs, jamais le fait atomique de cette seule connaissance (2 à 4 mots). Si cette Galaxy (${galaxy}) fait partie de [${domainGalaxyNames}], l'Étoile doit rester assez large (imagine dix autres contenus rattachés au même Solar : elle doit convenir à plusieurs d'entre eux) ; sinon elle peut être la notion précise elle-même. Dans tous les cas, "starName" ne doit JAMAIS reprendre les mots de "name" (le nouveau Solar) — ce serait une simple redite, pas une sous-catégorie.`,
+    "Format obligatoire : {\"noExistingMatch\":true,\"name\":\"...\",\"description\":\"...\",\"starName\":\"...\"} ou {\"noExistingMatch\":false,\"id\":123}",
     "",
-    JSON.stringify(compact)
+    JSON.stringify({ type: sourceType, title: subjectTitle, detail: subjectDetail, candidates: candidatesPayload })
   ].join("\n");
 
   try {
+    console.log(`[ia-call] solar+star create: galaxy=${galaxy} title="${subjectTitle.slice(0, 60)}"`);
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
     let content;
     if (isGpt5) {
-      // "medium" (pas "low") pour les galaxies à domaines fixes : c'est là que
-      // l'IA doit vraiment comparer le contenu à existing_systems plutôt que
-      // recopier le titre de la notion — un raisonnement plus poussé réduit
-      // (sans l'annuler) le risque de rattachement raté, cf. filet de
-      // sécurité déterministe plus bas (limite de mots) pour le reste.
-      // fetchGpt5JsonContentWithRetry redouble le budget si la première tentative
-      // épuise tout son budget en raisonnement caché (contenu vide) plutôt que
-      // d'abandonner (cf. sa doc) — jamais de classement manqué faute de budget.
-      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale solar-system]", {
-        reasoningEffort: domainConfig ? "medium" : "low",
-        initialBudget: domainConfig ? 1200 : 500
-      });
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, creationPrompt, "[knowledge-taxonomy solar create]", { reasoningEffort: "medium", initialBudget: 1200 });
     } else {
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify({
-          model: OPINION_ARTICLE_CATEGORY_MODEL,
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          max_tokens: 200,
-          temperature: 0
-        })
+        body: JSON.stringify({ model: OPINION_ARTICLE_CATEGORY_MODEL, messages: [{ role: "user", content: creationPrompt }], response_format: { type: "json_object" }, max_tokens: 220, temperature: 0 })
       });
-      if (!r.ok) {
-        const errBody = await r.text().catch(() => "");
-        throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
-      }
+      if (!r.ok) throw new Error(`openai http ${r.status}`);
       const data = await r.json();
       content = data?.choices?.[0]?.message?.content;
     }
-    const parsed = content ? JSON.parse(content) : null;
+    const raw = content ? JSON.parse(content) : null;
+    if (raw?.noExistingMatch === false) {
+      const id = Number(raw.id);
+      // Le Solar candidat était finalement acceptable : l'Étoile n'a pas été
+      // proposée dans cet appel (cf. consigne ci-dessus) — repli sur
+      // resolveCultureGeneraleStarWithAI par l'appelant, comme avant.
+      return candidates.some((c) => c.id === id) ? { solarSystemId: id, starId: null } : null;
+    }
+    const creation = parseCreationDecision(raw);
+    if (!creation) return null;
 
-    const candidateId = Number(parsed?.solar_system_id);
-    if (Number.isInteger(candidateId) && candidateId > 0 && existing.some((s) => s.id === candidateId)) {
-      return candidateId;
+    const gate = validateTaxonomyCreationCandidate({
+      name: creation.name,
+      galaxy,
+      existingSolarNames: candidates.map((c) => c.name),
+      subjectName: sourceName,
+      requireNoExistingMatch: true
+    });
+    if (!gate.ok) {
+      console.warn(`[knowledge-taxonomy solar create] création refusée par le gate (${gate.reason}) : galaxy=${galaxy} name="${creation.name}"`);
+      return null;
     }
-    const newName = String(parsed?.new_solar_system || "").trim();
-    // Filet de sécurité pour les galaxies à domaines fixes (cf.
-    // CULTURE_GENERALE_DOMAIN_GALAXIES) : le prompt demande "2 à 4 mots,
-    // jamais une phrase", mais rien n'empêchait l'IA de recopier le titre
-    // complet de la notion à la place (constaté en pratique le 10/08/2026 —
-    // "La monarchie française s'effondre aux Tuileries" comme système au
-    // lieu de réutiliser "Révolution française & Empire"). Un libellé trop
-    // long est rejeté ici plutôt que créé tel quel.
-    const wordCount = newName ? newName.split(/\s+/).filter(Boolean).length : 0;
-    const maxWords = domainConfig ? 5 : Infinity;
-    if (isStandaloneUniverseNodeName(newName) && wordCount <= maxWords) {
-      const normalized = normalizeSolarSystemName(newName);
-      if (!isOpinionArticleSolarSystemNameRejected(normalized, { galaxy, category: null, categoryPrecision: null })) {
-        return await resolveOrCreateSolarSystem(galaxy, newName, normalized);
-      }
-    } else if (domainConfig && newName) {
-      console.warn(`[culture-generale solar-system] libellé rejeté (trop long pour une galaxie à domaines fixes) : galaxy=${galaxy} newName="${newName}"`);
+    const solarSystemId = await resolveOrCreateSolarSystem(galaxy, creation.name, normalizeSolarSystemName(creation.name), {
+      description: creation.description,
+      taxonomyScope: "knowledge"
+    });
+    if (!solarSystemId) return null;
+
+    // Étoile déterminée déterministement à partir de starName (gate qualité
+    // uniquement — un Solar tout juste créé n'a par construction aucune
+    // étoile existante pour cet utilisateur, donc rien à comparer, cf.
+    // matchExistingStarByLabel jamais nécessaire ici).
+    const rawStarName = typeof raw?.starName === "string" ? raw.starName.trim() : "";
+    const starGate = validateStarLabelCandidate({ label: rawStarName, solarName: creation.name });
+    const finalStarLabel = starGate.ok ? rawStarName : sourceName; // repli sûr : jamais de création avec un libellé invalide
+    if (!starGate.ok) {
+      console.warn(`[knowledge-taxonomy star create] libellé rejeté par le gate (${starGate.reason}), repli sur sourceName : solar="${creation.name}" starName="${rawStarName}"`);
     }
+    const starId = await resolveOrCreateStar(solarSystemId, finalStarLabel, normalizeStarName(finalStarLabel));
+    return { solarSystemId, starId };
   } catch (error) {
-    console.warn("[culture-generale solar-system] classification IA ignorée :", error.message);
+    console.warn("[knowledge-taxonomy solar create] classification IA ignorée :", error.message);
+    return null;
   }
-  // Jamais de repli sur sourceName pour une galaxie à domaines fixes : ce
-  // serait recréer exactement le même problème (le titre complet de la
-  // notion comme "système") — mieux vaut ne pas classer cette fois (best-
-  // effort, cf. appelant) que créer un système à côté de la liste fixe.
-  if (domainConfig) return null;
-  return resolveOrCreateSolarSystem(galaxy, sourceName, normalizeSolarSystemName(sourceName));
 }
 
 // ---- Étoiles Culture Générale : tag précis (la notion elle-même, ex. "Résilience")
@@ -16397,7 +17203,6 @@ async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
     .select("id")
     .single();
   if (!insertError) {
-    invalidateCultureGeneraleHierarchyClassificationCache();
     return inserted.id;
   }
   const { data: retryExisting, error: retryError } = await supabase
@@ -16416,14 +17221,37 @@ async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
 // système : vérifie d'abord si la notion correspond à une étoile déjà existante dans CE
 // système précis avant d'en créer une nouvelle. Un seul item à la fois (tourne à
 // l'acquisition, pas en lot).
-async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSystemName, sourceType, sourceName, sourceDetail) {
+async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSystemName, sourceType, sourceName, sourceDetail, userStarActivations) {
   const { data: existingRows, error: existingError } = await supabase
     .from("stars")
-    .select("id, name")
+    .select("id, name, solar_system_id")
     .eq("solar_system_id", solarSystemId);
   if (existingError) console.warn("[culture-generale star] lecture stars échouée :", existingError.message);
-  const existing = existingRows || [];
+  // Isolation utilisateur (§3 de la vérification finale du 16/08/2026) : une
+  // Star déjà créée sous ce Solar par un AUTRE utilisateur, mais jamais
+  // rencontrée par l'utilisateur courant, n'est jamais un candidat — sans ça,
+  // resolveCultureGeneraleStarWithAI proposait auparavant TOUTES les étoiles
+  // du Solar, quel que soit qui les avait créées.
+  const existing = filterUserActiveStars(
+    (existingRows || []).map((s) => ({ id: s.id, name: s.name, solarSystemId: s.solar_system_id })),
+    userStarActivations,
+    solarSystemId
+  );
 
+  // §3 de la vérification finale (16/08/2026) demande d'évaluer si cet appel
+  // est supprimable quand l'identité est déterminable sans IA. Étudié et
+  // ÉCARTÉ : même quand `existing` est vide, cet appel ne fait pas QUE
+  // comparer à l'existant — il fabrique aussi le libellé de la nouvelle
+  // étoile en lui appliquant des règles de qualité non triviales (rester plus
+  // large que le fait précis, ne jamais reprendre les mots du système
+  // solaire, cf. règles ci-dessous, durcies le 09 et 10/08/2026 après bugs
+  // réels). Remplacer cet appel par resolveOrCreateStar(sourceName) quand
+  // `existing` est vide réintroduirait exactement ces deux bugs sur CHAQUE
+  // première étoile d'un Solar neuf ou nouvellement actif — le cas le plus
+  // fréquent, pas un cas marginal. Cet appel reste donc systématique dès que
+  // le Solar est connu ; seul le court-circuit "Subject déjà connu" en tête
+  // de classifyCultureGeneraleKnowledgePlacementWithAI (0 appel, identité
+  // exacte du Subject) l'évite légitimement.
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return resolveOrCreateStar(solarSystemId, sourceName, normalizeStarName(sourceName));
 
@@ -16478,6 +17306,10 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
   ].join("\n");
 
   try {
+    // Ce 3e appel (rare, cf. commentaire de repli plus haut chez l'appelant)
+    // est précisément celui qui fait passer le total de 2 à 3 sur le chemin
+    // create — marqué distinctement pour rester identifiable dans les logs.
+    console.log(`[ia-call] EXCEPTION star fallback (3e appel): galaxy=${galaxy} solarSystemId=${solarSystemId}`);
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
     let content;
     if (isGpt5) {
@@ -16552,30 +17384,130 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
 // du solar retenu. Les ids trouvés/créés sont copiés dans chaque question et
 // seront réutilisés à la première bonne réponse — aucune seconde décision IA
 // susceptible de ranger la même connaissance ailleurs.
-async function classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail) {
-  const classification = await classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, sourceDetail);
-  if (!classification?.category) return null;
+async function classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail, userId, sourceDebateId) {
+  // ── Chemin déterministe, 0 appel IA (cible "connu=0", vérification finale
+  // du 16/08/2026 — CORRIGÉ point 1 : doit être personnel, jamais celui d'un
+  // autre utilisateur) : CE Subject a-t-il déjà été classé par CET
+  // utilisateur précisément (une génération antérieure du même sourceDebateId
+  // que lui-même a déjà rencontrée et acquise) ? Un placement résolu
+  // uniquement par un autre utilisateur ne court-circuite jamais la
+  // classification de celui-ci — sinon le Solar/Star propre à cet autre
+  // utilisateur s'imposerait sans jamais passer par sa propre décision MATCH.
+  // buildKnownPlacementLookup renvoie null (donc aucune requête) si userId
+  // manque — jamais de court-circuit non personnel possible.
+  //
+  // Distinct, et volontairement non touché ici, du mécanisme PLUS ANCIEN de
+  // recordDailyQuizEclairageAcquisition ("contenu partagé par tous les
+  // visiteurs LE MÊME JOUR") : celui-ci porte sur LA MÊME ligne daily_quiz
+  // déjà générée une fois et lue par plusieurs utilisateurs le même jour —
+  // c'est l'identité du Subject/Star (canonique, partagée par construction,
+  // cf. rapport de design "Star ≈ Subject"), pas une réutilisation entre deux
+  // générations distinctes à des dates différentes comme ici.
+  const knownLookup = buildKnownPlacementLookup(sourceType, sourceDebateId, userId);
+  if (knownLookup) {
+    const { data: known, error: knownError } = await supabase
+      .from("user_article_acquisitions")
+      .select("solar_system_id, star_id")
+      .match(knownLookup)
+      .not("solar_system_id", "is", null)
+      .not("star_id", "is", null)
+      .limit(1)
+      .maybeSingle();
+    if (!knownError && known) {
+      const { data: knownSolar } = await supabase.from("solar_systems").select("galaxy").eq("id", known.solar_system_id).maybeSingle();
+      if (knownSolar?.galaxy) {
+        return {
+          category: knownSolar.galaxy,
+          categoryPrecision: null,
+          galaxy: knownSolar.galaxy,
+          solarSystemId: known.solar_system_id,
+          starId: known.star_id
+        };
+      }
+    }
+  }
 
-  const galaxy = getOpinionArticleGalaxy(classification.category, classification.categoryPrecision);
+  // Solars déjà actifs pour CET utilisateur (jamais tous les Solars de la
+  // Galaxy, cf. §1 du plan) — lu une seule fois, réutilisé par le MATCH
+  // fusionné Galaxy+Solar ci-dessous.
+  const userSolars = await fetchUserActiveKnowledgeSolars(userId);
+  const match = await matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, sourceDetail, userSolars);
+  if (!match?.galaxy) return null;
+
+  const galaxy = match.galaxy;
+  // `category`/`categoryPrecision` conservés dans l'objet retourné pour
+  // compatibilité avec le reste du code (sourceThemes, affichage) — pour le
+  // nouveau moteur, category vaut toujours galaxy elle-même (plus de
+  // rubriques hybrides côté connaissances, cf. KNOWLEDGE_GALAXY_DEFINITIONS).
   const placement = {
-    category: classification.category,
-    categoryPrecision: classification.categoryPrecision || null,
-    galaxy: galaxy || null,
+    category: galaxy,
+    categoryPrecision: null,
+    galaxy,
     solarSystemId: null,
     starId: null
   };
-  if (!galaxy) return placement;
 
-  // Le classifieur global a pu reconnaître directement un solar (et
-  // éventuellement son étoile) dans l'arbre complet. Cette correspondance
-  // a priorité absolue ; la résolution locale ne sert qu'en l'absence de
-  // parent existant adapté.
-  const solarSystemId = classification.solarSystemId || await resolveCultureGeneraleSolarSystemWithAI(
-    galaxy,
-    sourceType,
-    sourceName,
-    sourceDetail
-  );
+  // Étoiles déjà rencontrées par CET utilisateur uniquement (§3 de la
+  // vérification finale : une Star de User B doit rester invisible pour User
+  // A) — dérivées de user_article_acquisitions.star_id, aucune table dédiée.
+  // Chargées AVANT la décision solar : nécessaires dès le chemin "existing"
+  // pour la résolution déterministe de l'Étoile (cf. plus bas).
+  const { data: userStarRows } = await supabase
+    .from("user_article_acquisitions")
+    .select("star_id")
+    .eq("user_id", userId)
+    .not("star_id", "is", null);
+  const userStarActivations = (userStarRows || []).map((r) => ({ starId: r.star_id }));
+
+  let solarSystemId = null;
+  let starId = null;
+
+  if (match.decision === "existing") {
+    // ── Chemin reuse : TOTAL = 1 appel IA (celui du MATCH ci-dessus) ──────
+    // Le Solar est déjà connu (nom compris) : l'Étoile proposée par ce même
+    // appel (match.starLabel) est comparée déterministement aux étoiles déjà
+    // rencontrées par cet utilisateur sous CE Solar (matchExistingStarByLabel)
+    // — jamais un appel IA supplémentaire sur ce chemin.
+    solarSystemId = match.solarId;
+    const matchedSolar = match.candidates.find((c) => c.id === solarSystemId);
+    const { data: userExistingStars } = await supabase
+      .from("stars")
+      .select("id, name, solar_system_id")
+      .eq("solar_system_id", solarSystemId);
+    const scopedStars = filterUserActiveStars(
+      (userExistingStars || []).map((s) => ({ id: s.id, name: s.name, solarSystemId: s.solar_system_id })),
+      userStarActivations,
+      solarSystemId
+    );
+    const existingStarMatch = matchExistingStarByLabel(match.starLabel, scopedStars);
+    if (existingStarMatch) {
+      starId = existingStarMatch;
+    } else {
+      const starGate = validateStarLabelCandidate({ label: match.starLabel, solarName: matchedSolar?.name });
+      const finalLabel = starGate.ok ? match.starLabel : sourceName; // repli sûr, jamais un libellé invalide créé tel quel
+      if (!starGate.ok) {
+        console.warn(`[knowledge-taxonomy star match] libellé rejeté par le gate (${starGate.reason}), repli sur sourceName : solar="${matchedSolar?.name}" starLabel="${match.starLabel}"`);
+      }
+      starId = await resolveOrCreateStar(solarSystemId, finalLabel, normalizeStarName(finalLabel));
+    }
+  } else {
+    // ── Chemin create : TOTAL = 2 appels IA (MATCH + cet appel, qui produit
+    // désormais Solar ET Étoile ensemble) ────────────────────────────────
+    const created = await resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, sourceDetail, match.candidates);
+    if (!created?.solarSystemId) return placement;
+    solarSystemId = created.solarSystemId;
+    if (created.starId) {
+      starId = created.starId;
+    } else {
+      // Cas rare (cf. resolveCultureGeneraleSolarSystemWithAI) : l'appel de
+      // création a finalement jugé un candidat acceptable (noExistingMatch:false)
+      // sans proposer d'Étoile — repli sur la résolution dédiée (qui refait
+      // elle-même sa lecture + son filtrage utilisateur), seul cas où un 3e
+      // appel IA reste possible sur le chemin create.
+      const { data: fallbackSolarRow } = await supabase.from("solar_systems").select("name").eq("id", solarSystemId).maybeSingle();
+      starId = await resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, fallbackSolarRow?.name || sourceName, sourceType, sourceName, sourceDetail, userStarActivations);
+    }
+  }
   if (!solarSystemId) return placement;
 
   const { data: solarSystemRow, error: solarSystemError } = await supabase
@@ -16588,15 +17520,6 @@ async function classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourc
     return placement;
   }
   placement.solarSystemId = solarSystemRow.id;
-
-  const starId = classification.starId || await resolveCultureGeneraleStarWithAI(
-    galaxy,
-    solarSystemRow.id,
-    solarSystemRow.name || sourceName,
-    sourceType,
-    sourceName,
-    sourceDetail
-  );
   if (!starId) return placement;
 
   const { data: starRow, error: starError } = await supabase
@@ -16618,9 +17541,13 @@ async function classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourc
 // pas sourcePlacement, retombent simplement sur le flux historique plus bas.
 async function validateStoredCultureGeneralePlacement(rawPlacement) {
   if (!rawPlacement || typeof rawPlacement !== "object") return null;
-  const category = normalizeOpinionArticleCategory(rawPlacement.category);
-  const categoryPrecision = normalizeOpinionArticleCategoryPrecision(category, rawPlacement.categoryPrecision);
-  const galaxy = getOpinionArticleGalaxy(category, categoryPrecision);
+  // Valide contre KNOWLEDGE_GALAXY_DEFINITIONS (nouveau moteur, 16/08/2026) —
+  // plus getOpinionArticleGalaxy(category, categoryPrecision), qui référence
+  // la taxonomie des articles d'actu et rejetait à tort des galaxies
+  // connaissances valides comme "Arts" (jamais un libellé "actu" hybride
+  // ici). rawPlacement.galaxy est l'autorité ; category n'est conservé que
+  // pour compatibilité d'affichage (cf. classifyCultureGeneraleKnowledgePlacementWithAI).
+  const galaxy = findKnowledgeGalaxyDefinition(rawPlacement.galaxy)?.name || null;
   const solarSystemId = Number(rawPlacement.solarSystemId);
   const starId = Number(rawPlacement.starId);
   if (!galaxy || !Number.isInteger(solarSystemId) || solarSystemId <= 0 || !Number.isInteger(starId) || starId <= 0) return null;
@@ -16722,31 +17649,66 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   }
 
   if (!solarSystemId || !starId) {
-    const classification = await classifyCultureGeneraleCategoryWithAI(sourceType, sourceName, question.sourceDetail);
-    const galaxy = classification ? getOpinionArticleGalaxy(classification.category, classification.categoryPrecision) : null;
+    // Même moteur fusionné que classifyCultureGeneraleKnowledgePlacementWithAI
+    // (correctif du 16/08/2026) : 1 appel MATCH Galaxy+Solar, 1 second appel
+    // seulement sur no_match — jamais deux appels séparés Galaxy puis Solar.
+    const userSolarsForFallback = await fetchUserActiveKnowledgeSolars(user.id);
+    const match = await matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, question.sourceDetail, userSolarsForFallback);
+    const galaxy = match?.galaxy || null;
     // Best-effort, jamais bloquant — mais toujours tracé : un échec de
     // classification silencieux (catégorie IA non reconnue, appel réseau
     // en échec) est indiscernable d'un succès sans ce log (constaté en
     // pratique le 09/08/2026, plusieurs tentatives sans aucune trace).
     if (!galaxy) {
-      console.warn(`[daily quiz eclairage acquisitions] classification abandonnée : sourceType=${sourceType} sourceDebateId=${sourceDebateId} category=${classification?.category ?? "null"}`);
+      console.warn(`[daily quiz eclairage acquisitions] classification abandonnée : sourceType=${sourceType} sourceDebateId=${sourceDebateId}`);
       return;
     }
 
-    solarSystemId = await resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, question.sourceDetail);
+    const { data: userStarRowsFallback } = await supabase
+      .from("user_article_acquisitions")
+      .select("star_id")
+      .eq("user_id", user.id)
+      .not("star_id", "is", null);
+    const userStarActivationsFallback = (userStarRowsFallback || []).map((r) => ({ starId: r.star_id }));
+
+    if (match.decision === "existing") {
+      // Chemin reuse : 1 seul appel IA total (celui du MATCH), Étoile
+      // résolue déterministement — même logique que
+      // classifyCultureGeneraleKnowledgePlacementWithAI.
+      solarSystemId = match.solarId;
+      const matchedSolar = match.candidates.find((c) => c.id === solarSystemId);
+      const { data: existingStarsRows } = await supabase.from("stars").select("id, name, solar_system_id").eq("solar_system_id", solarSystemId);
+      const scopedStars = filterUserActiveStars(
+        (existingStarsRows || []).map((s) => ({ id: s.id, name: s.name, solarSystemId: s.solar_system_id })),
+        userStarActivationsFallback,
+        solarSystemId
+      );
+      const existingStarMatch = matchExistingStarByLabel(match.starLabel, scopedStars);
+      if (existingStarMatch) {
+        starId = existingStarMatch;
+      } else {
+        const starGate = validateStarLabelCandidate({ label: match.starLabel, solarName: matchedSolar?.name });
+        const finalLabel = starGate.ok ? match.starLabel : sourceName;
+        starId = await resolveOrCreateStar(solarSystemId, finalLabel, normalizeStarName(finalLabel));
+      }
+    } else {
+      // Chemin create : 2 appels IA total (MATCH + création Solar+Étoile ensemble).
+      const created = await resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourceName, question.sourceDetail, match.candidates);
+      if (!created?.solarSystemId) {
+        console.warn(`[daily quiz eclairage acquisitions] système solaire non résolu : galaxy=${galaxy} sourceDebateId=${sourceDebateId}`);
+        return;
+      }
+      solarSystemId = created.solarSystemId;
+      starId = created.starId;
+      if (!starId) {
+        const { data: fallbackSolarRow } = await supabase.from("solar_systems").select("name").eq("id", solarSystemId).maybeSingle();
+        starId = await resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, fallbackSolarRow?.name || sourceName, sourceType, sourceName, question.sourceDetail, userStarActivationsFallback);
+      }
+    }
     if (!solarSystemId) {
       console.warn(`[daily quiz eclairage acquisitions] système solaire non résolu : galaxy=${galaxy} sourceDebateId=${sourceDebateId}`);
       return;
     }
-
-    const { data: solarSystemRow, error: solarSystemRowError } = await supabase
-      .from("solar_systems")
-      .select("name")
-      .eq("id", solarSystemId)
-      .maybeSingle();
-    if (solarSystemRowError) console.warn("[daily quiz eclairage acquisitions] failed : lecture système solaire —", solarSystemRowError.message);
-
-    starId = await resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSystemRow?.name || sourceName, sourceType, sourceName, question.sourceDetail);
     if (!starId) {
       console.warn(`[daily quiz eclairage acquisitions] étoile non résolue : galaxy=${galaxy} solarSystemId=${solarSystemId} sourceDebateId=${sourceDebateId}`);
       return;
@@ -16770,6 +17732,21 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
       );
     if (error) throw error;
     console.log(`[daily quiz eclairage acquisitions] user=${user.id} sourceType=${sourceType} sourceDebateId=${sourceDebateId}`);
+
+    // Le Solar rejoint "l'univers actif" de CET utilisateur à cet instant —
+    // jamais à la génération du QCM (§7/§8 du plan : le coût et le périmètre
+    // de classification ne doivent dépendre que des connaissances réellement
+    // acquises, pas de tout ce qui a été généré). C'est ce qui rend candidat
+    // ce Solar pour les PROCHAINES classifications de cet utilisateur (cf.
+    // fetchUserActiveKnowledgeSolars) — sans effet rétroactif sur les
+    // classifications déjà faites. best-effort : un échec ici ne doit jamais
+    // empêcher l'acquisition elle-même d'être enregistrée (déjà faite ci-dessus).
+    if (solarSystemId) {
+      const { error: activationError } = await supabase
+        .from("user_solar_activations")
+        .upsert({ user_id: user.id, solar_system_id: solarSystemId }, { onConflict: "user_id,solar_system_id", ignoreDuplicates: true });
+      if (activationError) console.warn("[daily quiz eclairage acquisitions] failed : activation solar —", activationError.message);
+    }
 
     // La connaissance existe désormais réellement dans la mémoire. C'est à
     // cet instant précis — première bonne réponse, jamais à la création du
@@ -16922,6 +17899,28 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
       .maybeSingle();
     if (error) throw error;
     memoryItemRow = data;
+  } else if (questionId.startsWith("comprendre:")) {
+    // Le `slot` transmis par le client est le pseudo-slot agrégateur "comprendre" (jusqu'à 6
+    // questions puisées dans plusieurs liens différents en une seule session, cf.
+    // fetchCultureGeneraleComprehensionQuestions) — jamais le vrai slot par paire où la question
+    // vit réellement dans daily_quiz (cf. cultureGeneraleComprehensionQuizSlot). On le
+    // reconstruit depuis le questionId lui-même (comprendre:{pairHash}-q{n}), seule source
+    // fiable ici pour retrouver la bonne ligne.
+    const pairMatch = /^comprendre:([0-9a-f]{20})-q\d+$/.exec(questionId);
+    if (!pairMatch) return;
+    var comprehensionPairSlot = `notion:comprendre:${pairMatch[1]}`;
+    // `quizDate` (toujours "aujourd'hui" pour ce pseudo-slot agrégateur, cf.
+    // resolveDailyQuizRequestDate) ne correspond pas forcément à la vraie date de la ligne :
+    // contrairement aux autres notion quizzes, celle d'un lien "comprendre" peut avoir été
+    // générée un jour précédent puis simplement relue depuis (cf.
+    // ensureCultureGeneraleComprehensionQuizPersisted, jamais régénérée tant qu'une ligne existe
+    // déjà pour ce slot). On la relit par slot seul avant de chercher le memory_item.
+    const { data: comprehensionQuizRow, error: comprehensionQuizRowError } = await supabase
+      .from("daily_quiz").select("quiz_date").eq("slot", comprehensionPairSlot)
+      .order("quiz_date", { ascending: false }).limit(1).maybeSingle();
+    if (comprehensionQuizRowError) throw comprehensionQuizRowError;
+    if (!comprehensionQuizRow) return;
+    memoryItemRow = await upsertMemoryItemForNotionAnswer({ slot: comprehensionPairSlot, quizDate: comprehensionQuizRow.quiz_date, questionId });
   } else {
     return; // hors périmètre FSRS (question actu, ancien slot hors "notion:%")
   }
@@ -16934,6 +17933,19 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
   if (!canonicalQuestion) return; // ne devrait pas arriver pour un slot "notion:%" (jamais purgé)
 
   const { user } = await resolveLegacyUser(supabase, voterKey);
+
+  // Une question "Comprendre les liens" réussie ajoute automatiquement le lien à "Découvrir"
+  // (demande du 16/08/2026) : contrairement aux autres notions, il n'existe pas de bouton
+  // "Mémoriser" pour un lien détecté entre deux connaissances — seule une bonne réponse vaut
+  // adoption. upsert + ignoreDuplicates : ne recrée rien aux bonnes réponses suivantes du même
+  // lien (jusqu'à 6 questions par lien).
+  if (typeof comprehensionPairSlot !== "undefined" && isCorrect) {
+    const { error: comprehensionLinkError } = await supabase.from("user_notion_quizzes").upsert(
+      { user_id: user.id, quiz_date: memoryItemRow.quiz_date, slot: comprehensionPairSlot },
+      { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+    );
+    if (comprehensionLinkError) console.warn("[comprendre] ajout à Découvrir échoué :", comprehensionLinkError.message);
+  }
 
   const { data: existingStateRow, error: stateError } = await supabase.from("memory_item_fsrs_states")
     .select("*").eq("user_id", user.id).eq("memory_item_id", memoryItemRow.id).maybeSingle();
