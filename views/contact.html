@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Contact | agôn</title>
+  <title>Contact | mnoria</title>
   <link rel="icon" type="image/png" href="/mnoria-icon-64.png">
   <link rel="manifest" href="/manifest.webmanifest?v=20260815-mnoria-app-icon-v1">
   <link rel="apple-touch-icon" href="/mnoria-icon-192.png">
   <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -23,12 +23,12 @@
       if (window.self !== window.top) {
         document.body.classList.add('in-iframe');
         try {
-          window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
+          window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
         } catch (e) {}
       }
     });
   </script>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-contact">
 <header class="topbar topbar--mnoria-uniform">
@@ -84,7 +84,7 @@
   </section>
 </main>
 
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script>
 document.getElementById('contact-form')?.addEventListener('submit', async function(event) {
   event.preventDefault();

@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Concept du jour | agôn</title>
+  <title>Concept du jour | mnoria</title>
   <link rel="icon" type="image/png" href="/mnoria-icon-64.png">
   <link rel="manifest" href="/manifest.webmanifest?v=20260815-mnoria-app-icon-v1">
   <link rel="apple-touch-icon" href="/mnoria-icon-192.png">
   <meta name="theme-color" content="#243038">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+  <meta name="apple-mobile-web-app-title" content="Mnoria">
+  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -22,7 +22,7 @@
     document.addEventListener('DOMContentLoaded', function(){
       if (window.self !== window.top) {
         document.body.classList.add('in-iframe');
-        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+        try { window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
       }
     });
   </script>
@@ -320,7 +320,7 @@
       padding-top: 24px;
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-concept-du-jour">
 <header class="topbar topbar--mnoria-uniform">
@@ -358,7 +358,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script>
 (function () {
   var DOMAIN_LABELS = {
@@ -672,7 +672,7 @@
 
   function closeModal() {
     if (window.self !== window.top) {
-      try { window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*'); } catch (e) {}
+      try { window.parent.postMessage({ type: 'mnoria:close-debate-modal' }, '*'); } catch (e) {}
     } else {
       location.href = '/';
     }

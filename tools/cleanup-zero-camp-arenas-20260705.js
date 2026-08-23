@@ -10,7 +10,7 @@
 //
 // Usage :
 //   node tools/cleanup-zero-camp-arenas-20260705.js prepare   # audit + sauvegarde + déplacement idées + re-ciblage map
-//   npx pm2 restart agon-server                               # recharge la map en mémoire
+//   npx pm2 restart mnoria-server                               # recharge la map en mémoire
 //   node tools/cleanup-zero-camp-arenas-20260705.js delete    # suppressions via la route admin (cascade complète)
 //
 // Idempotent : chaque phase peut être relancée sans risque.
@@ -21,7 +21,7 @@ const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-const AGON_URL = "http://localhost:3001";
+const MNORIA_URL = "http://localhost:3001";
 const BACKUP_PATH = path.join(__dirname, "..", "data", "cleanup-zero-camp-arenas-20260705-backup.json");
 
 // ── Copies exactes des helpers de comptage de server.js ──
@@ -82,7 +82,7 @@ function countCloudSourcesForGroup(debate, politicalGroup, maps) {
 }
 
 async function buildOrientationMaps() {
-  const res = await fetch(`${AGON_URL}/api/about/medias`);
+  const res = await fetch(`${MNORIA_URL}/api/about/medias`);
   if (!res.ok) throw new Error(`/api/about/medias HTTP ${res.status}`);
   const medias = (await res.json()).medias || [];
   const maps = { byDomain: new Map(), byName: new Map() };
@@ -207,7 +207,7 @@ async function prepare() {
 
   if (mapChanged) {
     await saveMap(map);
-    console.log("Map shared_debate_links mise à jour — redémarre agon-server avant la phase delete.");
+    console.log("Map shared_debate_links mise à jour — redémarre mnoria-server avant la phase delete.");
   } else {
     console.log("Map déjà correcte.");
   }
@@ -217,7 +217,7 @@ async function doDelete() {
   if (!fs.existsSync(BACKUP_PATH)) throw new Error("Sauvegarde absente : lancer la phase prepare d'abord.");
   const { deleteIds } = JSON.parse(fs.readFileSync(BACKUP_PATH, "utf8"));
 
-  const loginRes = await fetch(`${AGON_URL}/api/admin/login`, {
+  const loginRes = await fetch(`${MNORIA_URL}/api/admin/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password: process.env.ADMIN_PASSWORD })
@@ -228,7 +228,7 @@ async function doDelete() {
 
   let deleted = 0, absent = 0, failed = 0;
   for (const id of deleteIds) {
-    const res = await fetch(`${AGON_URL}/api/debates/${id}`, {
+    const res = await fetch(`${MNORIA_URL}/api/debates/${id}`, {
       method: "DELETE",
       headers: { "x-admin-token": token }
     });

@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Autres actus | agôn</title>
+  <title>Autres actus | mnoria</title>
   <link rel="icon" type="image/png" href="/mnoria-icon-64.png">
   <link rel="manifest" href="/manifest.webmanifest?v=20260815-mnoria-app-icon-v1">
   <link rel="apple-touch-icon" href="/mnoria-icon-192.png">
   <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -72,7 +72,7 @@
       to { transform: rotate(360deg); }
     }
     body.page-tribunes .about-page-shell {
-      padding-bottom: calc(92px + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+      padding-bottom: calc(92px + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
     }
     body.page-tribunes .home-bottom-nav {
       background:
@@ -298,7 +298,7 @@
          visible, pas une barre pleine largeur. */
       body.page-tribunes #tribunes-sort-search-wrap.tribunes-sort-search-pinned {
         position: fixed;
-        /* La topbar (logo agôn) est censée être sticky elle aussi mais ne
+        /* La topbar (logo mnoria) est censée être sticky elle aussi mais ne
            tient pas non plus sur cette page (même souci d'overflow) : elle
            disparaît entièrement au scroll, donc le bouton se pose tout en
            haut du viewport plutôt qu'à la hauteur de la topbar (qui n'est
@@ -1121,7 +1121,7 @@
     // parent (modale iframe) que le chargement est resté bloqué alors que la page est
     // affichée — et masquer titre + filtres derrière l'overlay "chargement plus long
     // que prévu" (cf. resolveStuckDebateIframeParentLoading côté script.js).
-    window.__agonPageArrivalReady = true;
+    window.__mnoriaPageArrivalReady = true;
     if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
 
     // ── Épinglage manuel du bouton Trier/Rechercher (mobile) ──────────────
@@ -1326,11 +1326,11 @@
       if (window.self !== window.top) {
         document.body.classList.add('in-iframe');
         syncTribunesTopbarOffset();
-        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+        try { window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
       }
     });
   </script>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-tribunes">
 <!-- Bandeau du haut : réplique exacte de la page index. Le wrapper
@@ -1447,8 +1447,8 @@
       <i class="fa-solid fa-power-off"></i>
     </button>
 
-    <img src="/appagon-192.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
-    <img src="/appagonordi.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
+    <img src="/appmnoria-192.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
+    <img src="/appmnoriaordi.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
 
     <div class="admin-controls-row" data-admin style="display:none;">
       <div class="admin-topbar-menu" id="admin-topbar-menu">
@@ -1515,7 +1515,7 @@
   </div>
 </header>
 </div>
-<a href="/" class="tribunes-mobile-back-button" aria-label="Retour à l'accueil" onclick="try{sessionStorage.setItem('agon_skip_startup_once','1')}catch(e){} try{showTribunesNavOverlay()}catch(e){}">
+<a href="/" class="tribunes-mobile-back-button" aria-label="Retour à l'accueil" onclick="try{sessionStorage.setItem('mnoria_skip_startup_once','1')}catch(e){} try{showTribunesNavOverlay()}catch(e){}">
   <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
 </a>
 <style>
@@ -1567,7 +1567,7 @@ window.addEventListener("pageshow", function() {
   <section class="about-panel">
     <div class="tribunes-page-header">
       <h1>Autres actus</h1>
-      <p>Actualités qui n'ont pas (encore) donné lieu à l'ouverture d'une arène sur Agôn.</p>
+      <p>Actualités qui n'ont pas (encore) donné lieu à l'ouverture d'une arène sur Mnoria.</p>
 
       <div id="tribunes-sort-search-wrap" class="tribunes-sort-search-block">
         <div class="index-explorer-topbar">
@@ -1683,7 +1683,7 @@ window.addEventListener("pageshow", function() {
    éventuelle position mémorisée par une session précédente (avant ce
    verrouillage) est ignorée. */
 (function () {
-  try { sessionStorage.removeItem("agonFloatingScrollBtnPos:" + location.pathname); } catch (e) {}
+  try { sessionStorage.removeItem("mnoriaFloatingScrollBtnPos:" + location.pathname); } catch (e) {}
 })();
 </script>
 
@@ -1783,7 +1783,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -2030,7 +2030,7 @@ window.addEventListener("pageshow", function() {
   // Onglet "Personnalisé" : n'importe quel média (toute orientation) que
   // l'utilisateur choisit un par un. Pas de compte sur ce site : la sélection
   // vit en localStorage, par navigateur.
-  var TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY = 'agon_tribunes_custom_media';
+  var TRIBUNES_CUSTOM_MEDIA_STORAGE_KEY = 'mnoria_tribunes_custom_media';
   var customMediaSelection = new Set();
 
   // Le bot veille suffixe parfois le nom du média avec " : <sous-rubrique> :
@@ -2520,13 +2520,13 @@ window.addEventListener("pageshow", function() {
           '<div class="tribunes-arena-actions">' +
             '<button type="button" class="debate-card-options-btn tribunes-options-btn" aria-label="Options de partage" aria-expanded="false" onclick="event.preventDefault(); event.stopPropagation(); toggleTribunesShareMenu(this)">···</button>' +
             '<a class="tribunes-source-btn" href="' + escapeHtml(article.link) + '" target="_blank" rel="noopener noreferrer" onclick="if (window.openCardArticle) { event.preventDefault(); window.openCardArticle(this.closest(\'.tribunes-item\')); }"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir source</a>' +
-            '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="agon-arena-icon" aria-hidden="true"></span> Ouvrir arène</a>' +
+            '<a class="tribunes-arena-btn" href="' + createArenaHref(article) + '" onclick="event.preventDefault(); openDebateIframeModal(this.getAttribute(\'href\'))"><span class="mnoria-arena-icon" aria-hidden="true"></span> Ouvrir arène</a>' +
           '</div>' +
         '</div>' +
       '</li>';
   }
 
-  // Le champ "Sujet de l'arène" est limité à 110 caractères côté Agôn — un titre plus
+  // Le champ "Sujet de l'arène" est limité à 110 caractères côté Mnoria — un titre plus
   // long serait tronqué silencieusement. On coupe nous-mêmes avec une ellipse visible,
   // pour que l'utilisateur comprenne que ce n'est pas le titre exact de l'article et
   // pense à le retoucher si besoin (il peut tout modifier une fois sur /create).
@@ -2573,17 +2573,17 @@ window.addEventListener("pageshow", function() {
     var link = card.dataset.link;
     if (!link) return;
 
-    // Même page intermédiaire que sur la page debate (openAgonSourcePanel,
+    // Même page intermédiaire que sur la page debate (openMnoriaSourcePanel,
     // cf. script.js) : aperçu image + titre + résumé, bouton "Ouvrir la
     // source", partout hors standalone (desktop comme mobile web). Remplace
     // l'ancien overlay iframe propre à cette page. Le standalone (PWA) garde
     // le clic d'ancre ci-dessous : iOS y ouvre sa propre vue navigateur
     // intégrée.
-    if (!isStandaloneDisplay() && typeof window.openAgonSourcePanel === 'function') {
+    if (!isStandaloneDisplay() && typeof window.openMnoriaSourcePanel === 'function') {
       var article = card.__article || {};
       var preview = article.source_preview || {};
       var loadedImg = card.querySelector('.tribunes-thumb-loaded .tribunes-thumb-img');
-      window.openAgonSourcePanel(link, {
+      window.openMnoriaSourcePanel(link, {
         url: link,
         domain: preview.siteName || preview.domain || article.source || '',
         title: preview.title || article.title || '',
@@ -2597,7 +2597,7 @@ window.addEventListener("pageshow", function() {
 
     // Clic d'ancre plutôt que window.open : en PWA iOS, window.open bascule
     // vers Safari sans bouton de retour, alors qu'un lien target="_blank"
-    // ouvre la vue intégrée avec la croix / flèche de retour vers Agôn.
+    // ouvre la vue intégrée avec la croix / flèche de retour vers Mnoria.
     var anchor = document.createElement('a');
     anchor.href = link;
     anchor.target = '_blank';
@@ -3307,10 +3307,10 @@ window.addEventListener("pageshow", function() {
   }
 
   function syncTribunesMobileBottomViewport() {
-    if (typeof window.__agonSyncMobileBottomNavViewport !== 'function') return;
-    window.__agonSyncMobileBottomNavViewport();
-    requestAnimationFrame(window.__agonSyncMobileBottomNavViewport);
-    setTimeout(window.__agonSyncMobileBottomNavViewport, 220);
+    if (typeof window.__mnoriaSyncMobileBottomNavViewport !== 'function') return;
+    window.__mnoriaSyncMobileBottomNavViewport();
+    requestAnimationFrame(window.__mnoriaSyncMobileBottomNavViewport);
+    setTimeout(window.__mnoriaSyncMobileBottomNavViewport, 220);
   }
 
   function render(articles) {
@@ -3526,7 +3526,7 @@ window.addEventListener("pageshow", function() {
   var previewObserver = null;
   var previewCacheByLink = {};
   var previewRequestByLink = {};
-  var AGON_FALLBACK_IMAGE = '/logovisuel.png';
+  var MNORIA_FALLBACK_IMAGE = '/logovisuel.png';
   var LIBERATION_FALLBACK_IMAGE = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Lib%C3%A9ration.svg/langfr-250px-Lib%C3%A9ration.svg.png';
   // lepoint.fr est protégé par un anti-bot (DataDome) qui bloque systématiquement
   // la récupération d'og:image (403 sur tous les profils UA testés côté serveur,
@@ -3581,7 +3581,7 @@ window.addEventListener("pageshow", function() {
       preview && preview.thumbnail,
       preview && preview.thumbnailUrl,
       preview && preview.ogImage
-    ].concat(getYouTubeThumbnailCandidates(videoId), [sourceFallback, AGON_FALLBACK_IMAGE]));
+    ].concat(getYouTubeThumbnailCandidates(videoId), [sourceFallback, MNORIA_FALLBACK_IMAGE]));
   }
 
   function isExternalImageUrl(url) {

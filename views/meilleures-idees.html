@@ -12,8 +12,8 @@
 <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-<link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1" />
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+<link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -291,7 +291,7 @@
       color: #f0c96a;
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-notifications page-notifications-mobile page-contributions">
 <header class="topbar topbar--mnoria-uniform">
@@ -341,7 +341,7 @@
         <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
       </summary>
       <div class="contributions-accordion-body">
-        <p class="best-ideas-subheading"><span class="agon-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-votes-count"></span></p>
+        <p class="best-ideas-subheading"><span class="mnoria-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-votes-count"></span></p>
         <div id="best-ideas-open-votes"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
         <p class="best-ideas-subheading"><i class="fa-solid fa-scale-balanced"></i> Arènes à positions <span class="contributions-count" id="best-ideas-positioned-votes-count"></span></p>
         <div id="best-ideas-positioned-votes"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
@@ -350,11 +350,11 @@
 
     <details class="contributions-accordion">
       <summary>
-        <span class="contributions-accordion-label"><i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i> Meilleures notes IA</span>
+        <span class="contributions-accordion-label"><i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i> Meilleures notes IA</span>
         <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
       </summary>
       <div class="contributions-accordion-body">
-        <p class="best-ideas-subheading"><span class="agon-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-aiscore-count"></span></p>
+        <p class="best-ideas-subheading"><span class="mnoria-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-aiscore-count"></span></p>
         <div id="best-ideas-open-aiscore"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
         <p class="best-ideas-subheading"><i class="fa-solid fa-scale-balanced"></i> Arènes à positions <span class="contributions-count" id="best-ideas-positioned-aiscore-count"></span></p>
         <div id="best-ideas-positioned-aiscore"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
@@ -375,7 +375,7 @@
 
 <script>
 (function() {
-  var AGON_LOGOS_ICON = '<i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
+  var MNORIA_LOGOS_ICON = '<i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
 
   function esc(value) {
     return String(value == null ? "" : value)
@@ -450,7 +450,7 @@
 
   function bestIdeaItemHtml(item, metric, showSide) {
     var primaryBadge = metric === "aiScore"
-      ? '<span class="contribution-badge">' + AGON_LOGOS_ICON + ' ' + (Number(item.ai_score) || 0) + '/100</span>'
+      ? '<span class="contribution-badge">' + MNORIA_LOGOS_ICON + ' ' + (Number(item.ai_score) || 0) + '/100</span>'
       : '<span class="contribution-badge"><i class="fa-solid fa-bolt"></i> ' + (Number(item.votes) || 0) + ' voix</span>';
     return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(item.debate_id) + '">' +
       '<p class="contribution-title">' + esc(item.title || "(sans titre)") + '</p>' +
@@ -546,17 +546,17 @@
 (function() {
   if (window.self === window.top) return;
   function notifyMeilleuresIdeesIframeReady() {
-    window.__agonPageArrivalReady = true;
+    window.__mnoriaPageArrivalReady = true;
     try {
       window.parent.postMessage({
-        type: "agon:debate-iframe-ready",
+        type: "mnoria:debate-iframe-ready",
         pathname: String(location.pathname || "/meilleures-idees"),
         href: String(location.href || "")
       }, "*");
     } catch (error) {}
     try {
       window.parent.postMessage({
-        type: "agon:iframe-page-context",
+        type: "mnoria:iframe-page-context",
         page: "meilleures-idees",
         pathname: String(location.pathname || "/meilleures-idees"),
         href: String(location.href || "")
@@ -569,5 +569,5 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 </body></html>

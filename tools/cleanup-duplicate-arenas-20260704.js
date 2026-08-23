@@ -10,7 +10,7 @@
 //
 // Usage :
 //   node tools/cleanup-duplicate-arenas-20260704.js prepare   # sauvegarde + déplacement idées + re-ciblage map
-//   npx pm2 restart agon-server                               # recharge la map en mémoire
+//   npx pm2 restart mnoria-server                               # recharge la map en mémoire
 //   node tools/cleanup-duplicate-arenas-20260704.js delete    # suppressions via la route admin (cascade complète)
 //
 // Idempotent : chaque phase peut être relancée sans risque.
@@ -21,7 +21,7 @@ const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-const AGON_URL = "http://localhost:3001";
+const MNORIA_URL = "http://localhost:3001";
 const BACKUP_PATH = path.join(__dirname, "..", "data", "cleanup-duplicate-arenas-20260704-backup.json");
 
 // Arènes à supprimer (doublon conservé indiqué en commentaire)
@@ -111,14 +111,14 @@ async function prepare() {
     const { error } = await supabase.from("app_config")
       .upsert({ key: "shared_debate_links", value: map, updated_at: new Date().toISOString() });
     if (error) throw error;
-    console.log("Map shared_debate_links mise à jour — redémarre agon-server avant la phase delete.");
+    console.log("Map shared_debate_links mise à jour — redémarre mnoria-server avant la phase delete.");
   } else {
     console.log("Map déjà correcte.");
   }
 }
 
 async function doDelete() {
-  const loginRes = await fetch(`${AGON_URL}/api/admin/login`, {
+  const loginRes = await fetch(`${MNORIA_URL}/api/admin/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password: process.env.ADMIN_PASSWORD })
@@ -129,7 +129,7 @@ async function doDelete() {
 
   let deleted = 0, absent = 0, failed = 0;
   for (const id of DELETE_IDS) {
-    const res = await fetch(`${AGON_URL}/api/debates/${id}`, {
+    const res = await fetch(`${MNORIA_URL}/api/debates/${id}`, {
       method: "DELETE",
       headers: { "x-admin-token": token }
     });

@@ -60,7 +60,7 @@ Current behavior:
 
 The key `IFRAME_LATEST_MODAL_URL_KEY` currently maps to:
 
-- `agon_iframe_latest_modal_url`
+- `mnoria_iframe_latest_modal_url`
 
 It is allowed to remember the latest modal URL for live coordination, but it must not be treated as a refresh source of truth.
 
@@ -68,15 +68,15 @@ It is allowed to remember the latest modal URL for live coordination, but it mus
 
 The child iframe can send:
 
-- `agon:close-debate-modal`
-- `agon:open-debate-in-parent-modal`
-- `agon:debate-iframe-ready`
-- `agon:notification-target-ready`
-- `agon:notification-back-transition-start`
-- `agon:iframe-page-context`
-- `agon:pause-page-media`
-- `agon:voices-badge-position`
-- `agon:argument-form-visibility`
+- `mnoria:close-debate-modal`
+- `mnoria:open-debate-in-parent-modal`
+- `mnoria:debate-iframe-ready`
+- `mnoria:notification-target-ready`
+- `mnoria:notification-back-transition-start`
+- `mnoria:iframe-page-context`
+- `mnoria:pause-page-media`
+- `mnoria:voices-badge-position`
+- `mnoria:argument-form-visibility`
 
 The child-side bridge is:
 
@@ -107,7 +107,7 @@ Avoid changing these without a targeted browser check:
 - `closeDebateIframeModal`
 - `rememberLatestIframeModalUrl`
 - `initIframePageContextBridge`
-- message names beginning with `agon:`
+- message names beginning with `mnoria:`
 - parent URL handling for `/notifications`
 
 ## Suggested Verification

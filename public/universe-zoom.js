@@ -3,7 +3,7 @@
 // espace de coordonnées persistant), demande du 13/08/2026 — remplace l'ancien modèle "un
 // niveau = tout l'écran" (goToLevel/renderLevelNow, réinitialisant tagTrendCloud.js à chaque
 // clic). Volontairement séparé de tagTrendCloud.js plutôt que d'y toucher : ce moteur partagé
-// est aussi utilisé par les bulles Agôn/Actu (public/script.js), qui n'ont rien à voir avec un
+// est aussi utilisé par les bulles Mnoria/Actu (public/script.js), qui n'ont rien à voir avec un
 // zoom spatial et ne doivent jamais être affectées par ce chantier.
 //
 // Deux exports : layoutUniverseWorld (placement géométrique pur, aucun DOM) et createUniverseCamera
@@ -346,7 +346,15 @@ function createUniverseCamera({
     if (Number.isFinite(height) && height > 0) backgroundTileHeight = height;
   }
 
-  function apply() {
+  // skipBackground (audit "refresh mobile sur Ma mémoire" du 16/08/2026) : le fond est une
+  // texture 4K (3840×2560, ~39 Mo décodés) tuilée à l'infini via background-repeat — recalculer
+  // background-size/background-position à CHAQUE pointermove (jusqu'à 60-120/s pendant un pan ou
+  // un pincement tactile) force le compositeur à re-rastériser cette tuile en continu. Sur iOS,
+  // ce coût GPU/mémoire soutenu pendant tout un geste est un déclencheur plausible du kill mémoire
+  // WebKit qui redémarre ensuite la PWA (perçu comme un "rafraîchissement spontané"). Le monde
+  // (worldEl, un simple transform sur des nœuds normaux) continue lui à se repeindre à chaque
+  // frame, coût négligeable en comparaison — seul le fond est concerné par ce gel.
+  function apply(options = {}) {
     const vw = viewportEl.clientWidth;
     const vh = viewportEl.clientHeight;
     const tx = vw / 2 - state.x * state.scale;
@@ -355,7 +363,7 @@ function createUniverseCamera({
     // Le fond réagit uniquement au zoom de la scène, mais son facteur visuel est plafonné pour
     // ne plus agrandir les pixels du PNG jusqu'à ×8/×35. background-repeat assure toujours la
     // continuité dans les quatre directions sans créer de grille d'images dans le DOM.
-    if (backgroundEl) {
+    if (backgroundEl && !options.skipBackground) {
       const backgroundScale = getBackgroundVisualScale(state.scale);
       const tileW = backgroundTileWidth * backgroundScale;
       const tileH = backgroundTileHeight * backgroundScale;
@@ -378,7 +386,7 @@ function createUniverseCamera({
     });
   }
 
-  function setState(next, animate = false) {
+  function setState(next, animate = false, options = {}) {
     state = { ...state, ...next };
     state.scale = Math.min(maxScale, Math.max(minScale, state.scale));
     if (animate) {
@@ -397,17 +405,25 @@ function createUniverseCamera({
       worldEl.style.transition = "";
       if (backgroundEl) backgroundEl.style.transition = "";
     }
-    apply();
+    apply(options);
     scheduleChange();
+  }
+
+  // syncBackgroundNow : force un dernier calcul du fond (jamais sauté) sur l'état courant — appelé
+  // au RELÂCHEMENT d'un geste qui a gelé le fond pendant son déroulement (cf. skipBackground
+  // ci-dessus), pour que le fond rattrape exactement la position/l'échelle finales plutôt que de
+  // rester figé sur sa dernière valeur intermédiaire.
+  function syncBackgroundNow() {
+    apply();
   }
 
   // Zoom SUR PLACE : seul le scale change, x/y restent tels quels — jamais de recentrage sur le
   // curseur/point de pincement (essayé d'abord, cf. git blame) : la demande du 13/08/2026 est
   // justement qu'aucun geste de zoom ne déplace jamais la scène, "les galaxies restent fixes,
   // comme accrochées au fond".
-  function zoomInPlace(factor) {
+  function zoomInPlace(factor, options = {}) {
     const newScale = Math.min(maxScale, Math.max(minScale, state.scale * factor));
-    setState({ scale: newScale }, false);
+    setState({ scale: newScale }, false, options);
   }
 
   function focusOn(node, targetScale) {
@@ -446,11 +462,12 @@ function createUniverseCamera({
   });
   viewportEl.addEventListener("gesturechange", (e) => {
     e.preventDefault();
-    zoomInPlace(e.scale / gestureLastScale);
+    zoomInPlace(e.scale / gestureLastScale, { skipBackground: true });
     gestureLastScale = e.scale;
   });
   viewportEl.addEventListener("gestureend", (e) => {
     e.preventDefault();
+    syncBackgroundNow();
   });
 
   // ---- Pointer Events : geste vertical = page, geste dirigé = mémoire ------------------------
@@ -475,7 +492,10 @@ function createUniverseCamera({
   }
 
   viewportEl.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button, a")) return;
+    // .universe-knowledge-link : sans cette exclusion, setPointerCapture ci-dessous redirige
+    // les événements souris suivants (dont le dblclick synthétisé) vers viewportEl plutôt que
+    // le trait lui-même.
+    if (e.target.closest("button, a, .universe-knowledge-link")) return;
     // Les écrans tactiles possèdent déjà une capture implicite. Ne pas forcer
     // setPointerCapture dans ce cas laisse surtout WebKit prendre en charge le
     // pan-y natif de la page (avec son inertie), sans relais JS saccadé.
@@ -531,7 +551,9 @@ function createUniverseCamera({
         return;
       }
       if (e.cancelable) e.preventDefault();
-      setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+      // skipBackground : geste tactile/souris en cours (cf. commentaire sur apply() plus haut) —
+      // le fond ne rattrape sa position exacte qu'au relâchement (releasePointer, syncBackgroundNow).
+      setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false, { skipBackground: true });
       dragLastPoint = { x: e.clientX, y: e.clientY };
     } else if (activePointers.size === 2) {
       // Deux doigts constituent le geste « prononcé » pour déplacer verticalement la mémoire.
@@ -541,12 +563,12 @@ function createUniverseCamera({
       if (pinchLastMidpoint) {
         const dx = nextMidpoint.x - pinchLastMidpoint.x;
         const dy = nextMidpoint.y - pinchLastMidpoint.y;
-        setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false);
+        setState({ x: state.x - dx / state.scale, y: state.y - dy / state.scale }, false, { skipBackground: true });
       }
       pinchLastMidpoint = nextMidpoint;
       const dist = distance();
       if (pinchStartDist) {
-        zoomInPlace(dist / pinchStartDist);
+        zoomInPlace(dist / pinchStartDist, { skipBackground: true });
         pinchStartDist = dist;
       }
     }
@@ -568,6 +590,11 @@ function createUniverseCamera({
       pinchStartDist = null;
       pinchLastMidpoint = null;
     }
+    // Fin d'un geste (relâchement d'un doigt, qu'il en reste un autre actif ou plus aucun) : le
+    // fond, gelé pendant tout geste tactile/souris (cf. skipBackground ci-dessus), rattrape ici sa
+    // position/échelle exactes correspondant à l'état final — jamais laissé sur une valeur
+    // intermédiaire périmée.
+    syncBackgroundNow();
   }
   viewportEl.addEventListener("pointerup", releasePointer);
   viewportEl.addEventListener("pointercancel", releasePointer);

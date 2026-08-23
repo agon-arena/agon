@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>À propos | agôn</title>
+  <title>À propos | mnoria</title>
   <link rel="icon" type="image/png" href="/mnoria-icon-64.png">
   <link rel="manifest" href="/manifest.webmanifest?v=20260815-mnoria-app-icon-v1">
   <link rel="apple-touch-icon" href="/mnoria-icon-192.png">
   <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -22,11 +22,11 @@
     document.addEventListener('DOMContentLoaded', function(){
       if (window.self !== window.top) {
         document.body.classList.add('in-iframe');
-        try { window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
+        try { window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*'); } catch (e) {}
       }
     });
   </script>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-about">
 <header class="topbar topbar--mnoria-uniform">
@@ -43,11 +43,11 @@
     <h1>À propos</h1>
 
     <details class="about-accordion">
-      <summary>Présentation d’Agôn</summary>
+      <summary>Présentation d’Mnoria</summary>
       <div class="about-accordion-content">
-        <p>Agôn est un réseau de contributions évaluées par intelligence artificielle. Les utilisateurs y publient des contenus qui sont évalués et comparés selon des critères définis.</p>
+        <p>Mnoria est un réseau de contributions évaluées par intelligence artificielle. Les utilisateurs y publient des contenus qui sont évalués et comparés selon des critères définis.</p>
         <p>L’objectif est de faire émerger les propositions les plus robustes, les plus pertinentes ou les plus conformes aux critères choisis, sans imposer une vérité unique.</p>
-        <p>Agôn met les idées à l’épreuve pour rendre l’intelligence collective plus lisible, plus stimulante et plus exigeante.</p>
+        <p>Mnoria met les idées à l’épreuve pour rendre l’intelligence collective plus lisible, plus stimulante et plus exigeante.</p>
         <button type="button" class="about-accordion-collapse" onclick="this.closest('details').removeAttribute('open')">Masquer</button>
       </div>
     </details>
@@ -55,8 +55,8 @@
     <details class="about-accordion">
       <summary>Comment tes informations sont gardées en mémoire (sans compte)</summary>
       <div class="about-accordion-content">
-        <p>Agôn ne demande ni compte, ni email, ni mot de passe. Dès ta première visite, ton navigateur génère une clé aléatoire, stockée uniquement en local sur cet appareil, dans ce navigateur précis. C'est cette clé — et non une identité civile — qui associe tes votes, tes idées postées, tes commentaires et tes notifications à « toi ».</p>
-        <p>Rien n'est relié à une adresse email, un numéro de téléphone ou un nom : Agôn ne sait pas qui tu es réellement, seulement que la même clé revient.</p>
+        <p>Mnoria ne demande ni compte, ni email, ni mot de passe. Dès ta première visite, ton navigateur génère une clé aléatoire, stockée uniquement en local sur cet appareil, dans ce navigateur précis. C'est cette clé — et non une identité civile — qui associe tes votes, tes idées postées, tes commentaires et tes notifications à « toi ».</p>
+        <p>Rien n'est relié à une adresse email, un numéro de téléphone ou un nom : Mnoria ne sait pas qui tu es réellement, seulement que la même clé revient.</p>
         <p><strong>Les limites de ce fonctionnement</strong></p>
         <ul>
           <li>Si tu effaces les données de navigation (cache, cookies, stockage local) de ton navigateur, cette clé est perdue avec tout ce qu'elle porte : historique de votes, de contributions et de notifications. Elle ne peut pas être récupérée, il n'y a ni mot de passe ni email à réinitialiser.</li>
@@ -71,7 +71,7 @@
     <details class="about-accordion" id="fonctionnement-feed">
       <summary>Fonctionnement du feed officiel</summary>
       <div class="about-accordion-content">
-        <p>Le feed d’Agôn est alimenté automatiquement à partir de flux RSS issus de médias en ligne. Les contenus mis en avant sont les sujets les plus évoqués dans la presse française, c'est-à-dire ceux repris par plusieurs médias différents.</p>
+        <p>Le feed d’Mnoria est alimenté automatiquement à partir de flux RSS issus de médias en ligne. Les contenus mis en avant sont les sujets les plus évoqués dans la presse française, c'est-à-dire ceux repris par plusieurs médias différents.</p>
         <p>L’objectif n’est pas de remplacer les articles originaux, mais de repérer les grands sujets du moment, de croiser les sources et d’encourager chacun à aller lire les articles pour se faire sa propre opinion.</p>
 
         <button type="button" class="about-accordion-collapse" onclick="this.closest('details').removeAttribute('open')">Masquer</button>
@@ -91,10 +91,10 @@
     <details class="about-accordion">
       <summary>Explication arbitrage IA des arènes à positions</summary>
       <div class="about-accordion-content">
-        <p>Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les arguments les plus solides.</p>
+        <p>Mnoria ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les arguments les plus solides.</p>
 
         <p><strong>1. Les doublons sont regroupés</strong><br>
-        Avant la notation, Agôn repère les arguments qui défendent la même idée avec la même justification principale. Quand plusieurs arguments sont de vrais doublons, ils sont regroupés. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
+        Avant la notation, Mnoria repère les arguments qui défendent la même idée avec la même justification principale. Quand plusieurs arguments sont de vrais doublons, ils sont regroupés. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois.</p>
 
         <p><strong>2. Chaque argument distinct est noté sur 100</strong><br>
         Chaque argument conservé reçoit une note de solidité argumentative sur 100, selon les critères suivants :</p>
@@ -111,19 +111,19 @@
         0–49 : faible · 50–69 : moyen · 70–84 : bon · 85–100 : excellent</p>
 
         <p><strong>4. Les sources sont prises en compte séparément</strong><br>
-        Quand un argument contient une URL, Agôn peut évaluer la qualité de la source. Une source fiable et pertinente renforce l'évaluation, mais ne suffit pas à rendre un argument excellent si le raisonnement est faible.</p>
+        Quand un argument contient une URL, Mnoria peut évaluer la qualité de la source. Une source fiable et pertinente renforce l'évaluation, mais ne suffit pas à rendre un argument excellent si le raisonnement est faible.</p>
 
         <p><strong>5. Seuls les bons et excellents arguments comptent pour le verdict</strong><br>
         bon argument = coefficient 1 · excellent argument = coefficient 2 · faible ou moyen = coefficient 0</p>
 
-        <p><strong>6. Agôn calcule le score de chaque camp</strong><br>
-        Pour chaque camp, Agôn calcule une moyenne pondérée des bons et excellents arguments. Les excellents comptent double. Le camp qui obtient le meilleur score est désigné comme ayant l'avantage argumentatif.</p>
+        <p><strong>6. Mnoria calcule le score de chaque camp</strong><br>
+        Pour chaque camp, Mnoria calcule une moyenne pondérée des bons et excellents arguments. Les excellents comptent double. Le camp qui obtient le meilleur score est désigné comme ayant l'avantage argumentatif.</p>
 
         <p><strong>7. Une réserve est ajoutée si l'arène est déséquilibrée</strong><br>
         Si un camp a plus du double d'arguments solides que l'autre, le résultat est affiché avec prudence.</p>
 
         <p><strong>Ce que signifie le verdict</strong><br>
-        Le verdict ne signifie pas que le camp gagnant a forcément raison. Il signifie seulement que, parmi les contributions analysées, ce camp présente en moyenne les arguments distincts les plus solides selon le barème d'Agôn.</p>
+        Le verdict ne signifie pas que le camp gagnant a forcément raison. Il signifie seulement que, parmi les contributions analysées, ce camp présente en moyenne les arguments distincts les plus solides selon le barème d'Mnoria.</p>
 
         <button type="button" class="about-accordion-collapse" onclick="this.closest('details').removeAttribute('open')">Masquer</button>
       </div>
@@ -131,7 +131,7 @@
 
   </section>
 </main>
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script>
 (function() {
   var list = document.getElementById('about-media-list');

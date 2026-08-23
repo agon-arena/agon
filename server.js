@@ -10,6 +10,7 @@ const { Readable } = require("stream");
 const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
+const { recordAiUsage, extractUsage } = require("./lib/ai-usage-log");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { buildMemoryItemNaturalKey } = require("./lib/spaced-repetition/memory-model");
 const { reviewMemoryItem, computeRetrievability } = require("./lib/spaced-repetition/fsrs-scheduler");
@@ -47,6 +48,33 @@ const {
   sanitizeImageSearchQuery
 } = require("./lib/knowledge-admission");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
+const {
+  ACCEPTED_PHOTO_MIME_TYPES,
+  buildAnalysisDataUrl,
+  analyzePhotoKnowledge
+} = require("./lib/photo-knowledge");
+const { buildPhotoDocumentImportId, generatePhotoKnowledgeSheet } = require("./lib/photo-knowledge-sheet");
+const {
+  decodePdfDataUrl,
+  analyzePdfKnowledge,
+  createPdfAnalysisToken,
+  verifyPdfAnalysisToken
+} = require("./lib/pdf-knowledge");
+const {
+  validateTextKnowledgePayload,
+  analyzeTextKnowledge
+} = require("./lib/text-knowledge");
+const {
+  analyzeUrlKnowledge,
+  createUrlAnalysisToken,
+  verifyUrlAnalysisToken
+} = require("./lib/url-knowledge");
+const {
+  YoutubeKnowledgeError,
+  analyzeYoutubeKnowledge,
+  createYoutubeAnalysisToken,
+  verifyYoutubeAnalysisToken
+} = require("./lib/youtube-knowledge");
 const {
   cultureGeneraleNotionKey,
   canonicalNotionLinkPair,
@@ -179,7 +207,7 @@ function verifyAdminToken(token) {
     return crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
   } catch { return false; }
 }
-const AGON_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
+const MNORIA_ADMIN_CREATOR_KEY = "__AGON_ADMIN__";
 // Identifiant fixe envoyé par le pipeline Certamen (bot veille) sur POST /api/debates
 // pour publier des arènes communauté. Ces arènes ne doivent jamais afficher de badge
 // de tendance sur les cartes (demande explicite de Kevin) : voir le garde-fou autour
@@ -203,7 +231,7 @@ function claimCertamenQuestionKey(normalizedQuestion) {
 }
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@agonarena.org";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@mnoriaarena.org";
 
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static("public", { maxAge: "2m" }));
@@ -418,22 +446,22 @@ function replaceMetaPlaceholders(template, meta) {
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
   return String(template || "")
-    .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Agôn"))
+    .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Mnoria"))
     .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
     .replaceAll("__META_URL__", escapeMetaContent(meta.url || ""))
     .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
-    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Agôn"))
+    .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Mnoria"))
     .replaceAll("__VEILLE_URL__", VEILLE_URL)
     .replaceAll("__VEILLE_MEDIAS_JSON__", mediasJsonForScript);
 }
 
 function buildIndexMeta(req) {
   return {
-    title: "Agôn | L’arène des idées",
-    description: "Agôn est un outil d’intelligence collective augmenté par l’IA : il met les idées à l’épreuve pour faire émerger les positions les plus robustes.",
+    title: "Mnoria | L’arène des idées",
+    description: "Mnoria est un outil d’intelligence collective augmenté par l’IA : il met les idées à l’épreuve pour faire émerger les positions les plus robustes.",
     url: buildAbsoluteUrl(req, "/"),
-    image: buildAbsoluteUrl(req, "/logo.jpeg"),
-    imageAlt: "Agôn — l'arène des idées"
+    image: buildAbsoluteUrl(req, "/mnoria-icon-512.png"),
+    imageAlt: "Mnoria — l'arène des idées"
   };
 }
 
@@ -448,15 +476,15 @@ function buildDebateMeta(req, debate) {
     : buildAbsoluteUrl(req, "/debate");
   const ogImageUrl = debateId
     ? buildAbsoluteUrl(req, `/og/debate/${encodeURIComponent(debateId)}.png`)
-    : buildAbsoluteUrl(req, "/logo.jpeg");
+    : buildAbsoluteUrl(req, "/mnoria-icon-512.png");
   const isOpen = String(debate?.type || "").trim().toLowerCase() === "open";
-  const question = normalizeMetaText(debate?.question || "Débat sur agôn", 110);
+  const question = normalizeMetaText(debate?.question || "Débat sur mnoria", 110);
   const optionA = normalizeMetaText(debate?.option_a || "", 80);
   const optionB = normalizeMetaText(debate?.option_b || "", 80);
-  const title = `${question} | agôn`;
+  const title = `${question} | mnoria`;
   const description = isOpen
-    ? "Découvrez les réponses déjà proposées et ajoutez votre idée sur agôn."
-    : `Comparez les positions "${optionA || "Position A"}" et "${optionB || "Position B"}" dans cette arène sur agôn.`;
+    ? "Découvrez les réponses déjà proposées et ajoutez votre idée sur mnoria."
+    : `Comparez les positions "${optionA || "Position A"}" et "${optionB || "Position B"}" dans cette arène sur mnoria.`;
 
   return {
     title,
@@ -1042,7 +1070,7 @@ function parseStoryEpisodeDate(rawValue) {
 
 function resolveDebateEpisodeSortDate(debate) {
   // Pour la navigation entre épisodes, on suit d'abord la chronologie
-  // de publication sur Agôn. Les dates des sources externes peuvent être
+  // de publication sur Mnoria. Les dates des sources externes peuvent être
   // plus anciennes et fausser l'ordre narratif si on les privilégie.
   const createdAt = parseStoryEpisodeDate(debate?.created_at);
   if (createdAt) return createdAt;
@@ -1432,9 +1460,9 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
     const id = String(debate.id);
     if (hiddenAncestors.has(id)) continue;
     // Bulles Actu = arènes officielles uniquement ; les arènes communauté (ex: Certamen)
-    // ont leur propre nuage côté client (Bulles Agôn). political_group sépare en plus
+    // ont leur propre nuage côté client (Bulles Mnoria). political_group sépare en plus
     // le pool officiel en 3 nuages indépendants (général / gauche / droite).
-    if (debate.creator_key !== AGON_ADMIN_CREATOR_KEY) continue;
+    if (debate.creator_key !== MNORIA_ADMIN_CREATOR_KEY) continue;
     if ((debate.political_group || "mixed") !== politicalGroup) continue;
 
     // Arènes fusionnées (espace partagé) : une seule bulle par espace, la plus
@@ -2050,19 +2078,19 @@ function sanitizeDebateForClient(debate, clientKey, isAdminRequest = false) {
   if (!debate) return debate;
   const { creator_key, ...rest } = debate;
   const normalizedClientKey = clientKey ? String(clientKey) : "";
-  // Pour les arènes officielles (creator_key = AGON_ADMIN_CREATOR_KEY), aucune
+  // Pour les arènes officielles (creator_key = MNORIA_ADMIN_CREATOR_KEY), aucune
   // clé de navigateur ne correspondra jamais : seul un token admin valide
   // permet d'être reconnu comme "propriétaire" de ce type d'arène.
   const isOwner = !!(normalizedClientKey && creator_key && String(creator_key) === normalizedClientKey)
-    || !!(isAdminRequest && creator_key === AGON_ADMIN_CREATOR_KEY);
+    || !!(isAdminRequest && creator_key === MNORIA_ADMIN_CREATOR_KEY);
   return {
     ...rest,
     // Barème caché par le créateur : le texte ne doit jamais être exposé aux
     // autres clients, mais le créateur doit pouvoir le consulter lui-même.
     ...(rest.evaluation_axis_hidden && !isOwner ? { evaluation_axis: "" } : {}),
     is_owner: isOwner,
-    is_official: creator_key === AGON_ADMIN_CREATOR_KEY,
-    is_community: !!creator_key && creator_key !== AGON_ADMIN_CREATOR_KEY
+    is_official: creator_key === MNORIA_ADMIN_CREATOR_KEY,
+    is_community: !!creator_key && creator_key !== MNORIA_ADMIN_CREATOR_KEY
   };
 }
 
@@ -3285,6 +3313,62 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// Masquage des notes IA faible/moyen (demande du 19/08/2026) : seuls l'admin et le
+// créateur de l'arène concernée voient le score/détail réel d'une idée notée en
+// dessous de "bon" (70/100) — masqué pour tout le monde d'autre, y compris l'auteur
+// de l'idée lui-même. Toujours appliqué en LECTURE uniquement : debates.ai_analysis
+// stocke en base la version complète, jamais tronquée, quel que soit le lecteur.
+function canViewerSeeHiddenScores(req, creatorKey, clientKey) {
+  return isAdmin(req) || !!(clientKey && creatorKey && String(creatorKey) === String(clientKey));
+}
+
+// Retourne l'entrée de score telle quelle si l'idée est "bon"/"excellent" ou si le
+// lecteur y a droit (cf. canViewerSeeHiddenScores) — sinon null (jamais de score/
+// catégorie partiels renvoyés : soit tout, soit rien).
+function maskScoreEntryForViewer(scoreEntry, canSeeHidden) {
+  if (!scoreEntry) return null;
+  const category = String(scoreEntry.category || "").toLowerCase();
+  if (canSeeHidden || category === "bon" || category === "excellent") return scoreEntry;
+  return null;
+}
+
+// Redaction en profondeur d'une entrée effectiveArguments (cf. generateAnalysisJson,
+// lib/debate-analysis.js) pour un lecteur qui n'a pas le droit de voir les scores
+// faible/moyen — remplace tous les champs révélateurs par un marqueur neutre
+// 'masque', jamais un score de 0 (qui signifierait "évalué et jugé nul", pas "caché").
+function redactHiddenScoreEntry(entry) {
+  const category = String(entry?.final_category || entry?.category || "").toLowerCase();
+  if (category !== "faible" && category !== "moyen") return entry;
+  return {
+    ...entry,
+    final_score: null,
+    final_category: "masque",
+    category: "masque",
+    scores_without_sources: null,
+    category_without_sources: null,
+    source_score: null,
+    final_score_note: null,
+    custom_rubric_report: null,
+    strengths: [],
+    weaknesses: [],
+    short_explanation: "",
+    source_level: "",
+    source_relevance: "",
+    source_reliability: "",
+    source_supports_argument: "",
+    source_verification_level: "",
+    source_main_issue: null,
+    source_urls_analyzed: [],
+    source_explanation: "",
+    diagnostic: null,
+    plafonds_appliques: null,
+    total_without_sources_initial: null,
+    final_score_initial: null,
+    server_caps_applied: false,
+    server_caps_details: null
+  };
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -3450,6 +3534,7 @@ async function analyzeVeilleSimilarityWithAI(input, candidates) {
   ].join('\n');
 
   try {
+    const requestStartedAt = Date.now();
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
@@ -3461,8 +3546,13 @@ async function analyzeVeilleSimilarityWithAI(input, candidates) {
         temperature: 0
       })
     });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      recordAiUsage(supabase, { feature: 'veille_deduplication', model: 'gpt-4o-mini', latencyMs: Date.now() - requestStartedAt, success: false, error: `openai http ${r.status}` });
+      return null;
+    }
     const data = await r.json();
+    const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+    recordAiUsage(supabase, { feature: 'veille_deduplication', model: 'gpt-4o-mini', inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     const content = data?.choices?.[0]?.message?.content;
     if (!content) return null;
     const parsed = JSON.parse(content);
@@ -3536,6 +3626,7 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
   ].join("\n");
 
   try {
+    const requestStartedAt = Date.now();
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
@@ -3547,8 +3638,13 @@ async function findSimilarRecentSubjectForTrend(newSubject, recentSubjects) {
         temperature: 0
       })
     });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      recordAiUsage(supabase, { feature: "veille_deduplication", model: "gpt-4o-mini", latencyMs: Date.now() - requestStartedAt, success: false, error: `openai http ${r.status}` });
+      return null;
+    }
     const data = await r.json();
+    const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+    recordAiUsage(supabase, { feature: "veille_deduplication", model: "gpt-4o-mini", inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     const content = data?.choices?.[0]?.message?.content;
     if (!content) return null;
 
@@ -3657,6 +3753,7 @@ async function confirmSameDebateQuestionForMerge(newQuestion, canonicalQuestion,
       "Question 2 : " + q2
     ].join("\n");
 
+    const requestStartedAt = Date.now();
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
@@ -3668,8 +3765,13 @@ async function confirmSameDebateQuestionForMerge(newQuestion, canonicalQuestion,
         temperature: 0
       })
     });
-    if (!r.ok) return false;
+    if (!r.ok) {
+      recordAiUsage(supabase, { feature: "veille_deduplication", model: "gpt-4o-mini", latencyMs: Date.now() - requestStartedAt, success: false, error: `openai http ${r.status}` });
+      return false;
+    }
     const data = await r.json();
+    const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+    recordAiUsage(supabase, { feature: "veille_deduplication", model: "gpt-4o-mini", inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     const content = data?.choices?.[0]?.message?.content;
     if (!content) return false;
     const parsed = JSON.parse(content);
@@ -3901,6 +4003,7 @@ async function evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositi
       'B: ' + String(incomingPositions.positionB || '').trim()
     ].join("\n");
 
+    const requestStartedAt = Date.now();
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -3916,8 +4019,13 @@ async function evaluateVeilleMergeAlignmentWithAI(existingDebate, incomingPositi
       })
     });
 
-    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    if (!r.ok) {
+      recordAiUsage(supabase, { feature: 'veille_deduplication', model: 'gpt-4o-mini', latencyMs: Date.now() - requestStartedAt, success: false, error: `openai http ${r.status}` });
+      throw new Error(`openai http ${r.status}`);
+    }
     const data = await r.json();
+    const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+    recordAiUsage(supabase, { feature: 'veille_deduplication', model: 'gpt-4o-mini', inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
     if (!content) throw new Error('openai empty content');
     const parsed = JSON.parse(content);
@@ -4961,7 +5069,7 @@ app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, r
     if (referencedDebateIds.length) {
       const { data, error } = await supabase
         .from("debates")
-        .select("id, question, type")
+        .select("id, question, type, creator_key")
         .in("id", referencedDebateIds);
       if (error) throw error;
       referencedDebates = data || [];
@@ -4994,11 +5102,15 @@ app.get("/api/my-contributions", rateLimit("myContributions", 60), async (req, r
     res.json({
       debates: myDebates.map((d) => sanitizeDebateForClient(d, key)),
       arguments: myArguments.map((a) => {
-        const scoreEntry = scoreByArgumentId.get(String(a.id));
+        const parentDebate = debateById.get(String(a.debate_id));
+        // Note faible/moyen masquée même pour l'auteur de sa propre idée (demande du
+        // 19/08/2026) : seuls l'admin et le créateur de CETTE arène-là la voient.
+        const canSeeHidden = canViewerSeeHiddenScores(req, parentDebate?.creator_key, key);
+        const scoreEntry = maskScoreEntryForViewer(scoreByArgumentId.get(String(a.id)), canSeeHidden);
         return {
           ...sanitizeArgumentForClient(a, key),
-          debate_question: debateById.get(String(a.debate_id))?.question || "",
-          debate_type: debateById.get(String(a.debate_id))?.type || "",
+          debate_question: parentDebate?.question || "",
+          debate_type: parentDebate?.type || "",
           ai_score: scoreEntry ? scoreEntry.score : null,
           ai_category: scoreEntry ? scoreEntry.category : ""
         };
@@ -5066,7 +5178,7 @@ async function computeBestIdeas() {
   if (debateIds.length) {
     const [{ data: relatedDebates, error: debatesError }, { data: analyzedDebates, error: analysisError }] = await Promise.all([
       fetchAllSupabaseRowsIn(debateIds, (chunk) =>
-        supabase.from("debates").select("id, question, type, option_a, option_b").in("id", chunk)),
+        supabase.from("debates").select("id, question, type, option_a, option_b, creator_key").in("id", chunk)),
       fetchAllSupabaseRowsIn(debateIds, (chunk) =>
         supabase.from("debates").select("id, ai_analysis").in("id", chunk).not("ai_analysis", "is", null))
     ]);
@@ -5105,7 +5217,11 @@ async function computeBestIdeas() {
         ai_category: scoreEntry ? scoreEntry.category : "",
         created_at: arg.created_at,
         debate_id: arg.debate_id,
-        debate_question: debate.question || ""
+        debate_question: debate.question || "",
+        // Jamais renvoyé au client tel quel (cache partagé entre tous les visiteurs) —
+        // retiré et remplacé par un masquage par requête dans /api/best-ideas, cf.
+        // canViewerSeeHiddenScores.
+        debate_creator_key: debate.creator_key || null
       };
       if (String(debate.type || "debate") === "open") {
         open.push(item);
@@ -5183,7 +5299,7 @@ const TOP5_NOTIFY_METRIC_LABELS = {
   votes: "des idées les plus soutenues",
   aiScore: "des idées les mieux notées par l'IA"
 };
-const TOP5_NOTIFY_SCHEDULER_ENABLED = isRenderScopedTaskEnabled("AGON_TOP5_NOTIFY_SCHEDULER");
+const TOP5_NOTIFY_SCHEDULER_ENABLED = isRenderScopedTaskEnabled("MNORIA_TOP5_NOTIFY_SCHEDULER");
 
 let _top5NotifyPreviousEntrants = new Map();
 let _top5NotifyWarmedUp = false;
@@ -5246,7 +5362,7 @@ async function checkTop5IdeaEntries() {
 
   for (const [argumentId, { item, entries }] of newEntriesByArgumentId) {
     const authorKey = authorKeyById.get(argumentId);
-    if (!authorKey || authorKey === AGON_ADMIN_CREATOR_KEY) continue;
+    if (!authorKey || authorKey === MNORIA_ADMIN_CREATOR_KEY) continue;
 
     for (const { period, metric } of entries) {
       const message = `Bravo ! Votre idée ${quoteNotificationContent(item.title)} est entrée dans le top 5 ${TOP5_NOTIFY_METRIC_LABELS[metric]} ${TOP5_NOTIFY_PERIOD_LABELS[period]}.`;
@@ -5267,14 +5383,37 @@ if (TOP5_NOTIFY_SCHEDULER_ENABLED) {
   }, TOP5_NOTIFY_CHECK_INTERVAL_MS).unref();
   checkTop5IdeaEntries().catch((e) => console.error("[top5-notify] Erreur:", e.message));
 } else {
-  console.log("[top5-notify] scheduler désactivé hors Render (forcer avec AGON_TOP5_NOTIFY_SCHEDULER=on).");
+  console.log("[top5-notify] scheduler désactivé hors Render (forcer avec MNORIA_TOP5_NOTIFY_SCHEDULER=on).");
 }
 
 app.get("/api/best-ideas", rateLimit("bestIdeas", 60), async (req, res) => {
   const period = ["day", "week", "month"].includes(String(req.query.period)) ? String(req.query.period) : "day";
   try {
     const data = await getBestIdeasData();
-    res.json({ period, ...data[period] });
+    // getBestIdeasData() est un cache PARTAGÉ entre tous les visiteurs (TTL 3 min) —
+    // le masquage des notes faible/moyen (cf. canViewerSeeHiddenScores) doit donc être
+    // recalculé à chaque requête, jamais figé dans le cache lui-même.
+    const clientKey = getRequestClientKey(req);
+    const redactItem = (item) => {
+      const canSeeHidden = canViewerSeeHiddenScores(req, item.debate_creator_key, clientKey);
+      const { debate_creator_key, ...publicItem } = item;
+      if (canSeeHidden || item.ai_category === "bon" || item.ai_category === "excellent" || item.ai_score == null) {
+        return publicItem;
+      }
+      return { ...publicItem, ai_score: null, ai_category: "masque" };
+    };
+    const periodData = data[period];
+    const redacted = {
+      votes: {
+        open: (periodData.votes?.open || []).map(redactItem),
+        positioned: (periodData.votes?.positioned || []).map(redactItem)
+      },
+      aiScore: {
+        open: (periodData.aiScore?.open || []).map(redactItem),
+        positioned: (periodData.aiScore?.positioned || []).map(redactItem)
+      }
+    };
+    res.json({ period, ...redacted });
   } catch (e) {
     console.error("Erreur /api/best-ideas:", e);
     res.status(500).json({ error: "Erreur lors du chargement des meilleures idées." });
@@ -5296,10 +5435,10 @@ app.post("/api/contact", async (req, res) => {
     const { Resend } = require("resend");
     const resend = new Resend(apiKey);
     const result = await resend.emails.send({
-      from: "agôn <onboarding@resend.dev>",
+      from: "mnoria <onboarding@resend.dev>",
       to: "kevinbruyat@live.fr",
       reply_to: email,
-      subject: `Contact agôn — ${name}`,
+      subject: `Contact mnoria — ${name}`,
       text: `Nom : ${name}\nEmail : ${email}\n\n${message}`
     });
     if (result.error) {
@@ -5346,11 +5485,11 @@ app.get("/debate", async (req, res) => {
 
   if (!debateId) {
     const html = replaceMetaPlaceholders(template, {
-      title: "Débat | agôn",
-      description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
+      title: "Débat | mnoria",
+      description: "Découvrez les débats et les idées qui s'affrontent sur mnoria.",
       url: buildAbsoluteUrl(req, "/debate"),
-      image: buildAbsoluteUrl(req, "/logo.jpeg"),
-      imageAlt: "Agôn — l'arène des idées"
+      image: buildAbsoluteUrl(req, "/mnoria-icon-512.png"),
+      imageAlt: "Mnoria — l'arène des idées"
     });
     return res.set("Cache-Control", "no-store").type("html").send(html);
   }
@@ -5359,11 +5498,11 @@ app.get("/debate", async (req, res) => {
     const debate = await withHtmlMetaDbTimeout(getDebateById(debateId));
     if (!debate) {
       const html = replaceMetaPlaceholders(template, {
-        title: "Débat introuvable | agôn",
-        description: "Cette arène n'est plus disponible sur agôn.",
+        title: "Débat introuvable | mnoria",
+        description: "Cette arène n'est plus disponible sur mnoria.",
         url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
-        image: buildAbsoluteUrl(req, "/logo.jpeg"),
-        imageAlt: "Agôn — l'arène des idées"
+        image: buildAbsoluteUrl(req, "/mnoria-icon-512.png"),
+        imageAlt: "Mnoria — l'arène des idées"
       });
       return res.status(404).set("Cache-Control", "no-store").type("html").send(html);
     }
@@ -5373,11 +5512,11 @@ app.get("/debate", async (req, res) => {
   } catch (error) {
     console.error(error);
     const html = replaceMetaPlaceholders(template, {
-      title: "Débat | agôn",
-      description: "Découvrez les débats et les idées qui s'affrontent sur agôn.",
+      title: "Débat | mnoria",
+      description: "Découvrez les débats et les idées qui s'affrontent sur mnoria.",
       url: buildAbsoluteUrl(req, `/debate?id=${encodeURIComponent(debateId)}`),
-      image: buildAbsoluteUrl(req, "/logo.jpeg"),
-      imageAlt: "Agôn — l'arène des idées"
+      image: buildAbsoluteUrl(req, "/mnoria-icon-512.png"),
+      imageAlt: "Mnoria — l'arène des idées"
     });
     return res.set("Cache-Control", "no-store").type("html").send(html);
   }
@@ -5461,7 +5600,7 @@ async function sendDebateOgImage(req, res, id) {
       isOpen,
       percentA,
       percentB,
-      logoPath: path.join(__dirname, "public/logo.jpeg")
+      logoPath: path.join(__dirname, "public/mnoria-icon-512.png")
     });
 
     _cacheSet(ogImageCache, String(id), { buffer: pngBuffer, expiresAt: Date.now() + OG_IMAGE_CACHE_TTL_MS }, OG_IMAGE_CACHE_MAX);
@@ -5677,7 +5816,13 @@ const CULTURE_GENERALE_SOURCE_TYPE_LABEL = {
   concept: "Concept du jour",
   citation: "Citation du jour",
   oeuvre: "Œuvre d'art du jour",
-  latin: "Mot latin du jour"
+  latin: "Mot latin du jour",
+  photo_import: "Document importé",
+  manual_import: "Ajout manuel",
+  pdf_import: "Document PDF",
+  text_import: "Texte importé",
+  url_import: "Page web",
+  youtube_import: "Vidéo YouTube"
 };
 
 app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, res) => {
@@ -6938,7 +7083,7 @@ function addToMediaExtras(currentExtras, type, url, publishedAt) {
 
 app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
   try {
-    const { question, option_a, option_b, source_url, content, category, image_url, video_url, mark_as_agon_generated, story_id } = req.body || {};
+    const { question, option_a, option_b, source_url, content, category, image_url, video_url, mark_as_mnoria_generated, story_id } = req.body || {};
     const normalizedContent = normalizeDebateContent(content);
     const normalizedSourceUrl = normalizeExternalUrl(source_url);
     const normalizedCategory = String(category || "").trim() || null;
@@ -6999,7 +7144,7 @@ app.put("/api/admin/debate/:id", requireAdmin, async (req, res) => {
       ...(videoUrlSent ? { video_url: normalizedVideoUrl || "" } : {}),
       ...(extrasChanged ? { media_extras: newExtras } : {}),
       ...(sourceChanged ? { source_published_at: new Date().toISOString() } : {}),
-      ...(mark_as_agon_generated === true ? { creator_key: AGON_ADMIN_CREATOR_KEY } : {})
+      ...(mark_as_mnoria_generated === true ? { creator_key: MNORIA_ADMIN_CREATOR_KEY } : {})
     };
 
     const { error } = await supabase.from("debates").update(updateFields).eq("id", req.params.id);
@@ -7066,14 +7211,14 @@ app.put("/api/admin/debate/:id/media-extras", requireAdmin, express.json(), asyn
 app.post("/api/admin/debate/:id/bump", requireAdmin, async (req, res) => {
   try {
     const debateId = req.params.id;
-    const preserveAgonGenerated = req.body?.preserve_agon_generated === true;
+    const preserveMnoriaGenerated = req.body?.preserve_mnoria_generated === true;
     const now = new Date().toISOString();
     const { error } = await supabase
       .from("debates")
       .update({
         bumped_at: now,
-        creator_key: preserveAgonGenerated ? AGON_ADMIN_CREATOR_KEY : null,
-        ...(preserveAgonGenerated ? { created_at: now, source_published_at: now } : {})
+        creator_key: preserveMnoriaGenerated ? MNORIA_ADMIN_CREATOR_KEY : null,
+        ...(preserveMnoriaGenerated ? { created_at: now, source_published_at: now } : {})
       })
       .eq("id", debateId);
     if (error) {
@@ -7263,7 +7408,7 @@ app.get("/api/debates", async (req, res) => {
     const categoryQuery = String(req.query.category || "").trim();
     const rawPoliticalGroupQuery = String(req.query.politicalGroup || "").trim();
     const politicalGroupQuery = (rawPoliticalGroupQuery === "left" || rawPoliticalGroupQuery === "right" || rawPoliticalGroupQuery === "mixed") ? rawPoliticalGroupQuery : "";
-    // Lecture ciblée par ids (ex: cartes du top 10 Bulles Agôn absentes des débats
+    // Lecture ciblée par ids (ex: cartes du top 10 Bulles Mnoria absentes des débats
     // récents de l'index) : mêmes enrichissements que la liste, plafonné à 20 ids.
     const idsQuery = String(req.query.ids || "")
       .split(",")
@@ -7443,7 +7588,7 @@ app.get("/api/debates", async (req, res) => {
       }
     }
 
-    // Votes récents (7 jours max) pour le score d'activité des Bulles Agôn :
+    // Votes récents (7 jours max) pour le score d'activité des Bulles Mnoria :
     // la fenêtre temporelle limite la requête à un petit volume de lignes.
     const vote48hCountByDebate = new Map();
     const vote7dCountByDebate = new Map();
@@ -7710,7 +7855,7 @@ const { generateCloudLabel, truncateToBubbleLabel } = require("./lib/cloud-label
 // en cas d'échec IA, la colonne reste NULL et un fallback s'appliquera côté lecture.
 async function assignDebateCloudLabel(debateId, fields) {
   try {
-    const label = await generateCloudLabel(fields);
+    const label = await generateCloudLabel(fields, supabase);
     if (!label) return;
     const { error } = await supabase.from("debates").update({ cloud_label: label }).eq("id", debateId);
     if (error) console.error("[cloud-label]", debateId, error.message);
@@ -7784,10 +7929,10 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
     const shouldCreateCommunityDebate = force_community === true;
     const requestedCreatorKey = String(creatorKey || "").trim();
     const debateCreatorKey = shouldCreateCommunityDebate
-      ? (requestedCreatorKey && requestedCreatorKey !== AGON_ADMIN_CREATOR_KEY
+      ? (requestedCreatorKey && requestedCreatorKey !== MNORIA_ADMIN_CREATOR_KEY
         ? requestedCreatorKey
         : `community-${crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`)
-      : (isAdmin(req) ? AGON_ADMIN_CREATOR_KEY : (requestedCreatorKey || null));
+      : (isAdmin(req) ? MNORIA_ADMIN_CREATOR_KEY : (requestedCreatorKey || null));
 
     if (normalizedResourceMode === "source" && !normalizedSourceUrl) {
       return res.status(400).json({ error: "Lien source manquant." });
@@ -7915,7 +8060,7 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         }
 
         if (shouldCreateCommunityDebate) {
-          agonBubbleTrendsCache = null;
+          mnoriaBubbleTrendsCache = null;
           return;
         }
 
@@ -9824,7 +9969,7 @@ function getOpinionArticleFallbackCategory(article) {
   return "Société - éducation";
 }
 
-// Classe chaque article dans une rubrique Agôn (category/category_precision) — c'est tout :
+// Classe chaque article dans une rubrique Mnoria (category/category_precision) — c'est tout :
 // plus de système solaire ici, cf. Mon univers désormais réservé à la Culture Générale
 // (resolveCultureGeneraleSolarSystemWithAI).
 async function classifyOpinionArticlesWithAI(items) {
@@ -9846,7 +9991,7 @@ async function classifyOpinionArticlesWithAI(items) {
     const itemIds = compactItems.map((item) => item.id).join(", ");
     const prompt = [
       "Réponds uniquement en json valide.",
-      "Classe chaque article dans UNE seule rubrique Agôn.",
+      "Classe chaque article dans UNE seule rubrique Mnoria.",
       "Rubriques autorisées : " + OPINION_ARTICLE_CATEGORY_OPTIONS.join(" | "),
       `IMPORTANT : l'entrée contient ${compactItems.length} articles. Ta réponse json doit contenir exactement ${compactItems.length} objets dans items, avec tous les ids suivants : ${itemIds}.`,
       "Ne renvoie jamais seulement le premier item.",
@@ -9886,17 +10031,26 @@ async function classifyOpinionArticlesWithAI(items) {
         body.max_tokens = Math.min(6000, 160 + chunk.length * 40);
         body.temperature = 0;
       }
+      const requestStartedAt = Date.now();
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
         body: JSON.stringify(body)
       });
-      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      if (!r.ok) {
+        const errBody = await r.text().catch(() => "");
+        recordAiUsage(supabase, { feature: "opinion_article_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, latencyMs: Date.now() - requestStartedAt, success: false, error: errBody || `openai http ${r.status}` });
+        throw new Error(`openai http ${r.status}`);
+      }
       const data = await r.json();
       const choice = data?.choices?.[0];
       const content = choice?.message?.content || "";
       const finishReason = choice?.finish_reason || null;
       const refusal = choice?.message?.refusal || null;
+      {
+        const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+        recordAiUsage(supabase, { feature: "opinion_article_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
+      }
       let parsed = null;
       try {
         parsed = content ? JSON.parse(content) : null;
@@ -10777,17 +10931,17 @@ app.post("/api/admin/veille/check-similar", requireAdmin, rateLimit("veille-simi
 // Une question d'arène n'est jamais un tag : si aucun libellé associé n'est
 // disponible, l'arène est omise du nuage plutôt que d'afficher furtivement
 // son titre complet dans une bulle Communauté.
-function getAgonBubbleLabel(debate) {
+function getMnoriaBubbleLabel(debate) {
   return getCloudLabelFromDebate(debate);
 }
 
-let agonBubbleTrendsCache = null;
-let agonBubbleTrendsInFlight = null;
-const AGON_BUBBLE_TRENDS_CACHE_TTL_MS = 5 * 60 * 1000;
+let mnoriaBubbleTrendsCache = null;
+let mnoriaBubbleTrendsInFlight = null;
+const MNORIA_BUBBLE_TRENDS_CACHE_TTL_MS = 5 * 60 * 1000;
 // Supabase peut rester bloqué plusieurs dizaines de secondes avant de répondre
 // (ou de tomber en erreur) en cas de panne réseau côté infra — sans timeout
 // explicite, ces requêtes traîneraient la requête HTTP entrante avec elles.
-const AGON_BUBBLE_QUERY_TIMEOUT_MS = 8000;
+const MNORIA_BUBBLE_QUERY_TIMEOUT_MS = 8000;
 
 // Top 10 des arènes communautaires par score d'activité décroissant dans le temps
 // (idées ×1 + commentaires ×0,5 + votes ×0,2, chaque contribution pondérée par
@@ -10797,23 +10951,23 @@ const AGON_BUBBLE_QUERY_TIMEOUT_MS = 8000;
 // retombée, au détriment des arènes plus récentes. Un score qui décroît dans le
 // temps (ranking "hot" classique) fait naturellement sortir les arènes mortes et
 // laisse entrer les nouvelles dès qu'elles ont un peu d'activité récente.
-const AGON_BUBBLE_DECAY_HALF_LIFE_HOURS = 36;
+const MNORIA_BUBBLE_DECAY_HALF_LIFE_HOURS = 36;
 // Au-delà, le poids décayé d'un vote est < 0,1% de sa valeur initiale — borne la
 // fenêtre de la requête votes sans fausser le classement.
-const AGON_BUBBLE_DECAY_CUTOFF_MS = 15 * 24 * 60 * 60 * 1000;
+const MNORIA_BUBBLE_DECAY_CUTOFF_MS = 15 * 24 * 60 * 60 * 1000;
 
-function agonBubbleDecayWeight(createdAt, now) {
+function mnoriaBubbleDecayWeight(createdAt, now) {
   if (!createdAt) return 0;
   const ageHours = (now - new Date(createdAt).getTime()) / (60 * 60 * 1000);
   if (!Number.isFinite(ageHours) || ageHours <= 0) return 1;
-  return Math.pow(0.5, ageHours / AGON_BUBBLE_DECAY_HALF_LIFE_HOURS);
+  return Math.pow(0.5, ageHours / MNORIA_BUBBLE_DECAY_HALF_LIFE_HOURS);
 }
 
 // Calculé en base — contrairement au calcul client précédent, on n'a plus besoin
 // de charger toutes les arènes dans le navigateur pour obtenir ce classement.
-async function computeAgonBubbleTrends() {
-  if (agonBubbleTrendsCache && Date.now() < agonBubbleTrendsCache.expiresAt) {
-    return agonBubbleTrendsCache.value;
+async function computeMnoriaBubbleTrends() {
+  if (mnoriaBubbleTrendsCache && Date.now() < mnoriaBubbleTrendsCache.expiresAt) {
+    return mnoriaBubbleTrendsCache.value;
   }
 
   const now = Date.now();
@@ -10823,13 +10977,13 @@ async function computeAgonBubbleTrends() {
       .from("debates")
       .select("id, question, keywords, cloud_label, creator_key, created_at")
       .not("creator_key", "is", null)
-      .neq("creator_key", AGON_ADMIN_CREATOR_KEY)
+      .neq("creator_key", MNORIA_ADMIN_CREATOR_KEY)
       // Les arènes gauche/droite issues de la veille mixte ont leurs 2 nuages dédiés
       // (cf. rebuildCloudBubblesForGroup) — elles ne doivent jamais se mélanger ici
       // avec le nuage communautaire partagé (ex: Certamen).
       .or("political_group.is.null,political_group.eq.mixed")
       .order("id", { ascending: true })
-      .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)));
+      .abortSignal(AbortSignal.timeout(MNORIA_BUBBLE_QUERY_TIMEOUT_MS)));
 
   if (debatesError) throw debatesError;
   if (!debateRows || !debateRows.length) return [];
@@ -10843,7 +10997,7 @@ async function computeAgonBubbleTrends() {
       .select("id, debate_id, votes, created_at")
       .in("debate_id", idsChunk)
       .order("id", { ascending: true })
-      .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)));
+      .abortSignal(AbortSignal.timeout(MNORIA_BUBBLE_QUERY_TIMEOUT_MS)));
 
   if (argsError) throw argsError;
 
@@ -10859,7 +11013,7 @@ async function computeAgonBubbleTrends() {
   const argumentIds = (args || []).map((arg) => arg.id);
   const cutoff48h = now - 48 * 60 * 60 * 1000;
   const cutoff96h = now - 96 * 60 * 60 * 1000;
-  const cutoffDecay = now - AGON_BUBBLE_DECAY_CUTOFF_MS;
+  const cutoffDecay = now - MNORIA_BUBBLE_DECAY_CUTOFF_MS;
 
   const comment48hCountByDebate = new Map();
   const commentPrev48hCountByDebate = new Map();
@@ -10878,14 +11032,14 @@ async function computeAgonBubbleTrends() {
           .select("argument_id, created_at")
           .in("argument_id", idsChunk)
           .order("id", { ascending: true })
-          .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS))),
+          .abortSignal(AbortSignal.timeout(MNORIA_BUBBLE_QUERY_TIMEOUT_MS))),
       fetchAllSupabaseRows(() =>
         supabase
           .from("votes")
           .select("argument_id, vote_count, created_at")
           .gte("created_at", new Date(cutoffDecay).toISOString())
           .order("id", { ascending: true })
-          .abortSignal(AbortSignal.timeout(AGON_BUBBLE_QUERY_TIMEOUT_MS)))
+          .abortSignal(AbortSignal.timeout(MNORIA_BUBBLE_QUERY_TIMEOUT_MS)))
     ]);
 
     if (commentsError) throw commentsError;
@@ -10894,7 +11048,7 @@ async function computeAgonBubbleTrends() {
     for (const comment of comments || []) {
       const debateId = debateIdByArgumentId.get(String(comment.argument_id));
       if (!debateId || !comment.created_at) continue;
-      commentDecayByDebate.set(debateId, Number(commentDecayByDebate.get(debateId) || 0) + agonBubbleDecayWeight(comment.created_at, now));
+      commentDecayByDebate.set(debateId, Number(commentDecayByDebate.get(debateId) || 0) + mnoriaBubbleDecayWeight(comment.created_at, now));
 
       const commentTime = new Date(comment.created_at).getTime();
       if (commentTime > cutoff48h) comment48hCountByDebate.set(debateId, Number(comment48hCountByDebate.get(debateId) || 0) + 1);
@@ -10905,7 +11059,7 @@ async function computeAgonBubbleTrends() {
       const debateId = debateIdByArgumentId.get(String(vote.argument_id));
       if (!debateId || !vote.created_at) continue;
       const voteWeight = Math.max(1, Number(vote.vote_count) || 1);
-      voteDecayByDebate.set(debateId, Number(voteDecayByDebate.get(debateId) || 0) + voteWeight * agonBubbleDecayWeight(vote.created_at, now));
+      voteDecayByDebate.set(debateId, Number(voteDecayByDebate.get(debateId) || 0) + voteWeight * mnoriaBubbleDecayWeight(vote.created_at, now));
 
       const voteTime = new Date(vote.created_at).getTime();
       if (voteTime > cutoff48h) {
@@ -10928,7 +11082,7 @@ async function computeAgonBubbleTrends() {
       const t = new Date(a.created_at).getTime();
       return t > cutoff96h && t <= cutoff48h;
     }).length;
-    const argumentDecay = debateArgs.reduce((sum, a) => sum + agonBubbleDecayWeight(a.created_at, now), 0);
+    const argumentDecay = debateArgs.reduce((sum, a) => sum + mnoriaBubbleDecayWeight(a.created_at, now), 0);
 
     return {
       debate,
@@ -10954,7 +11108,7 @@ async function computeAgonBubbleTrends() {
 
   const bubbles = selected
     .map((item) => ({
-      tag: getAgonBubbleLabel(item.debate),
+      tag: getMnoriaBubbleLabel(item.debate),
       subjectId: String(item.debate.id),
       count: item.decayedScore,
       sizeWeight: maxDecayedScore > 0 ? item.decayedScore / maxDecayedScore : 0,
@@ -10962,38 +11116,38 @@ async function computeAgonBubbleTrends() {
     }))
     .filter((item) => item.tag);
 
-  agonBubbleTrendsCache = { value: bubbles, expiresAt: Date.now() + AGON_BUBBLE_TRENDS_CACHE_TTL_MS };
+  mnoriaBubbleTrendsCache = { value: bubbles, expiresAt: Date.now() + MNORIA_BUBBLE_TRENDS_CACHE_TTL_MS };
   return bubbles;
 }
 
-async function getAgonBubbleTrends() {
-  if (agonBubbleTrendsCache && Date.now() < agonBubbleTrendsCache.expiresAt) {
-    return agonBubbleTrendsCache.value;
+async function getMnoriaBubbleTrends() {
+  if (mnoriaBubbleTrendsCache && Date.now() < mnoriaBubbleTrendsCache.expiresAt) {
+    return mnoriaBubbleTrendsCache.value;
   }
-  if (!agonBubbleTrendsInFlight) {
-    agonBubbleTrendsInFlight = computeAgonBubbleTrends().finally(() => {
-      agonBubbleTrendsInFlight = null;
+  if (!mnoriaBubbleTrendsInFlight) {
+    mnoriaBubbleTrendsInFlight = computeMnoriaBubbleTrends().finally(() => {
+      mnoriaBubbleTrendsInFlight = null;
     });
   }
-  // Stale-while-revalidate (13/08/2026) : computeAgonBubbleTrends mesuré à
+  // Stale-while-revalidate (13/08/2026) : computeMnoriaBubbleTrends mesuré à
   // ~5,4s à froid (4 lectures Supabase en partie séquentielles) — plus long
-  // que le timeout de 5s côté client (fetchAgonBubbleTrends, public/script.js),
-  // qui abandonnait alors et retombait sur buildFallbackAgonBubbleTrends
+  // que le timeout de 5s côté client (fetchMnoriaBubbleTrends, public/script.js),
+  // qui abandonnait alors et retombait sur buildFallbackMnoriaBubbleTrends
   // (ce repli n'utilise désormais lui aussi que cloud_label/keywords, jamais
   // le titre du débat). Dès qu'une valeur existe (même expirée), on la
   // sert immédiatement pendant que le recalcul tourne en arrière-plan — seul
   // le tout premier appel depuis le démarrage du serveur attend le calcul
   // complet.
-  if (agonBubbleTrendsCache) {
-    agonBubbleTrendsInFlight.catch(() => {});
-    return agonBubbleTrendsCache.value;
+  if (mnoriaBubbleTrendsCache) {
+    mnoriaBubbleTrendsInFlight.catch(() => {});
+    return mnoriaBubbleTrendsCache.value;
   }
-  return agonBubbleTrendsInFlight;
+  return mnoriaBubbleTrendsInFlight;
 }
 
-app.get("/api/agon-bubbles", async (req, res) => {
+app.get("/api/mnoria-bubbles", async (req, res) => {
   try {
-    const bubbles = await getAgonBubbleTrends();
+    const bubbles = await getMnoriaBubbleTrends();
     res.json({ bubbles });
   } catch (error) {
     console.error(error);
@@ -11011,7 +11165,7 @@ app.get("/api/cloud-bubbles", async (req, res) => {
 });
 
 // Nuages dédiés gauche/droite (veille mixte) — même format de réponse que /api/cloud-bubbles,
-// jamais mélangés avec le pool général ni avec le nuage communautaire (Bulles Agôn).
+// jamais mélangés avec le pool général ni avec le nuage communautaire (Bulles Mnoria).
 app.get("/api/cloud-bubbles-left", async (req, res) => {
   try {
     const data = await loadCloudBubbles("cloud_bubbles_left");
@@ -11128,6 +11282,7 @@ app.post("/api/admin/veille/proofread", requireAdmin, rateLimit("admin-ai", 10),
   ].join("\n");
 
   try {
+    const requestStartedAt = Date.now();
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -11145,10 +11300,13 @@ app.post("/api/admin/veille/proofread", requireAdmin, rateLimit("admin-ai", 10),
 
     if (!r.ok) {
       const body = await r.text().catch(() => '');
+      recordAiUsage(supabase, { feature: 'admin_text_correction', model: 'gpt-4o-mini', latencyMs: Date.now() - requestStartedAt, success: false, error: body || 'Erreur OpenAI.' });
       return res.status(502).json({ error: body || 'Erreur OpenAI.' });
     }
 
     const data = await r.json();
+    const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+    recordAiUsage(supabase, { feature: 'admin_text_correction', model: 'gpt-4o-mini', inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     const content = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
     if (!content) {
       return res.status(502).json({ error: 'Réponse vide du correcteur.' });
@@ -11231,7 +11389,7 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
     // Garde anti-doublon intra-groupe : un même sujet peut exister en variante
     // générale/gauche/droite (une par groupe), mais jamais deux fois dans le même
     // groupe. Couvre les publications faites hors pipeline bot (bouton admin, crash
-    // du bot avant écriture de son historique sent-to-agon) que la dédup côté bot ne
+    // du bot avant écriture de son historique sent-to-mnoria) que la dédup côté bot ne
     // voit pas — cf. doublons 1237/1255 (left) et 1220/1221 (mixed) du 03/07/2026.
     // Comparaison déterministe (question normalisée), aucun appel IA.
     const normalizedPublishQuestion = normalizeQuestionForMergeComparison(safeQuestion);
@@ -11371,7 +11529,7 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       content: resolvedContent,
       source_url: sourceUrl,
       type: debateType,
-      creator_key: AGON_ADMIN_CREATOR_KEY,
+      creator_key: MNORIA_ADMIN_CREATOR_KEY,
       created_at: nowIso(),
       political_orientation: pendingPoliticalOrientation || null,
       political_group: resolvedPoliticalGroup
@@ -11612,19 +11770,36 @@ app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req
     return res.status(404).json({ error: error?.message || "Débat introuvable." });
   }
   const fullAnalysis = data.ai_analysis || null;
-  const raw = extractAnalysisScoringRaw(fullAnalysis);
+  let raw = extractAnalysisScoringRaw(fullAnalysis);
   // Barème caché par le créateur : le détail (orientation + règles dérivées)
   // ne doit fuiter ni vers les autres visiteurs ni vers le rapport IA public —
   // seul le créateur peut le consulter (cf. sanitizeDebateForClient).
   const isOwner = !!(clientKey && data.creator_key && String(data.creator_key) === clientKey)
-    || !!(isAdmin(req) && data.creator_key === AGON_ADMIN_CREATOR_KEY);
-  if (raw && data.evaluation_axis_hidden && !isOwner) {
+    || !!(isAdmin(req) && data.creator_key === MNORIA_ADMIN_CREATOR_KEY);
+  // Notes faible/moyen masquées pour tout le monde sauf admin/créateur (cf.
+  // canViewerSeeHiddenScores) — volontairement une condition d'accès plus large que
+  // isOwner ci-dessus (admin voit TOUJOURS, même sur l'arène d'un autre utilisateur ;
+  // isOwner ne le permet que sur les arènes créées par l'admin lui-même, propre à la
+  // fonctionnalité barème caché).
+  const canSeeHiddenScores = canViewerSeeHiddenScores(req, data.creator_key, clientKey);
+  if (raw && (data.evaluation_axis_hidden || !canSeeHiddenScores)) {
     try {
       const parsedRaw = JSON.parse(raw);
-      if (parsedRaw?.scoringGrid?.scoringMode === "custom") {
+      let mutated = false;
+      if (data.evaluation_axis_hidden && !isOwner && parsedRaw?.scoringGrid?.scoringMode === "custom") {
         parsedRaw.scoringGrid = { ...parsedRaw.scoringGrid, axisSource: "", customRubric: "", axisHidden: true };
-        raw = JSON.stringify(parsedRaw);
+        mutated = true;
       }
+      if (!canSeeHiddenScores && parsedRaw?.camps) {
+        for (const campKey of ["A", "B"]) {
+          const list = parsedRaw.camps[campKey]?.effectiveArguments;
+          if (Array.isArray(list)) {
+            parsedRaw.camps[campKey].effectiveArguments = list.map(redactHiddenScoreEntry);
+            mutated = true;
+          }
+        }
+      }
+      if (mutated) raw = JSON.stringify(parsedRaw);
     } catch (_) {}
   }
   const status = data.ai_analysis_status || "none";
@@ -11899,7 +12074,7 @@ async function _generateAndSaveAnalysis(debateId, { forceRescore = false } = {})
 
     // Analyse popularité vs robustesse (colonne séparée)
     try {
-      const popularityResult = await generatePopularityAnalysis(result, (messages) => _callOpenAI(apiKey, messages));
+      const popularityResult = await generatePopularityAnalysis(result, (messages) => _callOpenAI(apiKey, messages, { feature: "debate_popularity_analysis" }));
       const popularityRaw    = JSON.stringify(popularityResult);
       const { error: popErr } = await supabase.from("debates")
         .update({ popularity_analysis: popularityRaw })
@@ -12000,10 +12175,22 @@ function _buildAnalysisReadyPersonalization(analysis, questionLabel) {
       if (!scores.length) continue;
 
       const best = scores[0];
+      const bestCategory = String(best.category || "").toLowerCase();
+      // Note faible/moyen jamais révélée par notification, même à l'auteur lui-même
+      // (demande du 19/08/2026, cf. canViewerSeeHiddenScores) : message générique sans
+      // chiffre plutôt que de ne pas notifier du tout — l'idée reste consultable, seule
+      // la valeur du score est cachée.
+      const canRevealScore = bestCategory === "bon" || bestCategory === "excellent";
       const scoreLabel = `${best.score}/100`;
-      const suffix = scores.length > 1
-        ? `Ta meilleure note IA : ${scoreLabel} (${scores.length} idées notées).`
-        : `Ta note IA : ${scoreLabel}.`;
+      // Le chiffre reste caché (cf. plus haut), mais l'utilisateur doit quand même
+      // savoir qu'une note existe — jamais un silence qui pourrait passer pour un bug
+      // (demande du 20/08/2026) : on explique explicitement pourquoi elle n'est pas
+      // affichée plutôt que de ne rien dire du tout.
+      const suffix = !canRevealScore
+        ? "Les notes IA sont disponibles, mais seules les meilleures contributions sont rendues publiques."
+        : scores.length > 1
+          ? `Ta meilleure note IA : ${scoreLabel} (${scores.length} idées notées).`
+          : `Ta note IA : ${scoreLabel}.`;
 
       messageByUserKey.set(
         userKey,
@@ -12203,11 +12390,11 @@ async function _scheduleAnalysisIfNeeded(debateId) {
 // Render l'exécute (Render définit automatiquement la variable RENDER) : le pm2
 // local peut être coupé en pleine génération et laisserait l'analyse bloquée en
 // "generating" — statut que le scheduler ne reprend jamais. Même logique que
-// AUTO_PIPELINES_ENABLED côté bot veille. AGON_ANALYSIS_SCHEDULER=on|off force
+// AUTO_PIPELINES_ENABLED côté bot veille. MNORIA_ANALYSIS_SCHEDULER=on|off force
 // le comportement (ex. =on en local pour reprendre la main si Render est down).
 // Les routes manuelles de (re)génération restent utilisables sur les deux instances.
 const ANALYSIS_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_ANALYSIS_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_ANALYSIS_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -12267,6 +12454,14 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
   // réponse valide, juste plus longue. Toujours 45s par défaut pour tous les
   // autres appels du fichier, inchangés.
   const TIMEOUT_MS = opts.timeoutMs || 45_000;
+  const model = opts.model || "gpt-4o-mini";
+  // opts.feature (audit du 22/08/2026, phase 1) : identifie la fonctionnalité
+  // métier pour l'instrumentation de coût (cf. lib/ai-usage-log.js). Un seul
+  // log par appel à _callOpenAI, sur l'issue terminale (succès ou échec
+  // final) — les tentatives 429/5xx/réseau retentées ci-dessous ne sont
+  // jamais facturées par OpenAI, donc jamais elles-mêmes loguées.
+  const feature = opts.feature || null;
+  const startedAt = Date.now();
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let r;
@@ -12275,7 +12470,7 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
         method:  "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
         body:    JSON.stringify({
-          model: opts.model || "gpt-4o-mini",
+          model,
           messages,
           temperature: opts.temperature ?? 0.3,
           ...(opts.responseFormat ? { response_format: opts.responseFormat } : {})
@@ -12284,7 +12479,10 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
       });
     } catch (fetchErr) {
       // Timeout (AbortError) ou réseau — on retente sauf au dernier essai
-      if (attempt === MAX_ATTEMPTS) throw Object.assign(fetchErr, { status: 502 });
+      if (attempt === MAX_ATTEMPTS) {
+        recordAiUsage(supabase, { feature, model, latencyMs: Date.now() - startedAt, success: false, error: fetchErr.message });
+        throw Object.assign(fetchErr, { status: 502 });
+      }
       await new Promise(r => setTimeout(r, 1000 * attempt));
       continue;
     }
@@ -12298,13 +12496,387 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
 
     if (!r.ok) {
       const body = await r.text().catch(() => "");
+      recordAiUsage(supabase, { feature, model, latencyMs: Date.now() - startedAt, success: false, error: body || "Erreur OpenAI." });
       throw Object.assign(new Error(body || "Erreur OpenAI."), { status: 502 });
     }
 
     const data = await r.json();
+    const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+    recordAiUsage(supabase, { feature, model, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - startedAt, success: true });
     return data?.choices?.[0]?.message?.content || "";
   }
 }
+
+// Import de connaissances par photo (22/08/2026) : ANALYSE UNIQUEMENT. Cette
+// route ne fait aucun INSERT Supabase, aucune création FSRS, aucune review —
+// elle retourne des connaissances PROPOSÉES que le client doit faire valider
+// explicitement par l'utilisateur avant tout enregistrement (cf. décision
+// produit : jamais de sauvegarde automatique depuis une photo). Aucun
+// fichier n'est écrit sur disque : le buffer image ne vit qu'en mémoire le
+// temps de la requête.
+//
+// Taille "raisonnable" pour une photo de téléphone (pas un scan haute
+// résolution) : au-delà, mieux vaut que l'utilisateur recadre/compresse.
+const MAX_PHOTO_KNOWLEDGE_BYTES = 10 * 1024 * 1024; // 10 Mo décodés
+
+app.post("/api/photo-knowledge/analyze", rateLimit("photo-knowledge", 6), express.json({ limit: "14mb" }), async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+
+  try {
+    const dataUrl = String(req.body?.dataUrl || "").trim();
+
+    // Ne jamais se fier à une extension ou à un champ "type" déclaré seul :
+    // le préfixe MIME est extrait du dataUrl lui-même, puis le contenu réel
+    // est vérifié plus bas via sharp (lecture des octets, pas du label).
+    const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) return res.status(400).json({ error: "Format d'image invalide." });
+
+    const declaredMimeType = String(match[1] || "").toLowerCase();
+    if (!ACCEPTED_PHOTO_MIME_TYPES.includes(declaredMimeType)) {
+      return res.status(400).json({ error: "Type d'image non accepté (jpeg, png ou webp uniquement)." });
+    }
+
+    const buffer = Buffer.from(match[2], "base64");
+    if (!buffer.length) return res.status(400).json({ error: "Image vide." });
+    if (buffer.length > MAX_PHOTO_KNOWLEDGE_BYTES) {
+      return res.status(413).json({ error: "Image trop volumineuse (10 Mo maximum)." });
+    }
+
+    // Validation de contenu réel (pas seulement le label déclaré) : sharp
+    // échoue si le buffer n'est pas une image décodable, et son format
+    // détecté doit correspondre à un type accepté.
+    let detectedFormat;
+    try {
+      detectedFormat = (await sharp(buffer).metadata()).format;
+    } catch (error) {
+      return res.status(400).json({ error: "Fichier image illisible." });
+    }
+    if (!["jpeg", "png", "webp"].includes(detectedFormat)) {
+      return res.status(400).json({ error: "Type d'image non accepté (jpeg, png ou webp uniquement)." });
+    }
+
+    const { dataUrl: normalizedDataUrl } = await buildAnalysisDataUrl(buffer, declaredMimeType);
+    const { usage, ...result } = await analyzePhotoKnowledge({
+      dataUrl: normalizedDataUrl,
+      callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+    });
+
+    return res.json(result);
+  } catch (error) {
+    // Jamais le contenu de la photo dans les logs, uniquement le message
+    // d'erreur (RGPD/vie privée — cf. rapport).
+    console.error("Erreur analyse photo-knowledge:", error.message);
+    return res.status(500).json({ error: "Erreur analyse de la photo." });
+  }
+});
+
+// Import PDF texte : extraction locale en mémoire, puis sélection IA par
+// blocs. Aucun PDF, buffer, base64 ou texte intégral n'est persisté.
+app.post("/api/pdf-knowledge/analyze", rateLimit("pdf-knowledge", 4), express.json({ limit: "28mb" }), async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+  try {
+    const buffer = decodePdfDataUrl(req.body?.dataUrl, String(req.body?.type || "").toLowerCase());
+    const result = await analyzePdfKnowledge({
+      buffer,
+      callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+    });
+    if (result.status === "scan_not_supported") return res.json(result);
+    const secret = process.env.PDF_ANALYSIS_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.ADMIN_PASSWORD;
+    const analysisToken = createPdfAnalysisToken(result, secret);
+    return res.json({ ...result, analysisToken });
+  } catch (error) {
+    console.error("Erreur analyse pdf-knowledge:", error.message);
+    if (["invalid_mime", "invalid_pdf"].includes(error.code)) return res.status(400).json({ error: error.message, code: error.code });
+    if (["pdf_too_large", "pdf_too_long"].includes(error.code)) return res.status(413).json({ error: error.message, code: error.code });
+    return res.status(500).json({ error: "Erreur d'analyse du PDF." });
+  }
+});
+
+// Copier-coller : sélection uniquement. Le texte source n'est ni écrit en
+// base, ni ajouté à sourceDetail, ni conservé après la requête.
+app.post("/api/text-knowledge/analyze", rateLimit("text-knowledge", 8), express.json({ limit: "256kb" }), async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+  try {
+    const input = validateTextKnowledgePayload(req.body);
+    const result = await analyzeTextKnowledge({
+      ...input,
+      callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("Erreur analyse text-knowledge:", error.message);
+    if (["invalid_payload", "invalid_text", "text_too_long"].includes(error.code)) {
+      return res.status(error.code === "text_too_long" ? 413 : 400).json({ error: error.message, code: error.code });
+    }
+    return res.status(500).json({ error: "Erreur d'analyse du texte." });
+  }
+});
+
+app.post("/api/url-knowledge/analyze", rateLimit("url-knowledge", 6), express.json({ limit: "8kb" }), async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+  try {
+    if (!req.body || typeof req.body.url !== "string") return res.status(400).json({ error: "URL obligatoire.", code: "invalid_url" });
+    const result = await analyzeUrlKnowledge({
+      url: req.body.url,
+      callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+    });
+    const secret = process.env.URL_ANALYSIS_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.ADMIN_PASSWORD;
+    return res.json({ ...result, analysisToken: createUrlAnalysisToken(result, secret) });
+  } catch (error) {
+    console.error("Erreur analyse url-knowledge:", error.message);
+    const clientCodes = new Set(["invalid_url", "invalid_protocol", "ssrf_blocked", "dns_failed", "invalid_redirect", "too_many_redirects", "protected_page", "http_error", "unsupported_content_type", "content_not_available", "content_too_long", "response_too_large", "timeout", "fetch_failed"]);
+    if (clientCodes.has(error.code)) {
+      const status = ["response_too_large", "content_too_long"].includes(error.code) ? 413 : (error.code === "timeout" ? 504 : 400);
+      return res.status(status).json({ error: error.message, code: error.code, status: error.code === "content_not_available" ? "content_not_available" : "error" });
+    }
+    return res.status(500).json({ error: "Erreur d'analyse du lien." });
+  }
+});
+
+// Sous-titres publics uniquement : aucune vidéo, piste audio, miniature ou
+// transcription complète n'est écrite en base pendant cette analyse.
+app.post("/api/youtube-knowledge/analyze", rateLimit("youtube-knowledge", 4), express.json({ limit: "8kb" }), async (req, res) => {
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
+  try {
+    if (!req.body || typeof req.body.url !== "string") return res.status(400).json({ error: "URL YouTube obligatoire.", code: "invalid_url" });
+    const result = await analyzeYoutubeKnowledge({
+      url: req.body.url,
+      callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+    });
+    const secret = process.env.YOUTUBE_ANALYSIS_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.ADMIN_PASSWORD;
+    return res.json({ ...result, analysisToken: createYoutubeAnalysisToken(result, secret) });
+  } catch (error) {
+    console.error("Erreur analyse youtube-knowledge:", error.message);
+    if (error instanceof YoutubeKnowledgeError) {
+      const status = error.code === "video_too_long" ? 413 : (error.code === "service_error" ? 502 : 400);
+      return res.status(status).json({ error: error.message, code: error.code, status: error.code });
+    }
+    return res.status(500).json({ error: "Erreur d'analyse de la vidéo YouTube.", code: "service_error" });
+  }
+});
+
+// ÉCRITURE séparée de /analyze : cette route ne reçoit jamais l'image ni la
+// transcription, uniquement les faits que l'utilisateur a explicitement
+// laissés cochés avant de cliquer. Chaque fait rejoint le pipeline normal des
+// QCM de notion (daily_quiz + user_notion_quizzes), puis MemoryItem + FSRS à
+// la première réponse. Le hash normalisé du fait rend l'opération idempotente
+// entre deux imports de photos contenant la même connaissance.
+async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnowledge = 20, sourceUrl = null, sourceMeta = null }) {
+  if (!process.env.OPENAI_API_KEY) return { status: 503, body: { ok: false, error: "OPENAI_API_KEY manquant." } };
+
+  try {
+    const validation = validateLegacyKey(body?.legacyKey);
+    if (validation.error) return { status: 400, body: { ok: false, error: validation.error } };
+
+    const sourceTitle = String(body?.sourceTitle || "").trim().replace(/\s+/g, " ").slice(0, 160);
+    const submitted = Array.isArray(body?.knowledge) ? body.knowledge : [];
+    if (!submitted.length || submitted.length > maxKnowledge) {
+      return { status: 400, body: { ok: false, error: `Sélection invalide (1 à ${maxKnowledge} connaissances).` } };
+    }
+
+    const normalizedItems = [];
+    const requestIds = new Set();
+    for (let index = 0; index < submitted.length; index += 1) {
+      const fact = String(submitted[index] || "").trim().replace(/\s+/g, " ");
+      if (fact.length < 3 || fact.length > 500) {
+        return { status: 400, body: { ok: false, error: `Connaissance ${index + 1} invalide.` } };
+      }
+      const id = normalizeCustomTopicKey(fact);
+      // Un doublon dans la même sélection ne doit jamais produire deux
+      // insertions ni deux appels IA.
+      if (requestIds.has(id)) continue;
+      requestIds.add(id);
+      normalizedItems.push({ index, fact, id });
+    }
+    if (!normalizedItems.length) {
+      return { status: 400, body: { ok: false, error: "Aucune connaissance valide sélectionnée." } };
+    }
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    const finalKnowledge = normalizedItems.map((item) => item.fact);
+    const documentImportId = buildPhotoDocumentImportId(sourceTitle, finalKnowledge, sourceUrl);
+    let sharedSourceDetail = null;
+    const results = [];
+
+    // Traitement séquentiel volontaire : une photo peut proposer jusqu'à 20
+    // faits ; ne pas lancer autant de générations/classifications IA en rafale.
+    for (const item of normalizedItems) {
+      const slot = `notion:${sourceType}:${documentImportId}:${item.id}`;
+      try {
+        let quizDate = parisDateKey();
+        let questions;
+        let reused = false;
+
+        const { data: existingQuizRows, error: existingQuizError } = await supabase
+          .from("daily_quiz")
+          .select("quiz_date, questions")
+          .eq("slot", slot)
+          .order("quiz_date", { ascending: false })
+          .limit(1);
+        if (existingQuizError) throw existingQuizError;
+        const existingQuiz = existingQuizRows?.[0] || null;
+
+        if (existingQuiz) {
+          quizDate = existingQuiz.quiz_date;
+          questions = existingQuiz.questions || [];
+          // Reprise après un import partiellement abouti : la première
+          // connaissance déjà persistée devient la source de vérité de la
+          // fiche commune pour les QCM manquants, sans nouvel appel IA.
+          const existingDetail = questions[0]?.sourceDetail;
+          if (!sharedSourceDetail && existingDetail?.documentImportId === documentImportId) {
+            sharedSourceDetail = existingDetail;
+          }
+          reused = true;
+        } else {
+          // Une seule génération documentaire pour tout l'import, déclenchée
+          // paresseusement seulement si au moins un des QCM n'existe pas déjà.
+          // Son échec retourne une fiche minimale et ne bloque jamais les faits.
+          if (!sharedSourceDetail) {
+            const sheetResult = await generatePhotoKnowledgeSheet({
+              sourceTitle,
+              knowledge: finalKnowledge,
+              sourceType,
+              sourceUrl,
+              sourceMeta,
+              callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+            });
+            sharedSourceDetail = sheetResult.sourceDetail;
+            if (sheetResult.usedFallback && sheetResult.error) {
+              console.warn(`[${logLabel}:${documentImportId}] fiche enrichie indisponible, fallback minimal :`, sheetResult.error.message);
+            }
+          }
+          questions = await buildImportedKnowledgeQuestions(item.fact, item.id, user.id, sharedSourceDetail, documentImportId, sourceType);
+          if (!questions.length) throw new Error("Génération de la question impossible.");
+
+          const { error: insertError } = await supabase.from("daily_quiz").insert({
+            quiz_date: quizDate,
+            slot,
+            questions,
+            source_debate_ids: []
+          });
+          if (insertError) {
+            if (insertError.code !== "23505") throw insertError;
+            const { data: raceRows, error: raceError } = await supabase
+              .from("daily_quiz")
+              .select("quiz_date, questions")
+              .eq("slot", slot)
+              .order("quiz_date", { ascending: false })
+              .limit(1);
+            if (raceError) throw raceError;
+            const raceQuiz = raceRows?.[0];
+            if (!raceQuiz) throw insertError;
+            quizDate = raceQuiz.quiz_date;
+            questions = raceQuiz.questions || questions;
+            reused = true;
+          }
+        }
+
+        const { data: existingLink, error: existingLinkError } = await supabase
+          .from("user_notion_quizzes")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("quiz_date", quizDate)
+          .eq("slot", slot)
+          .maybeSingle();
+        if (existingLinkError) throw existingLinkError;
+
+        if (!existingLink) {
+          const { error: linkError } = await supabase.from("user_notion_quizzes").upsert(
+            { user_id: user.id, quiz_date: quizDate, slot },
+            { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+          );
+          if (linkError) throw linkError;
+        }
+
+        results.push({
+          index: item.index,
+          knowledge: item.fact,
+          status: existingLink ? "existing" : "added",
+          slot,
+          quizDate,
+          questionCount: questions.length,
+          reused
+        });
+      } catch (error) {
+        console.error(`[${logLabel}:add:${item.id}]`, error.message);
+        results.push({ index: item.index, knowledge: item.fact, status: "error", error: "Ajout impossible pour cette connaissance." });
+      }
+    }
+
+    const addedCount = results.filter((item) => item.status === "added").length;
+    const existingCount = results.filter((item) => item.status === "existing").length;
+    const errorCount = results.filter((item) => item.status === "error").length;
+    return { status: 200, body: { ok: errorCount === 0, documentImportId, addedCount, existingCount, errorCount, results } };
+  } catch (error) {
+    console.error(`Erreur ajout ${logLabel}:`, error.message);
+    return { status: 500, body: { ok: false, error: "Erreur lors de l'ajout à la mémoire." } };
+  }
+}
+
+app.post("/api/photo-knowledge/add", rateLimit("photo-knowledge-add", 12), express.json({ limit: "48kb" }), async (req, res) => {
+  const result = await addValidatedKnowledgeImport({ body: req.body, sourceType: "photo_import", logLabel: "photo-knowledge" });
+  return res.status(result.status).json(result.body);
+});
+
+app.post("/api/manual-knowledge/add", rateLimit("manual-knowledge-add", 12), express.json({ limit: "48kb" }), async (req, res) => {
+  const result = await addValidatedKnowledgeImport({ body: req.body, sourceType: "manual_import", logLabel: "manual-knowledge" });
+  return res.status(result.status).json(result.body);
+});
+
+app.post("/api/pdf-knowledge/add", rateLimit("pdf-knowledge-add", 8), express.json({ limit: "128kb" }), async (req, res) => {
+  try {
+    const secret = process.env.PDF_ANALYSIS_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.ADMIN_PASSWORD;
+    const token = verifyPdfAnalysisToken(req.body?.analysisToken, secret);
+    const result = await addValidatedKnowledgeImport({
+      body: req.body,
+      sourceType: "pdf_import",
+      logLabel: "pdf-knowledge",
+      maxKnowledge: token.maxKnowledge
+    });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/text-knowledge/add", rateLimit("text-knowledge-add", 12), express.json({ limit: "48kb" }), async (req, res) => {
+  const result = await addValidatedKnowledgeImport({ body: req.body, sourceType: "text_import", logLabel: "text-knowledge" });
+  return res.status(result.status).json(result.body);
+});
+
+app.post("/api/url-knowledge/add", rateLimit("url-knowledge-add", 12), express.json({ limit: "48kb" }), async (req, res) => {
+  try {
+    const secret = process.env.URL_ANALYSIS_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.ADMIN_PASSWORD;
+    const token = verifyUrlAnalysisToken(req.body?.analysisToken, secret);
+    const result = await addValidatedKnowledgeImport({
+      body: req.body,
+      sourceType: "url_import",
+      logLabel: "url-knowledge",
+      sourceUrl: token.sourceUrl
+    });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/youtube-knowledge/add", rateLimit("youtube-knowledge-add", 8), express.json({ limit: "128kb" }), async (req, res) => {
+  try {
+    const secret = process.env.YOUTUBE_ANALYSIS_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.ADMIN_PASSWORD;
+    const token = verifyYoutubeAnalysisToken(req.body?.analysisToken, secret);
+    const result = await addValidatedKnowledgeImport({
+      body: { ...req.body, sourceTitle: token.sourceTitle },
+      sourceType: "youtube_import",
+      logLabel: "youtube-knowledge",
+      maxKnowledge: token.maxKnowledge,
+      sourceUrl: token.sourceUrl,
+      sourceMeta: { sourceAuthor: token.sourceAuthor, durationSeconds: token.durationSeconds }
+    });
+    return res.status(result.status).json(result.body);
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
 
 app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate", 5), express.json(), async (req, res) => {
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "OPENAI_API_KEY manquant." });
@@ -13043,7 +13615,8 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" },
-      timeoutMs
+      timeoutMs,
+      feature: "knowledge_generation"
     });
     parsed = JSON.parse(content);
   } catch (error) {
@@ -13083,7 +13656,8 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(candidates, sourceName) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.2,
-        responseFormat: { type: "json_object" }
+        responseFormat: { type: "json_object" },
+        feature: "knowledge_verification"
       }),
       imageSearchQuery
         ? searchKnowledgeImage(imageSearchQuery, { logLabel: `${id}:${sourceName}` }).catch((error) => {
@@ -13114,7 +13688,8 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" },
-      timeoutMs
+      timeoutMs,
+      feature: "question_generation"
     });
     questionsParsed = JSON.parse(content);
   } catch (error) {
@@ -13223,7 +13798,8 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
       _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeAdmissionPrompt(formatCultureGeneraleItemForPrompt(item), instruction) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.3,
-        responseFormat: { type: "json_object" }
+        responseFormat: { type: "json_object" },
+        feature: "knowledge_generation"
       }),
       classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail, userId, id)
     ]);
@@ -13257,7 +13833,8 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
     const content = await _callOpenAI(apiKey, [{ role: "user", content: buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, instruction, formatBlock) }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      feature: "question_generation"
     });
     parsed = JSON.parse(content);
   } catch (error) {
@@ -13317,6 +13894,85 @@ function normalizeCustomTopicKey(topic) {
   return crypto.createHash("sha1").update(normalized).digest("hex").slice(0, 16);
 }
 
+// Import photo : une connaissance déjà sélectionnée à partir de la
+// transcription ET validée explicitement par l'utilisateur entre directement
+// dans le générateur commun de questions. On ne relance ni une admission ni
+// une réécriture de fiche : cela risquerait de modifier le fait validé. Les
+// mêmes validateurs et variantes que les autres QCM de notion restent ensuite
+// appliqués, et le MemoryItem/FSRS sera créé par le chemin canonique à la
+// première réponse (applyFsrsReviewForDailyQuizAnswer).
+async function buildImportedKnowledgeQuestions(knowledge, id, userId, sharedSourceDetail, documentImportId, sourceType) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return [];
+
+  const fact = String(knowledge || "").trim().replace(/\s+/g, " ");
+  if (!fact) return [];
+  const admittedKnowledge = [{
+    fact,
+    importance: "high",
+    certainty: "high",
+    // Le pipeline photo ne fournit pas ces deux signaux. Valeurs
+    // conservatrices : jamais de format ordre/intrus choisi arbitrairement.
+    sequential: false,
+    clearBoundary: false
+  }];
+
+  let parsed;
+  try {
+    const formatBlock = buildQuestionFormatsPromptBlock("sourceId", 1, true);
+    const content = await _callOpenAI(apiKey, [{
+      role: "user",
+      content: buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, null, formatBlock)
+    }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" },
+      feature: "question_generation"
+    });
+    parsed = JSON.parse(content);
+  } catch (error) {
+    console.error(`[photo-knowledge:${id}] génération des questions :`, error.message);
+    return [];
+  }
+
+  const validated = filterVariantsByKnowledgeConstraints(
+    filterQuestionsToAdmittedKnowledge(
+      validateNarrativeQuizQuestions(parsed?.questions, [id], 1, 1),
+      admittedKnowledge
+    ),
+    admittedKnowledge
+  );
+  if (validated.length !== 1) return [];
+
+  const sourceName = fact.slice(0, 120);
+  // Le placement reste propre à CETTE connaissance : la fiche documentaire
+  // globale peut couvrir plusieurs domaines et ne doit pas fusionner leur
+  // classification. Seul le sourceDetail stocké/affiché est partagé.
+  const classificationDetail = {
+    meta: "Connaissance issue d'un document importé",
+    sections: [{ label: null, text: fact }],
+    image: null
+  };
+  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(
+    sourceType, sourceName, classificationDetail, userId, id
+  );
+  const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
+
+  return validated.map((question, index) => ({
+    id: `notion:${sourceType}:${documentImportId}:${id}-q${index + 1}`,
+    ...question,
+    sourceType,
+    sourceScope: null,
+    sourceName,
+    sourceDetail: sharedSourceDetail,
+    sourceThemes,
+    sourcePlacement,
+    level: null,
+    documentImportId,
+    sourceDebateId: id
+  }));
+}
+
 // Détermine, avant toute génération, si un sujet libre en niveau Expert
 // désigne une vraie liste énumérable (cf. NOTION_QUIZ_ENUMERABLE_MAX_ITEMS).
 // Ne demande PAS la liste elle-même ici (voir fetchEnumerableItems) : un
@@ -13356,7 +14012,8 @@ async function scopeCustomTopic(apiKey, topic) {
     const content = await _callOpenAI(apiKey, [{ role: "user", content: buildTopicScopePrompt(topic) }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.3,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      feature: "knowledge_topic_scope"
     });
     const parsed = JSON.parse(content);
     if (!parsed || parsed.valid === false) {
@@ -13422,7 +14079,8 @@ async function fetchEnumerableItems(apiKey, subject) {
       const content = await _callOpenAI(apiKey, [{ role: "user", content: buildEnumerableItemsChunkPrompt(subject, items, askCount) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
-        responseFormat: { type: "json_object" }
+        responseFormat: { type: "json_object" },
+        feature: "knowledge_enumerable_items"
       });
       const parsed = JSON.parse(content);
       const newItems = Array.isArray(parsed?.items) ? parsed.items.map((it) => String(it || "").trim()).filter(Boolean) : [];
@@ -13504,7 +14162,8 @@ async function generateEnumerableQuizQuestions(apiKey, subject, items, id) {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
         responseFormat: { type: "json_object" },
-        timeoutMs: Math.min(120_000, 45_000 + chunk.length * 3_000)
+        timeoutMs: Math.min(120_000, 45_000 + chunk.length * 3_000),
+        feature: "question_generation"
       });
       const parsedChunk = JSON.parse(content);
       all.push(...validateNarrativeQuizQuestions(parsedChunk?.questions, [id], chunk.length, chunk.length));
@@ -13665,7 +14324,8 @@ async function extractDebateTopicNotions(question, content) {
     const raw = await _callOpenAI(apiKey, [{ role: "user", content: buildDebateTopicNotionsPrompt(question, content) }], {
       model: DEBATE_TOPIC_NOTIONS_MODEL,
       temperature: 0.3,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      feature: "knowledge_related_notions"
     });
     const parsed = JSON.parse(raw);
     const seen = new Set();
@@ -14300,8 +14960,8 @@ async function fetchUserAcquis(voterKey, options = {}) {
 /*   dépendances et exposer des routes minces.                       */
 /* ================================================================= */
 
-// Source de vérité des sujets publiés par Agôn : les arènes créées par le
-// bot/admin (creator_key AGON_ADMIN_CREATOR_KEY) — projection de cette
+// Source de vérité des sujets publiés par Mnoria : les arènes créées par le
+// bot/admin (creator_key MNORIA_ADMIN_CREATOR_KEY) — projection de cette
 // même source dans la forme attendue par lib/parallele-historique.js.
 function extractParalleleHistoriqueSources(row) {
   const sources = [];
@@ -14322,7 +14982,7 @@ function extractParalleleHistoriqueSources(row) {
 
 // Une même actu est souvent publiée 2-3 fois (variantes gauche/droite/générale
 // du même sujet) : on les regroupe par cloud_label — le même identifiant de
-// sujet que les Bulles Agôn (getCloudLabelFromDebate/normalizeCloudLabel,
+// sujet que les Bulles Mnoria (getCloudLabelFromDebate/normalizeCloudLabel,
 // définis plus haut), pas une nouvelle notion de "sujet". À label égal, on ne
 // garde que la variante la mieux sourcée (countCloudSources, déjà existant),
 // puis la plus longue en cas d'égalité — "la version la plus complète".
@@ -14470,7 +15130,7 @@ async function getPublishedTopicsForDate(dateKey) {
   const { data, error } = await supabase
     .from("debates")
     .select("id, question, content, category, source_url, media_extras, created_at, cloud_label, keywords, image_url")
-    .eq("creator_key", AGON_ADMIN_CREATOR_KEY)
+    .eq("creator_key", MNORIA_ADMIN_CREATOR_KEY)
     .gte("created_at", cutoff)
     .lt("created_at", nextDayCutoff)
     .order("created_at", { ascending: false })
@@ -14525,7 +15185,7 @@ async function fetchPressPreviewImage(sourceUrl) {
 
 const paralleleHistoriqueService = createParalleleHistoriqueService({
   supabase,
-  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, { ...opts, feature: "daily_parallele_historique" }),
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
@@ -14575,7 +15235,7 @@ async function getPenseePhilosophiqueExcludedTopicIds(dateKey) {
 // deux rubriques, pas une deuxième définition de "publié aujourd'hui".
 const penseePhilosophiqueService = createPenseePhilosophiqueService({
   supabase,
-  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, { ...opts, feature: "daily_pensee_philosophique" }),
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
@@ -14645,7 +15305,7 @@ async function getMecanismeSociologiqueExcludedTopicIds(dateKey) {
 // trois rubriques, pas une troisième définition de "publié aujourd'hui".
 const mecanismeSociologiqueService = createMecanismeSociologiqueService({
   supabase,
-  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, { ...opts, feature: "daily_mecanisme_sociologique" }),
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
@@ -14733,7 +15393,7 @@ async function getConceptDuJourExcludedTopicIds(dateKey) {
 // quatre rubriques, pas une quatrième définition de "publié aujourd'hui".
 const conceptDuJourService = createConceptDuJourService({
   supabase,
-  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, { ...opts, feature: "daily_concept_du_jour" }),
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
@@ -14788,7 +15448,7 @@ async function getCitationDuJourExcludedTopicIds(dateKey) {
 // représente l'auteur cité, jamais le sujet d'actualité.
 const citationDuJourService = createCitationDuJourService({
   supabase,
-  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, { ...opts, feature: "daily_citation_du_jour" }),
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
@@ -14840,7 +15500,7 @@ async function getOeuvreArtDuJourExcludedTopicIds(dateKey) {
 // jamais le sujet d'actualité.
 const oeuvreArtDuJourService = createOeuvreArtDuJourService({
   supabase,
-  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, { ...opts, feature: "daily_oeuvre_art_du_jour" }),
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
@@ -14891,7 +15551,7 @@ async function getLatinDuJourExcludedTopicIds(dateKey) {
 // rubriques, aucune personne réelle ni œuvre n'est représentée ici.
 const latinDuJourService = createLatinDuJourService({
   supabase,
-  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, { ...opts, feature: "daily_latin_du_jour" }),
   logger: console,
   getCurrentDate: () => new Date(),
   getPublishedTopicsForDate,
@@ -14963,7 +15623,7 @@ async function getDailyEclairagesPublicationStatus(date = new Date()) {
 // Interrupteur indépendant (mêmes règles que ci-dessus) pour le parallèle
 // historique : peut être activé/désactivé sans toucher au QCM.
 const PARALLELE_HISTORIQUE_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_PARALLELE_HISTORIQUE_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_PARALLELE_HISTORIQUE_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -14975,7 +15635,7 @@ const PARALLELE_HISTORIQUE_TRIGGER_HOUR = 9;
 // Interrupteur indépendant (mêmes règles) pour la pensée philosophique :
 // peut être activé/désactivé sans toucher au QCM ni au parallèle historique.
 const PENSEE_PHILOSOPHIQUE_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_PENSEE_PHILOSOPHIQUE_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_PENSEE_PHILOSOPHIQUE_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -14985,7 +15645,7 @@ const PENSEE_PHILOSOPHIQUE_TRIGGER_HOUR = 9;
 // Interrupteur indépendant (mêmes règles) pour le mécanisme sociologique :
 // peut être activé/désactivé sans toucher aux deux autres rubriques.
 const MECANISME_SOCIOLOGIQUE_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_MECANISME_SOCIOLOGIQUE_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_MECANISME_SOCIOLOGIQUE_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -14995,7 +15655,7 @@ const MECANISME_SOCIOLOGIQUE_TRIGGER_HOUR = 9;
 // Interrupteur indépendant (mêmes règles) pour le concept du jour : peut
 // être activé/désactivé sans toucher aux trois autres rubriques.
 const CONCEPT_DU_JOUR_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_CONCEPT_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_CONCEPT_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -15005,7 +15665,7 @@ const CONCEPT_DU_JOUR_TRIGGER_HOUR = 9;
 // Interrupteur indépendant (mêmes règles) pour la citation du jour : peut
 // être activé/désactivé sans toucher aux quatre autres rubriques.
 const CITATION_DU_JOUR_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_CITATION_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_CITATION_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -15015,7 +15675,7 @@ const CITATION_DU_JOUR_TRIGGER_HOUR = 9;
 // Interrupteur indépendant (mêmes règles) pour l'œuvre d'art du jour : peut
 // être activé/désactivé sans toucher aux cinq autres rubriques.
 const OEUVRE_ART_DU_JOUR_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_OEUVRE_ART_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_OEUVRE_ART_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -15025,7 +15685,7 @@ const OEUVRE_ART_DU_JOUR_TRIGGER_HOUR = 9;
 // Interrupteur indépendant (mêmes règles) pour le mot latin du jour : peut
 // être activé/désactivé sans toucher aux six autres rubriques.
 const LATIN_DU_JOUR_SCHEDULER_ENABLED = (() => {
-  const forced = String(process.env.AGON_LATIN_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
+  const forced = String(process.env.MNORIA_LATIN_DU_JOUR_SCHEDULER || "").trim().toLowerCase();
   if (forced === "on") return true;
   if (forced === "off") return false;
   return Boolean(process.env.RENDER);
@@ -15868,7 +16528,12 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     res.json({
       slot: resolvedSlot,
       quizDate: resolvedQuizDate,
-      label: first.sourceName || null,
+      // Un import photo garde sourceName = fait individuel pour que chaque
+      // apprentissage reste identifiable, mais sa fiche ouvre le titre du
+      // document global partagé par toutes les connaissances de l'import.
+      label: ["photo_import", "manual_import", "pdf_import", "text_import", "url_import", "youtube_import"].includes(first.sourceType) && first.sourceDetail?.documentTitle
+        ? first.sourceDetail.documentTitle
+        : (first.sourceName || null),
       sourceType: first.sourceType || null,
       themes: primaryTheme ? [primaryTheme] : [],
       sourceDetail: first.sourceDetail || null,
@@ -15925,9 +16590,16 @@ function flattenCultureGeneraleDetail(detail) {
 // deux appels IA supplémentaires est négligeable face à un classement manqué
 // (demande du 12/08/2026). Redouble le budget à chaque tentative plutôt que
 // d'abandonner après la première réponse vide.
-async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, { reasoningEffort = "low", initialBudget = 1200 } = {}) {
+// feature (audit du 22/08/2026, phase 1) : contrairement à _callOpenAI, CHAQUE
+// tentative de cette boucle est une requête réellement facturée par OpenAI —
+// y compris quand elle revient vide (cf. commentaire ci-dessus : le budget de
+// raisonnement peut être épuisé avant la moindre sortie JSON). Chaque
+// tentative est donc instrumentée individuellement (1 requête API = 1 log),
+// et pas seulement l'issue finale de la fonction.
+async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, { reasoningEffort = "low", initialBudget = 1200, feature = null } = {}) {
   let budget = initialBudget;
   for (let attempt = 1; attempt <= 4; attempt++) {
+    const startedAt = Date.now();
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
@@ -15939,9 +16611,15 @@ async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, {
         reasoning_effort: reasoningEffort
       })
     });
-    if (!r.ok) throw new Error(`openai http ${r.status}`);
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      recordAiUsage(supabase, { feature, model, latencyMs: Date.now() - startedAt, success: false, error: body || `openai http ${r.status}` });
+      throw new Error(`openai http ${r.status}`);
+    }
     const data = await r.json();
     const content = data?.choices?.[0]?.message?.content;
+    const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+    recordAiUsage(supabase, { feature, model, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - startedAt, success: true });
     if (content) return content;
     console.warn(`${logPrefix} réponse IA vide (tentative ${attempt}/4, budget=${budget}) : finish_reason=${data?.choices?.[0]?.finish_reason}`);
     budget *= 2;
@@ -16177,8 +16855,9 @@ async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, 
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
     let content;
     if (isGpt5) {
-      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[knowledge-taxonomy match]", { reasoningEffort: "medium", initialBudget: 1200 });
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[knowledge-taxonomy match]", { reasoningEffort: "medium", initialBudget: 1200, feature: "knowledge_classification" });
     } else {
+      const requestStartedAt = Date.now();
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
@@ -16190,9 +16869,15 @@ async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, 
           temperature: 0
         })
       });
-      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      if (!r.ok) {
+        const errBody = await r.text().catch(() => "");
+        recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, latencyMs: Date.now() - requestStartedAt, success: false, error: errBody || `openai http ${r.status}` });
+        throw new Error(`openai http ${r.status}`);
+      }
       const data = await r.json();
       content = data?.choices?.[0]?.message?.content;
+      const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+      recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     }
     const raw = content ? JSON.parse(content) : null;
     const galaxyDef = findKnowledgeGalaxyDefinition(raw?.galaxy);
@@ -16382,7 +17067,8 @@ async function buildCultureGeneraleComprehensionQuiz(link) {
     const content = await _callOpenAI(apiKey, [{ role: "user", content: prompt }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.35,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      feature: "question_generation"
     });
     const parsed = JSON.parse(content);
     const validated = validateNarrativeQuizQuestions(parsed?.questions, [pairHash], COMPREHENSION_QUIZ_MAX_QUESTIONS, COMPREHENSION_QUIZ_MAX_QUESTIONS);
@@ -16566,7 +17252,7 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
   ].join("\n");
 
   try {
-    const content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale notion-links]");
+    const content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale notion-links]", { feature: "knowledge_links" });
     const parsed = content ? JSON.parse(content) : null;
     const candidateByKey = new Map(candidates.map((c) => [cultureGeneraleNotionKey(c.type, c.id), c]));
     const validLinks = selectValidNotionLinks(parsed?.links, candidateByKey, 3);
@@ -17112,16 +17798,23 @@ async function resolveCultureGeneraleSolarSystemWithAI(galaxy, sourceType, sourc
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
     let content;
     if (isGpt5) {
-      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, creationPrompt, "[knowledge-taxonomy solar create]", { reasoningEffort: "medium", initialBudget: 1200 });
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, creationPrompt, "[knowledge-taxonomy solar create]", { reasoningEffort: "medium", initialBudget: 1200, feature: "knowledge_classification" });
     } else {
+      const requestStartedAt = Date.now();
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
         body: JSON.stringify({ model: OPINION_ARTICLE_CATEGORY_MODEL, messages: [{ role: "user", content: creationPrompt }], response_format: { type: "json_object" }, max_tokens: 220, temperature: 0 })
       });
-      if (!r.ok) throw new Error(`openai http ${r.status}`);
+      if (!r.ok) {
+        const errBody = await r.text().catch(() => "");
+        recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, latencyMs: Date.now() - requestStartedAt, success: false, error: errBody || `openai http ${r.status}` });
+        throw new Error(`openai http ${r.status}`);
+      }
       const data = await r.json();
       content = data?.choices?.[0]?.message?.content;
+      const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+      recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     }
     const raw = content ? JSON.parse(content) : null;
     if (raw?.noExistingMatch === false) {
@@ -17326,9 +18019,11 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
       // faute de budget.
       content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale star]", {
         reasoningEffort: domainConfig ? "medium" : "low",
-        initialBudget: domainConfig ? 1200 : 500
+        initialBudget: domainConfig ? 1200 : 500,
+        feature: "knowledge_classification"
       });
     } else {
+      const requestStartedAt = Date.now();
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
@@ -17342,10 +18037,13 @@ async function resolveCultureGeneraleStarWithAI(galaxy, solarSystemId, solarSyst
       });
       if (!r.ok) {
         const errBody = await r.text().catch(() => "");
+        recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, latencyMs: Date.now() - requestStartedAt, success: false, error: errBody || `openai http ${r.status}` });
         throw new Error(`openai http ${r.status} — ${errBody.slice(0, 500)}`);
       }
       const data = await r.json();
       content = data?.choices?.[0]?.message?.content;
+      const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
+      recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     }
     const parsed = content ? JSON.parse(content) : null;
 
@@ -18500,6 +19198,35 @@ app.get("/latin-du-jour", (req, res) => {
   res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/latin-du-jour.html"));
 });
 
+// Import de connaissances par photo — page autonome, non mise en cache
+// (formulaire interactif, pas un contenu du jour). Cf. views/photo-knowledge.html.
+app.get("/photo-knowledge", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/photo-knowledge.html"));
+});
+
+// Ajout manuel : réutilise exactement le même éditeur léger que l'import
+// photo, basculé en mode manuel par son URL (aucune duplication de page).
+app.get("/manual-knowledge", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/photo-knowledge.html"));
+});
+
+// PDF : même éditeur, basculé en mode PDF par l'URL.
+app.get("/pdf-knowledge", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/photo-knowledge.html"));
+});
+
+app.get("/text-knowledge", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/photo-knowledge.html"));
+});
+
+app.get("/url-knowledge", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/photo-knowledge.html"));
+});
+
+app.get("/youtube-knowledge", (req, res) => {
+  res.sendFile(path.join(__dirname, "views/photo-knowledge.html"));
+});
+
 // Route publique : renvoie le contenu du jour s'il existe déjà, sinon
 // déclenche sa génération (verrou anti-concurrence géré par le module).
 app.get("/api/latin-du-jour/today", rateLimit("latin-du-jour-today", 60), async (req, res) => {
@@ -18603,7 +19330,7 @@ app.get("/api/admin/diag/logs", requireAdmin, (req, res) => {
   }
 });
 
-/* ---- TEMPORAIRE : diagnostic du saut de --agon-home-first-row-mt au retour
+/* ---- TEMPORAIRE : diagnostic du saut de --mnoria-home-first-row-mt au retour
    de Connaissances/Éclairages/Ce jour dans l'histoire en standalone. À
    retirer une fois la cause identifiée (cf. conversation du 05/08/2026). ---- */
 const SCROLL_JUMP_DIAG_FILE = path.join(__dirname, "scroll-jump-diag.json");
@@ -18640,7 +19367,7 @@ app.listen(PORT, "0.0.0.0", async () => {
   initDebateTrendsCache().catch(e => console.error("[debate-trends] init error:", e.message));
   _loadVeilleMediasFromSupabase().then(ok => console.log(`[veille-medias] cache ${ok ? "chargé depuis Supabase" : "fichier local (fallback)"}`)).catch(console.error);
   const _readJsonFile = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return fallback; } };
-  const startupMigrationsEnabled = isRenderScopedTaskEnabled("AGON_STARTUP_MIGRATIONS");
+  const startupMigrationsEnabled = isRenderScopedTaskEnabled("MNORIA_STARTUP_MIGRATIONS");
   if (startupMigrationsEnabled) {
     // Migration one-shot debate-content.json → debates.content
     try {
@@ -18657,11 +19384,11 @@ app.listen(PORT, "0.0.0.0", async () => {
           await Promise.all(toMigrate.map(([id, content]) =>
             supabase.from("debates").update({ content }).eq("id", id).then(() => {}).catch(() => {})
           ));
-          console.log(`[Agôn] Content migré vers Supabase : ${toMigrate.length} débats.`);
+          console.log(`[Mnoria] Content migré vers Supabase : ${toMigrate.length} débats.`);
         }
       }
     } catch (e) {
-      console.error("[Agôn] Erreur migration debate-content:", e.message);
+      console.error("[Mnoria] Erreur migration debate-content:", e.message);
     }
 
     // Migration one-shot debate-assets.json → debates.image_url / video_url
@@ -18686,11 +19413,11 @@ app.listen(PORT, "0.0.0.0", async () => {
               video_url: db.video_url || v.video_url || ""
             }).eq("id", id).then(() => {}).catch(() => {});
           }));
-          console.log(`[Agôn] Assets migrés vers Supabase : ${toMigrate.length} débats.`);
+          console.log(`[Mnoria] Assets migrés vers Supabase : ${toMigrate.length} débats.`);
         }
       }
     } catch (e) {
-      console.error("[Agôn] Erreur migration debate-assets:", e.message);
+      console.error("[Mnoria] Erreur migration debate-assets:", e.message);
     }
 
     // Migration one-shot debate-keywords.json → debates.keywords
@@ -18706,11 +19433,11 @@ app.listen(PORT, "0.0.0.0", async () => {
           await Promise.all(toMigrate.map(([id, keywords]) =>
             supabase.from("debates").update({ keywords }).eq("id", id).then(() => {}).catch(() => {})
           ));
-          console.log(`[Agôn] Keywords migrés vers Supabase : ${toMigrate.length} débats.`);
+          console.log(`[Mnoria] Keywords migrés vers Supabase : ${toMigrate.length} débats.`);
         }
       }
     } catch (e) {
-      console.error("[Agôn] Erreur migration keywords:", e.message);
+      console.error("[Mnoria] Erreur migration keywords:", e.message);
     }
 
     // Migration one-shot stories.json → table stories
@@ -18722,14 +19449,14 @@ app.listen(PORT, "0.0.0.0", async () => {
         const toMigrate = localStories.filter(s => s.story_id && !existingIds.has(s.story_id));
         if (toMigrate.length) {
           await Promise.all(toMigrate.map(s => upsertStory(s)));
-          console.log(`[Agôn] Stories migrées vers Supabase : ${toMigrate.length} stories.`);
+          console.log(`[Mnoria] Stories migrées vers Supabase : ${toMigrate.length} stories.`);
         }
       }
     } catch (e) {
-      console.error("[Agôn] Erreur migration stories:", e.message);
+      console.error("[Mnoria] Erreur migration stories:", e.message);
     }
   } else {
-    console.log("[Agôn] Migrations de démarrage désactivées hors Render (forcer avec AGON_STARTUP_MIGRATIONS=on).");
+    console.log("[Mnoria] Migrations de démarrage désactivées hors Render (forcer avec MNORIA_STARTUP_MIGRATIONS=on).");
   }
 
   // Chargement tag_exclusions depuis Supabase → public/tag-exclusions.json + mémoire
@@ -18737,20 +19464,20 @@ app.listen(PORT, "0.0.0.0", async () => {
     const { data, error } = await supabase.from("app_config").select("value").eq("key", "tag_exclusions").maybeSingle();
     if (!error && Array.isArray(data?.value)) {
       writeTagExclusionFiles(data.value);
-      console.log(`[Agôn] Tag exclusions chargés depuis Supabase : ${data.value.length} tags.`);
+      console.log(`[Mnoria] Tag exclusions chargés depuis Supabase : ${data.value.length} tags.`);
     } else if (fs.existsSync(tagExclusionsMetaPath)) {
       const parsed = JSON.parse(fs.readFileSync(tagExclusionsMetaPath, "utf8") || "[]");
       if (parsed.length) writeTagExclusionFiles(parsed);
     }
   } catch (e) {
-    console.error("[Agôn] Erreur chargement tag_exclusions:", e.message);
+    console.error("[Mnoria] Erreur chargement tag_exclusions:", e.message);
   }
   // Chargement shared_debate_links depuis Supabase → cache mémoire
   try {
     const { data, error } = await supabase.from("app_config").select("value").eq("key", "shared_debate_links").maybeSingle();
     if (!error && data?.value && typeof data.value === "object") {
       _sharedLinksCache = data.value;
-      console.log(`[Agôn] Shared debate links chargés depuis Supabase : ${Object.keys(data.value).length} liens.`);
+      console.log(`[Mnoria] Shared debate links chargés depuis Supabase : ${Object.keys(data.value).length} liens.`);
     } else {
       const local = _readJsonFile(sharedDebateLinksMetaPath, {});
       if (Object.keys(local).length) {
@@ -18758,13 +19485,13 @@ app.listen(PORT, "0.0.0.0", async () => {
         supabase.from("app_config")
           .upsert({ key: "shared_debate_links", value: local, updated_at: new Date().toISOString() })
           .then(() => {}).catch(() => {});
-        console.log(`[Agôn] Shared debate links migrés vers Supabase : ${Object.keys(local).length} liens.`);
+        console.log(`[Mnoria] Shared debate links migrés vers Supabase : ${Object.keys(local).length} liens.`);
       } else {
         _sharedLinksCache = {};
       }
     }
   } catch (e) {
-    console.error("[Agôn] Erreur chargement shared_debate_links:", e.message);
+    console.error("[Mnoria] Erreur chargement shared_debate_links:", e.message);
     _sharedLinksCache = _getSharedLinksMap();
   }
 
@@ -18778,11 +19505,11 @@ app.listen(PORT, "0.0.0.0", async () => {
         const cacheKey = getDebatesApiCacheKey({ limit: prewarmLimit, offset: 0, sort });
         if (!getCachedDebatesApiResponse(cacheKey)) {
           const res = await fetch(`http://localhost:${PORT}/api/debates?sort=${sort}&limit=${prewarmLimit}&offset=0`);
-          if (res.ok) console.log(`[Agôn] Cache /api/debates?sort=${sort} préchauffé.`);
+          if (res.ok) console.log(`[Mnoria] Cache /api/debates?sort=${sort} préchauffé.`);
         }
       }
     } catch (e) {
-      console.error("[Agôn] Erreur pré-chauffe cache debates:", e);
+      console.error("[Mnoria] Erreur pré-chauffe cache debates:", e);
     }
   }, 2000);
 });

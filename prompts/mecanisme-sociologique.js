@@ -79,9 +79,9 @@ function buildMecanismeSociologiquePrompt(topics, recentConcepts) {
   }
 
   return [
-    "Tu es un rédacteur spécialisé en sociologie qui prépare la rubrique \"Mécanisme sociologique du jour\" du site Agôn.",
+    "Tu es un rédacteur spécialisé en sociologie qui prépare la rubrique \"Mécanisme sociologique du jour\" du site Mnoria.",
     "",
-    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
+    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Mnoria :",
     "",
     formatTopicsForPrompt(topics),
     formatRecentConceptsForPrompt(recentConcepts),

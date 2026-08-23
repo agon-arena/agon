@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Importer une photo | mnoria</title>
+<link rel="icon" type="image/png" href="/mnoria-icon-64.png">
+<link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
+<style>
+  /* Page volontairement autonome (pas de dépendance à public/script.js) :
+     flux court, isolé, pas encore relié au reste de l'interface mémoire. */
+  body.page-photo-knowledge {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+    color: #1c2733;
+  }
+  .pk-title { font-size: 1.4rem; font-weight: 700; margin: 0 0 4px; }
+  .pk-subtitle { color: #5a6b78; margin: 0 0 24px; font-size: 0.95rem; }
+  .pk-card {
+    border: 1px solid #dfe6ea;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    background: #fff;
+  }
+  .pk-dropzone {
+    border: 2px dashed #b7c4cc;
+    border-radius: 10px;
+    padding: 28px 16px;
+    text-align: center;
+  }
+  .pk-btn {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    background: #243038;
+    color: #fff;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .pk-btn.secondary { background: #eef2f4; color: #243038; }
+  .pk-btn:disabled { opacity: 0.5; cursor: default; }
+  .pk-preview { max-width: 100%; max-height: 280px; border-radius: 8px; margin: 12px 0; display: none; }
+  .pk-state { display: none; }
+  .pk-state.active { display: block; }
+  .pk-error { color: #b3261e; background: #fdecea; border-radius: 8px; padding: 12px 14px; font-size: 0.9rem; }
+  .pk-info { color: #3a4a55; background: #eef4f6; border-radius: 8px; padding: 12px 14px; font-size: 0.9rem; }
+  .pk-knowledge-list { list-style: none; margin: 0; padding: 0; }
+  body.is-pdf-mode .pk-knowledge-list { max-height: 56vh; overflow-y: auto; padding-right: 6px; }
+  .pk-count { color: #5a6b78; font-size: 0.86rem; margin: -4px 0 8px; }
+  .pk-file-name { color: #5a6b78; font-size: 0.9rem; margin: 12px 0 0; overflow-wrap: anywhere; }
+  .pk-text-compose { display: grid; gap: 14px; }
+  .pk-text-compose label { font-size: 0.9rem; font-weight: 600; }
+  .pk-source-text-input {
+    display: block; width: 100%; box-sizing: border-box; margin-top: 6px;
+    padding: 10px 12px; border: 1px solid #d8e0e5; border-radius: 8px;
+    background: #fbfcfd; color: #1c2733; font: inherit;
+  }
+  textarea.pk-source-text-input { min-height: 300px; resize: vertical; line-height: 1.45; }
+  .pk-char-count { margin: -8px 0 0; color: #7a8a96; font-size: 0.82rem; text-align: right; }
+  .pk-url-compose { display: grid; gap: 12px; }
+  .pk-knowledge-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 10px;
+    align-items: start;
+    padding: 12px 0;
+    border-bottom: 1px solid #eef2f4;
+  }
+  .pk-knowledge-item:last-child { border-bottom: none; }
+  .pk-knowledge-text {
+    width: 100%;
+    min-height: 68px;
+    box-sizing: border-box;
+    resize: vertical;
+    border: 1px solid #d8e0e5;
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: #fbfcfd;
+    color: #1c2733;
+    font: inherit;
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+  .pk-knowledge-text:focus { outline: none; border-color: #647984; background: #fff; }
+  .pk-delete-btn {
+    border: 0;
+    background: transparent;
+    color: #7a8a96;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+  }
+  .pk-delete-btn:hover { color: #b3261e; }
+  .pk-evidence { grid-column: 1; font-size: 0.8rem; color: #7a8a96; margin-top: -3px; font-style: italic; }
+  .pk-source-title { font-weight: 600; margin-bottom: 12px; }
+  .pk-manual-title-wrap { display: block; margin-bottom: 18px; font-size: 0.9rem; font-weight: 600; }
+  .pk-manual-title-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 6px;
+    padding: 10px 12px;
+    border: 1px solid #d8e0e5;
+    border-radius: 8px;
+    background: #fbfcfd;
+    color: #1c2733;
+    font: inherit;
+  }
+  .pk-manual-title-input:focus { outline: none; border-color: #647984; background: #fff; }
+  .pk-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .pk-spinner {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 3px solid #dfe6ea; border-top-color: #243038;
+    animation: pk-spin 0.8s linear infinite; margin: 0 auto 10px;
+  }
+  @keyframes pk-spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="page-photo-knowledge">
+
+  <h1 class="pk-title" id="pk-page-title">Importer une connaissance depuis une photo</h1>
+  <p class="pk-subtitle" id="pk-page-subtitle">Prends ou choisis une photo d'un cours, d'un manuel ou d'un cahier. Les connaissances proposées ne seront jamais mémorisées sans ta validation.</p>
+
+  <!-- État 1 : import -->
+  <div id="pk-state-pick" class="pk-card pk-state active">
+    <div class="pk-dropzone">
+      <p id="pk-picker-help">Choisis une image (JPEG, PNG ou WEBP, 10 Mo maximum).</p>
+      <input type="file" id="pk-file-input" accept="image/jpeg,image/png,image/webp" capture="environment" style="margin-top:10px;">
+    </div>
+    <div id="pk-text-compose" class="pk-text-compose" hidden>
+      <label>Titre / thème <span style="font-weight:400; color:#7a8a96;">(facultatif)</span>
+        <input id="pk-text-title-input" class="pk-source-text-input" type="text" maxlength="160" placeholder="Ex. La photosynthèse">
+      </label>
+      <label>Zone de texte
+        <textarea id="pk-source-text-input" class="pk-source-text-input" placeholder="Colle ici ton cours, article, extrait ou tes notes…"></textarea>
+      </label>
+      <p id="pk-char-count" class="pk-char-count">0 / 50 000 caractères</p>
+    </div>
+    <div id="pk-url-compose" class="pk-url-compose" hidden>
+      <label id="pk-url-label" for="pk-url-input" style="font-size:0.9rem; font-weight:600;">URL de la page</label>
+      <input id="pk-url-input" class="pk-source-text-input" type="url" inputmode="url" maxlength="2048" placeholder="https://exemple.com/article" autocomplete="url">
+      <p id="pk-url-help" style="margin:0; color:#7a8a96; font-size:0.82rem;">Pages HTML publiques uniquement. Les PDF utilisent l’import PDF.</p>
+    </div>
+    <p id="pk-file-name" class="pk-file-name" hidden></p>
+    <img id="pk-preview" class="pk-preview" alt="Aperçu de la photo importée">
+    <div class="pk-actions">
+      <button id="pk-analyze-btn" class="pk-btn" disabled>Analyser la photo</button>
+    </div>
+  </div>
+
+  <!-- État 2 : chargement -->
+  <div id="pk-state-loading" class="pk-card pk-state">
+    <div class="pk-spinner"></div>
+    <p id="pk-loading-text" style="text-align:center;">Analyse de la photo en cours…</p>
+  </div>
+
+  <!-- État 3 : erreur -->
+  <div id="pk-state-error" class="pk-card pk-state">
+    <p class="pk-error" id="pk-error-message"></p>
+    <div class="pk-actions">
+      <button class="pk-btn" id="pk-retry-btn">Réessayer</button>
+    </div>
+  </div>
+
+  <!-- État 4 : retake (readability !== "ok") -->
+  <div id="pk-state-retake" class="pk-card pk-state">
+    <p class="pk-info" id="pk-retake-message">Le document n'est pas suffisamment lisible. Reprends la photo.</p>
+    <div class="pk-actions">
+      <button class="pk-btn" id="pk-retake-btn">Reprendre une photo</button>
+      <button class="pk-btn secondary" id="pk-choose-other-btn">Choisir une autre image</button>
+    </div>
+  </div>
+
+  <!-- État 5 : aucune connaissance retenue (readability ok, knowledge: []) -->
+  <div id="pk-state-empty" class="pk-card pk-state">
+    <p class="pk-info">Aucune connaissance vraiment pertinente à mémoriser n'a été détectée dans ce document.</p>
+    <div class="pk-actions">
+      <button class="pk-btn secondary" id="pk-empty-choose-other-btn">Choisir une autre image</button>
+    </div>
+  </div>
+
+  <!-- État 6 : connaissances proposées -->
+  <div id="pk-state-results" class="pk-card pk-state">
+    <div id="pk-source-title" class="pk-source-title" style="display:none;"></div>
+    <label id="pk-manual-title-wrap" class="pk-manual-title-wrap" hidden>
+      Titre / thème <span style="font-weight:400; color:#7a8a96;">(facultatif)</span>
+      <input id="pk-manual-title-input" class="pk-manual-title-input" type="text" maxlength="160" placeholder="Ex. Révolution française">
+    </label>
+    <p id="pk-editor-instruction">Sélectionne les connaissances que tu veux mémoriser.</p>
+    <p id="pk-count" class="pk-count" hidden></p>
+    <ul id="pk-knowledge-list" class="pk-knowledge-list"></ul>
+    <div class="pk-actions">
+      <button class="pk-btn secondary" id="pk-add-row-btn" type="button">+ Ajouter une connaissance</button>
+      <button class="pk-btn" id="pk-add-btn">Ajouter à ma mémoire</button>
+      <button class="pk-btn secondary" id="pk-results-choose-other-btn">Choisir une autre image</button>
+    </div>
+    <p id="pk-add-status" class="pk-info" role="status" style="display:none; margin-top:12px;"></p>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var MAX_BYTES = 10 * 1024 * 1024;
+  var ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  var isManualMode = window.location.pathname === "/manual-knowledge";
+  var isPdfMode = window.location.pathname === "/pdf-knowledge";
+  var isTextMode = window.location.pathname === "/text-knowledge";
+  var isUrlMode = window.location.pathname === "/url-knowledge";
+  var isYoutubeMode = window.location.pathname === "/youtube-knowledge";
+  if (isPdfMode) {
+    MAX_BYTES = 20 * 1024 * 1024;
+    ACCEPTED_TYPES = ["application/pdf"];
+    document.body.classList.add("is-pdf-mode");
+  }
+
+  var states = ["pick", "loading", "error", "retake", "empty", "results"];
+  function showState(name) {
+    states.forEach(function (s) {
+      document.getElementById("pk-state-" + s).classList.toggle("active", s === name);
+    });
+  }
+
+  var fileInput = document.getElementById("pk-file-input");
+  var preview = document.getElementById("pk-preview");
+  var analyzeBtn = document.getElementById("pk-analyze-btn");
+  var errorMessage = document.getElementById("pk-error-message");
+
+  var currentDataUrl = null;
+  var currentText = "";
+  var currentType = null;
+  var currentSourceTitle = null;
+  var currentAnalysisToken = null;
+  var currentMaxKnowledge = 20;
+  var nextKnowledgeRowId = 0;
+
+  function resetPicker() {
+    currentDataUrl = null;
+    currentText = "";
+    currentType = null;
+    currentSourceTitle = null;
+    currentAnalysisToken = null;
+    currentMaxKnowledge = 20;
+    nextKnowledgeRowId = 0;
+    fileInput.value = "";
+    document.getElementById("pk-source-text-input").value = "";
+    document.getElementById("pk-text-title-input").value = "";
+    document.getElementById("pk-url-input").value = "";
+    document.getElementById("pk-char-count").textContent = "0 / 50 000 caractères";
+    preview.style.display = "none";
+    document.getElementById("pk-file-name").hidden = true;
+    analyzeBtn.disabled = true;
+    showState("pick");
+  }
+
+  function showError(message) {
+    errorMessage.textContent = message;
+    showState("error");
+  }
+
+  fileInput.addEventListener("change", function () {
+    var file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+
+    if (ACCEPTED_TYPES.indexOf(file.type) === -1) {
+      showError(isPdfMode ? "Format non accepté. Choisis un fichier PDF." : "Format non accepté. Choisis une image JPEG, PNG ou WEBP.");
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      showError(isPdfMode ? "Fichier trop lourd (20 Mo maximum)." : "Fichier trop lourd (10 Mo maximum).");
+      return;
+    }
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      currentDataUrl = reader.result;
+      currentType = file.type;
+      document.getElementById("pk-file-name").textContent = file.name;
+      document.getElementById("pk-file-name").hidden = false;
+      if (!isPdfMode) {
+        preview.src = currentDataUrl;
+        preview.style.display = "block";
+      }
+      analyzeBtn.disabled = false;
+    };
+    reader.onerror = function () {
+      showError("Impossible de lire ce fichier.");
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function renderResults(result) {
+    currentSourceTitle = result.sourceTitle || null;
+    currentAnalysisToken = result.analysisToken || null;
+    currentMaxKnowledge = Number(result.maxKnowledge || 20);
+    var titleEl = document.getElementById("pk-source-title");
+    if (result.sourceTitle) {
+      titleEl.textContent = result.sourceTitle;
+      titleEl.style.display = "block";
+    } else {
+      titleEl.style.display = "none";
+    }
+
+    var list = document.getElementById("pk-knowledge-list");
+    list.innerHTML = "";
+    nextKnowledgeRowId = 0;
+    result.knowledge.forEach(function (item) { appendKnowledgeRow(item); });
+    if (isPdfMode) {
+      document.getElementById("pk-editor-instruction").textContent = result.pageCount + " pages analysées en " + result.blockCount + " bloc" + (result.blockCount > 1 ? "s" : "") + ". Modifie ou supprime les propositions avant validation.";
+    } else if (isYoutubeMode) {
+      var durationMinutes = result.durationSeconds ? Math.max(1, Math.ceil(result.durationSeconds / 60)) : null;
+      document.getElementById("pk-editor-instruction").textContent = (result.author ? result.author + " · " : "") + (durationMinutes ? durationMinutes + " min · " : "") + result.blockCount + " bloc" + (result.blockCount > 1 ? "s" : "") + " analysé" + (result.blockCount > 1 ? "s" : "") + ". Modifie ou supprime les propositions avant validation.";
+    }
+
+    var addStatus = document.getElementById("pk-add-status");
+    addStatus.style.display = "none";
+    addStatus.textContent = "";
+    document.getElementById("pk-add-btn").disabled = false;
+    showState("results");
+  }
+
+  function updateEditorActions() {
+    var count = document.querySelectorAll("#pk-knowledge-list .pk-knowledge-item").length;
+    document.getElementById("pk-add-btn").disabled = count === 0;
+    var countEl = document.getElementById("pk-count");
+    countEl.hidden = !(isPdfMode || isTextMode || isUrlMode || isYoutubeMode);
+    if (isPdfMode || isTextMode || isUrlMode || isYoutubeMode) countEl.textContent = count + " connaissance" + (count > 1 ? "s" : "") + " proposée" + (count > 1 ? "s" : "") + " — maximum " + currentMaxKnowledge;
+  }
+
+  function appendKnowledgeRow(item) {
+    var list = document.getElementById("pk-knowledge-list");
+    var rowId = "pk-knowledge-text-" + nextKnowledgeRowId++;
+    var li = document.createElement("li");
+    li.className = "pk-knowledge-item";
+
+    var textEl = document.createElement("textarea");
+    textEl.className = "pk-knowledge-text";
+    textEl.id = rowId;
+    textEl.maxLength = 500;
+    textEl.rows = 2;
+    textEl.setAttribute("aria-label", "Texte de la connaissance");
+    textEl.value = item && item.knowledge ? String(item.knowledge) : "";
+
+    var deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "pk-delete-btn";
+    deleteBtn.setAttribute("aria-label", "Supprimer cette connaissance");
+    deleteBtn.textContent = "Supprimer";
+    deleteBtn.addEventListener("click", function () {
+      li.remove();
+      updateEditorActions();
+    });
+
+    li.appendChild(textEl);
+    li.appendChild(deleteBtn);
+    if (item && item.evidence) {
+      var evidenceEl = document.createElement("div");
+      evidenceEl.className = "pk-evidence";
+      evidenceEl.textContent = "« " + item.evidence + " »";
+      li.appendChild(evidenceEl);
+    }
+    list.appendChild(li);
+    updateEditorActions();
+    return textEl;
+  }
+
+  analyzeBtn.addEventListener("click", function () {
+    if (isTextMode) {
+      currentText = document.getElementById("pk-source-text-input").value.trim();
+      currentSourceTitle = document.getElementById("pk-text-title-input").value.trim();
+      if (currentText.length < 3) {
+        showError("Colle un texte d'au moins 3 caractères avant de lancer l'analyse.");
+        return;
+      }
+      if (currentText.length > 50000) {
+        showError("Le texte dépasse 50 000 caractères. Réduis-le ou découpe-le en plusieurs imports.");
+        return;
+      }
+    } else if (isUrlMode || isYoutubeMode) {
+      currentText = document.getElementById("pk-url-input").value.trim();
+      if (!currentText) {
+        showError(isYoutubeMode ? "Colle une URL YouTube avant de lancer l'analyse." : "Colle une URL avant de lancer l'analyse.");
+        return;
+      }
+    } else if (!currentDataUrl) return;
+    showState("loading");
+
+    fetch(isYoutubeMode ? "/api/youtube-knowledge/analyze" : (isUrlMode ? "/api/url-knowledge/analyze" : (isTextMode ? "/api/text-knowledge/analyze" : (isPdfMode ? "/api/pdf-knowledge/analyze" : "/api/photo-knowledge/analyze"))), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify((isUrlMode || isYoutubeMode)
+        ? { url: currentText }
+        : (isTextMode
+        ? { text: currentText, sourceTitle: currentSourceTitle }
+        : { dataUrl: currentDataUrl, type: currentType }))
+    })
+      .then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok) throw new Error(body && body.error ? body.error : "Erreur d'analyse.");
+          return body;
+        });
+      })
+      .then(function (result) {
+        if (isPdfMode && result.status === "scan_not_supported") {
+          document.getElementById("pk-retake-message").textContent = "Ce PDF ne contient pas de texte exploitable. Les PDF scannés ne sont pas encore pris en charge.";
+          showState("retake");
+          return;
+        }
+        if (!isPdfMode && !isTextMode && !isUrlMode && !isYoutubeMode && result.readability !== "ok") {
+          showState("retake");
+          return;
+        }
+        if (!Array.isArray(result.knowledge) || result.knowledge.length === 0) {
+          showState("empty");
+          return;
+        }
+        renderResults(result);
+      })
+      .catch(function (error) {
+        showError(error.message || "Erreur réseau. Réessaie dans quelques instants.");
+      });
+  });
+
+  document.getElementById("pk-retry-btn").addEventListener("click", resetPicker);
+  document.getElementById("pk-retake-btn").addEventListener("click", resetPicker);
+  document.getElementById("pk-choose-other-btn").addEventListener("click", resetPicker);
+  document.getElementById("pk-empty-choose-other-btn").addEventListener("click", resetPicker);
+  document.getElementById("pk-results-choose-other-btn").addEventListener("click", resetPicker);
+
+  function getLegacyKey() {
+    var key = null;
+    try { key = localStorage.getItem("key"); } catch (error) {}
+    if (!key) {
+      key = Math.random().toString(36);
+      try { localStorage.setItem("key", key); } catch (error) {}
+    }
+    return key;
+  }
+
+  document.getElementById("pk-add-row-btn").addEventListener("click", function () {
+    var count = document.querySelectorAll("#pk-knowledge-list .pk-knowledge-item").length;
+    var addStatus = document.getElementById("pk-add-status");
+    if (count >= currentMaxKnowledge) {
+      addStatus.textContent = "Tu peux ajouter " + currentMaxKnowledge + " connaissances maximum pour cet import.";
+      addStatus.style.display = "block";
+      return;
+    }
+    addStatus.style.display = "none";
+    var input = appendKnowledgeRow({ knowledge: "", evidence: null });
+    input.focus();
+  });
+
+  document.getElementById("pk-add-btn").addEventListener("click", function () {
+    var addBtn = document.getElementById("pk-add-btn");
+    var addStatus = document.getElementById("pk-add-status");
+    var selected = [];
+    var seen = Object.create(null);
+    document.querySelectorAll("#pk-knowledge-list .pk-knowledge-item").forEach(function (row) {
+      var input = row.querySelector(".pk-knowledge-text");
+      var value = String(input ? input.value : "").trim().replace(/\s+/g, " ");
+      if (!value) {
+        row.remove();
+        return;
+      }
+      // Même esprit que la normalisation serveur : deux lignes qui ne
+      // diffèrent que par casse ou espaces ne partent jamais deux fois.
+      var duplicateKey = value.toLocaleLowerCase("fr-FR");
+      if (seen[duplicateKey]) {
+        row.remove();
+        return;
+      }
+      seen[duplicateKey] = true;
+      selected.push(value);
+    });
+    updateEditorActions();
+
+    addStatus.style.display = "block";
+    if (!selected.length) {
+      addStatus.textContent = "Ajoute au moins une connaissance avant de valider.";
+      return;
+    }
+    if (selected.length > currentMaxKnowledge) {
+      addStatus.textContent = "Tu peux ajouter " + currentMaxKnowledge + " connaissances maximum pour cet import.";
+      return;
+    }
+
+    if (isManualMode) {
+      currentSourceTitle = String(document.getElementById("pk-manual-title-input").value || "").trim();
+    }
+
+    addBtn.disabled = true;
+    addBtn.textContent = "Ajout en cours…";
+    addStatus.textContent = "Création des questions et ajout à ta mémoire…";
+
+    fetch(isManualMode ? "/api/manual-knowledge/add" : (isPdfMode ? "/api/pdf-knowledge/add" : (isTextMode ? "/api/text-knowledge/add" : (isUrlMode ? "/api/url-knowledge/add" : (isYoutubeMode ? "/api/youtube-knowledge/add" : "/api/photo-knowledge/add")))), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        legacyKey: getLegacyKey(),
+        sourceTitle: currentSourceTitle,
+        knowledge: selected,
+        analysisToken: (isPdfMode || isUrlMode || isYoutubeMode) ? currentAnalysisToken : undefined
+      })
+    })
+      .then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok) throw new Error(body && body.error ? body.error : "Erreur d'ajout.");
+          return body;
+        });
+      })
+      .then(function (result) {
+        var added = Number(result.addedCount || 0);
+        var existing = Number(result.existingCount || 0);
+        var failed = Number(result.errorCount || 0);
+        var parts = [added + " connaissance" + (added > 1 ? "s" : "") + " ajoutée" + (added > 1 ? "s" : "") + " à ta mémoire."];
+        if (existing) parts.push(existing + " déjà présente" + (existing > 1 ? "s" : "") + ", sans doublon créé.");
+        if (failed) parts.push(failed + " n'a" + (failed > 1 ? "ont" : "") + " pas pu être ajoutée" + (failed > 1 ? "s" : "") + ".");
+        addStatus.textContent = parts.join(" ");
+        if (!failed) {
+          document.querySelectorAll("#pk-knowledge-list textarea, #pk-knowledge-list button").forEach(function (control) {
+            control.disabled = true;
+          });
+          if (isManualMode) document.getElementById("pk-manual-title-input").disabled = true;
+          document.getElementById("pk-add-row-btn").disabled = true;
+        } else {
+          addBtn.disabled = false;
+        }
+      })
+      .catch(function (error) {
+        addStatus.textContent = error.message || "Erreur réseau. Réessaie dans quelques instants.";
+        addBtn.disabled = false;
+      })
+      .finally(function () {
+        addBtn.textContent = "Ajouter à ma mémoire";
+      });
+  });
+
+  if (isManualMode) {
+    document.title = "Ajouter manuellement | mnoria";
+    document.getElementById("pk-page-title").textContent = "Ajouter manuellement";
+    document.getElementById("pk-page-subtitle").textContent = "Écris directement les connaissances que tu veux mémoriser. Mnoria créera ensuite les questions et les rappels.";
+    document.getElementById("pk-manual-title-wrap").hidden = false;
+    document.getElementById("pk-editor-instruction").textContent = "Connaissances à mémoriser";
+    document.getElementById("pk-results-choose-other-btn").hidden = true;
+    currentSourceTitle = null;
+    document.getElementById("pk-knowledge-list").innerHTML = "";
+    nextKnowledgeRowId = 0;
+    appendKnowledgeRow({ knowledge: "", evidence: null }).focus();
+    document.getElementById("pk-add-status").style.display = "none";
+    showState("results");
+  } else if (isPdfMode) {
+    document.title = "Importer un PDF | mnoria";
+    document.getElementById("pk-page-title").textContent = "Importer des connaissances depuis un PDF";
+    document.getElementById("pk-page-subtitle").textContent = "Choisis un PDF contenant du texte. Les connaissances proposées ne seront mémorisées qu'après ta validation.";
+    document.getElementById("pk-picker-help").textContent = "Choisis un PDF texte (20 Mo et 100 pages maximum).";
+    fileInput.accept = "application/pdf";
+    fileInput.removeAttribute("capture");
+    analyzeBtn.textContent = "Analyser le PDF";
+    document.getElementById("pk-loading-text").textContent = "Extraction des pages et analyse des blocs en cours…";
+    document.getElementById("pk-retake-btn").textContent = "Choisir un autre PDF";
+    document.getElementById("pk-choose-other-btn").hidden = true;
+    document.getElementById("pk-empty-choose-other-btn").textContent = "Choisir un autre PDF";
+    document.getElementById("pk-results-choose-other-btn").textContent = "Choisir un autre PDF";
+  } else if (isTextMode) {
+    document.title = "Coller du texte | mnoria";
+    document.getElementById("pk-page-title").textContent = "Coller du texte";
+    document.getElementById("pk-page-subtitle").textContent = "Colle un cours, un article, un extrait ou des notes. Rien ne sera mémorisé avant ta validation.";
+    document.querySelector(".pk-dropzone").hidden = true;
+    document.getElementById("pk-text-compose").hidden = false;
+    document.getElementById("pk-file-name").hidden = true;
+    preview.hidden = true;
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Analyser le texte";
+    document.getElementById("pk-loading-text").textContent = "Sélection des connaissances en cours…";
+    document.getElementById("pk-empty-choose-other-btn").textContent = "Modifier le texte";
+    document.getElementById("pk-results-choose-other-btn").textContent = "Coller un autre texte";
+    var sourceTextInput = document.getElementById("pk-source-text-input");
+    sourceTextInput.addEventListener("input", function () {
+      var count = sourceTextInput.value.length;
+      document.getElementById("pk-char-count").textContent = count.toLocaleString("fr-FR") + " / 50 000 caractères";
+      analyzeBtn.disabled = sourceTextInput.value.trim().length < 3 || count > 50000;
+    });
+  } else if (isUrlMode) {
+    document.title = "Importer un lien | mnoria";
+    document.getElementById("pk-page-title").textContent = "Importer depuis un lien";
+    document.getElementById("pk-page-subtitle").textContent = "Colle l’URL d’un article ou d’une page pédagogique publique. Rien ne sera mémorisé avant ta validation.";
+    document.querySelector(".pk-dropzone").hidden = true;
+    document.getElementById("pk-url-compose").hidden = false;
+    document.getElementById("pk-file-name").hidden = true;
+    preview.hidden = true;
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Analyser le lien";
+    document.getElementById("pk-loading-text").textContent = "Récupération de la page et sélection des connaissances…";
+    document.getElementById("pk-empty-choose-other-btn").textContent = "Essayer un autre lien";
+    document.getElementById("pk-results-choose-other-btn").textContent = "Importer un autre lien";
+    var urlInput = document.getElementById("pk-url-input");
+    urlInput.addEventListener("input", function () {
+      analyzeBtn.disabled = !urlInput.value.trim();
+    });
+  } else if (isYoutubeMode) {
+    document.title = "Importer YouTube | mnoria";
+    document.getElementById("pk-page-title").textContent = "Importer une vidéo YouTube";
+    document.getElementById("pk-page-subtitle").textContent = "Colle l’URL d’une vidéo YouTube publique avec sous-titres. Rien ne sera mémorisé avant ta validation.";
+    document.querySelector(".pk-dropzone").hidden = true;
+    document.getElementById("pk-url-compose").hidden = false;
+    document.getElementById("pk-url-label").textContent = "URL de la vidéo YouTube";
+    document.getElementById("pk-url-input").placeholder = "https://www.youtube.com/watch?v=…";
+    document.getElementById("pk-url-help").textContent = "Une vidéo publique avec sous-titres, 2 heures maximum. Aucun audio n’est téléchargé.";
+    document.getElementById("pk-file-name").hidden = true;
+    preview.hidden = true;
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = "Analyser la vidéo";
+    document.getElementById("pk-loading-text").textContent = "Récupération des sous-titres et sélection des connaissances…";
+    document.getElementById("pk-empty-choose-other-btn").textContent = "Essayer une autre vidéo";
+    document.getElementById("pk-results-choose-other-btn").textContent = "Importer une autre vidéo";
+    var youtubeInput = document.getElementById("pk-url-input");
+    youtubeInput.addEventListener("input", function () {
+      analyzeBtn.disabled = !youtubeInput.value.trim();
+    });
+  }
+})();
+</script>
+</body>
+</html>

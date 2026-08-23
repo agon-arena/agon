@@ -139,9 +139,9 @@ function buildConceptDuJourPrompt(topics, recentConcepts) {
   }
 
   return [
-    "Tu es un rédacteur généraliste, rigoureux et cultivé, qui prépare la rubrique \"Concept du jour\" du site Agôn : elle éclaire un événement d'actualité par un concept transversal solide, tiré de la psychologie, de la sociologie, de la rhétorique/argumentation, de l'économie, de la science politique, de la philosophie ou des sciences.",
+    "Tu es un rédacteur généraliste, rigoureux et cultivé, qui prépare la rubrique \"Concept du jour\" du site Mnoria : elle éclaire un événement d'actualité par un concept transversal solide, tiré de la psychologie, de la sociologie, de la rhétorique/argumentation, de l'économie, de la science politique, de la philosophie ou des sciences.",
     "",
-    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
+    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Mnoria :",
     "",
     formatTopicsForPrompt(topics),
     formatRecentConceptsForPrompt(recentConcepts),

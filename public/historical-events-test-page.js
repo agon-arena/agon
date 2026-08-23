@@ -76,7 +76,7 @@
   // Même état local partagé que public/script.js, recopié ici parce que cette page historique
   // isolée ne charge volontairement pas script.min.js. /apprentissage peut ainsi afficher le
   // nom et le sablier même si ce document est remplacé pendant le fetch.
-  var PENDING_NOTION_QUIZZES_KEY = "agon_pending_notion_quizzes_v1";
+  var PENDING_NOTION_QUIZZES_KEY = "mnoria_pending_notion_quizzes_v1";
   function readPendingNotionQuizGenerations() {
     try {
       var parsed = JSON.parse(localStorage.getItem(PENDING_NOTION_QUIZZES_KEY) || "[]");
@@ -121,7 +121,7 @@
     if (window.self !== window.top) {
       try {
         window.parent.postMessage({
-          type: "agon:open-page-in-parent-modal",
+          type: "mnoria:open-page-in-parent-modal",
           url: url,
           returnUrl: location.pathname + location.search + location.hash
         }, "*");
@@ -633,7 +633,7 @@
     function collapse() {
       toggle.setAttribute("aria-expanded", "false");
       content.hidden = true;
-      scrollToggleIntoView();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     toggle.addEventListener("click", function () {

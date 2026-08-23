@@ -12,12 +12,12 @@
 <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-<style id="agon-idle-home-guard-style">html.agon-idle-home-redirecting body{visibility:hidden!important;}</style>
-<script id="agon-idle-home-guard">
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+<style id="mnoria-idle-home-guard-style">html.mnoria-idle-home-redirecting body{visibility:hidden!important;}</style>
+<script id="mnoria-idle-home-guard">
 (function(){
   var THRESHOLD = 3 * 60 * 1000;
-  var KEY = "agon_idle_hidden_at";
+  var KEY = "mnoria_idle_hidden_at";
   var timer = null;
   var isStandalone = false;
   try {
@@ -25,7 +25,7 @@
   } catch (e) {}
   if (!isStandalone) return;
   // Cette page peut être chargée dans l'iframe-modal de l'accueil. Dans ce cas,
-  // "agon_idle_hidden_at" est une clé sessionStorage partagée avec l'accueil/
+  // "mnoria_idle_hidden_at" est une clé sessionStorage partagée avec l'accueil/
   // d'autres pages déjà visitées : un ancien horodatage obsolète y déclencherait
   // une redirection immédiate vers "/" qui casse le chargement. Le garde n'a de
   // sens que pour la page top-level.
@@ -36,7 +36,7 @@
   }
 
   function hideForRedirect() {
-    document.documentElement.classList.add("agon-idle-home-redirecting");
+    document.documentElement.classList.add("mnoria-idle-home-redirecting");
   }
 
   function goHomeIfStale() {
@@ -45,7 +45,7 @@
     sessionStorage.removeItem(KEY);
     if (!isHomePath()) {
       hideForRedirect();
-      try { sessionStorage.setItem("agon_last_reload_reason", JSON.stringify({ reason: "idle-home-guard (notifications)", at: Date.now() })); } catch(e) {}
+      try { sessionStorage.setItem("mnoria_last_reload_reason", JSON.stringify({ reason: "idle-home-guard (notifications)", at: Date.now() })); } catch(e) {}
       location.replace("/");
       return true;
     }
@@ -72,11 +72,11 @@
     clearIdleTimer();
     if (!goHomeIfStale()) {
       sessionStorage.removeItem(KEY);
-      document.documentElement.classList.remove("agon-idle-home-redirecting");
+      document.documentElement.classList.remove("mnoria-idle-home-redirecting");
     }
   }
 
-  window.__agonIdleHomeGuard = { check: goHomeIfStale, markHidden: markHidden, markVisible: markVisible };
+  window.__mnoriaIdleHomeGuard = { check: goHomeIfStale, markHidden: markHidden, markVisible: markVisible };
   window.addEventListener("pageshow", markVisible, true);
   document.addEventListener("visibilitychange", function(){
     if (document.hidden) markHidden();
@@ -85,7 +85,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1" />
+<link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -211,7 +211,7 @@
     }
 
   </style>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-notifications page-notifications-mobile">
 <script>
@@ -323,7 +323,7 @@
         <div>
           <p style="margin:0 0 6px; font-weight:700; color:#e8e8e8; font-size:15px;">Les notifications sont bloquées</p>
           <p style="margin:0 0 10px; color:#a0b0bb; font-size:13px; line-height:1.5;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Pour les réactiver, clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur, puis autorise les notifications pour ce site.</p>
-          <p style="margin:0; color:#7a8a94; font-size:12px;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+          <p style="margin:0; color:#7a8a94; font-size:12px;">Sur iPhone : Réglages → Safari → mnoria → Notifications → Autoriser</p>
         </div>
       </div>
     </div>
@@ -383,17 +383,17 @@
 (function() {
   if (window.self === window.top) return;
   function notifyNotificationsIframeReady() {
-    window.__agonPageArrivalReady = true;
+    window.__mnoriaPageArrivalReady = true;
     try {
       window.parent.postMessage({
-        type: "agon:debate-iframe-ready",
+        type: "mnoria:debate-iframe-ready",
         pathname: String(location.pathname || "/notifications"),
         href: String(location.href || "")
       }, "*");
     } catch (error) {}
     try {
       window.parent.postMessage({
-        type: "agon:iframe-page-context",
+        type: "mnoria:iframe-page-context",
         page: "notifications",
         pathname: String(location.pathname || "/notifications"),
         href: String(location.href || "")
@@ -450,7 +450,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-	<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+	<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
   <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom" defer></script>
 <script>
 (function() {
@@ -464,7 +464,7 @@ document.addEventListener('keydown', function(e) {
   function notifyParentIframePageContext() {
     if (window.self === window.top) return;
     try {
-      window.parent.postMessage({ type: "agon:iframe-page-context", page: "notifications" }, "*");
+      window.parent.postMessage({ type: "mnoria:iframe-page-context", page: "notifications" }, "*");
     } catch (error) {}
   }
 
@@ -482,7 +482,7 @@ document.addEventListener('keydown', function(e) {
     <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
       <img src="/mnoria-icon-64.png" alt="mnoria" style="height:32px; width:auto; display:block; flex-shrink:0;">
       <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers agôn</button>
+      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers mnoria</button>
     </div>
     <iframe id="ext-link-iframe" src="" style="flex:1; border:none; width:100%; background:#fff;"></iframe>
   </div>

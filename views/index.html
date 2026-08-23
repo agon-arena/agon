@@ -10,7 +10,7 @@
     // 200 ms et laisse brièvement voir le fond puis le cadre des bulles.
     try {
       if (new URLSearchParams(window.location.search).has('_swrefresh')) {
-        document.documentElement.classList.add('agon-user-refresh-startup');
+        document.documentElement.classList.add('mnoria-user-refresh-startup');
       }
     } catch (_) {}
   </script>
@@ -19,13 +19,13 @@
   <title>__META_TITLE__</title>
 
   <meta name="description" content="__META_DESCRIPTION__">
-  <meta property="og:site_name" content="agôn">
+  <meta property="og:site_name" content="mnoria">
   <meta property="og:type" content="website">
   <meta property="og:title" content="__META_TITLE__">
   <meta property="og:description" content="__META_DESCRIPTION__">
   <meta property="og:url" content="__META_URL__">
   <meta property="og:image" content="__META_IMAGE__">
-  <meta property="og:image:alt" content="agôn — l'arène des idées">
+  <meta property="og:image:alt" content="mnoria — l'arène des idées">
   <link rel="canonical" href="__META_URL__">
   <link rel="preload" as="image" href="/logovisuelchargement.png">
 
@@ -47,7 +47,7 @@
   <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
+<meta name="apple-mobile-web-app-title" content="Mnoria">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,9 +57,9 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
-  <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
+  <link id="mnoria-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
        ça le navigateur doit télécharger + parser le CSS avant de découvrir l'URL de la police,
        laissant les icônes (ex: chevrons haut/bas flottants) invisibles pendant ce temps. Servie
@@ -76,7 +76,7 @@
         if (!link || link.rel === 'stylesheet') return;
         link.rel = 'stylesheet';
       }
-      ['agon-fa-preload'].forEach(function (id) {
+      ['mnoria-fa-preload'].forEach(function (id) {
         var link = document.getElementById(id);
         if (!link) return;
         link.addEventListener('load', function () { swap(link); }, { once: true });
@@ -89,7 +89,7 @@
       display: none !important;
     }
   </style>
-  <style id="agon-startup-critical-css">
+  <style id="mnoria-startup-critical-css">
     html,
     body {
       background: #243038;
@@ -99,19 +99,19 @@
        pendant un refresh. Ce calque absolu, volontairement plus haut que le grand
        viewport, reste derrière le loader mais devant toute l'interface (notamment
        son bandeau blanc inférieur) et prolonge donc le même fond jusqu'en bas. */
-    html.agon-startup-active body::before {
+    html.mnoria-startup-active body::before {
       content: '';
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
-      min-height: calc(100vh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
-      min-height: calc(100lvh + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
+      min-height: calc(100vh + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
+      min-height: calc(100lvh + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
       z-index: 9998;
       pointer-events: none;
       background: radial-gradient(circle at 50% 50vh, #243038 0%, #101820 55%, #05070a 100%);
     }
-    .agon-startup-loader {
+    .mnoria-startup-loader {
       position: fixed;
       top: 0;
       left: 0;
@@ -124,8 +124,8 @@
          padding-bottom de la même valeur (box-sizing:border-box) pour que le
          contenu centré (logo) reste calé sur le vrai viewport, pas sur cette
          boîte agrandie — sinon le centrage se décale vers le bas. */
-      bottom: calc(-1 * (var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
-      padding-bottom: calc(var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
+      bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
+      padding-bottom: calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
       box-sizing: border-box;
       z-index: 9999;
       display: flex;
@@ -149,15 +149,23 @@
        (display-mode: standalone) uniquement — jamais observé en navigateur classique d'après
        retour utilisateur, pas de raison d'y introduire ce délai. */
     @media (display-mode: standalone) {
-      .agon-startup-loader {
+      .mnoria-startup-loader {
         opacity: 0;
       }
-      .agon-startup-loader.is-ready {
+      .mnoria-startup-loader.is-ready {
         opacity: 1;
       }
-      html.agon-user-refresh-startup .agon-startup-loader {
-        opacity: 1;
-      }
+      /* Règle "html.mnoria-user-refresh-startup .mnoria-startup-loader { opacity: 1; }" retirée le
+         17/08/2026 ("au milieu de l'animation le fond est coupé en bas avant de réapparaître
+         rapidement", confirmé standalone) : elle forçait la pleine opacité dès la toute première
+         image de la page issue de la navigation post-refresh (cf. tête de <head> plus haut, qui
+         pose mnoria-user-refresh-startup dès que _swrefresh est présent dans l'URL) — précisément
+         la fenêtre que ce bloc entier existe pour éviter (le bug de composition WebKit décrit
+         juste au-dessus). revealStartupLoaderWhenStable() (script plus bas) reconnaît maintenant
+         ce marqueur et révèle via is-ready après seulement 2 requestAnimationFrame — assez vite
+         pour ne jamais ressembler à un redémarrage de l'intro, mais assez pour laisser WebKit
+         composer le calque fixed avant de le montrer, comme sur la page précédente juste avant
+         la navigation (cf. forceFullPageRefresh, script.js, même technique des 2 frames). */
     }
     /* Au lancement d'une PWA iOS, le layout viewport peut grandir pendant les
        premières images (par exemple 768px -> 812px). Le centrage flex du
@@ -166,7 +174,7 @@
        ancre son centre sur le large viewport, stable dès le premier rendu.
        50vh reste le repli pour les anciens WebKit sans unités lvh. */
     @media (display-mode: standalone) and (max-width: 768px) {
-      .agon-startup-loader-inner {
+      .mnoria-startup-loader-inner {
         position: absolute;
         left: 50%;
         top: 50vh;
@@ -176,28 +184,28 @@
         width: min(360px, 100%);
       }
     }
-    .agon-startup-loader.is-hiding {
+    .mnoria-startup-loader.is-hiding {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
-    html.agon-skip-startup-once .agon-startup-loader {
+    html.mnoria-skip-startup-once .mnoria-startup-loader {
       display: none !important;
     }
-    .agon-startup-loader-inner {
+    .mnoria-startup-loader-inner {
       text-align: center;
       padding: 32px 24px;
       max-width: 360px;
     }
-    .agon-startup-brand {
+    .mnoria-startup-brand {
       margin-top: 24px;
-      margin-bottom: 14px;
+      margin-bottom: 2px;
       min-height: 120px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .agon-startup-logo-img {
+    .mnoria-startup-logo-img {
       width: 270px;
       max-width: 80vw;
       height: auto;
@@ -206,13 +214,13 @@
       margin: 0 auto;
       filter: brightness(0.914) saturate(0.96);
     }
-    .agon-startup-lines {
+    .mnoria-startup-lines {
       display: flex;
       flex-direction: column;
       gap: 0;
-      transform: translateY(-8px);
+      transform: translateY(-20px);
     }
-    .agon-startup-line {
+    .mnoria-startup-line {
       margin: 9px 0;
       font-size: 20px;
       font-weight: 600;
@@ -220,10 +228,10 @@
       color: rgba(255, 255, 255, 0.45);
       opacity: 0;
     }
-    .agon-startup-line.is-playing {
-      animation: agonStartupLineIn 1.4s ease forwards;
+    .mnoria-startup-line.is-playing {
+      animation: mnoriaStartupLineIn 1.4s ease forwards;
     }
-    @keyframes agonStartupLineIn {
+    @keyframes mnoriaStartupLineIn {
       from { opacity: 0; }
       to { opacity: 1; }
     }
@@ -232,9 +240,9 @@
        "Autres actus" y apparaissent sous l'animation. On les masque tant que
        l'intro joue : la bande montre alors le fond sombre du body, toujours
        peint correctement. Classe retirée par tryHide() dans script.js. */
-    html.agon-startup-active .home-bottom-nav,
-    html.agon-startup-active .agon-tribunes-btn,
-    html.agon-startup-active .app-floating-refresh-btn {
+    html.mnoria-startup-active .home-bottom-nav,
+    html.mnoria-startup-active .mnoria-tribunes-btn,
+    html.mnoria-startup-active .app-floating-refresh-btn {
       visibility: hidden !important;
     }
     /* Porte de sortie si l'intro s'éternise (classe posée par le garde-fou
@@ -243,7 +251,7 @@
        (location.reload) ne dépend d'aucun fichier externe. Invisible sur un
        lancement normal (l'intro se termine bien avant). Symbole en texte brut :
        Font Awesome peut ne pas être chargé dans ce scénario de panne réseau. */
-    .agon-startup-retry-btn {
+    .mnoria-startup-retry-btn {
       display: none;
       margin: 26px auto 0;
       padding: 10px 24px;
@@ -255,7 +263,7 @@
       font-weight: 600;
       cursor: pointer;
     }
-    html.agon-startup-stuck .agon-startup-retry-btn {
+    html.mnoria-startup-stuck .mnoria-startup-retry-btn {
       display: inline-block;
     }
   </style>
@@ -264,14 +272,14 @@
 
     /* Réserve le gabarit mobile définitif avant le premier rendu. Sans ce
        verrou précoce, le conteneur flex peut brièvement comprimer le cadre
-       Bulles Actu avant que la classe agon-mobile-cloud-viewport soit prise
+       Bulles Actu avant que la classe mnoria-mobile-cloud-viewport soit prise
        en compte, puis le faire grandir. Hauteur dynamique (cf. style.css,
        même formule) hors standalone, qui garde sa propre valeur fixe via le
-       fallback body.agon-mobile-cloud-viewport .agon-tag-trends-cloud (636px,
+       fallback body.mnoria-mobile-cloud-viewport .mnoria-tag-trends-cloud (636px,
        inchangé, moins spécifique que ce verrou donc repris automatiquement
        dès que ce dernier ne cible plus le mode standalone). */
     @media (max-width: 768px) {
-      body.page-home-mobile:not(.is-standalone) #agon-tag-trends-cloud {
+      body.page-home-mobile:not(.is-standalone) #mnoria-tag-trends-cloud {
         height: calc(100dvh - 50px - env(safe-area-inset-bottom, 0px));
         min-height: calc(100dvh - 50px - env(safe-area-inset-bottom, 0px));
         flex: 0 0 auto;
@@ -347,20 +355,20 @@
   </style>
   <style>
     @media (max-width:768px){
-      body.page-home-mobile.agon-memoire-cloud-mode #agon-tag-trends-section #universe-status{
+      body.page-home-mobile.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status{
         margin:-10px auto 0!important;
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 
 <body class="page-home page-home-mobile">
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
 <script>
-// Pose agon-mobile-cloud-viewport tout de suite (même calcul que isAgonMobileCloudViewport
+// Pose mnoria-mobile-cloud-viewport tout de suite (même calcul que isMnoriaMobileCloudViewport
 // dans script.js, qui ne tourne qu'après le parsing complet, chargé en defer) : sans ce
-// script inline, le cadre du nuage Bulles Actu/Agôn s'affiche d'abord avec le CSS par
+// script inline, le cadre du nuage Bulles Actu/Mnoria s'affiche d'abord avec le CSS par
 // défaut avant de basculer sur le style mobile un instant plus tard.
 (function(){
   try{
@@ -370,12 +378,12 @@
     var narrowDevice = Math.min(screen.width || 9999, screen.height || 9999) <= 820;
     var standalone = navigator.standalone || window.matchMedia("(display-mode: standalone)").matches;
     if (cssMobile || (standalone && coarseTouch && narrowDevice)) {
-      document.body.classList.add("agon-mobile-cloud-viewport");
+      document.body.classList.add("mnoria-mobile-cloud-viewport");
     }
   } catch(e) {}
 })();
 </script>
-<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('agon_scroll_top');function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}
+<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('mnoria_scroll_top');function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}
   // Restauration depuis le bfcache (retour navigateur) : la page est ressuscitée
   // telle quelle, scroll inclus — ne pas rejouer t() ici, sous peine de remettre
   // à zéro une position déjà correcte.
@@ -385,8 +393,8 @@
 (function(){
   var shouldSkipStartup = false;
   try {
-    if (sessionStorage.getItem('agon_skip_startup_once') === '1') {
-      sessionStorage.removeItem('agon_skip_startup_once');
+    if (sessionStorage.getItem('mnoria_skip_startup_once') === '1') {
+      sessionStorage.removeItem('mnoria_skip_startup_once');
       shouldSkipStartup = true;
     }
   } catch (_) {}
@@ -400,13 +408,13 @@
   } catch (_) {}
   try {
     if (!shouldSkipStartup) {
-      var raw = sessionStorage.getItem('agon_last_reload_reason');
+      var raw = sessionStorage.getItem('mnoria_last_reload_reason');
       if (raw) {
         var parsed = JSON.parse(raw);
         if (parsed && parsed.reason && parsed.reason.indexOf('sw-recovery-page') !== -1) {
           shouldSkipStartup = true;
         }
-        // Ne pas consommer la clé ici : __agonDebugStartupDiagnostic la lit aussi
+        // Ne pas consommer la clé ici : __mnoriaDebugStartupDiagnostic la lit aussi
       }
     }
   } catch (_) {}
@@ -423,53 +431,92 @@
   } catch (_) {}
 
   if (shouldSkipStartup) {
-    window.__agonSkipStartupOnce = true;
-    document.documentElement.classList.add('agon-skip-startup-once');
+    window.__mnoriaSkipStartupOnce = true;
+    document.documentElement.classList.add('mnoria-skip-startup-once');
   } else {
-    document.documentElement.classList.add('agon-startup-active');
+    document.documentElement.classList.add('mnoria-startup-active');
   }
 })();
 </script>
 
-<div id="agon-startup-loader" class="agon-startup-loader">
-  <div class="agon-startup-loader-inner">
-    <div class="agon-startup-brand">
-      <img src="/mnoria-logo.png?v=20260815-startup-v1" class="agon-startup-logo-img" alt="Mnoria" width="2172" height="724">
+<div id="mnoria-startup-loader" class="mnoria-startup-loader">
+  <div class="mnoria-startup-loader-inner">
+    <div class="mnoria-startup-brand">
+      <img src="/mnoria-logo.png?v=20260815-startup-v1" class="mnoria-startup-logo-img" alt="Mnoria" width="2172" height="724">
     </div>
-    <div class="agon-startup-lines">
-      <p class="agon-startup-line agon-startup-line-1">Cultivez votre esprit</p>
+    <div class="mnoria-startup-lines">
+      <p class="mnoria-startup-line mnoria-startup-line-1">Cultive ton esprit</p>
     </div>
-    <button type="button" class="agon-startup-retry-btn" onclick="try{window.location.reload()}catch(e){}" aria-label="Recharger l'application">&#8635;&nbsp;&nbsp;Recharger</button>
+    <button type="button" class="mnoria-startup-retry-btn" onclick="try{window.location.reload()}catch(e){}" aria-label="Recharger l'application">&#8635;&nbsp;&nbsp;Recharger</button>
   </div>
 </div>
 <script>
 (function(){
-  var loader = document.getElementById('agon-startup-loader');
+  var loader = document.getElementById('mnoria-startup-loader');
   if (!loader) return;
-  // Révèle le loader (opacity 0 → 1 par défaut, cf. .agon-startup-loader/.is-ready plus haut)
+  // Révèle le loader (opacity 0 → 1 par défaut, cf. .mnoria-startup-loader/.is-ready plus haut)
   // après un court délai plutôt qu'immédiatement : laisse la fenêtre à risque (bande basse
   // furtive en standalone, WebKit peint ce calque en retard tout au début) se passer pendant
   // que SEUL le fond du <body> est visible (déjà sombre, lui peint fiablement jusqu'au bord).
   // Démarré ici, au tout début du script, avant toute autre logique (y compris le cas
-  // __agonSkipStartupOnce ci-dessous, où le loader est de toute façon retiré du DOM avant que
+  // __mnoriaSkipStartupOnce ci-dessous, où le loader est de toute façon retiré du DOM avant que
   // ce délai n'expire — l'ajout de la classe sur un nœud détaché ne fait alors rien).
-  setTimeout(function () { loader.classList.add('is-ready'); }, 200);
-  if (window.__agonSkipStartupOnce === true) {
+  //
+  // Ce même délai sert aussi à couvrir un second problème : au lancement d'une PWA iOS, le
+  // viewport peut grandir pendant les toutes premières frames (ex. 768px -> 812px, cf.
+  // .mnoria-startup-loader-inner plus haut) — s'il grandit APRÈS que le loader soit devenu
+  // visible, le bloc logo/texte (centré sur 50lvh, ou 50vh en repli sur les WebKit sans unité
+  // lvh) apparaît trop haut puis descend visiblement ("saute" pendant l'animation). Plutôt que
+  // de miser sur un délai fixe assez long pour couvrir tous les appareils, on écoute un
+  // resize/visualViewport-resize (signe que le viewport vient de se stabiliser) et on révèle
+  // juste après — invisible jusque-là de toute façon. Le setTimeout(400ms) reste le filet : si
+  // aucun resize ne survient (viewport déjà stable dès le départ, ou événement absent sur cet
+  // appareil), on révèle quand même — porté de 200 à 400ms pour laisser un peu plus de marge à
+  // la croissance du viewport avant de révéler dans ce cas.
+  (function revealStartupLoaderWhenStable() {
+    var revealed = false;
+    function reveal() {
+      if (revealed) return;
+      revealed = true;
+      loader.classList.add('is-ready');
+    }
+    // Page issue d'un refresh utilisateur (bouton "Actualiser", cf. forceFullPageRefresh/
+    // showMnoriaStartupBeforeRefresh, script.js — _swrefresh dans l'URL détecté en tête de <head>,
+    // qui pose mnoria-user-refresh-startup) : cette page CONTINUE une animation déjà visible sur
+    // la précédente, attendre un resize ou 400ms comme au lancement à froid ferait retomber le
+    // loader à transparent puis le remonter, perçu comme un flash/redémarrage de l'intro. Mais
+    // révéler à la synchrone (frame 0) réintroduit exactement le bug de composition WebKit que
+    // ce mécanisme existe pour éviter (bande basse coupée en standalone). Deux frames suffisent
+    // à WebKit pour composer le calque fixed — même technique que les 2 requestAnimationFrame
+    // juste avant la navigation dans forceFullPageRefresh (script.js) — sans être perceptible.
+    if (document.documentElement.classList.contains('mnoria-user-refresh-startup')) {
+      requestAnimationFrame(function() { requestAnimationFrame(reveal); });
+      return;
+    }
+    try {
+      window.addEventListener('resize', reveal, { once: true, passive: true });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', reveal, { once: true, passive: true });
+      }
+    } catch (_) {}
+    setTimeout(reveal, 400);
+  })();
+  if (window.__mnoriaSkipStartupOnce === true) {
     if (loader.parentNode) loader.parentNode.removeChild(loader);
     return;
   }
-  var line = loader.querySelector('.agon-startup-line-1');
+  var line = loader.querySelector('.mnoria-startup-line-1');
   if (!line) return;
-  window.__agonStartupInlineStarted = true;
+  window.__mnoriaStartupInlineStarted = true;
   var lineDelayMs = 500;
   var startupClockNow = window.performance && window.performance.now ? window.performance.now() : Date.now();
-  window.__agonStartupLineDelayUntil = startupClockNow + lineDelayMs;
-  var isMobileStartup = document.body.classList.contains('agon-mobile-cloud-viewport') ||
+  window.__mnoriaStartupLineDelayUntil = startupClockNow + lineDelayMs;
+  var isMobileStartup = document.body.classList.contains('mnoria-mobile-cloud-viewport') ||
     window.matchMedia('(max-width: 768px)').matches;
   var retryDelay = isMobileStartup ? 12000 : 6500;
   var automaticReleaseDelay = isMobileStartup ? 18000 : 12000;
   // Garde-fou autonome, sans aucune dépendance à script.min.js : la fin de
-  // l'intro (retrait du loader + de la classe agon-startup-active qui masque
+  // l'intro (retrait du loader + de la classe mnoria-startup-active qui masque
   // la barre basse) repose entièrement sur ce fichier externe. S'il ne
   // s'exécute jamais — hoquet réseau au lancement, cf. blocage PWA du
   // 18/07/2026 vers 18h29, app coincée sur l'animation — plus rien n'est
@@ -480,7 +527,7 @@
   // temps d'aboutir avant que le bouton Recharger ne signale un vrai blocage.
   setTimeout(function () {
     if (loader.parentNode && !loader.classList.contains('is-hiding')) {
-      document.documentElement.classList.add('agon-startup-stuck');
+      document.documentElement.classList.add('mnoria-startup-stuck');
     }
   }, retryDelay);
   // Étape 2 (18s sur mobile) : libération automatique complète.
@@ -489,12 +536,12 @@
       loader.classList.add('is-hiding');
       setTimeout(function () { if (loader.parentNode) loader.parentNode.removeChild(loader); }, 600);
     }
-    document.documentElement.classList.remove('agon-startup-active');
-    document.documentElement.classList.remove('agon-startup-stuck');
+    document.documentElement.classList.remove('mnoria-startup-active');
+    document.documentElement.classList.remove('mnoria-startup-stuck');
   }, automaticReleaseDelay);
   setTimeout(function(){
     requestAnimationFrame(function(){
-      window.__agonStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+      window.__mnoriaStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
       line.classList.add('is-playing');
     });
   }, lineDelayMs);
@@ -767,7 +814,7 @@
         <button onclick="setTypeFilter('debate')" id="filter-debate">Arènes à positions</button>
         <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
         <button onclick="setTypeFilter('visited')" id="filter-visited">Arènes consultées</button>
-        <button onclick="setTypeFilter('agon')" id="filter-agon">Arènes ouvertes par agôn</button>
+        <button onclick="setTypeFilter('mnoria')" id="filter-mnoria">Arènes ouvertes par mnoria</button>
       </div>
 
       <div class="index-theme-filter-wrap index-type-filter-mobile" data-active="false">
@@ -781,7 +828,7 @@
             <option value="debate">Arènes à positions</option>
             <option value="question">Arènes libres</option>
             <option value="visited">Arènes consultées</option>
-            <option value="agon">Arènes ouvertes par agôn</option>
+            <option value="mnoria">Arènes ouvertes par mnoria</option>
           </select>
         </div>
       </div>
@@ -815,19 +862,24 @@
   </div>
 </div>
 
-<section id="agon-tag-trends-section" class="agon-tag-trends-section" hidden>
+<section id="mnoria-tag-trends-section" class="mnoria-tag-trends-section" hidden>
   <!-- Embed "Ma mémoire" (demande du 08/08/2026 : bulles directement sur l'accueil, pas une
-       page à part) : réutilise #agon-tag-trends-cloud juste en dessous comme conteneur de
-       bulles (mon-univers.js retombe dessus si #agon-universe-cloud n'existe pas sur la page,
+       page à part) : réutilise #mnoria-tag-trends-cloud juste en dessous comme conteneur de
+       bulles (mon-univers.js retombe dessus si #mnoria-universe-cloud n'existe pas sur la page,
        cf. mon-univers.js) — jamais un 2e cadre de bulles séparé. Fil d'Ariane et bouton retour
        enveloppés dans des div [hidden] dédiées (et non un [hidden] posé directement sur eux) :
        mon-univers.js gère lui-même la classe is-visible du bouton retour, un [hidden] direct
        entrerait en conflit de spécificité CSS avec cette classe. -->
-  <div id="agon-memoire-embed-before" hidden>
+  <div id="mnoria-memoire-embed-before" hidden>
     <nav id="universe-breadcrumb" class="universe-breadcrumb" aria-label="Fil d'Ariane de l'univers"></nav>
   </div>
-  <div id="agon-tag-trends-cloud" class="agon-tag-trends-cloud"></div>
-  <div id="agon-memoire-embed-after" hidden>
+  <!-- mnoria-memoire-frame posée directement en statique : "Ma mémoire" est désormais le mode par
+       défaut à l'arrivée (setMemoireCloudMode(true) au DOMContentLoaded, script.js) — sans cette
+       classe déjà présente, le cadre affichait ~1s le fond par défaut (Bulles Actu) avant que le
+       JS ajoute la classe et bascule sur le fond étoilé, décalage visible à chaque
+       rafraîchissement (demande du 17/08/2026, "il y a encore déplacement du fond"). -->
+  <div id="mnoria-tag-trends-cloud" class="mnoria-tag-trends-cloud mnoria-memoire-frame"></div>
+  <div id="mnoria-memoire-embed-after" hidden>
     <button type="button" id="universe-back-btn" class="universe-back-btn" aria-label="Revenir au niveau précédent">
       <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Retour
     </button>
@@ -844,18 +896,18 @@
       <ul id="universe-star-panel-list" class="universe-star-panel__list"></ul>
     </div>
   </div>
-<div id="agon-cloud-mode-switch" class="agon-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
-  <button type="button" id="agon-cloud-mode-actu" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setAgonCloudMode(false)"><i class="fa-solid fa-circle-nodes agon-cloud-mode-segment-icon" aria-hidden="true"></i><span class="agon-cloud-mode-segment-label">Actualités</span></button>
-  <button type="button" id="agon-cloud-mode-memoire-btn" class="agon-cloud-mode-segment" onclick="setMemoireCloudMode(true)"><i class="fa-solid fa-brain agon-cloud-mode-segment-icon" aria-hidden="true"></i><span class="agon-cloud-mode-segment-label">Ma mémoire</span></button>
-  <button type="button" id="agon-cloud-mode-agon-btn" class="agon-cloud-mode-segment" onclick="setAgonCloudMode(true)"><i class="fa-solid fa-atom agon-cloud-mode-segment-icon" aria-hidden="true"></i><span class="agon-cloud-mode-segment-label">Communauté</span></button>
+<div id="mnoria-cloud-mode-switch" class="mnoria-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
+  <button type="button" id="mnoria-cloud-mode-actu" class="mnoria-cloud-mode-segment mnoria-cloud-mode-segment-active" onclick="setMnoriaCloudMode(false)"><i class="fa-solid fa-circle-nodes mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Actualités</span></button>
+  <button type="button" id="mnoria-cloud-mode-memoire-btn" class="mnoria-cloud-mode-segment" onclick="setMemoireCloudMode(true)"><i class="fa-solid fa-brain mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Ma mémoire</span></button>
+  <button type="button" id="mnoria-cloud-mode-mnoria-btn" class="mnoria-cloud-mode-segment" onclick="setMnoriaCloudMode(true)"><i class="fa-solid fa-atom mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Communauté</span></button>
 </div>
 <div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
-<div id="agon-political-cloud-switch" class="agon-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
-  <button type="button" id="agon-political-cloud-left" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')"><i class="fa-solid fa-arrow-left" aria-hidden="true" style="font-size:9px"></i> Gauche</button>
-  <button type="button" id="agon-political-cloud-mixed" class="agon-cloud-mode-segment agon-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Tout</button>
-  <button type="button" id="agon-political-cloud-right" class="agon-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite <i class="fa-solid fa-arrow-right" aria-hidden="true" style="font-size:9px"></i></button>
+<div id="mnoria-political-cloud-switch" class="mnoria-cloud-mode-switch" role="group" aria-label="Filtrer le nuage Actu par orientation">
+  <button type="button" id="mnoria-political-cloud-left" class="mnoria-cloud-mode-segment" onclick="setPoliticalCloudGroup('left')"><i class="fa-solid fa-arrow-left" aria-hidden="true" style="font-size:9px"></i> Gauche</button>
+  <button type="button" id="mnoria-political-cloud-mixed" class="mnoria-cloud-mode-segment mnoria-cloud-mode-segment-active" onclick="setPoliticalCloudGroup('mixed')">Tout</button>
+  <button type="button" id="mnoria-political-cloud-right" class="mnoria-cloud-mode-segment" onclick="setPoliticalCloudGroup('right')">Droite <i class="fa-solid fa-arrow-right" aria-hidden="true" style="font-size:9px"></i></button>
 </div>
-<a href="/autres-sources" class="agon-tribunes-btn" onclick="try{showTribunesNavOverlay()}catch(e){}">
+<a href="/autres-sources" class="mnoria-tribunes-btn" onclick="try{showTribunesNavOverlay()}catch(e){}">
   <i class="fa-solid fa-newspaper"></i>
   <span>Autres actus</span>
 </a>
@@ -899,7 +951,7 @@ window.addEventListener("pageshow", function() {
   if (o) o.remove();
 });
 </script>
-<p class="agon-tag-trends-caption" style="text-align: center;">
+<p class="mnoria-tag-trends-caption" style="text-align: center;">
   Les tendances de l'actualité française. <a href="/about#fonctionnement-feed" onclick="event.preventDefault(); openDebateIframeModal('/about#fonctionnement-feed')" style="color:rgba(255,255,255,0.75);text-decoration:none;cursor:pointer;">En savoir plus.</a>
 </p>
 </section>
@@ -915,7 +967,7 @@ window.addEventListener("pageshow", function() {
   </a>
 </div>
 <style>
-  /* Le paragraphe .agon-tag-trends-caption juste au-dessus a un margin-bottom
+  /* Le paragraphe .mnoria-tag-trends-caption juste au-dessus a un margin-bottom
      de 26px (mobile) / 40px (desktop, cf. @media min-width:769px dans
      style.css) qui collapse avec le margin-top de ce bloc : sans cette
      compensation négative, l'espace au-dessus est bien plus grand que
@@ -926,8 +978,8 @@ window.addEventListener("pageshow", function() {
      changer l'écart entre le bloc et lui). Valeurs calibrées pour égaliser
      les deux côtés (reprises telles quelles du bouton QCM solo). */
   /* Bandeau unique façon "switch" (même langage visuel que le sélecteur
-     Bulles Actu/Agôn juste au-dessus : anneau clair + fond vitré translucide
-     + anneau sombre en renfort, cf. .agon-cloud-mode-switch dans style.css)
+     Bulles Actu/Mnoria juste au-dessus : anneau clair + fond vitré translucide
+     + anneau sombre en renfort, cf. .mnoria-cloud-mode-switch dans style.css)
      plutôt que 3 pastilles dorées séparées qui juraient avec le reste de la
      page. Les 3 liens sont des segments à parts égales d'une seule barre. */
   .home-secondary-actions {
@@ -939,7 +991,7 @@ window.addEventListener("pageshow", function() {
     margin: -23px auto 30px;
     border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 999px;
-    /* Quasi-opaque (pas juste vitré à 8% comme le switch Bulles Actu/Agôn) :
+    /* Quasi-opaque (pas juste vitré à 8% comme le switch Bulles Actu/Mnoria) :
        la marge négative ci-dessus fait remonter ce bandeau sur le bas du
        nuage de bulles juste au-dessus — avec un fond trop transparent, les
        bulles derrière transparaissaient et rendaient le haut du texte
@@ -964,20 +1016,20 @@ window.addEventListener("pageshow", function() {
     .home-secondary-actions {
       width: min(100% - 32px, 480px);
     }
-    body.is-standalone.page-home-mobile .agon-tag-trends-section {
+    body.is-standalone.page-home-mobile .mnoria-tag-trends-section {
       min-height: auto;
       justify-content: normal;
       padding-bottom: 0;
     }
-    body.is-standalone.page-home-mobile .agon-tag-trends-cloud {
+    body.is-standalone.page-home-mobile .mnoria-tag-trends-cloud {
       top: 14px;
     }
-    body.is-standalone.page-home-mobile #agon-cloud-mode-switch,
-    body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-cloud-mode-agon ~ #agon-cloud-mode-switch,
-    body.is-standalone.page-home-mobile .agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch {
+    body.is-standalone.page-home-mobile #mnoria-cloud-mode-switch,
+    body.is-standalone.page-home-mobile .mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria ~ #mnoria-cloud-mode-switch,
+    body.is-standalone.page-home-mobile .mnoria-tag-trends-cloud.mnoria-memoire-frame ~ #mnoria-cloud-mode-switch {
       margin-top: -47px !important;
     }
-    body.is-standalone.page-home-mobile .agon-tag-trends-caption {
+    body.is-standalone.page-home-mobile .mnoria-tag-trends-caption {
       position: relative;
       inset: auto;
       margin: 18px auto 26px;
@@ -997,7 +1049,7 @@ window.addEventListener("pageshow", function() {
     }
   }
   @media (max-width: 390px) {
-    body.is-standalone.page-home-mobile .agon-tag-trends-section {
+    body.is-standalone.page-home-mobile .mnoria-tag-trends-section {
       padding-bottom: 24px;
     }
   }
@@ -1009,7 +1061,7 @@ window.addEventListener("pageshow", function() {
 
   /* Segment du bandeau : plat et transparent au repos (le fond vitré vient du
      conteneur), un simple surlignage clair au survol — même transition que
-     .agon-tribunes-btn. Un filet vertical sépare les segments entre eux
+     .mnoria-tribunes-btn. Un filet vertical sépare les segments entre eux
      (::after, sauf sur le dernier), même technique que le séparateur du
      switch Gauche/Tout/Droite. */
   .home-qcm-btn {
@@ -1200,7 +1252,7 @@ window.addEventListener("pageshow", function() {
    le temps que script.min.js soit parsé. */
 (function () {
   try {
-    var raw = sessionStorage.getItem("agonFloatingScrollBtnPos:" + location.pathname);
+    var raw = sessionStorage.getItem("mnoriaFloatingScrollBtnPos:" + location.pathname);
     if (!raw) return;
     var s = JSON.parse(raw);
     if (!s || s.w !== window.innerWidth) return;
@@ -1220,12 +1272,33 @@ window.addEventListener("pageshow", function() {
 (function () {
   try {
     if (!(navigator.standalone || window.matchMedia("(display-mode: standalone)").matches)) return;
-    var raw = sessionStorage.getItem("agonCloudMarginTop:" + location.pathname);
+    var raw = sessionStorage.getItem("mnoriaCloudMarginTop:" + location.pathname);
     if (!raw) return;
     var s = JSON.parse(raw);
     if (!s || s.w !== window.innerWidth || typeof s.m !== "number") return;
-    var cloud = document.getElementById("agon-tag-trends-cloud");
+    var cloud = document.getElementById("mnoria-tag-trends-cloud");
     if (cloud) cloud.style.marginTop = s.m + "px";
+  } catch (e) {}
+})();
+
+/* Restaure la hauteur du cadre "Ma mémoire"/Actu/Communauté calculée par syncCloudSectionHeight
+   à la visite précédente (script.js la mémorise en sessionStorage), avant le premier rendu :
+   sans ceci, le cadre reste ~1s à sa hauteur CSS de repli (min-height:260px) avant de sauter à
+   sa hauteur définitive dès que script.min.js s'exécute — décalage visible du fond à chaque
+   rafraîchissement (demande du 17/08/2026). Uniquement en desktop (>=769px) : en mobile, la
+   hauteur est calée différemment (syncMobileCloudFrameHeight, sur le bandeau haut/bas réels). */
+(function () {
+  try {
+    if (window.innerWidth <= 768) return;
+    var raw = sessionStorage.getItem("mnoriaMemoireCloudSize:" + location.pathname);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    if (!s || s.w !== window.innerWidth || typeof s.h !== "number") return;
+    var cloud = document.getElementById("mnoria-tag-trends-cloud");
+    if (cloud) {
+      cloud.style.flex = "0 0 auto";
+      cloud.style.height = s.h + "px";
+    }
   } catch (e) {}
 })();
 </script>
@@ -1308,11 +1381,11 @@ window.addEventListener("pageshow", function() {
 
 <script>
 (function(){
-  if (window.__agonIndexMetaCaptureInstalled) return;
-  window.__agonIndexMetaCaptureInstalled = true;
+  if (window.__mnoriaIndexMetaCaptureInstalled) return;
+  window.__mnoriaIndexMetaCaptureInstalled = true;
 
   var debateMetaById = new Map();
-  window.__agonIndexDebateMeta = debateMetaById;
+  window.__mnoriaIndexDebateMeta = debateMetaById;
 
   function toNumber(value){
     var n = Number(value);
@@ -1488,7 +1561,7 @@ window.addEventListener("pageshow", function() {
           if (contentType.indexOf('application/json') !== -1) {
             clone.json().then(function(data){
               var debateDataFound = walkPayload(data);
-              if (debateDataFound) document.dispatchEvent(new CustomEvent('agon:index-meta-updated'));
+              if (debateDataFound) document.dispatchEvent(new CustomEvent('mnoria:index-meta-updated'));
             }).catch(function(){});
           }
         } catch (err) {}
@@ -1500,7 +1573,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
@@ -1729,7 +1802,7 @@ window.addEventListener("pageshow", function() {
     });
   }
 
-  window.__agonIndexShareDropdownScan = scheduleScan;
+  window.__mnoriaIndexShareDropdownScan = scheduleScan;
 
   document.addEventListener('click', function(){
     closeAllDropdowns();
@@ -1757,8 +1830,8 @@ window.addEventListener("pageshow", function() {
     if (deltaY > 10) closeAllDropdowns();
   }, { passive: true });
 
-  window.addEventListener('agon:feed-ready', function(){ scheduleScan(document); });
-  document.addEventListener('agon:index-meta-updated', function(){ scheduleScan(document); });
+  window.addEventListener('mnoria:feed-ready', function(){ scheduleScan(document); });
+  document.addEventListener('mnoria:index-meta-updated', function(){ scheduleScan(document); });
   setTimeout(function(){ scheduleScan(document); }, 1200);
   setTimeout(function(){ scheduleScan(document); }, 2600);
 })();
@@ -1835,8 +1908,8 @@ window.addEventListener("pageshow", function() {
 
   function applyCounts(card){
     var id = getDebateIdFromCard(card);
-    if (!id || !window.__agonIndexDebateMeta) return;
-    var data = window.__agonIndexDebateMeta.get(String(id));
+    if (!id || !window.__mnoriaIndexDebateMeta) return;
+    var data = window.__mnoriaIndexDebateMeta.get(String(id));
     if (!data) return;
 
     var row = ensureStatsRow(card);
@@ -1874,9 +1947,9 @@ window.addEventListener("pageshow", function() {
     if (_scanCardsRaf) return;
     _scanCardsRaf = requestAnimationFrame(function(){ _scanCardsRaf = null; scanCards(root); });
   }
-  window.__agonIndexStatsScan = scheduleScanCards;
-  document.addEventListener('agon:index-meta-updated', scheduleScanCards);
-  window.addEventListener('agon:feed-ready', function(){ scheduleScanCards(document); });
+  window.__mnoriaIndexStatsScan = scheduleScanCards;
+  document.addEventListener('mnoria:index-meta-updated', scheduleScanCards);
+  window.addEventListener('mnoria:feed-ready', function(){ scheduleScanCards(document); });
   setTimeout(function(){ scheduleScanCards(document); }, 1200);
   setTimeout(function(){ scheduleScanCards(document); }, 2600);
 })();
@@ -1893,7 +1966,7 @@ window.addEventListener("pageshow", function() {
       <img src="/mnoria-icon-192.png" alt="" class="install-modal-app-icon">
     </div>
 
-    <h3 class="install-modal-title">Installer l’icône Agôn</h3>
+    <h3 class="install-modal-title">Installer l’icône Mnoria</h3>
 
     <!-- Contenu MOBILE Android -->
     <div id="install-modal-android" style="display:none;">
@@ -1924,7 +1997,7 @@ window.addEventListener("pageshow", function() {
         <h4 class="install-modal-platform"><i class="fa-brands fa-chrome"></i> Sur Chrome ou Edge</h4>
         <p class="install-modal-text">Une icône d'installation apparaît automatiquement dans la barre d'adresse :</p>
         <button class="install-modal-android-btn" id="install-pwa-btn-desktop" type="button" onclick="triggerAndroidInstall()">
-          <i class="fa-solid fa-download"></i> Installer agôn
+          <i class="fa-solid fa-download"></i> Installer mnoria
         </button>
         <p class="install-modal-text install-modal-hint">Si le bouton n'apparaît pas, cherche l'icône <strong>⊕</strong> à droite de la barre d'adresse.</p>
       </div>
@@ -2057,18 +2130,18 @@ window.addEventListener("pageshow", function() {
     <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
     <p style="font-weight:700; color:#e8e8e8; font-size:15px; margin:0 0 10px; text-align:center;">Notifications bloquées</p>
     <p style="color:#a0b0bb; font-size:13px; line-height:1.6; margin:0 0 10px;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur → Notifications → Autoriser.</p>
-    <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+    <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → mnoria → Notifications → Autoriser</p>
     <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
   </div>
 </div>
 
-<div id="agon-analysis-queue-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;" onclick="if(event.target===this)closeAnalysisQueueModal()">
+<div id="mnoria-analysis-queue-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;" onclick="if(event.target===this)closeAnalysisQueueModal()">
   <div style="max-width:640px;margin:40px auto;background:#16242e;border:1px solid #2d3f4a;border-radius:14px;padding:18px 16px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
       <div style="color:#c0d8e0;font-size:15px;font-weight:700;">⏳ Comptes à rebours d'analyse</div>
       <button type="button" onclick="closeAnalysisQueueModal()" style="background:#0f1c24;border:1px solid #2d3f4a;color:#7a9aaa;border-radius:8px;padding:5px 12px;cursor:pointer;">Fermer</button>
     </div>
-    <div id="agon-analysis-queue-toolbar" style="display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+    <div id="mnoria-analysis-queue-toolbar" style="display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
       <label style="display:flex;align-items:center;gap:6px;color:#a8c4d0;font-size:13px;cursor:pointer;">
         <input type="checkbox" id="aq-select-all" onchange="toggleAllAnalysisCountdowns(this.checked)">
         Tout cocher
@@ -2078,7 +2151,7 @@ window.addEventListener("pageshow", function() {
         ✕ Annuler la sélection (0)
       </button>
     </div>
-    <div id="agon-analysis-queue-content" style="font-size:13px;line-height:1.6;color:#a8c4d0;">Chargement…</div>
+    <div id="mnoria-analysis-queue-content" style="font-size:13px;line-height:1.6;color:#a8c4d0;">Chargement…</div>
   </div>
 </div>
 <script>
@@ -2116,8 +2189,8 @@ window.addEventListener("pageshow", function() {
 
   window.openAnalysisQueueModal = function() {
     if (typeof closeHomeTopbarMenu === "function") closeHomeTopbarMenu();
-    var modal = document.getElementById("agon-analysis-queue-modal");
-    var content = document.getElementById("agon-analysis-queue-content");
+    var modal = document.getElementById("mnoria-analysis-queue-modal");
+    var content = document.getElementById("mnoria-analysis-queue-content");
     modal.style.display = "block";
     content.innerHTML = "Chargement…";
 
@@ -2125,7 +2198,7 @@ window.addEventListener("pageshow", function() {
       .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function(items) {
         _aqItems = items || [];
-        var toolbar = document.getElementById("agon-analysis-queue-toolbar");
+        var toolbar = document.getElementById("mnoria-analysis-queue-toolbar");
         if (!_aqItems.length) {
           content.innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
           toolbar.style.display = "none";
@@ -2160,7 +2233,7 @@ window.addEventListener("pageshow", function() {
       })
       .catch(function() {
         content.innerHTML = '<p style="color:#e07070;">Erreur de chargement (mode admin requis).</p>';
-        document.getElementById("agon-analysis-queue-toolbar").style.display = "none";
+        document.getElementById("mnoria-analysis-queue-toolbar").style.display = "none";
       });
   };
 
@@ -2203,8 +2276,8 @@ window.addEventListener("pageshow", function() {
         .catch(function() { errors.push(id); });
     })).then(function() {
       if (!_aqItems.length) {
-        document.getElementById("agon-analysis-queue-content").innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
-        document.getElementById("agon-analysis-queue-toolbar").style.display = "none";
+        document.getElementById("mnoria-analysis-queue-content").innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
+        document.getElementById("mnoria-analysis-queue-toolbar").style.display = "none";
       } else {
         updateAnalysisSelectionCount();
       }
@@ -2226,8 +2299,8 @@ window.addEventListener("pageshow", function() {
         if (row) row.remove();
         _aqItems = _aqItems.filter(function(item) { return String(item.id) !== String(debateId); });
         if (!_aqItems.length) {
-          document.getElementById("agon-analysis-queue-content").innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
-          document.getElementById("agon-analysis-queue-toolbar").style.display = "none";
+          document.getElementById("mnoria-analysis-queue-content").innerHTML = '<p style="color:#4a6a7a;">Aucun compte à rebours en cours.</p>';
+          document.getElementById("mnoria-analysis-queue-toolbar").style.display = "none";
         } else {
           updateAnalysisSelectionCount();
         }
@@ -2239,12 +2312,12 @@ window.addEventListener("pageshow", function() {
   };
 
   window.closeAnalysisQueueModal = function() {
-    document.getElementById("agon-analysis-queue-modal").style.display = "none";
+    document.getElementById("mnoria-analysis-queue-modal").style.display = "none";
     if (_aqTimer) { clearInterval(_aqTimer); _aqTimer = null; }
   };
 })();
 </script>
-<div id="agon-diagnostic-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;" onclick="if(event.target===this)closeDiagnosticModal()">
+<div id="mnoria-diagnostic-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);overflow-y:auto;-webkit-overflow-scrolling:touch;" onclick="if(event.target===this)closeDiagnosticModal()">
   <div style="background:#1a2730;border:1px solid #2d3f4a;border-radius:16px;margin:20px auto;max-width:680px;width:calc(100% - 32px);padding:20px 18px 24px;box-sizing:border-box;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
       <span style="color:#e8f0f5;font-weight:700;font-size:16px;">Diagnostic refresh</span>
@@ -2258,8 +2331,8 @@ window.addEventListener("pageshow", function() {
       <button onclick="pushDiagToServer()" id="diag-push-btn" style="padding:6px 14px;border-radius:20px;border:1px solid #1a4a2a;background:#0e2818;color:#7ecfa0;font-size:13px;cursor:pointer;">Envoyer</button>
       <button onclick="clearDiagLogs()" style="padding:6px 14px;border-radius:20px;border:1px solid #5a2020;background:#2a1010;color:#e07070;font-size:13px;cursor:pointer;margin-left:auto;">Effacer</button>
     </div>
-    <div id="agon-diagnostic-status" style="font-size:12px;margin-bottom:10px;min-height:18px;"></div>
-    <div id="agon-diagnostic-content" style="font-size:12px;line-height:1.6;"></div>
+    <div id="mnoria-diagnostic-status" style="font-size:12px;margin-bottom:10px;min-height:18px;"></div>
+    <div id="mnoria-diagnostic-content" style="font-size:12px;line-height:1.6;"></div>
   </div>
 </div>
 
@@ -2281,7 +2354,7 @@ window.addEventListener("pageshow", function() {
   }
 
   function setStatus(msg, color) {
-    var el = document.getElementById("agon-diagnostic-status");
+    var el = document.getElementById("mnoria-diagnostic-status");
     if (el) el.innerHTML = '<span style="color:' + (color||"#7a9aaa") + ';">' + msg + '</span>';
   }
 
@@ -2294,7 +2367,7 @@ window.addEventListener("pageshow", function() {
     document.getElementById("diag-tab-freeze").style.fontWeight = tab === "freeze" ? "700" : "400";
     document.getElementById("diag-tab-server").style.fontWeight = tab === "server" ? "700" : "400";
     setStatus("");
-    var el = document.getElementById("agon-diagnostic-content");
+    var el = document.getElementById("mnoria-diagnostic-content");
     if (tab === "server") {
       el.innerHTML = '<p style="color:#4a6a7a;font-size:13px;">Chargement…</p>';
       fetch("/api/admin/diag/logs", { headers: { "x-admin-token": localStorage.getItem("admin_token") || "" } })
@@ -2322,7 +2395,7 @@ window.addEventListener("pageshow", function() {
         .catch(function(){ el.innerHTML = '<p style="color:#e07070;font-size:13px;">Erreur de chargement.</p>'; });
       return;
     }
-    var key = tab === "startup" ? "agon_startup_log" : tab === "freeze" ? "agon_freeze_log" : "agon_refresh_log";
+    var key = tab === "startup" ? "mnoria_startup_log" : tab === "freeze" ? "mnoria_freeze_log" : "mnoria_refresh_log";
     var entries = [];
     try { entries = JSON.parse(localStorage.getItem(key) || "[]"); } catch(e) {}
     if (!entries.length) {
@@ -2339,9 +2412,9 @@ window.addEventListener("pageshow", function() {
     var startup_log = [];
     var refresh_log = [];
     var freeze_log = [];
-    try { startup_log = JSON.parse(localStorage.getItem("agon_startup_log") || "[]"); } catch(e) {}
-    try { refresh_log = JSON.parse(localStorage.getItem("agon_refresh_log") || "[]"); } catch(e) {}
-    try { freeze_log = JSON.parse(localStorage.getItem("agon_freeze_log") || "[]"); } catch(e) {}
+    try { startup_log = JSON.parse(localStorage.getItem("mnoria_startup_log") || "[]"); } catch(e) {}
+    try { refresh_log = JSON.parse(localStorage.getItem("mnoria_refresh_log") || "[]"); } catch(e) {}
+    try { freeze_log = JSON.parse(localStorage.getItem("mnoria_freeze_log") || "[]"); } catch(e) {}
     fetch("/api/admin/diag/push-logs", {
       method: "POST",
       headers: Object.assign({ "Content-Type": "application/json" }, { "x-admin-token": localStorage.getItem("admin_token") || "" }),
@@ -2362,20 +2435,20 @@ window.addEventListener("pageshow", function() {
   };
 
   window.openDiagnosticModal = function() {
-    document.getElementById("agon-diagnostic-modal").style.display = "block";
+    document.getElementById("mnoria-diagnostic-modal").style.display = "block";
     document.body.style.overflow = "hidden";
     showDiagTab(currentTab);
   };
 
   window.closeDiagnosticModal = function() {
-    document.getElementById("agon-diagnostic-modal").style.display = "none";
+    document.getElementById("mnoria-diagnostic-modal").style.display = "none";
     document.body.style.overflow = "";
   };
 
   window.clearDiagLogs = function() {
-    try { localStorage.removeItem("agon_startup_log"); } catch(e) {}
-    try { localStorage.removeItem("agon_refresh_log"); } catch(e) {}
-    try { localStorage.removeItem("agon_freeze_log"); } catch(e) {}
+    try { localStorage.removeItem("mnoria_startup_log"); } catch(e) {}
+    try { localStorage.removeItem("mnoria_refresh_log"); } catch(e) {}
+    try { localStorage.removeItem("mnoria_freeze_log"); } catch(e) {}
     showDiagTab(currentTab);
   };
 })();

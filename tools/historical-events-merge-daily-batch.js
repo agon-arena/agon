@@ -38,7 +38,7 @@ function readJson(filePath) {
 // review_status de l'app (draft/reviewed/validated/rejected) n'a pas
 // d'équivalent direct au statut "test"/"draft"/"published" du lot source :
 // tout ce qui n'est pas explicitement "published" devient "draft" (jamais
-// "reviewed"/"validated" sans relecture humaine réelle dans Agôn).
+// "reviewed"/"validated" sans relecture humaine réelle dans Mnoria).
 function mapReviewStatus(dayStatus) {
   return dayStatus === "published" ? "reviewed" : "draft";
 }

@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Histoires associées — Admin Agôn</title>
-    <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+  <title>Histoires associées — Admin Mnoria</title>
+    <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <style>
     body {
       margin: 0;
@@ -241,7 +241,7 @@
       backEl.textContent = "Fermer";
       backEl.addEventListener("click", (event) => {
         event.preventDefault();
-        window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+        window.parent.postMessage({ type: "mnoria:close-debate-modal" }, "*");
       });
     }
 

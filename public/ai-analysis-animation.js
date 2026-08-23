@@ -36,8 +36,8 @@
 
   function refreshStandaloneBottomSurfaces() {
     try {
-      if (typeof window.__agonRefreshStandaloneBottomSurfaces === 'function') {
-        window.__agonRefreshStandaloneBottomSurfaces();
+      if (typeof window.__mnoriaRefreshStandaloneBottomSurfaces === 'function') {
+        window.__mnoriaRefreshStandaloneBottomSurfaces();
       }
     } catch (e) {}
   }
@@ -104,7 +104,7 @@
     el.textContent = `
       #aala-overlay {
         --aala-bottom-bleed: 0px;
-        --aala-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
+        --aala-safe-bottom: var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px));
         position: fixed; top: 0; right: 0; bottom: 0 !important; left: 0; z-index: 100000;
         width: 100vw;
         height: calc(var(--aala-vvh, 100vh) + var(--aala-safe-bottom, 0px) + 96px);
@@ -312,7 +312,7 @@
       requestAnimationFrame(syncOverlayViewportSize);
       setTimeout(syncOverlayViewportSize, 120);
       setTimeout(refreshStandaloneBottomSurfaces, 180);
-      try { window.parent.postMessage({ type: 'agon:ai-loading-animation-visibility', open: true }, '*'); } catch (e) {}
+      try { window.parent.postMessage({ type: 'mnoria:ai-loading-animation-visibility', open: true }, '*'); } catch (e) {}
     });
   }
 
@@ -345,7 +345,7 @@
             document.documentElement.classList.remove('aala-overlay-active');
             refreshStandaloneBottomSurfaces();
             setTimeout(refreshStandaloneBottomSurfaces, 180);
-            try { window.parent.postMessage({ type: 'agon:ai-loading-animation-visibility', open: false }, '*'); } catch (e) {}
+            try { window.parent.postMessage({ type: 'mnoria:ai-loading-animation-visibility', open: false }, '*'); } catch (e) {}
             if (callback) callback();
           }, FADE_MS);
         } else {

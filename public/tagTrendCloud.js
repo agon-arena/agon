@@ -1,4 +1,4 @@
-// Satellites "atome" des bulles Agôn/Communauté : nombre de satellites (1 à 10) reflétant
+// Satellites "atome" des bulles Mnoria/Communauté : nombre de satellites (1 à 10) reflétant
 // l'intensité RELATIVE du nombre d'idées (arguments pour/contre postés) au sein de l'ensemble
 // des bulles actuellement affichées — jamais de seuil absolu (100 idées n'est pas "5
 // satellites" en soi, ça dépend entièrement du min/max du lot du moment). La bulle la moins
@@ -35,17 +35,17 @@ function computeRelativeIdeaOrbitCounts(bubbles) {
 
 // Distances (px, au-delà du bord de la bulle) et diamètres variés plutôt que des valeurs
 // fixes, pour un aspect moins mécanique — combinés à la répartition en angle d'or ci-dessous.
-// Décorrélés entre eux (offset de 2 dans l'index de lecture de AGON_SATELLITE_SIZE_STEPS_PX)
+// Décorrélés entre eux (offset de 2 dans l'index de lecture de MNORIA_SATELLITE_SIZE_STEPS_PX)
 // pour qu'un satellite "loin" ne soit pas systématiquement aussi le "gros", et vice-versa.
 // Direction posée ici (dataset.angle), mais la distance RÉELLE est décidée plus tard par
 // layoutBubbleSatellites, une fois la géométrie finale (px) de toutes les bulles du nuage
 // connue : c'est elle qui garantit qu'un satellite n'empiète jamais sur une bulle voisine.
-const AGON_SATELLITE_AXIS_EXTEND_PX = [9, 20, 13, 24, 11];
-const AGON_SATELLITE_SIZE_STEPS_PX = [7, 12, 9, 14, 10];
+const MNORIA_SATELLITE_AXIS_EXTEND_PX = [9, 20, 13, 24, 11];
+const MNORIA_SATELLITE_SIZE_STEPS_PX = [7, 12, 9, 14, 10];
 // Opacité de base variée elle aussi (décorrélée via un 3e offset, +4) : certains satellites
 // plus estompés, d'autres plus francs, plutôt qu'une opacité unique pour tous.
-const AGON_SATELLITE_OPACITY_STEPS = [0.55, 0.95, 0.7, 0.85, 0.6];
-const AGON_SATELLITE_GOLDEN_ANGLE = 137.508; // angle d'or : répartition non régulière mais stable
+const MNORIA_SATELLITE_OPACITY_STEPS = [0.55, 0.95, 0.7, 0.85, 0.6];
+const MNORIA_SATELLITE_GOLDEN_ANGLE = 137.508; // angle d'or : répartition non régulière mais stable
 
 // Ajoute les points satellites (+ leur trait de liaison au noyau) à une bulle déjà construite.
 // Positions posées à 0 pour l'instant (repliés sur le centre) — layoutBubbleSatellites les
@@ -57,21 +57,21 @@ function appendBubbleSatellites(bubble, orbitCount, seedIndex) {
   if (!count) return;
 
   const wrap = document.createElement("span");
-  wrap.className = "agon-tag-bubble-satellites";
+  wrap.className = "mnoria-tag-bubble-satellites";
   wrap.setAttribute("aria-hidden", "true");
 
   const phase = (seedIndex * 47) % 360;
   for (let i = 0; i < count; i += 1) {
-    const angleDeg = phase + i * AGON_SATELLITE_GOLDEN_ANGLE;
-    const extendPx = AGON_SATELLITE_AXIS_EXTEND_PX[i % AGON_SATELLITE_AXIS_EXTEND_PX.length];
-    const sizePx = AGON_SATELLITE_SIZE_STEPS_PX[(i + 2) % AGON_SATELLITE_SIZE_STEPS_PX.length];
-    const opacity = AGON_SATELLITE_OPACITY_STEPS[(i + 4) % AGON_SATELLITE_OPACITY_STEPS.length];
+    const angleDeg = phase + i * MNORIA_SATELLITE_GOLDEN_ANGLE;
+    const extendPx = MNORIA_SATELLITE_AXIS_EXTEND_PX[i % MNORIA_SATELLITE_AXIS_EXTEND_PX.length];
+    const sizePx = MNORIA_SATELLITE_SIZE_STEPS_PX[(i + 2) % MNORIA_SATELLITE_SIZE_STEPS_PX.length];
+    const opacity = MNORIA_SATELLITE_OPACITY_STEPS[(i + 4) % MNORIA_SATELLITE_OPACITY_STEPS.length];
 
     const line = document.createElement("span");
-    line.className = "agon-tag-bubble-satellite-line";
+    line.className = "mnoria-tag-bubble-satellite-line";
 
     const dot = document.createElement("span");
-    dot.className = "agon-tag-bubble-satellite";
+    dot.className = "mnoria-tag-bubble-satellite";
     dot.dataset.angle = angleDeg.toFixed(2);
     dot.dataset.axisExtend = String(extendPx);
     dot.dataset.dotRadius = String(sizePx / 2);
@@ -79,7 +79,7 @@ function appendBubbleSatellites(bubble, orbitCount, seedIndex) {
     dot.style.height = sizePx + "px";
     dot.style.marginLeft = (-sizePx / 2) + "px";
     dot.style.marginTop = (-sizePx / 2) + "px";
-    dot.style.setProperty("--agon-satellite-opacity", String(opacity));
+    dot.style.setProperty("--mnoria-satellite-opacity", String(opacity));
     dot.style.animationDelay = `${((i * 0.7) % 4).toFixed(2)}s`;
     dot.style.animationDuration = `${(7 + (i % 3) * 1.6).toFixed(2)}s`;
     wrap.append(line, dot);
@@ -108,7 +108,7 @@ function raySafeDistanceBeforeCircle(originX, originY, dirX, dirY, circleX, circ
   return t0;
 }
 
-const AGON_SATELLITE_CLEARANCE = 3; // marge visuelle en plus du rayon du point
+const MNORIA_SATELLITE_CLEARANCE = 3; // marge visuelle en plus du rayon du point
 
 // Repositionne les satellites de chaque bulle une fois le nuage entièrement placé (bulles +
 // bouton central) : la distance de chaque satellite à son noyau est plafonnée pour ne JAMAIS
@@ -116,7 +116,7 @@ const AGON_SATELLITE_CLEARANCE = 3; // marge visuelle en plus du rayon du point
 // bulle ou d'une bulle voisine) — quitte à rester masqué sous sa propre bulle (distance <= son
 // propre rayon) dans les cas de chevauchement serré que l'algorithme de placement autorise déjà
 // entre bulles voisines (maxAllowedOverlap). Appelée depuis applyCompactBubbleLayout, après que
-// toutes les bulles ont leur position/taille finale (bubble.style.left/top + --agon-tag-bubble-size).
+// toutes les bulles ont leur position/taille finale (bubble.style.left/top + --mnoria-tag-bubble-size).
 //
 // Deux passes : la 1ère calcule la distance max de chaque satellite vis-à-vis des bulles/bouton
 // central uniquement (indépendant de l'ordre). La 2e reparcourt tous les satellites du nuage
@@ -125,7 +125,7 @@ const AGON_SATELLITE_CLEARANCE = 3; // marge visuelle en plus du rayon du point
 // satellite déjà finalisé, donc aucun chevauchement satellite-satellite au final.
 function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
   function bubbleGeo(el) {
-    const size = parseFloat(el.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
+    const size = parseFloat(el.style.getPropertyValue("--mnoria-tag-bubble-size")) || 0;
     const left = parseFloat(el.style.left);
     const top = parseFloat(el.style.top);
     if (!size || Number.isNaN(left) || Number.isNaN(top)) return null;
@@ -147,14 +147,14 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
   // bulles/bouton central uniquement (pas encore des autres satellites).
   const items = [];
   bubbles.forEach((bubble) => {
-    const wrap = bubble.querySelector(".agon-tag-bubble-satellites");
+    const wrap = bubble.querySelector(".mnoria-tag-bubble-satellites");
     if (!wrap) return;
     const geo = bubbleGeo(bubble);
     if (!geo) return;
 
     const others = allObstacles.filter((o) => o.el !== bubble);
 
-    wrap.querySelectorAll(".agon-tag-bubble-satellite").forEach((dot) => {
+    wrap.querySelectorAll(".mnoria-tag-bubble-satellite").forEach((dot) => {
       const angleRad = ((parseFloat(dot.dataset.angle) || 0) * Math.PI) / 180;
       const dirX = Math.cos(angleRad);
       const dirY = Math.sin(angleRad);
@@ -166,7 +166,7 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
         const limit = raySafeDistanceBeforeCircle(
           geo.cx, geo.cy, dirX, dirY,
           obstacle.cx, obstacle.cy,
-          obstacle.r + dotRadius + AGON_SATELLITE_CLEARANCE
+          obstacle.r + dotRadius + MNORIA_SATELLITE_CLEARANCE
         );
         maxDist = Math.min(maxDist, limit);
       });
@@ -184,14 +184,14 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
       const limit = raySafeDistanceBeforeCircle(
         geo.cx, geo.cy, dirX, dirY,
         placed.cx, placed.cy,
-        placed.r + dotRadius + AGON_SATELLITE_CLEARANCE
+        placed.r + dotRadius + MNORIA_SATELLITE_CLEARANCE
       );
       dist = Math.min(dist, limit);
     });
     dist = Math.max(0, dist);
 
     const line = dot.previousElementSibling;
-    const isLine = line && line.classList.contains("agon-tag-bubble-satellite-line");
+    const isLine = line && line.classList.contains("mnoria-tag-bubble-satellite-line");
 
     // La distance minimale pour que le point reste ENTIÈREMENT hors de SA PROPRE bulle est
     // geo.r + dotRadius (+ marge) — pas geo.r seul (qui ne place que le CENTRE du point sur le
@@ -199,7 +199,7 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
     // écrase la distance sous ce seuil, il n'existe aucune position sûre dans cette direction :
     // le satellite est alors masqué plutôt que dessiné à l'intérieur d'une bulle (jamais de
     // superposition, quitte à afficher moins de satellites que l'orbitCount cible).
-    const ownEdgeMin = geo.r + dotRadius + AGON_SATELLITE_CLEARANCE;
+    const ownEdgeMin = geo.r + dotRadius + MNORIA_SATELLITE_CLEARANCE;
     if (dist < ownEdgeMin) {
       dot.style.display = "none";
       if (isLine) line.style.display = "none";
@@ -237,14 +237,14 @@ function layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius) {
 function getBubbleSizeClass(index, trendItem = null) {
   const weight = Number(trendItem?.sizeWeight);
   if (Number.isFinite(weight)) {
-    if (weight >= 0.72 || index === 0) return "agon-tag-bubble-large";
-    if (weight >= 0.38) return "agon-tag-bubble-medium";
-    return "agon-tag-bubble-small";
+    if (weight >= 0.72 || index === 0) return "mnoria-tag-bubble-large";
+    if (weight >= 0.38) return "mnoria-tag-bubble-medium";
+    return "mnoria-tag-bubble-small";
   }
 
-  if (index <= 2) return "agon-tag-bubble-large";
-  if (index <= 5) return "agon-tag-bubble-medium";
-  return "agon-tag-bubble-small";
+  if (index <= 2) return "mnoria-tag-bubble-large";
+  if (index <= 5) return "mnoria-tag-bubble-medium";
+  return "mnoria-tag-bubble-small";
 }
 
 const MAX_TAG_TREND_BUBBLES = 10;
@@ -256,7 +256,7 @@ function boostedBubbleSize(px, isMobile = false) {
 }
 
 // Source unique de vérité pour la taille d'une bulle en pixels, avant facteur d'échelle global.
-// Utilisée à la fois pour l'affichage visuel (--agon-tag-bubble-size) et pour le placement.
+// Utilisée à la fois pour l'affichage visuel (--mnoria-tag-bubble-size) et pour le placement.
 function computeBubblePxSize(index, trendItem, isMobile) {
   const weight = Number(trendItem?.sizeWeight);
   if (Number.isFinite(weight)) {
@@ -270,8 +270,8 @@ function computeBubblePxSize(index, trendItem, isMobile) {
   }
   // Fallback aligné sur les tailles par défaut des classes CSS
   const sizeClass = getBubbleSizeClass(index);
-  if (sizeClass === "agon-tag-bubble-large") return boostedBubbleSize(index === 1 ? (isMobile ? 153 : 209) : (isMobile ? 128 : 181), isMobile);
-  if (sizeClass === "agon-tag-bubble-medium") return boostedBubbleSize(isMobile ? 110 : 152, isMobile);
+  if (sizeClass === "mnoria-tag-bubble-large") return boostedBubbleSize(index === 1 ? (isMobile ? 153 : 209) : (isMobile ? 128 : 181), isMobile);
+  if (sizeClass === "mnoria-tag-bubble-medium") return boostedBubbleSize(isMobile ? 110 : 152, isMobile);
   return boostedBubbleSize(isMobile ? 72 : 102, isMobile);
 }
 
@@ -288,21 +288,21 @@ function computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBott
 
 function getTrendMeta(trend) {
   const value = Number.isFinite(Number(trend)) ? Math.round(Number(trend)) : 0;
-  if (value > 0) return { className: "agon-tag-trend-up",     label: `▲ +${value}%` };
-  if (value < 0) return { className: "agon-tag-trend-down",   label: `▼ ${value}%` };
-  return              { className: "agon-tag-trend-neutral", label: "= 0%" };
+  if (value > 0) return { className: "mnoria-tag-trend-up",     label: `▲ +${value}%` };
+  if (value < 0) return { className: "mnoria-tag-trend-down",   label: `▼ ${value}%` };
+  return              { className: "mnoria-tag-trend-neutral", label: "= 0%" };
 }
 
 function getWordLengthClass(word) {
   const len = word.length;
-  if (len <= 5)  return "agon-tag-word-short";
-  if (len <= 9)  return "agon-tag-word-medium";
-  if (len <= 13) return "agon-tag-word-long";
-  return "agon-tag-word-xlong";
+  if (len <= 5)  return "mnoria-tag-word-short";
+  if (len <= 9)  return "mnoria-tag-word-medium";
+  if (len <= 13) return "mnoria-tag-word-long";
+  return "mnoria-tag-word-xlong";
 }
 
 function clearTagTrendCloud(container) {
-  container.classList.remove("agon-cloud-layout-pending");
+  container.classList.remove("mnoria-cloud-layout-pending");
   container.innerHTML = "";
   const parentSection = container.closest("section");
   if (parentSection) parentSection.hidden = true;
@@ -310,19 +310,19 @@ function clearTagTrendCloud(container) {
 
 function clearTagTrendCloudVisualItems(container) {
   container.querySelectorAll(
-    ".agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector, .agon-tag-orbit-line"
+    ".mnoria-tag-bubble, .mnoria-tag-center-btn, .mnoria-tag-label-overlay, .mnoria-tag-trend, .mnoria-tag-trend-connector, .mnoria-tag-orbit-line"
   ).forEach((el) => el.remove());
 }
 
 function fitLabelInBubble(bubble) {
-  const label = bubble.querySelector(".agon-tag-label");
+  const label = bubble.querySelector(".mnoria-tag-label");
   if (!label) return;
 
-  const trendEl = bubble.querySelector(".agon-tag-trend");
+  const trendEl = bubble.querySelector(".mnoria-tag-trend");
   const trendH = trendEl ? trendEl.offsetHeight + 3 : 0;
   const bubbleW = bubble.clientWidth || 0;
   const bubbleH = bubble.clientHeight || 0;
-  const wordCount = Math.max(1, label.querySelectorAll(".agon-tag-word").length);
+  const wordCount = Math.max(1, label.querySelectorAll(".mnoria-tag-word").length);
   const labelText = getTagTextFromLabel(label);
   const charCount = labelText.replace(/\s+/g, "").length;
   const lengthFactor = charCount >= 22 ? 0.72 : charCount >= 16 ? 0.82 : charCount >= 11 ? 0.92 : 1;
@@ -353,26 +353,26 @@ function fitLabelInBubble(bubble) {
 }
 
 function getTagTextFromLabel(label) {
-  const words = label?.querySelectorAll(".agon-tag-word");
+  const words = label?.querySelectorAll(".mnoria-tag-word");
   return words?.length
     ? Array.from(words).map(w => w.textContent.trim()).join(" ").trim()
     : (label?.textContent.trim() || "");
 }
 
 function renderLabelOverlays(container) {
-  container.querySelectorAll(".agon-tag-label-overlay").forEach(el => el.remove());
+  container.querySelectorAll(".mnoria-tag-label-overlay").forEach(el => el.remove());
 
   const containerRect = container.getBoundingClientRect();
-  container.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
-    const label = bubble.querySelector(".agon-tag-label");
+  container.querySelectorAll(".mnoria-tag-bubble").forEach(bubble => {
+    const label = bubble.querySelector(".mnoria-tag-label");
     if (!label) return;
 
     const tag = getTagTextFromLabel(label);
     const labelRect = label.getBoundingClientRect();
     const overlay = label.cloneNode(true);
-    overlay.classList.add("agon-tag-label-overlay");
-    if (bubble.classList.contains("agon-tag-bubble-active")) {
-      overlay.classList.add("agon-tag-label-overlay-active");
+    overlay.classList.add("mnoria-tag-label-overlay");
+    if (bubble.classList.contains("mnoria-tag-bubble-active")) {
+      overlay.classList.add("mnoria-tag-label-overlay-active");
     }
     overlay.dataset.tag = tag.toLowerCase();
     overlay.style.position = "absolute";
@@ -390,7 +390,7 @@ function renderLabelOverlays(container) {
 }
 
 function getOverlayTextRect(overlay) {
-  const words = [...overlay.querySelectorAll(".agon-tag-word")];
+  const words = [...overlay.querySelectorAll(".mnoria-tag-word")];
   const rects = words.length ? words.map((word) => word.getBoundingClientRect()) : [overlay.getBoundingClientRect()];
   const visibleRects = rects.filter((rect) => rect.width > 0 && rect.height > 0);
   if (!visibleRects.length) return overlay.getBoundingClientRect();
@@ -410,7 +410,7 @@ function getRectOverlapArea(a, b) {
 }
 
 function isStandaloneMobileHome() {
-  return !!document.body?.classList?.contains("agon-mobile-cloud-viewport");
+  return !!document.body?.classList?.contains("mnoria-mobile-cloud-viewport");
 }
 
 function isMobileTagCloud() {
@@ -433,8 +433,8 @@ function getReadableTextRects(container, containerRect, paddingOverride = null) 
     : (isMobileTagCloud() ? 10 : 3);
   const rects = [];
 
-  container.querySelectorAll(".agon-tag-label-overlay").forEach((overlay) => {
-    const wordRects = [...overlay.querySelectorAll(".agon-tag-word")]
+  container.querySelectorAll(".mnoria-tag-label-overlay").forEach((overlay) => {
+    const wordRects = [...overlay.querySelectorAll(".mnoria-tag-word")]
       .map((word) => word.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0);
 
@@ -467,7 +467,7 @@ function shrinkOverlayText(overlay, factor = 0.9) {
 }
 
 function resolveLabelOverlayCollisions(container) {
-  const overlays = [...container.querySelectorAll(".agon-tag-label-overlay")];
+  const overlays = [...container.querySelectorAll(".mnoria-tag-label-overlay")];
   if (overlays.length < 2) return;
 
   for (let pass = 0; pass < 12; pass += 1) {
@@ -487,7 +487,7 @@ function resolveLabelOverlayCollisions(container) {
     if (!changed) break;
   }
 
-  const centerBtn = container.querySelector(".agon-tag-center-btn");
+  const centerBtn = container.querySelector(".mnoria-tag-center-btn");
   if (!centerBtn) return;
   const centerRect = centerBtn.getBoundingClientRect();
   for (let pass = 0; pass < 14; pass += 1) {
@@ -502,7 +502,7 @@ function resolveLabelOverlayCollisions(container) {
 }
 
 function applyCompactBubbleLayout(container) {
-  const bubbles = [...container.querySelectorAll(".agon-tag-bubble")];
+  const bubbles = [...container.querySelectorAll(".mnoria-tag-bubble")];
   if (!bubbles.length) return;
 
   // clientWidth/clientHeight (pas getBoundingClientRect) : le conteneur porte encore
@@ -521,7 +521,7 @@ function applyCompactBubbleLayout(container) {
   const frameTopRaw = getComputedStyle(container).getPropertyValue("--bubble-frame-top").trim();
   const frameTop = parseFloat(frameTopRaw) || 55;
   const frameBottomInset = isMobile ? 78 : 23;
-  // Cadre décoratif (.agon-tag-trends-cloud::before) inséré de 30px à gauche et à droite (cf.
+  // Cadre décoratif (.mnoria-tag-trends-cloud::before) inséré de 30px à gauche et à droite (cf.
   // style.css, inset: ... 30px ...) — jusqu'ici seuls le haut/bas (frameTop/frameBottomInset)
   // étaient pris en compte pour les limites de placement, pas les côtés : une bulle pouvait donc
   // être posée jusqu'à 24px plus à gauche/droite que ce que le cadre visible autorise, et
@@ -529,7 +529,7 @@ function applyCompactBubbleLayout(container) {
   const frameSideInset = 30;
   const centerY = (frameTop + (containerH - frameBottomInset)) / 2;
 
-  const centerBtnEl = container.querySelector(".agon-tag-center-btn");
+  const centerBtnEl = container.querySelector(".mnoria-tag-center-btn");
   if (centerBtnEl) centerBtnEl.style.top = Math.round(centerY) + "px";
 
   // Lire les tailles de base stockées au moment du rendu
@@ -539,7 +539,7 @@ function applyCompactBubbleLayout(container) {
   const autoScale = computeAutoScale(baseSizes, containerW, containerH, frameTop, frameBottomInset);
 
   const margin = isMobile ? 4 : 6;
-  // Rayon réservé au centre pour .agon-tag-center-btn (obstacle initial du placement, cf.
+  // Rayon réservé au centre pour .mnoria-tag-center-btn (obstacle initial du placement, cf.
   // `placed` plus bas) : 0 si le bouton n'existe pas du tout (renderTagTrendCloud peut
   // désormais le sauter entièrement, cf. paramètre centerLabel) — jamais de trou vide
   // artificiel dans ce cas. data-center-radius, posé par renderTagTrendCloud, permet à un
@@ -572,7 +572,7 @@ function applyCompactBubbleLayout(container) {
     // Appliquer les tailles mises à l'échelle : même valeur pour l'affichage et le placement
     const scaledSizes = baseSizes.map((base, i) => {
       const scaled = Math.max(48, Math.round(base * scale));
-      bubbles[i].style.setProperty("--agon-tag-bubble-size", scaled + "px");
+      bubbles[i].style.setProperty("--mnoria-tag-bubble-size", scaled + "px");
       return scaled;
     });
 
@@ -716,31 +716,31 @@ function applyCompactBubbleLayout(container) {
     scale = nextScale;
   }
 
-  // Satellites "atome" des bulles Agôn/Communauté (cf. appendBubbleSatellites) : repositionnés
+  // Satellites "atome" des bulles Mnoria/Communauté (cf. appendBubbleSatellites) : repositionnés
   // seulement maintenant, une fois la géométrie finale (px) de toutes les bulles connue —
   // aucun effet si aucune bulle n'a de satellites (querySelector interne retourne alors null).
   layoutBubbleSatellites(bubbles, centerX, centerY, btnRadius);
 
   // Traits reliant le centre "soleil" (étoiles autour de leur système, cf.
-  // .agon-tag-center-btn-sun, posé par mon-univers.js) à chaque bulle fille — jamais pour le
+  // .mnoria-tag-center-btn-sun, posé par mon-univers.js) à chaque bulle fille — jamais pour le
   // bouton "À LA UNE" par défaut, ni pour le centre "trou noir" (systèmes autour de leur galaxie,
   // demande du 07/08/2026 : le trait ne doit relier que la toute dernière étape, pas l'étape
   // intermédiaire). Lit les positions déjà finalisées (bubble.style.left/top, posées ci-dessus)
   // plutôt que de dupliquer le calcul de placement — reste correct même après un recalcul
   // déclenché par ResizeObserver, qui appelle layoutTagTrendCloud directement sans repasser par
   // cette fonction wrapper.
-  if (centerBtnEl && centerBtnEl.classList.contains("agon-tag-center-btn-sun")) {
+  if (centerBtnEl && centerBtnEl.classList.contains("mnoria-tag-center-btn-sun")) {
     drawOrbitLines(container, bubbles, centerX, centerY, btnRadius);
   } else {
-    container.querySelectorAll(".agon-tag-orbit-line").forEach((el) => el.remove());
+    container.querySelectorAll(".mnoria-tag-orbit-line").forEach((el) => el.remove());
   }
 }
 
 function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
-  container.querySelectorAll(".agon-tag-orbit-line").forEach((el) => el.remove());
+  container.querySelectorAll(".mnoria-tag-orbit-line").forEach((el) => el.remove());
 
   function bubbleGeo(el) {
-    const size = parseFloat(el.style.getPropertyValue("--agon-tag-bubble-size")) || 0;
+    const size = parseFloat(el.style.getPropertyValue("--mnoria-tag-bubble-size")) || 0;
     const left = parseFloat(el.style.left);
     const top = parseFloat(el.style.top);
     if (!size || Number.isNaN(left) || Number.isNaN(top)) return null;
@@ -775,7 +775,7 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
     // mathématique exact de la bulle. 14px les fait arriver juste dans la partie
     // colorée, sans traverser le texte central de l'étoile. Le même recouvrement
     // est appliqué au départ, vers le soleil central.
-    const customBackground = bubble.style.getPropertyValue("--agon-orbit-line-background").trim();
+    const customBackground = bubble.style.getPropertyValue("--mnoria-orbit-line-background").trim();
     const starRingOverlap = customBackground ? 14 : 0;
     const solarOverlap = customBackground ? 14 : 0;
     const lineLength = dist - geo.r - targetR;
@@ -788,7 +788,7 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
     const startY = targetY + sinAngle * targetR;
 
     const line = document.createElement("div");
-    line.className = "agon-tag-orbit-line";
+    line.className = "mnoria-tag-orbit-line";
     line.style.position = "absolute";
     line.style.left = Math.round(startX) + "px";
     line.style.top = Math.round(startY) + "px";
@@ -826,7 +826,7 @@ function drawOrbitLines(container, bubbles, centerX, centerY, btnRadius) {
       const appendOverlap = (distanceFromTarget, width, fadeDirection) => {
         if (width <= 0) return;
         const overlap = document.createElement("div");
-        overlap.className = `agon-tag-orbit-line agon-tag-orbit-line-star-overlap agon-tag-orbit-line-star-overlap-${fadeDirection}`;
+        overlap.className = `mnoria-tag-orbit-line mnoria-tag-orbit-line-star-overlap mnoria-tag-orbit-line-star-overlap-${fadeDirection}`;
         overlap.style.position = "absolute";
         overlap.style.left = Math.round(targetX + cosAngle * distanceFromTarget) + "px";
         overlap.style.top = Math.round(targetY + sinAngle * distanceFromTarget) + "px";
@@ -849,7 +849,7 @@ function positionTrendBadges(container) {
   const cW = container.clientWidth;
   const cH = container.clientHeight;
 
-  const allBubbles = [...container.querySelectorAll(".agon-tag-bubble")];
+  const allBubbles = [...container.querySelectorAll(".mnoria-tag-bubble")];
 
   const bubbleGeo = allBubbles.map(b => {
     const br = b.getBoundingClientRect();
@@ -865,7 +865,7 @@ function positionTrendBadges(container) {
   const overlayRects = getReadableTextRects(container, containerRect);
   const tightOverlayRects = getReadableTextRects(container, containerRect, isMobileTagCloud() ? 4 : 1);
 
-  const cbtn = container.querySelector(".agon-tag-center-btn");
+  const cbtn = container.querySelector(".mnoria-tag-center-btn");
   const cbtnR = cbtn ? (() => {
     const r = cbtn.getBoundingClientRect();
     return { l: r.left - containerRect.left - 4, t: r.top - containerRect.top - 4, r: r.right - containerRect.left + 4, b: r.bottom - containerRect.top + 4 };
@@ -886,19 +886,19 @@ function positionTrendBadges(container) {
   }
 
   allBubbles.forEach((bubble, idx) => {
-    const trend = bubble.querySelector(".agon-tag-trend")
-      || container.querySelector(`.agon-tag-trend[data-bubble-index="${bubble.dataset.bubbleIndex || idx}"]`);
+    const trend = bubble.querySelector(".mnoria-tag-trend")
+      || container.querySelector(`.mnoria-tag-trend[data-bubble-index="${bubble.dataset.bubbleIndex || idx}"]`);
     if (!trend) return;
-    const connector = bubble.querySelector(".agon-tag-trend-connector")
-      || container.querySelector(`.agon-tag-trend-connector[data-bubble-index="${bubble.dataset.bubbleIndex || idx}"]`);
+    const connector = bubble.querySelector(".mnoria-tag-trend-connector")
+      || container.querySelector(`.mnoria-tag-trend-connector[data-bubble-index="${bubble.dataset.bubbleIndex || idx}"]`);
 
     const geo = bubbleGeo[idx];
 
     // Rect du texte du tag de cette bulle (overlay si présent, sinon label interne) :
     // la cible de proximité du badge
     const tagKey = String(trend.dataset.tag || bubble.dataset.tag || "").toLowerCase();
-    const ownLabelEl = [...container.querySelectorAll(".agon-tag-label-overlay")]
-      .find((o) => o.dataset.tag === tagKey) || bubble.querySelector(".agon-tag-label");
+    const ownLabelEl = [...container.querySelectorAll(".mnoria-tag-label-overlay")]
+      .find((o) => o.dataset.tag === tagKey) || bubble.querySelector(".mnoria-tag-label");
     const ownLabelRect = ownLabelEl
       ? rectToContainerSpace(ownLabelEl.getBoundingClientRect(), containerRect, 0)
       : null;
@@ -1114,7 +1114,7 @@ function positionTrendBadges(container) {
 
 function layoutTagTrendCloud(container) {
   applyCompactBubbleLayout(container);
-  container.querySelectorAll(".agon-tag-bubble").forEach(fitLabelInBubble);
+  container.querySelectorAll(".mnoria-tag-bubble").forEach(fitLabelInBubble);
   renderLabelOverlays(container);
   positionTrendBadges(container);
 }
@@ -1122,7 +1122,7 @@ function layoutTagTrendCloud(container) {
 // maxBubbles : optionnel, par défaut MAX_TAG_TREND_BUBBLES (comportement historique
 // inchangé pour tout appelant existant). Permet à un autre appelant (ex. page "Mon
 // univers") d'afficher plus d'éléments sans dupliquer ce moteur — index au-delà de 11
-// perd juste le décalage d'animation par .agon-tag-pos-N (aucune règle CSS au-delà,
+// perd juste le décalage d'animation par .mnoria-tag-pos-N (aucune règle CSS au-delà,
 // donc sans effet visuel indésirable), jamais d'erreur.
 // centerLabel : optionnel, undefined par défaut (comportement historique inchangé — bouton
 // "À LA UNE" cliquable, cf. plus bas). null/false = aucun bouton central du tout (jamais de
@@ -1135,10 +1135,10 @@ function layoutTagTrendCloud(container) {
 // maximum autorisé). Espace minimal additionnel (px) exigé entre bulles par
 // applyCompactBubbleLayout — utilisé par "Mon univers" au niveau galaxies pour laisser
 // respirer le fond étoilé entre les bulles plutôt que les coller les unes aux autres, et par
-// Bulles Agôn/Communauté (cf. toggleAgonCloud, script.js) pour le même effet.
+// Bulles Mnoria/Communauté (cf. toggleMnoriaCloud, script.js) pour le même effet.
 // sizeScale : optionnel, 1 par défaut (comportement historique inchangé — taille pleine).
 // Multiplie la taille de base de chaque bulle (avant le facteur d'échelle global anti-
-// débordement, computeAutoScale) — utilisé par Bulles Agôn/Communauté pour des bulles plus
+// débordement, computeAutoScale) — utilisé par Bulles Mnoria/Communauté pour des bulles plus
 // petites, laissant plus de place aux satellites et au bubbleGap ci-dessus.
 function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TREND_BUBBLES, centerLabel = undefined, bubbleGap = 0, sizeScale = 1) {
   if (!container) return;
@@ -1153,15 +1153,15 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
   const parentSection = container.closest("section");
   if (parentSection) parentSection.hidden = false;
 
-  container.classList.add("agon-cloud-layout-pending");
+  container.classList.add("mnoria-cloud-layout-pending");
   clearTagTrendCloudVisualItems(container);
 
   const isMobile = isMobileTagCloud();
   const POS_ORDER = [1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
   const visibleTrends = trends.slice(0, maxBubbles);
-  // Satellites "atome" (Bulles Agôn/Communauté uniquement) : seuls les trendItems porteurs
-  // d'un ideaCount (posé par toggleAgonCloud côté script.js) en reçoivent — les nuages Actu
+  // Satellites "atome" (Bulles Mnoria/Communauté uniquement) : seuls les trendItems porteurs
+  // d'un ideaCount (posé par toggleMnoriaCloud côté script.js) en reçoivent — les nuages Actu
   // et Mon univers, qui ne renseignent jamais ce champ, restent inchangés.
   const hasIdeaIntensity = visibleTrends.some((t) => Number.isFinite(Number(t?.ideaCount)));
   const ideaOrbitCounts = hasIdeaIntensity ? computeRelativeIdeaOrbitCounts(visibleTrends) : [];
@@ -1175,9 +1175,9 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
     const trendMeta = hasTrend ? getTrendMeta(trendValue) : null;
     const bubble = document.createElement("button");
     bubble.className = [
-      "agon-tag-bubble",
+      "mnoria-tag-bubble",
       getBubbleSizeClass(index, trendItem),
-      `agon-tag-pos-${POS_ORDER[index] ?? index}`
+      `mnoria-tag-pos-${POS_ORDER[index] ?? index}`
     ].join(" ");
 
     // Taille de base calculée (sans facteur d'échelle) — stockée en data-attribute
@@ -1187,21 +1187,21 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
     bubble.dataset.bubbleIndex = String(index);
     bubble.dataset.tag = tag;
     bubble.dataset.subjectId = String(trendItem?.subjectId || "").trim();
-    bubble.style.setProperty("--agon-tag-bubble-size", basePxSize + "px");
+    bubble.style.setProperty("--mnoria-tag-bubble-size", basePxSize + "px");
 
     // Optionnel, jamais utilisé par les appelants existants (nuages de tags de débats) : un
-    // style inline gagne toujours sur la règle CSS de fond par défaut (.agon-tag-bubble),
+    // style inline gagne toujours sur la règle CSS de fond par défaut (.mnoria-tag-bubble),
     // aucune modification de style.css nécessaire. Sert à "Mon univers" pour colorer chaque
     // bulle par galaxie (cf. public/mon-univers.js).
     if (trendItem?.bubbleBackground) bubble.style.background = trendItem.bubbleBackground;
     // Idem, optionnel : classe supplémentaire (ex. halo façon galaxie sur les bulles racine de
     // "Mon univers") + couleur de halo transmise en variable CSS, jamais posée par défaut.
     if (trendItem?.bubbleExtraClass) bubble.classList.add(trendItem.bubbleExtraClass);
-    if (trendItem?.bubbleGlowColor) bubble.style.setProperty("--agon-tag-bubble-glow", trendItem.bubbleGlowColor);
+    if (trendItem?.bubbleGlowColor) bubble.style.setProperty("--mnoria-tag-bubble-glow", trendItem.bubbleGlowColor);
     // Couleur optionnelle du trait reliant cette bulle au centre. Ma mémoire l'utilise
     // pour donner à chaque liaison étoile → système la même teinte que l'étoile.
     if (trendItem?.orbitLineBackground) {
-      bubble.style.setProperty("--agon-orbit-line-background", trendItem.orbitLineBackground);
+      bubble.style.setProperty("--mnoria-orbit-line-background", trendItem.orbitLineBackground);
     }
     // Idem, optionnel : index (dans ce même tableau trends) d'une AUTRE bulle à laquelle
     // relier cette bulle par un trait, au lieu du centre par défaut (cf. drawOrbitLines) — sert
@@ -1211,28 +1211,28 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
     bubble.type = "button";
 
     const label = document.createElement("span");
-    label.className = "agon-tag-label";
+    label.className = "mnoria-tag-label";
 
     tag.split(/\s+/).filter(Boolean).forEach(word => {
       const wordSpan = document.createElement("span");
-      wordSpan.className = `agon-tag-word ${getWordLengthClass(word)}`;
+      wordSpan.className = `mnoria-tag-word ${getWordLengthClass(word)}`;
       wordSpan.textContent = word.toUpperCase();
       label.appendChild(wordSpan);
     });
 
     const flashWrap = document.createElement("span");
-    flashWrap.className = "agon-tag-bubble-flash";
+    flashWrap.className = "mnoria-tag-bubble-flash";
 
     bubble.append(flashWrap, label);
     if (hasTrend) {
       const trendSpan = document.createElement("span");
-      trendSpan.className = `agon-tag-trend ${trendMeta.className}`;
+      trendSpan.className = `mnoria-tag-trend ${trendMeta.className}`;
       trendSpan.dataset.bubbleIndex = String(index);
       trendSpan.dataset.tag = tag;
       trendSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
       trendSpan.textContent = trendMeta.label;
       const connectorSpan = document.createElement("span");
-      connectorSpan.className = `agon-tag-trend-connector ${trendMeta.className}`;
+      connectorSpan.className = `mnoria-tag-trend-connector ${trendMeta.className}`;
       connectorSpan.dataset.bubbleIndex = String(index);
       connectorSpan.dataset.tag = tag;
       connectorSpan.dataset.subjectId = String(trendItem?.subjectId || "").trim();
@@ -1245,7 +1245,7 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
   if (centerLabel !== null && centerLabel !== false) {
     const centerBtn = document.createElement("button");
     centerBtn.type = "button";
-    centerBtn.className = "agon-tag-center-btn";
+    centerBtn.className = "mnoria-tag-center-btn";
     // Deux formes acceptées pour un centre personnalisé : une chaîne (texte seul, disque neutre
     // par défaut) ou un objet {label, background} — la bulle centrale prend alors le même
     // dégradé qu'une vraie bulle de ce niveau (cf. mon-univers.js centerLabelForCurrentLevel),
@@ -1255,8 +1255,8 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
       ? centerLabel.trim()
       : (centerLabel && typeof centerLabel === "object" ? String(centerLabel.label || "").trim() : "");
     if (centerText) {
-      centerBtn.classList.add("agon-tag-center-btn-custom");
-      // 58 plutôt que le rayon réel du cercle (46, cf. .agon-tag-center-btn-custom 92px) : ce
+      centerBtn.classList.add("mnoria-tag-center-btn-custom");
+      // 58 plutôt que le rayon réel du cercle (46, cf. .mnoria-tag-center-btn-custom 92px) : ce
       // rayon sert d'obstacle pour éloigner les bulles filles lors du placement, mais le texte
       // du centre peut désormais déborder de son cercle sans être coupé (overflow:visible,
       // cf. style.css) — une marge de sécurité évite qu'une bulle voisine se retrouve placée
@@ -1267,27 +1267,27 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
       }
       // Centres "trou noir"/"soleil" (cf. mon-univers.js blackHoleVisual/sunVisual) : classe
       // dédiée en plus du dégradé (posé via .background ci-dessus) pour le halo (box-shadow,
-      // style.css .agon-tag-center-btn-blackhole/-sun) ; glowColor teinte ce halo par galaxie.
+      // style.css .mnoria-tag-center-btn-blackhole/-sun) ; glowColor teinte ce halo par galaxie.
       if (centerLabel && typeof centerLabel === "object") {
-        if (centerLabel.blackHole) centerBtn.classList.add("agon-tag-center-btn-blackhole");
-        if (centerLabel.sun) centerBtn.classList.add("agon-tag-center-btn-sun");
+        if (centerLabel.blackHole) centerBtn.classList.add("mnoria-tag-center-btn-blackhole");
+        if (centerLabel.sun) centerBtn.classList.add("mnoria-tag-center-btn-sun");
         if (centerLabel.glowColor) centerBtn.style.setProperty("--center-glow-color", centerLabel.glowColor);
       }
       const span = document.createElement("span");
-      span.className = "agon-tag-center-btn-custom-text";
+      span.className = "mnoria-tag-center-btn-custom-text";
       span.textContent = centerText;
       centerBtn.appendChild(span);
       centerBtn.disabled = true;
     } else {
       centerBtn.innerHTML = `<span>À LA</span><span>UNE</span>`;
       centerBtn.addEventListener("click", () => {
-        window.dispatchEvent(new CustomEvent("agon:tag-trends-show-agon"));
+        window.dispatchEvent(new CustomEvent("mnoria:tag-trends-show-mnoria"));
       });
     }
     container.appendChild(centerBtn);
   }
 
-  const keepVisibleDuringSwitch = container.classList.contains("agon-cloud-switching");
+  const keepVisibleDuringSwitch = container.classList.contains("mnoria-cloud-switching");
   if (!keepVisibleDuringSwitch) container.style.visibility = "hidden";
 
   requestAnimationFrame(() => {
@@ -1295,20 +1295,20 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
       try {
         layoutTagTrendCloud(container);
       } catch (error) {
-        console.warn("[Agôn] Placement du nuage interrompu:", error);
+        console.warn("[Mnoria] Placement du nuage interrompu:", error);
       } finally {
-        container.classList.remove("agon-cloud-layout-pending");
+        container.classList.remove("mnoria-cloud-layout-pending");
         if (!keepVisibleDuringSwitch) container.style.visibility = "";
         if (onReady) onReady();
       }
 
       if (document.fonts?.ready) {
         document.fonts.ready.then(() => {
-          if (!container.isConnected || !container.querySelector(".agon-tag-bubble")) return;
+          if (!container.isConnected || !container.querySelector(".mnoria-tag-bubble")) return;
           try {
             layoutTagTrendCloud(container);
           } catch (error) {
-            console.warn("[Agôn] Repositionnement du nuage interrompu:", error);
+            console.warn("[Mnoria] Repositionnement du nuage interrompu:", error);
           }
         }).catch(() => {});
       }
@@ -1323,7 +1323,7 @@ function renderTagTrendCloud(container, trends, onReady, maxBubbles = MAX_TAG_TR
     container._cloudResizeObserver = new ResizeObserver(() => {
       clearTimeout(_resizeTimer);
       _resizeTimer = setTimeout(() => {
-        if (!container.querySelectorAll('.agon-tag-bubble').length) return;
+        if (!container.querySelectorAll('.mnoria-tag-bubble').length) return;
         layoutTagTrendCloud(container);
       }, 120);
     });

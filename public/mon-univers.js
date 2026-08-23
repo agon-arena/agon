@@ -5,10 +5,10 @@
 // chaque clic. Remplace l'ancien modèle "un niveau = tout l'écran" qui réutilisait
 // tagTrendCloud.js (recalculait les positions à chaque clic, sans mémoire spatiale entre
 // niveaux) — tagTrendCloud.js n'est plus utilisé ici, jamais touché : il reste utilisé tel
-// quel par les bulles Agôn/Actu (public/script.js), sans rapport avec ce chantier.
+// quel par les bulles Mnoria/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260815-radial-collision-layout-v28";
+import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260817-revert-galaxy-size";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -25,7 +25,7 @@ function getKey() {
 
 // ---- Couleur par galaxie : une teinte fixe par galaxie (jamais blanc/bleu/rouge, déjà pris par
 // les nuages de tags existants — général blanc-bleuté, "Droite" bleu, "Gauche" rouge, cf.
-// style.css .agon-tag-bubble / .agon-cloud-political-right / .agon-cloud-political-left), la
+// style.css .mnoria-tag-bubble / .mnoria-cloud-political-right / .mnoria-cloud-political-left), la
 // même teinte pour tous les niveaux (galaxie -> système solaire -> étoile) mais de plus en plus
 // claire à mesure qu'on zoome, pour garder un repère visuel de profondeur. Deux arcs de teintes
 // hors zones réservées (rouge ~340-20°, bleu ~200-250°) : 25-181° (chaud, catégories concrètes)
@@ -66,6 +66,17 @@ function hueForGalaxy(name) {
   return offset <= (181 - 25) ? 25 + offset : 256 + (offset - (181 - 25));
 }
 
+// Même principe que le hash de hueForGalaxy ci-dessus (jamais Math.random(), pour un rendu
+// stable entre deux visites) : dérive une valeur déterministe dans [0,1) à partir d'une chaîne
+// de départ. Utilisé par addMoonsAroundGalaxy pour un jitter d'angle/rayon reproductible plutôt
+// qu'un placement parfaitement régulier (demande du 17/08/2026, "pas de manière régulière et
+// symétrique").
+function stableUnitFromString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return (hash % 100000) / 100000;
+}
+
 // Saturation commune, luminosité des 3 arrêts du dégradé — jamais recalculée par galaxie.
 // Le solar reprend désormais les mêmes niveaux colorés perceptibles que sa galaxie : des
 // luminosités trop proches du blanc donnaient auparavant l'impression d'une saturation moindre.
@@ -98,12 +109,12 @@ function bubbleBackgroundFor(galaxyName, level, fadeEdge = false) {
 }
 
 // "À classer" (aucune galaxie à colorer) : même bleuté que le dégradé par défaut de
-// .agon-tag-bubble, avec le même fondu en alpha vers le bord que les autres niveaux.
+// .mnoria-tag-bubble, avec le même fondu en alpha vers le bord que les autres niveaux.
 const UNCLASSIFIED_BUBBLE_BACKGROUND = `radial-gradient(circle closest-side at 50% 50%, rgba(255,255,255,1) 0%, rgba(235,242,255,1) 40%, rgba(210,225,248,0.85) 70%, rgba(185,208,240,0.35) 88%, rgba(185,208,240,0) 100%)`;
 
 // Bulles galaxie : rendu "nœud de neurone" très lumineux plutôt qu'un simple disque pastel —
 // cœur très brillant + fines lignes rayonnantes façon synapses/dendrites, halo qui déborde du
-// cercle (cf. .agon-tag-bubble-galaxy, style.css). Le dégradé de base (bubbleBackgroundFor)
+// cercle (cf. .mnoria-tag-bubble-galaxy, style.css). Le dégradé de base (bubbleBackgroundFor)
 // reste identique en dessous pour garder la même teinte que les systèmes/étoiles filles ; ces
 // couches viennent seulement s'ajouter par-dessus.
 
@@ -192,7 +203,7 @@ function galaxyBubbleVisual(galaxyName) {
   const lines = neuronLinesBackground(hue);
   // Cœur et halo également réduits d'~30% (demande du 13/08/2026) — alpha du
   // centre blanc et de la teinte de fin de dégradé abaissés, glowColor (repris
-  // par .agon-tag-bubble-galaxy::before, style.css) idem.
+  // par .mnoria-tag-bubble-galaxy::before, style.css) idem.
   const core = `radial-gradient(ellipse 24% 24% at 50% 50%, rgba(255,255,255,0.72) 0%, hsl(${hue} ${THEME_SATURATION}% 93%) 12%, hsl(${hue} ${THEME_SATURATION}% 80%) 36%, hsla(${hue}, ${THEME_SATURATION}%, 68%, 0.68) 66%, transparent 86%)`;
   return {
     background: `${core}, ${lines}`,
@@ -214,6 +225,7 @@ let viewportEl = null;
 // (le compositeur recompose un bitmap agrandi puis rétréci au lieu de re-rasteriser le texte à
 // sa taille finale) — signalé le 13/08/2026 par capture d'écran, très net à ×20-40.
 let labelsOverlayEl = null;
+let linksOverlayEl = null;
 // Recalcule les dimensions CSS de la tuile 4K au redimensionnement/changement de densité
 // d'écran (rotation mobile, passage d'un écran Retina à un autre), cf. mountUniverse.
 let universeBgResizeObserver = null;
@@ -228,6 +240,48 @@ const connectorElByNodeId = new Map();
 // extrémités du niveau concerné le sont.
 const knowledgeLinkEls = [];
 const nodeById = new Map(); // id (cf. layoutUniverseWorld) -> nœud positionné, reconstruit à chaque scène
+// Isolation étoile<->étoile (demande du 17/08/2026) : Set des 2 ids d'étoiles à garder visibles
+// après un double-clic sur leur lien, ou null en vue normale — cf. createKnowledgeLinkEl,
+// onCameraChange.
+let isolatedStarPair = null;
+let isolationInfoEl = null;
+let moonLinkEl = null;
+
+// Centralise le passage isolé <-> normal (demande du 17/08/2026, petite fenêtre avec les noms
+// des 2 étoiles + rappel "clique n'importe où pour tout faire réapparaître") : tous les points
+// d'entrée (double-clic sur le lien, clic sur zone vide) passent par ici plutôt que de manipuler
+// isolatedStarPair et ce panneau séparément à chaque endroit.
+function setIsolatedStarPair(pair, fromNode, toNode) {
+  isolatedStarPair = pair;
+  if (isolationInfoEl) {
+    if (pair && fromNode && toNode) {
+      isolationInfoEl.innerHTML = "";
+      const names = document.createElement("p");
+      names.className = "universe-isolation-info-names";
+      names.textContent = fromNode.name + " ↔ " + toNode.name;
+      const hint = document.createElement("p");
+      hint.className = "universe-isolation-info-hint";
+      hint.textContent = "Ferme cette fenêtre, puis double-clique n’importe où pour tout faire réapparaître.";
+      const dismissBtn = document.createElement("button");
+      dismissBtn.type = "button";
+      dismissBtn.className = "universe-isolation-info-dismiss";
+      dismissBtn.textContent = "J’ai compris";
+      // stopPropagation : sans ça, ce clic bulle jusqu'au listener document ci-dessous, qui —
+      // une fois le panneau fermé par CE MÊME clic — verrait aussitôt isolationInfoEl.hidden et
+      // sortirait de l'isolement dans la foulée, au lieu de se contenter de fermer la fenêtre.
+      dismissBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        isolationInfoEl.hidden = true;
+      });
+      isolationInfoEl.append(names, hint, dismissBtn);
+      isolationInfoEl.hidden = false;
+    } else {
+      isolationInfoEl.hidden = true;
+    }
+  }
+  camera?.refresh();
+}
 
 // HUD de navigation : un seul SVG très léger, indépendant du monde transformé. Il affiche
 // uniquement les galaxies, la position de la caméra et l'emprise du viewport.
@@ -246,22 +300,30 @@ let minimapActiveGalaxyId = null;
 let minimapClipIdCounter = 0;
 const minimapMarkerByNodeId = new Map();
 
-// Repli sur #agon-tag-trends-cloud (bulles "Ma mémoire" embarquées sur l'accueil, même cadre
-// que Bulles Actu/Bulles Agôn) — la page /mon-univers autonome a bien son propre
-// #agon-universe-cloud, jamais affecté par ce repli.
-const cloudEl = document.getElementById("agon-universe-cloud") || document.getElementById("agon-tag-trends-cloud");
+// Repli sur #mnoria-tag-trends-cloud (bulles "Ma mémoire" embarquées sur l'accueil, même cadre
+// que Bulles Actu/Bulles Mnoria) — la page /mon-univers autonome a bien son propre
+// #mnoria-universe-cloud, jamais affecté par ce repli.
+const cloudEl = document.getElementById("mnoria-universe-cloud") || document.getElementById("mnoria-tag-trends-cloud");
 const breadcrumbEl = document.getElementById("universe-breadcrumb");
 const statusEl = document.getElementById("universe-status");
 const backBtn = document.getElementById("universe-back-btn");
 
-// Texture définitive fournie pour "Ma mémoire". Le fichier PNG demeure strictement intact :
-// aucune variante, recompression ou transformation n'est générée. À l'échelle caméra 1, une
-// dimension CSS divisée par devicePixelRatio fait correspondre un pixel source à un pixel
-// physique sur les écrans Retina/HiDPI ; le zoom de la caméra reste ensuite un zoom visuel
-// normal du même asset original.
+// Texture définitive fournie pour "Ma mémoire". À l'échelle caméra 1, une dimension CSS divisée
+// par devicePixelRatio fait correspondre un pixel source à un pixel physique sur les écrans
+// Retina/HiDPI ; le zoom de la caméra reste ensuite un zoom visuel normal du même asset.
+// WebP lossy (qualité 82, cf. audit "egress Ma mémoire" du 16/08/2026) remplace le PNG source
+// (mnoria_master_4K_seamless_infini.png, conservé sur disque comme master) : -90,6% de poids
+// (12,0 Mo -> 1,13 Mo) pour une différence visuelle imperceptible même sur les zones les plus
+// exigeantes (champ d'étoiles à fort contraste, vérifié par crops 500×500 comparés pixel à
+// pixel). Mêmes dimensions natives (3840×2560), donc aucun changement des calculs de
+// zoom/tuilage ci-dessous. Cohérent avec le reste du projet, qui sert déjà tous ses visuels en
+// WebP sans repli PNG (cf. /visuels/*.webp, server.js resized.webp) — pas de <picture>/fallback
+// nécessaire. Ne réduit PAS l'empreinte mémoire décodée pendant le rendu (même bitmap brut une
+// fois décodé, quel que soit le format source) : gain réseau/disque uniquement, distinct du
+// correctif "gel du fond pendant un geste" (cf. universe-zoom.js) qui vise lui la mémoire/GPU.
 const MNORIA_TEXTURE_NATURAL_W = 3840;
 const MNORIA_TEXTURE_NATURAL_H = 2560;
-const MNORIA_TEXTURE_URL = "/mnoria_master_4K_seamless_infini.png?v=20260815-original";
+const MNORIA_TEXTURE_URL = "/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy";
 let mnoriaTextureReadyPromise = null;
 
 function ensureMnoriaTextureReady() {
@@ -358,9 +420,15 @@ function ariaLabelFor(kind, node) {
 // ---- Indicateurs et décorations calculés une seule fois par nœud lors du montage ------------
 
 // Lunes INFORMATIVES de la vue galaxie : une lune exacte par système solaire, jamais de lune
-// ajoutée au hasard. Leur position est entièrement déterministe et se déploie en anneaux
-// radiaux réguliers autour de la galaxie. Si une galaxie contient trop de systèmes pour un seul
-// anneau sans chevauchement, les suivants occupent automatiquement un anneau plus éloigné.
+// ajoutée au hasard. Leur position est entièrement déterministe (jamais Math.random(), cf.
+// stableUnitFromString) mais volontairement irrégulière — chaque lune reçoit un léger jitter
+// d'angle et de rayon, propre à son anneau, plutôt qu'un placement parfaitement régulier et
+// symétrique (demande du 17/08/2026). Le jitter reste borné assez strictement pour ne jamais
+// remettre en cause les deux invariants existants : aucune collision entre lunes d'un même
+// anneau, et aucun débordement sur le territoire d'une galaxie voisine (cf. mémoire
+// project_galaxy_moon_spacing — les lunes restent bornées dans leur propre galaxy.r). Si une
+// galaxie contient trop de systèmes pour un seul anneau sans chevauchement, les suivants
+// occupent automatiquement un anneau plus éloigné.
 function addMoonsAroundGalaxy(galaxy) {
   const systems = galaxy.ref.solarSystems;
   if (!systems.length) return;
@@ -369,25 +437,55 @@ function addMoonsAroundGalaxy(galaxy) {
   // ces repères se confondaient avec les étoiles du fond et donnaient l'impression de
   // n'apparaître qu'après le zoom sur les systèmes solaires.
   const moonSize = Math.max(8, Math.min(11, galaxy.r * 0.13));
-  const spacing = moonSize + 8;
-  const firstRadius = galaxy.r + 14 + moonSize / 2;
+  // 8 -> 2px d'écart entre deux lunes du même anneau (demande du 17/08/2026, "s'agglomérer") :
+  // serrées les unes contre les autres, seul un nouvel anneau (plus loin) prend le relais si la
+  // capacité du premier est dépassée (ringCapacity plus bas, inchangé dans son principe).
+  const spacing = moonSize + 2;
+  // Toucher le cercle exact (galaxy.r) ne suffisait pas (demande du 17/08/2026, "toujours trop
+  // loin") : la bulle galaxie a un halo lumineux qui déborde largement de ce cercle
+  // (.mnoria-tag-bubble-galaxy::before, inset:-26px, style.css) — visuellement, le bord de la
+  // galaxie perçu par l'œil est bien au-delà de galaxy.r. On rentre donc les lunes DANS cette
+  // zone de halo plutôt que de s'arrêter au cercle mathématique.
+  // -14 -> -22 -> -30 (demande du 17/08/2026, "rapproche encore" répétée) : toujours plus
+  // profondément dans le halo. Plancher (moonSize) pour les petites galaxies : évite un rayon
+  // nul/négatif qui empilerait les lunes sur le centre au lieu de les garder en couronne autour
+  // de la bulle.
+  const firstRadius = Math.max(moonSize, galaxy.r - 30 + moonSize / 2);
   // Phase stable dérivée du nom : évite que toutes les galaxies alignent leurs premières lunes
   // sur le même axe sans introduire le moindre Math.random() ni mouvement entre deux visites.
-  const phase = (hueForGalaxy(galaxy.name) * Math.PI) / 180;
+  const hue = hueForGalaxy(galaxy.name);
+  const phase = (hue * Math.PI) / 180;
   let systemIndex = 0;
   let ringIndex = 0;
 
   while (systemIndex < systems.length) {
     const radialDistance = firstRadius + ringIndex * spacing;
-    const ringCapacity = Math.max(6, Math.floor((Math.PI * 2 * radialDistance) / spacing));
+    // Capacité calculée sur un espacement 30% plus large que le minimum strict (spacing) : cette
+    // marge est ce qui absorbe le jitter d'angle ci-dessous sans jamais faire se toucher deux
+    // lunes voisines, même dans le pire cas (les deux jitrées l'une vers l'autre au maximum).
+    const ringSlotSpacing = spacing * 1.3;
+    const ringCapacity = Math.max(6, Math.floor((Math.PI * 2 * radialDistance) / ringSlotSpacing));
     const ringCount = Math.min(ringCapacity, systems.length - systemIndex);
     const ringOffset = ringIndex % 2 ? Math.PI / ringCount : 0;
+    const slotAngleWidth = (Math.PI * 2) / ringCount;
 
     for (let slot = 0; slot < ringCount; slot += 1) {
       const system = systems[systemIndex];
-      const angle = phase + ringOffset + (slot / ringCount) * Math.PI * 2;
+      const baseAngle = phase + ringOffset + slot * slotAngleWidth;
+      // Jitter borné à 30% de la demi-largeur du créneau de chaque côté : dans le pire cas (deux
+      // voisines jitrées l'une vers l'autre), il reste toujours la marge de ringSlotSpacing
+      // ci-dessus entre elles. Rayon jitré indépendamment, dans une plage plus généreuse (peut
+      // légèrement mordre sur l'anneau voisin) : aucun risque de collision, seul l'angle rapproche
+      // deux lunes entre elles.
+      const angleJitter = (stableUnitFromString(`${system.id}:angle`) - 0.5) * slotAngleWidth * 0.3;
+      const radiusJitter = (stableUnitFromString(`${system.id}:radius`) - 0.5) * spacing * 0.7;
+      const angle = baseAngle + angleJitter;
+      const moonRadialDistance = radialDistance + radiusJitter;
       const moon = document.createElement("span");
       moon.className = "universe-galaxy-moon";
+      // Teintées comme leur galaxie plutôt qu'en or/crème fixe (demande du 17/08/2026) — même
+      // hue que cette galaxie (hueForGalaxy), lu par le dégradé/halo en CSS.
+      moon.style.setProperty("--moon-hue", String(hue));
       moon.dataset.solarSystemId = String(system.id);
       moon.setAttribute("aria-hidden", "true");
       // galaxyId : lu par onCameraChange pour masquer ces lunes dès que les systèmes solaires de
@@ -395,8 +493,8 @@ function addMoonsAroundGalaxy(galaxy) {
       // veux plus voir ces lunes") — même bascule is-revealed que la bulle galaxie elle-même
       // (childrenCanShow), pour rester synchronisé avec elle plutôt que de suivre un seuil propre.
       moon.dataset.galaxyId = galaxy.id;
-      moon.style.left = Math.round(galaxy.x + Math.cos(angle) * radialDistance - moonSize / 2) + "px";
-      moon.style.top = Math.round(galaxy.y + Math.sin(angle) * radialDistance - moonSize / 2) + "px";
+      moon.style.left = Math.round(galaxy.x + Math.cos(angle) * moonRadialDistance - moonSize / 2) + "px";
+      moon.style.top = Math.round(galaxy.y + Math.sin(angle) * moonRadialDistance - moonSize / 2) + "px";
       moon.style.width = moonSize + "px";
       moon.style.height = moonSize + "px";
       worldEl.appendChild(moon);
@@ -419,20 +517,20 @@ function createBubbleEl(kind, node, background, glowColor, extraClass) {
   const btn = document.createElement("div");
   btn.setAttribute("role", "button");
   btn.tabIndex = 0;
-  btn.className = `agon-tag-bubble universe-zoom-bubble${extraClass ? " " + extraClass : ""}`;
+  btn.className = `mnoria-tag-bubble universe-zoom-bubble${extraClass ? " " + extraClass : ""}`;
   btn.dataset.kind = kind;
   btn.dataset.nodeId = node.id;
   if (Number.isFinite(node.themeHue)) btn.dataset.themeHue = String(node.themeHue);
   btn.style.left = (node.x - node.r) + "px";
   btn.style.top = (node.y - node.r) + "px";
-  // .agon-tag-bubble ne fixe pas width/height elle-même (ça vient normalement de
-  // .agon-tag-bubble-large/-medium/-small, un système de paliers propre à tagTrendCloud.js,
+  // .mnoria-tag-bubble ne fixe pas width/height elle-même (ça vient normalement de
+  // .mnoria-tag-bubble-large/-medium/-small, un système de paliers propre à tagTrendCloud.js,
   // non utilisé ici) : posé directement en inline, une taille continue plutôt que 3 paliers.
   btn.style.width = node.r * 2 + "px";
   btn.style.height = node.r * 2 + "px";
-  btn.style.setProperty("--agon-tag-bubble-size", node.r * 2 + "px");
+  btn.style.setProperty("--mnoria-tag-bubble-size", node.r * 2 + "px");
   if (background) btn.style.background = background;
-  if (glowColor) btn.style.setProperty("--agon-tag-bubble-glow", glowColor);
+  if (glowColor) btn.style.setProperty("--mnoria-tag-bubble-glow", glowColor);
   btn.setAttribute("aria-label", ariaLabelFor(kind, node));
   btn.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -446,7 +544,13 @@ function createBubbleEl(kind, node, background, glowColor, extraClass) {
   // onCameraChange, pas ici (la caméra n'a pas encore de position tant que le montage n'est pas
   // terminé) — masqué par défaut (is-revealed ajouté par onCameraChange au premier calcul).
   const label = document.createElement("span");
-  label.className = `universe-zoom-bubble-label${kind === "star" ? " universe-zoom-bubble-label-star" : ""}`;
+  // Modificateur par niveau, du plus petit au plus grand (étoile < système < galaxie, demande
+  // du 16/08/2026, "bien les distinguer") — un seul à la fois, cf. style.css pour les tailles.
+  const labelLevelClass = kind === "star" ? " universe-zoom-bubble-label-star"
+    : kind === "solarSystem" ? " universe-zoom-bubble-label-solar"
+    : kind === "galaxy" ? " universe-zoom-bubble-label-galaxy"
+    : "";
+  label.className = `universe-zoom-bubble-label${labelLevelClass}`;
   label.textContent = node.name;
   labelsOverlayEl.appendChild(label);
   labelElByNodeId.set(node.id, label);
@@ -705,7 +809,11 @@ function createUniverseMinimap() {
   };
   minimapZoomOutBtn = createZoomButton("out");
   minimapZoomInBtn = createZoomButton("in");
-  minimapZoomControlsEl.append(minimapZoomOutBtn, minimapZoomInBtn);
+  // Position visuelle fixée en CSS (--in à gauche, --out à droite, cf. style.css), pas par
+  // l'ordre DOM : chaque bouton garde sa place même quand l'autre se masque en butée de zoom
+  // min/max (demande du 17/08/2026, "doivent toujours rester à la même place"). L'ordre
+  // d'ajout ici ne pilote donc plus que l'ordre de tabulation clavier.
+  minimapZoomControlsEl.append(minimapZoomInBtn, minimapZoomOutBtn);
 
   let dragState = null;
   const eventToMapPoint = (event) => {
@@ -771,8 +879,47 @@ function createUniverseMinimap() {
     minimapZoomControlsEl.addEventListener(type, (event) => event.stopPropagation());
   });
 
+  // Dans le PETIT cadre repère (minimapEl), pas dans le grand cadre principal (demande du
+  // 17/08/2026, "tu les avais mis en haut du grand cadre !!! moi je veux du tout petit cadre de
+  // repère") — enfant de minimapEl plutôt que sibling posé sur toute la largeur de viewportEl.
+  // Au-dessus du petit cadre repère, pas à l'intérieur (demande du 17/08/2026, reprise après un
+  // premier essai posé en interne) : sibling de minimapEl plutôt qu'enfant, positionné en CSS
+  // pour s'aligner sur sa largeur/son bord droit juste au-dessus (cf. style.css).
+  // Revenu à l'intérieur du petit cadre repère (demande du 17/08/2026) : positionné au-dessus
+  // (bottom:110px, sibling de minimapEl) faisait disparaître les boutons dès que le cadre
+  // n'était pas assez haut — overflow:hidden sur viewportEl (cf. style.css) les coupait. La
+  // hauteur du cadre étant trop variable cette session pour fiabiliser un offset absolu, on
+  // reste sur un placement garanti toujours visible : à l'intérieur du petit cadre lui-même.
+  // Au-dessus du petit cadre repère, EN DEHORS de lui (demande du 17/08/2026, insistance après
+  // 2 essais) : sibling de viewportEl, enfant direct de cloudEl (#mnoria-universe-cloud /
+  // #mnoria-tag-trends-cloud) plutôt que de viewportEl ou minimapEl — ces deux derniers ont
+  // overflow:hidden (cf. style.css), qui coupait les boutons dès qu'ils sortaient de leurs
+  // limites ("ils ont disparu"). cloudEl a overflow:visible : peints même si l'estimation
+  // d'offset n'est pas pixel-parfaite, jamais invisibles.
   minimapEl.append(minimapSvgEl, recenterBtn);
-  viewportEl.append(minimapZoomControlsEl, minimapEl);
+  viewportEl.append(minimapEl);
+  cloudEl.appendChild(minimapZoomControlsEl);
+
+  // Petit panneau d'isolement (demande du 17/08/2026) : noms des 2 étoiles + rappel "clique
+  // n'importe où". Enfant de cloudEl (overflow:visible, cf. commentaire ci-dessus sur les
+  // boutons de zoom) plutôt que de viewportEl, pour ne jamais être coupé si le cadre est bas.
+  isolationInfoEl = document.createElement("div");
+  isolationInfoEl.className = "universe-isolation-info";
+  isolationInfoEl.hidden = true;
+  cloudEl.appendChild(isolationInfoEl);
+
+  // Trait entre les 2 lunes des systèmes solaires isolés (demande du 17/08/2026) — même couche
+  // écran que les liens de connaissance (cf. leur commentaire sur le flou à fort zoom), jamais
+  // dans worldEl.
+  moonLinkEl = document.createElement("div");
+  moonLinkEl.className = "universe-knowledge-link universe-moon-link";
+  // Hors boucle knowledgeLinkEls (cf. onCameraChange) : jamais recalculés par elle, donc posés
+  // une fois ici plutôt que par frame (ce trait ponctuel n'a pas besoin de varier avec le zoom,
+  // déjà en coordonnées écran réelles via getBoundingClientRect).
+  moonLinkEl.style.height = "2px";
+  moonLinkEl.style.backgroundSize = "12px 100%";
+  moonLinkEl.style.boxShadow = "0 0 1px rgba(151, 224, 255, 1), 0 0 2px rgba(105, 205, 255, 0.85)";
+  linksOverlayEl.appendChild(moonLinkEl);
 }
 
 // ---- Montage complet de la scène (une seule fois par chargement de données) ----
@@ -782,8 +929,16 @@ function destroyUniverseScene() {
   universeBgResizeObserver = null;
   if (viewportEl) viewportEl.remove();
   viewportEl = null;
+  // Enfant direct de cloudEl désormais, pas de viewportEl (cf. mountUniverse) : jamais retiré
+  // par viewportEl.remove() ci-dessus, resterait orphelin en double au remontage suivant.
+  if (minimapZoomControlsEl) minimapZoomControlsEl.remove();
+  if (isolationInfoEl) isolationInfoEl.remove();
+  isolationInfoEl = null;
+  moonLinkEl = null; // enfant de linksOverlayEl, déjà retiré par viewportEl.remove() ci-dessus
+  isolatedStarPair = null;
   worldEl = null;
   labelsOverlayEl = null;
+  linksOverlayEl = null;
   minimapEl = null;
   minimapSvgEl = null;
   minimapViewportRectEl = null;
@@ -807,12 +962,19 @@ function destroyUniverseScene() {
 // height = CONNECTOR_SCREEN_PX / state.scale à chaque frame (jamais une valeur fixe posée ici à
 // la création : un enfant de worldEl voit sa taille multipliée par state.scale comme le reste de
 // la scène, cf. son commentaire).
-const CONNECTOR_SCREEN_PX = 2;
+// 2 -> 3px (demande du 16/08/2026, "toujours pas assez visible, légèrement plus gros") : reste
+// nettement plus fin que les connecteurs de liens intellectuels (screenThickness jusqu'à 3.35px
+// dans onCameraChange), juste un cran plus épais qu'avant.
+const CONNECTOR_SCREEN_PX = 3;
 
-function createConnectorEl(fromX, fromY, toX, toY) {
+// toRadius (rayon "monde" de l'étoile d'arrivée) raccourcit le trait pour qu'il s'arrête à sa
+// bordure plutôt qu'à son centre (demande du 17/08/2026) — jamais le départ (le système solaire
+// reste l'ancrage visuel, cf. son point lumineux).
+function createConnectorEl(fromX, fromY, toX, toY, toRadius = 0) {
   const dx = toX - fromX;
   const dy = toY - fromY;
-  const length = Math.hypot(dx, dy);
+  const fullLength = Math.hypot(dx, dy);
+  const length = Math.max(0, fullLength - toRadius);
   const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
   const el = document.createElement("div");
   el.className = "universe-zoom-connector";
@@ -828,20 +990,48 @@ function knowledgeNodeKey(sourceType, sourceId) {
   return `${String(sourceType || "").trim()}::${String(sourceId || "").trim()}`;
 }
 
-// Tirets bleutés lumineux entre deux étoiles reliées intellectuellement. Le segment est placé
-// dans l'espace monde, comme les bulles : il suit donc exactement le pan et le zoom. Le motif,
-// l'épaisseur et le halo sont contre-dimensionnés dans onCameraChange pour rester fins et nets
-// à l'écran, quel que soit le facteur de zoom.
+// Tirets bleutés lumineux entre deux étoiles reliées intellectuellement. Posés dans
+// labelsOverlayEl (coordonnées ÉCRAN, comme les libellés), pas dans le monde transformé
+// (worldEl) : un enfant de worldEl est rendu minuscule puis agrandi par transform:scale à
+// fort zoom, ce qui le floute (même cause que le texte flou déjà documentée pour les
+// libellés, signalé à nouveau le 17/08/2026 pour ces traits — "pas nettes... surtout zoomé").
+// Repositionnés à chaque frame de caméra dans onCameraChange, jamais ici (la caméra n'a pas
+// encore de position tant que le montage n'est pas terminé).
 function createKnowledgeLinkEl(level, fromNode, toNode) {
-  const dx = toNode.x - fromNode.x;
-  const dy = toNode.y - fromNode.y;
   const el = document.createElement("div");
   el.className = "universe-knowledge-link";
-  el.style.left = fromNode.x + "px";
-  el.style.top = fromNode.y + "px";
-  el.style.width = Math.hypot(dx, dy) + "px";
-  el.style.transform = `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`;
-  worldEl.appendChild(el);
+  // Double-clic pour isoler la paire (restauré le 17/08/2026 : confirmé fonctionnel — seule la
+  // zone cliquable élargie, ::before de +12px, débordait sur les étoiles adjacentes et cassait
+  // leur propre clic ; retirée, jamais réintroduite). Le conteneur reste pointer-events:none
+  // (cf. style.css) : seul ce trait précis, sur son propre tracé exact, redevient cliquable.
+  if (level === "star") {
+    el.style.pointerEvents = "auto";
+    el.style.cursor = "pointer";
+    const toggleIsolation = () => {
+      const alreadyIsolated = isolatedStarPair
+        && isolatedStarPair.has(fromNode.id) && isolatedStarPair.has(toNode.id);
+      setIsolatedStarPair(alreadyIsolated ? null : new Set([fromNode.id, toNode.id]), fromNode, toNode);
+    };
+    el.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleIsolation();
+    });
+    let lastTapAt = 0;
+    el.addEventListener("pointerup", (event) => {
+      if (event.pointerType !== "touch") return;
+      const now = Date.now();
+      if (now - lastTapAt < 400) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleIsolation();
+        lastTapAt = 0;
+      } else {
+        lastTapAt = now;
+      }
+    });
+  }
+  linksOverlayEl.appendChild(el);
   const linkState = { el, level, fromNodeId: fromNode.id, toNodeId: toNode.id, count: 1 };
   knowledgeLinkEls.push(linkState);
   return linkState;
@@ -859,11 +1049,20 @@ function mountUniverse() {
   backgroundEl.className = "universe-zoom-background";
   worldEl = document.createElement("div");
   worldEl.className = "universe-zoom-world";
+  // Couche dédiée aux liens de connaissance, INSÉRÉE AVANT worldEl (demande du 17/08/2026, "ne
+  // doivent passer par-dessus aucun élément") : ni z-index ni transform explicites sur elle ni
+  // sur worldEl, donc l'ordre du DOM seul détermine l'empilement — ici toujours EN DESSOUS de
+  // toutes les bulles/moons/connecteurs de worldEl. Coordonnées écran comme labelsOverlayEl
+  // (jamais enfant de worldEl, cf. son commentaire), pour la même raison : éviter le flou à fort
+  // zoom d'un élément fin mis à l'échelle.
+  linksOverlayEl = document.createElement("div");
+  linksOverlayEl.className = "universe-zoom-links-overlay";
   // Sibling de worldEl (pas un enfant) : reste en dehors de son transform:scale, cf. le
   // commentaire sur labelsOverlayEl plus haut.
   labelsOverlayEl = document.createElement("div");
   labelsOverlayEl.className = "universe-zoom-labels-overlay";
   viewportEl.appendChild(backgroundEl);
+  viewportEl.appendChild(linksOverlayEl);
   viewportEl.appendChild(worldEl);
   viewportEl.appendChild(labelsOverlayEl);
   cloudEl.appendChild(viewportEl);
@@ -944,7 +1143,7 @@ function mountUniverse() {
   worldLayout.galaxies.forEach((g) => {
     g.themeHue = hueForGalaxy(g.name);
     const visual = galaxyBubbleVisual(g.name);
-    const el = createBubbleEl("galaxy", g, visual.background, visual.glowColor, "agon-tag-bubble-galaxy");
+    const el = createBubbleEl("galaxy", g, visual.background, visual.glowColor, "mnoria-tag-bubble-galaxy");
     el.classList.add("is-revealed"); // toujours visibles, jamais soumises au seuil de révélation
     addMoonsAroundGalaxy(g);
     nodeById.set(g.id, g);
@@ -953,12 +1152,16 @@ function mountUniverse() {
   worldLayout.solarSystems.forEach((s) => {
     const hue = hueForGalaxy(getGalaxyNameFromId(s.galaxyId));
     s.themeHue = hue;
+    // Plus de glowColor (demande du 16/08/2026, "taches colorées floues qui ne servent à
+    // rien" en mode solar) : ce halo (.mnoria-tag-bubble-solarsystem::before, style.css)
+    // débordait largement du cercle réel et se lisait comme un flou sans forme, surtout sur
+    // des systèmes petits/rapprochés — retiré, cf. style.css.
     createBubbleEl(
       "solarSystem",
       s,
       bubbleBackgroundFor(getGalaxyNameFromId(s.galaxyId), "solarSystem", true),
-      `hsla(${hue}, 36%, 72%, 0.76)`,
-      "agon-tag-bubble-solarsystem"
+      null,
+      "mnoria-tag-bubble-solarsystem"
     );
     nodeById.set(s.id, s);
   });
@@ -970,11 +1173,11 @@ function mountUniverse() {
       star,
       bubbleBackgroundFor(getGalaxyNameFromId(star.galaxyId), "star", true),
       null,
-      "agon-tag-bubble-star"
+      "mnoria-tag-bubble-star"
     );
     const parentSystem = nodeById.get(star.solarSystemId);
     if (parentSystem) {
-      connectorElByNodeId.set(star.id, createConnectorEl(parentSystem.x, parentSystem.y, star.x, star.y));
+      connectorElByNodeId.set(star.id, createConnectorEl(parentSystem.x, parentSystem.y, star.x, star.y, star.r));
     }
     nodeById.set(star.id, star);
   });
@@ -995,7 +1198,7 @@ function mountUniverse() {
       r: extra,
       ref: universeData.unclassified
     };
-    createBubbleEl("unclassified", unclassifiedNode, UNCLASSIFIED_BUBBLE_BACKGROUND, null, "agon-tag-bubble-unclassified");
+    createBubbleEl("unclassified", unclassifiedNode, UNCLASSIFIED_BUBBLE_BACKGROUND, null, "mnoria-tag-bubble-unclassified");
     nodeById.set(unclassifiedNode.id, unclassifiedNode);
   }
 
@@ -1050,7 +1253,7 @@ function waitForUniverseRootPaint(modeToken) {
     const check = () => {
       // L'utilisateur a déjà quitté "Ma mémoire" : ce rendu périmé ne doit surtout pas retirer
       // le sablier du nouveau mode qui a pris le relais sur le même conteneur partagé.
-      if (modeToken !== window._agonCloudModeToken || !isMemoireEmbedActive()) {
+      if (modeToken !== window._mnoriaCloudModeToken || !isMemoireEmbedActive()) {
         resolve(false);
         return;
       }
@@ -1081,12 +1284,48 @@ function waitForUniverseRootPaint(modeToken) {
   });
 }
 
+// mountUniverse() mesure la taille du cadre UNE SEULE FOIS (worldRadius, cf. son commentaire)
+// pour calculer toute la disposition des galaxies — jamais recalculée ensuite (le
+// ResizeObserver du fond ne corrige que la texture, pas le layout). Si le cadre est encore en
+// transition CSS (#mnoria-universe-cloud/.mnoria-memoire-frame, transform 0.16s) au moment du
+// montage — plausible juste après connexion desktop —, la disposition se cale sur une taille
+// pas encore définitive : la caméra recadre ensuite sur la bonne taille, d'où un saut visible
+// "zoomé puis dézoomé" (demande du 17/08/2026). On attend ici que la taille du cadre arrête de
+// bouger (2 frames identiques d'affilée) avant de monter la scène, plutôt que de corriger après
+// coup. 400ms de filet : largement au-dessus des 160ms de transition connus, jamais de blocage
+// indéfini si le cadre ne se stabilise jamais pour une raison imprévue.
+function waitForContainerSizeStable(el, maxWaitMs = 400) {
+  return new Promise((resolve) => {
+    const startedAt = performance.now();
+    let lastW = -1;
+    let lastH = -1;
+    let stableFrames = 0;
+    const check = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0 && h > 0 && w === lastW && h === lastH) {
+        stableFrames += 1;
+        if (stableFrames >= 2) { resolve(); return; }
+      } else {
+        stableFrames = 0;
+        lastW = w;
+        lastH = h;
+      }
+      if (performance.now() - startedAt >= maxWaitMs) { resolve(); return; }
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+}
+
 async function mountUniverseAndHideSpinnerWhenReady(modeToken) {
+  await waitForContainerSizeStable(cloudEl);
+  if (modeToken !== window._mnoriaCloudModeToken) return;
   mountUniverse();
-  if (typeof window.__agonHideBubbleCloudLoadingSpinner !== "function") return;
+  if (typeof window.__mnoriaHideBubbleCloudLoadingSpinner !== "function") return;
   const ready = await waitForUniverseRootPaint(modeToken);
-  if (!ready || modeToken !== window._agonCloudModeToken || !isMemoireEmbedActive()) return;
-  window.__agonHideBubbleCloudLoadingSpinner();
+  if (!ready || modeToken !== window._mnoriaCloudModeToken || !isMemoireEmbedActive()) return;
+  window.__mnoriaHideBubbleCloudLoadingSpinner();
 }
 
 function getGalaxyNameFromId(galaxyId) {
@@ -1125,6 +1364,14 @@ function onCameraChange(state) {
     star: new Set()
   };
 
+  // Anti-chevauchement des étiquettes (demande du 17/08/2026, "les noms ne doivent jamais se
+  // superposer") : chaque nœud pousse ici sa candidature (label + priorité) plutôt que de
+  // basculer .is-revealed directement dans la boucle ci-dessous — la résolution des collisions
+  // (comparaison des rectangles réels de chaque étiquette) n'a lieu qu'une fois TOUTES les
+  // positions/tailles connues, cf. plus bas après cette boucle.
+  const labelCandidates = [];
+  const LABEL_LEVEL_PRIORITY = { galaxy: 0, unclassified: 0, solarSystem: 1, star: 2 };
+
   worldEl.querySelectorAll(".universe-zoom-bubble").forEach((el) => {
     const kind = el.dataset.kind;
     const nodeId = el.dataset.nodeId;
@@ -1137,6 +1384,10 @@ function onCameraChange(state) {
       revealed = true; // toujours révélé
     } else if (kind === "galaxy") {
       revealed = !childrenCanShow(node, state.scale);
+      // Isolation étendue à TOUTES les galaxies, y compris celles des étoiles isolées
+      // (demande du 17/08/2026, "même les concernées") — contrairement aux solars, aucune
+      // galaxie ne reste comme ancrage.
+      if (isolatedStarPair) revealed = false;
     } else {
       // Hiérarchie stricte à 3 niveaux (systèmes/étoiles) : un système/une étoile ne se révèle
       // jamais seul(e) sur sa seule taille à l'écran — il faut AUSSI que son parent direct ait
@@ -1159,10 +1410,31 @@ function onCameraChange(state) {
           && parent.r * state.scale >= REVEAL_PX_SELF;
         const selfReady = node.r * state.scale >= STAR_REVEAL_PX;
         revealed = parentSolarVisible && selfReady;
+        // Isolation double-clic sur un lien étoile<->étoile (demande du 17/08/2026) : toute
+        // autre étoile disparaît tant qu'une paire est isolée — cf. isolatedStarPair, posé par
+        // createKnowledgeLinkEl. Les solars non parents des étoiles isolées disparaissent aussi
+        // (cf. plus bas) ; galaxies non affectées. Connecteurs : même `revealed` que l'étoile.
+        // Les 2 étoiles isolées, elles, restent affichées quel que soit le zoom (demande du
+        // 17/08/2026, "le plus simple... les étoiles ne disparaissent jamais même en
+        // dézoomant à fond") — remplace entièrement le calcul normal ci-dessus pour elles.
+        if (isolatedStarPair) revealed = isolatedStarPair.has(nodeId);
       } else {
         const parentCeded = parent && childrenCanShow(parent, state.scale);
         const selfRevealed = node.r * state.scale >= REVEAL_PX_SELF;
         revealed = parentCeded && selfRevealed;
+        // Isolation étendue aux solars (demande du 17/08/2026) : un solar parent d'une étoile
+        // isolée reste TOUJOURS affiché, quel que soit le zoom — comme l'étoile elle-même
+        // (remplace entièrement le calcul normal ci-dessus, pas seulement en cas contraire) : à
+        // fond dézoomé, il rétrécit juste avec le reste de la scène plutôt que de disparaître
+        // ("ne fais pas disparaître les solars... rends-les juste plus petits"). Un solar non
+        // concerné, lui, disparaît toujours normalement.
+        if (kind === "solarSystem" && isolatedStarPair) {
+          const isParentOfIsolatedStar = [...isolatedStarPair].some((starId) => {
+            const starNode = nodeById.get(starId);
+            return starNode && starNode.solarSystemId === nodeId;
+          });
+          revealed = isParentOfIsolatedStar;
+        }
       }
     }
 
@@ -1173,7 +1445,7 @@ function onCameraChange(state) {
       label.style.left = (vw / 2 + (node.x - state.x) * state.scale) + "px";
       label.style.top = (vh / 2 + (node.y - state.y) * state.scale) + "px";
       const labelRevealed = revealed && (kind !== "star" || node.r * state.scale >= STAR_LABEL_REVEAL_PX);
-      label.classList.toggle("is-revealed", labelRevealed);
+      labelCandidates.push({ label, labelRevealed, priority: LABEL_LEVEL_PRIORITY[kind] ?? 3 });
     }
     // Trait connecteur (étoiles uniquement, cf. createConnectorEl) : même état que l'étoile
     // elle-même, jamais affiché seul ni en avance sur elle. Épaisseur RECALCULÉE ici à chaque
@@ -1186,7 +1458,13 @@ function onCameraChange(state) {
     const connector = connectorElByNodeId.get(nodeId);
     if (connector) {
       connector.style.height = Math.max(0.4, CONNECTOR_SCREEN_PX / state.scale) + "px";
-      connector.classList.toggle("is-revealed", revealed);
+      // Le connecteur relie l'étoile à son solar : il doit disparaître en même temps que CE
+      // solar, pas seulement suivre l'étoile (demande du 17/08/2026) — utile désormais qu'une
+      // étoile isolée reste affichée même très dézoomée, quand son solar, lui, a disparu.
+      // revealedNodeIdsByLevel.solarSystem est déjà rempli à ce stade : les bulles solar
+      // précèdent toujours les étoiles dans le DOM (cf. mountUniverse, ordre de création).
+      const parentSolarRevealed = revealedNodeIdsByLevel.solarSystem.has(node.solarSystemId);
+      connector.classList.toggle("is-revealed", revealed && parentSolarRevealed);
     }
 
     if (revealedNodeIdsByLevel[kind] && revealed) revealedNodeIdsByLevel[kind].add(nodeId);
@@ -1194,19 +1472,104 @@ function onCameraChange(state) {
     el.classList.toggle("is-revealed", revealed);
   });
 
+  // Résolution des collisions : priorité galaxie/non-classé > solar > étoile (LABEL_LEVEL_PRIORITY
+  // ci-dessus), puis ordre de parcours pour deux étiquettes de même priorité. getBoundingClientRect
+  // est lu ici SEULEMENT (aucune écriture géométrique intercalée avant la fin de cette boucle,
+  // seul .is-revealed — une opacité, jamais de reflow — est posé au fil de l'eau) : un seul batch
+  // de layout pour tous les candidats plutôt qu'un reflow par étiquette. rejectedLabels regroupe
+  // les étiquettes déjà écartées cette frame pour ne jamais leur laisser .is-revealed d'une frame
+  // précédente.
+  const acceptedRects = [];
+  const rejectedLabels = new Set(labelCandidates.map((c) => c.label));
+  const OVERLAP_PADDING_PX = 3;
+  labelCandidates
+    .filter((c) => c.labelRevealed)
+    .sort((a, b) => a.priority - b.priority)
+    .forEach(({ label }) => {
+      const rect = label.getBoundingClientRect();
+      const collides = acceptedRects.some((accepted) =>
+        rect.left < accepted.right + OVERLAP_PADDING_PX
+        && rect.right + OVERLAP_PADDING_PX > accepted.left
+        && rect.top < accepted.bottom + OVERLAP_PADDING_PX
+        && rect.bottom + OVERLAP_PADDING_PX > accepted.top
+      );
+      if (collides) return; // reste dans rejectedLabels : masqué cette frame
+      acceptedRects.push(rect);
+      rejectedLabels.delete(label);
+    });
+  labelCandidates.forEach(({ label, labelRevealed }) => {
+    label.classList.toggle("is-revealed", labelRevealed && !rejectedLabels.has(label));
+  });
+
+  // Un seul niveau de liens actif à la fois (demande du 16/08/2026) : le niveau le plus profond
+  // actuellement révélé gagne. Nécessaire car côté nœuds, un solar reste volontairement visible
+  // une fois ses étoiles satellites apparues (cf. commentaire plus haut, "ancrage visuel" —
+  // comportement des NŒUDS inchangé par cette tâche) — sans cette règle dédiée aux LIENS, les
+  // traits solar<->solar restaient donc affichés en même temps que les traits star<->star dès
+  // qu'on descendait au niveau étoiles, et pareil pour galaxy<->galaxy dès qu'un solar apparaît
+  // pendant qu'une autre galaxie encore non dézoomée reste affichée en arrière-plan.
+  const activeLinkLevel = revealedNodeIdsByLevel.star.size
+    ? "star"
+    : (revealedNodeIdsByLevel.solarSystem.size ? "solarSystem" : "galaxy");
+
   // Une relation ne flotte jamais seule dans le vide : à chaque profondeur, elle apparaît
   // uniquement lorsque les deux galaxies, les deux solars ou les deux étoiles concernés sont
-  // visibles. Motif de 7px de lumière + 5px d'espace, épaisseur ~1,35px et halo constants en
-  // pixels écran malgré la mise à l'échelle du monde.
+  // visibles. Repositionnés en coordonnées ÉCRAN ici (comme les libellés, cf.
+  // createKnowledgeLinkEl) plutôt que via transform:scale du monde — plus de flou à fort zoom
+  // (demande du 17/08/2026), et l'épaisseur/le halo sont déjà en pixels écran réels, plus
+  // besoin de les contre-dimensionner par state.scale.
   knowledgeLinkEls.forEach(({ el, level, fromNodeId, toNodeId, count }) => {
+    // Niveau inactif : réellement exclu du rendu (display:none via cette classe, cf. style.css),
+    // pas seulement rendu transparent — évite tout chevauchement visuel entre deux échelles de
+    // liens et épargne le calcul ci-dessous pour les liens qu'on ne montre pas.
+    if (level !== activeLinkLevel) {
+      el.classList.remove("is-revealed");
+      el.classList.add("is-inactive-link-level");
+      return;
+    }
+    el.classList.remove("is-inactive-link-level");
     const revealedIds = revealedNodeIdsByLevel[level];
     const revealed = revealedIds?.has(fromNodeId) && revealedIds.has(toNodeId);
-    // +0,5px écran par relation supplémentaire, plafonné à 3,35px : l'importance devient
-    // perceptible sans empiler plusieurs segments ni transformer une connexion dense en barre.
-    const screenThickness = Math.min(3.35, 1.35 + Math.max(0, count - 1) * 0.5);
-    el.style.height = Math.max(0.35, screenThickness / state.scale) + "px";
-    el.style.backgroundSize = (12 / state.scale) + "px 100%";
-    el.style.boxShadow = `0 0 ${3 / state.scale}px rgba(105, 205, 255, 0.95), 0 0 ${8 / state.scale}px rgba(56, 166, 255, 0.72)`;
+    if (revealed) {
+      const fromNode = nodeById.get(fromNodeId);
+      const toNode = nodeById.get(toNodeId);
+      if (fromNode && toNode) {
+        const fromScreenX = vw / 2 + (fromNode.x - state.x) * state.scale;
+        const fromScreenY = vh / 2 + (fromNode.y - state.y) * state.scale;
+        const toScreenX = vw / 2 + (toNode.x - state.x) * state.scale;
+        const toScreenY = vh / 2 + (toNode.y - state.y) * state.scale;
+        const dx = toScreenX - fromScreenX;
+        const dy = toScreenY - fromScreenY;
+        const distance = Math.hypot(dx, dy);
+        // S'arrête à la bordure des bulles, pas à leur centre (demande du 17/08/2026) : recule
+        // chaque extrémité de son propre rayon écran (node.r * state.scale).
+        const ux = distance > 0 ? dx / distance : 0;
+        const uy = distance > 0 ? dy / distance : 0;
+        // Niveau galaxie seulement : le halo lumineux décoratif (.mnoria-tag-bubble-galaxy::before,
+        // inset:-26px) déborde largement du cercle réel (node.r), qui sert seul au rognage
+        // ci-dessus — le trait s'arrêtait donc pile sur ce cercle plein, bien avant ce halo, et
+        // semblait ne jamais atteindre visuellement la galaxie (demande du 17/08/2026, "pas assez
+        // longs, ils s'arrêtent avant les galaxies"). Un rayon de rognage réduit à ce niveau
+        // laisse le trait prolonger dans le halo plutôt que de s'arrêter net au cercle plein.
+        const GALAXY_LINK_TRIM_RATIO = 0.3;
+        const trimRatio = level === "galaxy" ? GALAXY_LINK_TRIM_RATIO : 1;
+        const fromRadiusPx = (fromNode.r || 0) * state.scale * trimRatio;
+        const toRadiusPx = (toNode.r || 0) * state.scale * trimRatio;
+        const startX = fromScreenX + ux * fromRadiusPx;
+        const startY = fromScreenY + uy * fromRadiusPx;
+        const trimmedLength = Math.max(0, distance - fromRadiusPx - toRadiusPx);
+        el.style.left = startX + "px";
+        el.style.top = startY + "px";
+        el.style.width = trimmedLength + "px";
+        el.style.transform = `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`;
+      }
+    }
+    // +0,5px par relation supplémentaire, plafonné à 3,6px — déjà en pixels écran réels
+    // (labelsOverlayEl n'est jamais mis à l'échelle par la caméra, contrairement à worldEl).
+    const screenThickness = Math.min(3.6, 1.7 + Math.max(0, count - 1) * 0.5);
+    el.style.height = screenThickness + "px";
+    el.style.backgroundSize = "12px 100%";
+    el.style.boxShadow = "0 0 1px rgba(151, 224, 255, 1), 0 0 2px rgba(105, 205, 255, 0.85)";
     el.classList.toggle("is-revealed", revealed);
   });
 
@@ -1218,14 +1581,51 @@ function onCameraChange(state) {
   const anySolarSystemVisible = Array.from(
     worldEl.querySelectorAll('.universe-zoom-bubble[data-kind="solarSystem"]')
   ).some((el) => el.classList.contains("is-revealed"));
+  const moonSolarSystemIdByEl = new Map();
   worldEl.querySelectorAll(".universe-galaxy-moon").forEach((el) => {
     const node = nodeById.get(el.dataset.galaxyId);
     if (!node) return;
-    el.classList.toggle(
-      "is-revealed",
-      !anySolarSystemVisible && !childrenCanShow(node, state.scale)
-    );
+    // Pendant l'isolement, toutes les lunes disparaissent (demande du 17/08/2026, "faire
+    // disparaître la petite lune... des galaxies pas concernées") : à ce niveau de zoom (assez
+    // profond pour voir des solars/étoiles), aucune lune n'a plus lieu d'apparaître, isolement
+    // ou pas — mais en dézoomant PENDANT un isolement, la logique normale ci-dessous les
+    // réaffichait quand même, sans savoir qu'une isolation était en cours.
+    const revealed = !isolatedStarPair && !anySolarSystemVisible && !childrenCanShow(node, state.scale);
+    el.classList.toggle("is-revealed", revealed);
+    if (revealed) moonSolarSystemIdByEl.set(el.dataset.solarSystemId, el);
   });
+
+  // Trait entre les 2 lunes des systèmes solaires dont sont issues les étoiles isolées
+  // (demande du 17/08/2026) : visible seulement si l'isolement est actif ET que les lunes
+  // elles-mêmes sont visibles (donc jamais en même temps que les solars/étoiles, cf. logique
+  // ci-dessus — les deux se relaient plutôt que de se superposer). Repris du même principe que
+  // les liens de connaissance (couche écran, cf. createKnowledgeLinkEl) mais positionné via les
+  // rects réels des lunes (déjà en coordonnées écran), plus simple que refaire le calcul monde
+  // -> écran pour un unique trait ponctuel.
+  if (moonLinkEl) {
+    let moonLinkVisible = false;
+    if (isolatedStarPair && isolatedStarPair.size === 2) {
+      const solarSystemIds = [...isolatedStarPair].map((starId) => nodeById.get(starId)?.solarSystemId);
+      const [fromMoon, toMoon] = solarSystemIds.map((id) => moonSolarSystemIdByEl.get(id));
+      if (fromMoon && toMoon && fromMoon !== toMoon) {
+        const fromRect = fromMoon.getBoundingClientRect();
+        const toRect = toMoon.getBoundingClientRect();
+        const viewportRect = viewportEl.getBoundingClientRect();
+        const fromX = fromRect.left + fromRect.width / 2 - viewportRect.left;
+        const fromY = fromRect.top + fromRect.height / 2 - viewportRect.top;
+        const toX = toRect.left + toRect.width / 2 - viewportRect.left;
+        const toY = toRect.top + toRect.height / 2 - viewportRect.top;
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        moonLinkEl.style.left = fromX + "px";
+        moonLinkEl.style.top = fromY + "px";
+        moonLinkEl.style.width = Math.hypot(dx, dy) + "px";
+        moonLinkEl.style.transform = `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`;
+        moonLinkVisible = true;
+      }
+    }
+    moonLinkEl.classList.toggle("is-revealed", moonLinkVisible);
+  }
 
   updateUniverseMinimap(state);
   renderBreadcrumb(computeFocusInfo(state));
@@ -1252,6 +1652,21 @@ function computeFocusInfo(state) {
 
 // ---- Clic (délégué sur document, un seul listener pour toute la durée de vie du module —
 // worldEl est recréé à chaque loadUniverse(), inutile de re-brancher un listener à chaque fois) ----
+// Sortie de l'isolement au DOUBLE-clic désormais (demande du 17/08/2026, "non pas un simple
+// clique comme c'est le cas") — plus le simple clic ci-dessous, qui doit rester réservé à
+// l'ouverture des fiches/le focus sur une bulle, même pendant un isolement. Toujours gardée
+// derrière la fermeture du panneau (isolationInfoEl.hidden), et hors interface
+// (minicarte/zoom/fil d'Ariane), pour les mêmes raisons que précédemment.
+document.addEventListener("dblclick", (event) => {
+  if (!isMemoireEmbedActive() || !worldEl) return;
+  if (isolatedStarPair && isolationInfoEl?.hidden
+      && !event.target.closest(".universe-minimap, .universe-minimap__zoom-controls, #universe-breadcrumb")) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsolatedStarPair(null);
+  }
+});
+
 document.addEventListener("click", (event) => {
   if (!isMemoireEmbedActive() || !worldEl) return;
   const bubble = event.target.closest(".universe-zoom-bubble");
@@ -1346,10 +1761,16 @@ const STAR_KNOWLEDGE_SOURCE_META = {
   concept: { icon: "fa-shapes", label: "Concept du jour" },
   citation: { icon: "fa-quote-left", label: "Citation du jour" },
   oeuvre: { icon: "fa-palette", label: "Œuvre d'art du jour" },
-  latin: { icon: "fa-scroll", label: "Mot latin du jour" }
+  latin: { icon: "fa-scroll", label: "Mot latin du jour" },
+  photo_import: { icon: "fa-camera", label: "Document importé" },
+  manual_import: { icon: "fa-pen", label: "Ajout manuel" },
+  pdf_import: { icon: "fa-file-pdf", label: "Document PDF" },
+  text_import: { icon: "fa-align-left", label: "Texte importé" },
+  url_import: { icon: "fa-link", label: "Page web" },
+  youtube_import: { icon: "fa-brands fa-youtube", label: "Vidéo YouTube" }
 };
 
-// Sur l'accueil, le panneau est déclaré dans #agon-tag-trends-section, qui crée son
+// Sur l'accueil, le panneau est déclaré dans #mnoria-tag-trends-section, qui crée son
 // propre contexte d'empilement (z-index:1). Le dock blanc peut alors passer devant
 // malgré le z-index du panneau. Le rattacher au body lui rend un vrai calque plein
 // écran, comme les fiches blanches de "Mes acquis".
@@ -1518,7 +1939,14 @@ function appendKnowledgeLinks(parent, links, star) {
     const name = document.createElement("span");
     name.className = "qcm-fiche-link-name";
     name.textContent = link.name || "Voir la fiche";
-    button.append(label, name);
+    // Ces deux <span> n'ont aucune mise en forme dédiée sur cette page (contrairement à
+    // qcm-du-jour.html, qui les stylise en display:block) : sans séparateur explicite entre
+    // les deux nœuds de texte, ils s'affichaient collés l'un à l'autre, ex. "...romainDieux
+    // Romains" (demande du 17/08/2026, "un tiret au lieu de coller les mots").
+    const separator = document.createElement("span");
+    separator.className = "qcm-fiche-link-sep";
+    separator.textContent = " – ";
+    button.append(label, separator, name);
     button.addEventListener("click", () => showLinkedKnowledgeSheet(link, star));
     list.appendChild(button);
   });
@@ -1564,6 +1992,22 @@ function renderKnowledgeSheet(article, star, fullFiche, loading = false) {
   }
 
   appendKnowledgeSheetText(sheet, "qcm-fiche-meta", detail.meta);
+
+  if (/^https?:\/\//i.test(String(detail.sourceUrl || ""))) {
+    const sourceLink = document.createElement("a");
+    sourceLink.className = "qcm-fiche-meta";
+    sourceLink.href = detail.sourceUrl;
+    sourceLink.target = "_blank";
+    sourceLink.rel = "noopener noreferrer";
+    sourceLink.textContent = "Voir la page source";
+    sheet.appendChild(sourceLink);
+  }
+  if (detail.sourceAuthor) {
+    const sourceAuthor = document.createElement("p");
+    sourceAuthor.className = "qcm-fiche-meta";
+    sourceAuthor.textContent = `Chaîne : ${detail.sourceAuthor}${detail.durationSeconds ? ` · ${Math.ceil(Number(detail.durationSeconds) / 60)} min` : ""}`;
+    sheet.appendChild(sourceAuthor);
+  }
 
   if (detail.image?.url) {
     const figure = document.createElement("figure");
@@ -1687,14 +2131,14 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !starPanelEl.hidden) hideStarPanel();
 });
 
-// #agon-memoire-embed-before n'existe QUE sur l'accueil (embed "Ma mémoire") : absent sur la
+// #mnoria-memoire-embed-before n'existe QUE sur l'accueil (embed "Ma mémoire") : absent sur la
 // page /mon-univers autonome (donc toujours "actif" là-bas). Sur l'accueil, ce même
-// #agon-tag-trends-cloud est PARTAGÉ avec Bulles Actu/Bulles Agôn (cf. cloudEl plus haut) —
+// #mnoria-tag-trends-cloud est PARTAGÉ avec Bulles Actu/Bulles Mnoria (cf. cloudEl plus haut) —
 // sans cette vérification, les clics posés sur worldEl resteraient actifs pour toujours après
 // une seule visite en mode "Ma mémoire", et stopPropagation() empêcherait alors les clics sur
-// les vraies bulles Actu/Agôn d'atteindre le listener global de script.js.
+// les vraies bulles Actu/Mnoria d'atteindre le listener global de script.js.
 function isMemoireEmbedActive() {
-  const marker = document.getElementById("agon-memoire-embed-before");
+  const marker = document.getElementById("mnoria-memoire-embed-before");
   return !marker || !marker.hidden;
 }
 
@@ -1706,9 +2150,9 @@ function showStatus(kind) {
   // message d'état lorsque l'univers est vide. On la masque dans cet état précis, puis on la
   // réaffiche uniquement dès qu'un niveau contenant des éléments peut être rendu. La page autonome
   // /mon-univers n'a pas ce marqueur ni cette légende partagée.
-  const embeddedMarker = document.getElementById("agon-memoire-embed-before");
+  const embeddedMarker = document.getElementById("mnoria-memoire-embed-before");
   const embeddedCaption = embeddedMarker
-    ? document.querySelector("#agon-tag-trends-section .agon-tag-trends-caption")
+    ? document.querySelector("#mnoria-tag-trends-section .mnoria-tag-trends-caption")
     : null;
   if (embeddedCaption && kind === "empty") embeddedCaption.hidden = true;
   if (embeddedCaption && kind === "none") embeddedCaption.hidden = false;
@@ -1729,8 +2173,8 @@ function showStatus(kind) {
 
   if (kind === "loading") {
     // Sur l'accueil, le sablier dans le cadre remplace ce texte pour reproduire exactement
-    // le chargement Bulles Actu/Agôn. La page /mon-univers autonome garde son texte habituel.
-    if (document.getElementById("agon-memoire-embed-before")) {
+    // le chargement Bulles Actu/Mnoria. La page /mon-univers autonome garde son texte habituel.
+    if (document.getElementById("mnoria-memoire-embed-before")) {
       statusEl.hidden = true;
       return;
     }
@@ -1739,8 +2183,8 @@ function showStatus(kind) {
     statusEl.hidden = true;
     const message = document.createElement("div");
     // La classe générique d'overlay permet aussi au changement de mode
-    // Actu/Agôn de retirer ce message avec les anciens labels du nuage.
-    message.className = "agon-tag-label-overlay universe-empty-overlay";
+    // Actu/Mnoria de retirer ce message avec les anciens labels du nuage.
+    message.className = "mnoria-tag-label-overlay universe-empty-overlay";
     message.style.cssText = "position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:clamp(20px,6vw,46px);text-align:center;color:#fff;pointer-events:none;opacity:1;visibility:visible;transform:none;";
     message.innerHTML = '<div style="width:min(100%,520px);box-sizing:border-box;padding:clamp(22px,5vw,34px);border:1px solid rgba(255,255,255,.2);border-radius:22px;background:linear-gradient(145deg,rgba(18,29,38,.88),rgba(27,42,52,.76));box-shadow:0 18px 48px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08);">' +
       '<div style="width:48px;height:48px;margin:0 auto 15px;border:1px solid rgba(255,255,255,.24);border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);box-shadow:0 0 24px rgba(160,198,212,.18);"><i class="fa-solid fa-diagram-project" style="font-size:19px;color:#c9dce5;"></i></div>' +
@@ -1754,7 +2198,7 @@ function showStatus(kind) {
       event.stopPropagation();
       if (window.self !== window.top) {
         window.parent.postMessage({
-          type: "agon:open-page-in-parent-modal",
+          type: "mnoria:open-page-in-parent-modal",
           url: "/apprentissage",
           returnUrl: `${location.pathname}${location.search}${location.hash}`
         }, "*");
@@ -1779,7 +2223,7 @@ function showStatus(kind) {
   }
 
   if (kind === "empty" || kind === "error") {
-    if (isMemoireEmbedActive()) window.__agonHideBubbleCloudLoadingSpinner?.();
+    if (isMemoireEmbedActive()) window.__mnoriaHideBubbleCloudLoadingSpinner?.();
   }
 }
 
@@ -1863,7 +2307,7 @@ const UNIVERSE_FETCH_TIMEOUT_MS = 12000;
 const UNIVERSE_EMPTY_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 
 function getUniverseEmptyCacheKey() {
-  return `agonUniverseEmpty:${getKey()}`;
+  return `mnoriaUniverseEmpty:${getKey()}`;
 }
 
 function hasFreshEmptyUniverseCache() {
@@ -1887,12 +2331,12 @@ function cacheUniverseEmptyState(empty) {
 
 // ---- Chargement (un seul appel réseau, jamais relancé à la navigation dans la scène) ----
 async function loadUniverse() {
-  // Jeton partagé avec script.js (toggleAgonCloud/setPoliticalCloudGroup/setMemoireCloudMode) :
-  // si l'utilisateur repart sur Bulles Actu/Agôn pendant que ce fetch est encore en vol (réseau
-  // lent), window._agonCloudModeToken aura changé à la résolution ci-dessous — sans cette
+  // Jeton partagé avec script.js (toggleMnoriaCloud/setPoliticalCloudGroup/setMemoireCloudMode) :
+  // si l'utilisateur repart sur Bulles Actu/Mnoria pendant que ce fetch est encore en vol (réseau
+  // lent), window._mnoriaCloudModeToken aura changé à la résolution ci-dessous — sans cette
   // vérification, le rendu de "Ma mémoire" arrivait en retard et écrasait les bulles
-  // Actu/Agôn déjà affichées entre-temps sur le conteneur partagé.
-  const modeToken = window._agonCloudModeToken;
+  // Actu/Mnoria déjà affichées entre-temps sur le conteneur partagé.
+  const modeToken = window._mnoriaCloudModeToken;
 
   destroyUniverseScene();
   breadcrumbEl.innerHTML = "";
@@ -1903,7 +2347,7 @@ async function loadUniverse() {
   const isDemo = new URLSearchParams(location.search).get("demo") === "1";
   if (isDemo) {
     universeData = buildDemoUniverseData();
-    if (modeToken !== window._agonCloudModeToken) return;
+    if (modeToken !== window._mnoriaCloudModeToken) return;
     showStatus("none");
     await mountUniverseAndHideSpinnerWhenReady(modeToken);
     return;
@@ -1922,7 +2366,7 @@ async function loadUniverse() {
     universeData = await response.json();
   } catch (error) {
     console.warn("[mon-univers] chargement échoué :", error.message);
-    if (modeToken !== window._agonCloudModeToken) return;
+    if (modeToken !== window._mnoriaCloudModeToken) return;
     // Si un état vide récent est déjà visible, une panne réseau momentanée ne doit pas le
     // remplacer par une erreur ni faire réapparaître un chargement long. La prochaine entrée
     // relancera de toute façon une vérification fraîche.
@@ -1930,17 +2374,34 @@ async function loadUniverse() {
     return;
   }
 
-  if (modeToken !== window._agonCloudModeToken) return;
+  if (modeToken !== window._mnoriaCloudModeToken) return;
 
   const emptyUniverse = isUniverseEmpty(universeData);
   cacheUniverseEmptyState(emptyUniverse);
   if (emptyUniverse) {
     showStatus("empty");
+    // Même correctif que pour l'état peuplé juste en dessous (demande du 17/08/2026, cadre
+    // "vide" cette fois trop grand/déborde en bas) : le calage du cadre de l'accueil peut
+    // s'être verrouillé pendant un DOM différent (chargement, ou l'inverse — peuplé puis
+    // redevenu vide après suppression d'un apprentissage). Redéclenché ici aussi.
+    if (typeof window.syncCloudSectionHeight === "function") {
+      window._mobileCloudFrameLocked = false;
+      window.syncCloudSectionHeight(true);
+    }
     return;
   }
 
   showStatus("none");
   await mountUniverseAndHideSpinnerWhenReady(modeToken);
+  // Cadre de l'accueil (mnoria-tag-trends-cloud, cf. syncMobileCloudFrameHeight dans script.js) :
+  // son calage se verrouille une seule fois au premier calcul réussi, potentiellement pendant
+  // l'état vide/chargement (DOM différent) — un élément qui vient de faire passer l'univers de
+  // vide à peuplé ne redéclenchait jamais ce calcul, laissant le cadre parfois trop bas/petit en
+  // bas (demande du 17/08/2026). Déverrouille puis relance une fois le vrai contenu monté.
+  if (typeof window.syncCloudSectionHeight === "function") {
+    window._mobileCloudFrameLocked = false;
+    window.syncCloudSectionHeight(true);
+  }
 }
 
 loadUniverse();
@@ -1949,7 +2410,7 @@ loadUniverse();
 // tout premier passage : l'import dynamique n'évalue ce module qu'une seule fois (mis en cache
 // via _memoireModuleLoadPromise), donc le loadUniverse() ci-dessus, en haut de fichier, ne
 // s'exécute lui aussi qu'une seule fois — sans cet export, repasser sur "Ma mémoire" après être
-// allé sur Bulles Actu/Agôn laissait leurs bulles telles quelles à l'écran au lieu de les
+// allé sur Bulles Actu/Mnoria laissait leurs bulles telles quelles à l'écran au lieu de les
 // remplacer par la scène "Ma mémoire". destroyUniverseScene() (en tout début de loadUniverse)
 // évite d'empiler des scènes/caméras à chaque retour.
 // Reclique sur l'onglet "Ma mémoire" (script.js) alors qu'on y est déjà : ramène la caméra à la

@@ -80,7 +80,7 @@ function main() {
   const closeBody = functionBody(script, "closeDebateIframeModal");
 
   const requiredAnchors = [
-    check("IFRAME_LATEST_MODAL_URL_KEY", has(script, /const\s+IFRAME_LATEST_MODAL_URL_KEY\s*=\s*["']agon_iframe_latest_modal_url["']/)),
+    check("IFRAME_LATEST_MODAL_URL_KEY", has(script, /const\s+IFRAME_LATEST_MODAL_URL_KEY\s*=\s*["']mnoria_iframe_latest_modal_url["']/)),
     check("getLatestStoredIframeModalUrl", has(script, /function\s+getLatestStoredIframeModalUrl\s*\(/)),
     check("isSafeInternalModalUrl", has(script, /function\s+isSafeInternalModalUrl\s*\(/)),
     check("resolveInitialOpenModalUrl", has(script, /function\s+resolveInitialOpenModalUrl\s*\(/)),
@@ -102,10 +102,10 @@ function main() {
     check("openDebate query support", has(script, /params\.get\(["']openDebate["']\)/)),
     check("notifications not burned into URL", /notifications/.test(syncIndexBody) && /ne pas le graver|isNotificationsUrl/.test(syncIndexBody)),
     check("close returns index URL", /syncIndexUrlWithOpenIframeModal\(["']["']\)/.test(closeBody)),
-    check("iframe ready message", has(script, /agon:debate-iframe-ready/)),
-    check("iframe context message", has(script, /agon:iframe-page-context/)),
-    check("close message", has(script, /agon:close-debate-modal/)),
-    check("open debate in parent message", has(script, /agon:open-debate-in-parent-modal/)),
+    check("iframe ready message", has(script, /mnoria:debate-iframe-ready/)),
+    check("iframe context message", has(script, /mnoria:iframe-page-context/)),
+    check("close message", has(script, /mnoria:close-debate-modal/)),
+    check("open debate in parent message", has(script, /mnoria:open-debate-in-parent-modal/)),
     check("index references notifications top link", has(indexHtml, /home-topbar-notifications-link/)),
     check("debate iframe bridge calls parent", has(debateHtml + script, /notifyParentAboutIframePageContext/))
   ];
@@ -116,18 +116,18 @@ function main() {
     status: requiredAnchors.every(item => item.status === "ok") ? "ok" : "attention",
     requiredAnchors,
     counts: {
-      postMessageAgonTypes: countMatches(script, /agon:[A-Za-z0-9_-]+/g),
+      postMessageMnoriaTypes: countMatches(script, /mnoria:[A-Za-z0-9_-]+/g),
       historyPushState: countMatches(script, /history\.pushState/g),
       historyReplaceState: countMatches(script, /history\.replaceState/g),
       iframeModalMentions: countMatches(script, /debate-iframe-modal/g),
-      latestModalStorageMentions: countMatches(script, /IFRAME_LATEST_MODAL_URL_KEY|agon_iframe_latest_modal_url/g)
+      latestModalStorageMentions: countMatches(script, /IFRAME_LATEST_MODAL_URL_KEY|mnoria_iframe_latest_modal_url/g)
     },
     locations: {
       resolveInitialOpenModalUrl: locations(script, /function\s+resolveInitialOpenModalUrl\s*\(/g),
       syncIndexUrlWithOpenIframeModal: locations(script, /function\s+syncIndexUrlWithOpenIframeModal\s*\(/g),
       openDebateIframeModal: locations(script, /function\s+openDebateIframeModal\s*\(/g),
       closeDebateIframeModal: locations(script, /function\s+closeDebateIframeModal\s*\(/g),
-      iframeMessages: locations(script, /agon:[A-Za-z0-9_-]+/g)
+      iframeMessages: locations(script, /mnoria:[A-Za-z0-9_-]+/g)
     },
     nonZeroRiskBoundary: [
       "Reading stale modal URL from sessionStorage during initial index load.",

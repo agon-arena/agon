@@ -13,12 +13,12 @@
 <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-<style id="agon-idle-home-guard-style">html.agon-idle-home-redirecting body{visibility:hidden!important;}</style>
-<script id="agon-idle-home-guard">
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+<style id="mnoria-idle-home-guard-style">html.mnoria-idle-home-redirecting body{visibility:hidden!important;}</style>
+<script id="mnoria-idle-home-guard">
 (function(){
   var THRESHOLD = 3 * 60 * 1000;
-  var KEY = "agon_idle_hidden_at";
+  var KEY = "mnoria_idle_hidden_at";
   var timer = null;
   var isStandalone = false;
   try {
@@ -26,7 +26,7 @@
   } catch (e) {}
   if (!isStandalone) return;
   // Cette page peut être chargée dans l'iframe-modal de l'accueil. Dans ce cas,
-  // "agon_idle_hidden_at" est une clé sessionStorage partagée avec l'accueil/
+  // "mnoria_idle_hidden_at" est une clé sessionStorage partagée avec l'accueil/
   // d'autres pages déjà visitées : un ancien horodatage obsolète y déclencherait
   // une redirection immédiate vers "/" qui casse le chargement. Le garde n'a de
   // sens que pour la page top-level.
@@ -37,7 +37,7 @@
   }
 
   function hideForRedirect() {
-    document.documentElement.classList.add("agon-idle-home-redirecting");
+    document.documentElement.classList.add("mnoria-idle-home-redirecting");
   }
 
   function goHomeIfStale() {
@@ -46,7 +46,7 @@
     sessionStorage.removeItem(KEY);
     if (!isHomePath()) {
       hideForRedirect();
-      try { sessionStorage.setItem("agon_last_reload_reason", JSON.stringify({ reason: "idle-home-guard (create)", at: Date.now() })); } catch(e) {}
+      try { sessionStorage.setItem("mnoria_last_reload_reason", JSON.stringify({ reason: "idle-home-guard (create)", at: Date.now() })); } catch(e) {}
       location.replace("/");
       return true;
     }
@@ -73,11 +73,11 @@
     clearIdleTimer();
     if (!goHomeIfStale()) {
       sessionStorage.removeItem(KEY);
-      document.documentElement.classList.remove("agon-idle-home-redirecting");
+      document.documentElement.classList.remove("mnoria-idle-home-redirecting");
     }
   }
 
-  window.__agonIdleHomeGuard = { check: goHomeIfStale, markHidden: markHidden, markVisible: markVisible };
+  window.__mnoriaIdleHomeGuard = { check: goHomeIfStale, markHidden: markHidden, markVisible: markVisible };
   window.addEventListener("pageshow", markVisible, true);
   document.addEventListener("visibilitychange", function(){
     if (document.hidden) markHidden();
@@ -86,12 +86,12 @@
   goHomeIfStale();
 })();
 </script>
-  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
-  <link id="agon-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
+  <link id="mnoria-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <noscript>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
@@ -99,7 +99,7 @@
   <script>
     (function () {
       function swap(link) { if (!link || link.rel === 'stylesheet') return; link.rel = 'stylesheet'; }
-      ['agon-fa-preload'].forEach(function (id) {
+      ['mnoria-fa-preload'].forEach(function (id) {
         var link = document.getElementById(id);
         if (!link) return;
         link.addEventListener('load', function () { swap(link); }, { once: true });
@@ -261,7 +261,7 @@
     }
 
   </style>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 
 <body class="page-create page-create-mobile">
@@ -556,7 +556,7 @@
       ></textarea>
       <div id="evaluation-axis-placeholder" class="axis-placeholder-overlay" aria-hidden="true">
         <span class="axis-placeholder-title">3 possibilités</span>
-        <p>1. Champ vide → barème Agôn par défaut sur 100 pts : pertinence, clarté, solidité, apport à l'arène, nuance et ton, + bonus sources en URL (jusqu'à +10, plafonné à 100).</p>
+        <p>1. Champ vide → barème Mnoria par défaut sur 100 pts : pertinence, clarté, solidité, apport à l'arène, nuance et ton, + bonus sources en URL (jusqu'à +10, plafonné à 100).</p>
         <p>2. Tes critères sans points (ex. : humour, audace, réalisme) → l'IA répartit les 100 points équitablement entre eux. Un critère unique (ex. : humour) garde un socle pertinence + clarté.</p>
         <p>3. Ton barème chiffré (ex. : intro /10, définition /10, connaissances /60, clarté /20) → sépare les critères composés : l'IA les évaluera un par un.</p>
       </div>
@@ -828,7 +828,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">
@@ -836,7 +836,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div id="ext-link-topbar" style="display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,0.1); background:#1a272f;">
       <img src="/mnoria-icon-64.png" alt="mnoria" style="height:32px; width:auto; display:block; flex-shrink:0;">
       <span id="ext-link-domain" style="font-size:13px; font-weight:700; color:#a0b0bb; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers agôn</button>
+      <button onclick="closeExtPanel()" style="display:flex; align-items:center; gap:8px; border:none; background:rgba(255,255,255,0.10); color:#e8e8e8; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; cursor:pointer; flex-shrink:0;" title="Fermer">← Retour vers mnoria</button>
     </div>
     <iframe id="ext-link-iframe" src="" style="flex:1; border:none; width:100%; background:#fff;"></iframe>
   </div>

@@ -23,36 +23,36 @@
   // et les pages complètes utilisent le même DOM, la même police et les mêmes
   // coordonnées. Le script principal conserve seulement son ancien fallback.
   function renderUniversalTimeWidget(brandMain) {
-    if (!brandMain || document.querySelector(".agon-time-widget")) return;
+    if (!brandMain || document.querySelector(".mnoria-time-widget")) return;
 
     var style = document.createElement("style");
-    style.id = "agon-universal-time-widget-styles";
+    style.id = "mnoria-universal-time-widget-styles";
     style.textContent =
-      ".topbar--mnoria-uniform .home-brand-main.agon-time-widget-anchor{position:relative!important;overflow:visible!important}" +
-      ".agon-time-widget-logo-overlay{position:absolute;top:7px;left:50%;z-index:18;transform:translateX(-50%);max-width:min(220px,calc(100vw - 40px))}" +
-      ".agon-time-widget{display:inline-flex;align-items:center;gap:6px;margin:0;padding:4px 12px;border:0;border-radius:999px;background:transparent;color:#111827;font:700 11px/1 Arial,Helvetica,sans-serif!important;letter-spacing:normal;white-space:nowrap;cursor:pointer;box-sizing:border-box}" +
-      ".agon-time-widget i{color:#9cc3f0;font-size:10px}" +
-      ".agon-time-widget-warning{color:#d64545}" +
-      ".agon-time-widget-warning i{color:#d64545}" +
-      ".agon-time-widget-blinking{animation:agonUniversalTimeBlink .4s ease-in-out 3}" +
-      "@keyframes agonUniversalTimeBlink{0%,100%{opacity:1}50%{opacity:.15}}" +
-      "@media(max-width:768px){.agon-time-widget-logo-overlay{top:0px}}" +
-      ".agon-time-explanation-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;background:rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}" +
-      ".agon-time-explanation{width:min(100%,430px);padding:30px 24px 22px;box-sizing:border-box;border:1px solid #dbeafe;border-radius:24px;background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);box-shadow:0 24px 60px rgba(15,23,42,.22),0 8px 24px rgba(59,130,246,.1);color:#111827;text-align:center}" +
-      ".agon-time-explanation h3{margin:0 0 20px;font-size:28px;line-height:1.2;font-weight:800}" +
-      ".agon-time-explanation p{margin:0 0 18px;color:#4b5563;font-size:14px;line-height:1.55}" +
-      ".agon-time-explanation button{display:flex;align-items:center;justify-content:center;width:100%;padding:12px 18px;border:0;border-radius:999px;background:#111827;color:#fff;font:700 15px/1 Arial,Helvetica,sans-serif;cursor:pointer}";
+      ".topbar--mnoria-uniform .home-brand-main.mnoria-time-widget-anchor{position:relative!important;overflow:visible!important}" +
+      ".mnoria-time-widget-logo-overlay{position:absolute;top:7px;left:50%;z-index:18;transform:translateX(-50%);max-width:min(220px,calc(100vw - 40px))}" +
+      ".mnoria-time-widget{display:inline-flex;align-items:center;gap:6px;margin:0;padding:4px 12px;border:0;border-radius:999px;background:transparent;color:#111827;font:700 11px/1 Arial,Helvetica,sans-serif!important;letter-spacing:normal;white-space:nowrap;cursor:pointer;box-sizing:border-box}" +
+      ".mnoria-time-widget i{color:#9cc3f0;font-size:10px}" +
+      ".mnoria-time-widget-warning{color:#d64545}" +
+      ".mnoria-time-widget-warning i{color:#d64545}" +
+      ".mnoria-time-widget-blinking{animation:mnoriaUniversalTimeBlink .4s ease-in-out 3}" +
+      "@keyframes mnoriaUniversalTimeBlink{0%,100%{opacity:1}50%{opacity:.15}}" +
+      "@media(max-width:768px){.mnoria-time-widget-logo-overlay{top:0px}}" +
+      ".mnoria-time-explanation-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;background:rgba(0,0,0,.55);font-family:Arial,Helvetica,sans-serif;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}" +
+      ".mnoria-time-explanation{width:min(100%,430px);padding:30px 24px 22px;box-sizing:border-box;border:1px solid #dbeafe;border-radius:24px;background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);box-shadow:0 24px 60px rgba(15,23,42,.22),0 8px 24px rgba(59,130,246,.1);color:#111827;text-align:center}" +
+      ".mnoria-time-explanation h3{margin:0 0 20px;font-size:28px;line-height:1.2;font-weight:800}" +
+      ".mnoria-time-explanation p{margin:0 0 18px;color:#4b5563;font-size:14px;line-height:1.55}" +
+      ".mnoria-time-explanation button{display:flex;align-items:center;justify-content:center;width:100%;padding:12px 18px;border:0;border-radius:999px;background:#111827;color:#fff;font:700 15px/1 Arial,Helvetica,sans-serif;cursor:pointer}";
     document.head.appendChild(style);
 
     var widget = document.createElement("button");
     widget.type = "button";
-    widget.className = "agon-time-widget agon-time-widget-logo-overlay";
-    widget.setAttribute("aria-label", "Temps passé sur agôn aujourd'hui");
+    widget.className = "mnoria-time-widget mnoria-time-widget-logo-overlay";
+    widget.setAttribute("aria-label", "Temps passé sur mnoria aujourd'hui");
     widget.innerHTML = '<i class="fa-regular fa-clock" aria-hidden="true"></i><span></span>';
-    brandMain.classList.add("agon-time-widget-anchor");
+    brandMain.classList.add("mnoria-time-widget-anchor");
     brandMain.appendChild(widget);
 
-    var elapsedKey = "agon_time_widget_daily_v2";
+    var elapsedKey = "mnoria_time_widget_daily_v2";
     var limitSeconds = 60 * 60;
     var warningSeconds = 10 * 60;
     function getParisDayKey() {
@@ -115,9 +115,9 @@
     function maybeBlink() {
       var shouldBlink = expired && visible;
       if (shouldBlink && !blinkActive) {
-        widget.classList.remove("agon-time-widget-blinking");
+        widget.classList.remove("mnoria-time-widget-blinking");
         void widget.offsetWidth;
-        widget.classList.add("agon-time-widget-blinking");
+        widget.classList.add("mnoria-time-widget-blinking");
       }
       blinkActive = shouldBlink;
     }
@@ -128,8 +128,8 @@
       widget.querySelector("span").textContent = expired
         ? "Attention à ta santé numérique !"
         : String(Math.floor(remaining / 60)).padStart(2, "0") + ":" + String(remaining % 60).padStart(2, "0");
-      widget.classList.toggle("agon-time-widget-warning", remaining <= warningSeconds);
-      widget.classList.toggle("agon-time-widget-expired", expired);
+      widget.classList.toggle("mnoria-time-widget-warning", remaining <= warningSeconds);
+      widget.classList.toggle("mnoria-time-widget-expired", expired);
       maybeBlink();
       if (running) persistElapsed();
     }
@@ -144,11 +144,11 @@
     }
 
     widget.addEventListener("click", function () {
-      var existing = document.querySelector(".agon-time-explanation-overlay");
+      var existing = document.querySelector(".mnoria-time-explanation-overlay");
       if (existing) existing.remove();
       var overlay = document.createElement("div");
-      overlay.className = "agon-time-explanation-overlay";
-      overlay.innerHTML = '<div class="agon-time-explanation"><h3><i class="fa-regular fa-clock"></i> Temps passé</h3><p>Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes par jour sur les réseaux et plateformes comme agôn. Ce compteur ne bloque rien, c\'est juste un repère.</p><button type="button">Compris</button></div>';
+      overlay.className = "mnoria-time-explanation-overlay";
+      overlay.innerHTML = '<div class="mnoria-time-explanation"><h3><i class="fa-regular fa-clock"></i> Temps passé</h3><p>Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes par jour sur les réseaux et plateformes comme mnoria. Ce compteur ne bloque rien, c\'est juste un repère.</p><button type="button">Compris</button></div>';
       function close() { overlay.remove(); }
       overlay.addEventListener("click", function (event) { if (event.target === overlay) close(); });
       overlay.querySelector("button").addEventListener("click", close);

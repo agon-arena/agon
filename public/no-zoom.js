@@ -1,4 +1,4 @@
-(function lockAgonZoom() {
+(function lockMnoriaZoom() {
   function preventZoom(event) {
     event.preventDefault();
   }

@@ -45,11 +45,11 @@
     // mécanisme que le popup de détail de score IA, cf. argument-ai-detail-overlay)
     // pendant que cette overlay de contact est ouverte, pour éviter toute confusion
     // avec deux boutons de fermeture superposés.
-    try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: true }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'mnoria:ai-score-modal-visibility', open: true }, '*'); } catch (e) {}
 
     const closeOverlay = () => {
       overlay.remove();
-      try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: false }, '*'); } catch (e) {}
+      try { window.parent.postMessage({ type: 'mnoria:ai-score-modal-visibility', open: false }, '*'); } catch (e) {}
     };
 
     const closeBtn = document.createElement('button');
@@ -61,7 +61,7 @@
 
     const iframe = document.createElement('iframe');
     iframe.src = '/contact';
-    iframe.title = 'Contact agôn';
+    iframe.title = 'Contact mnoria';
     iframe.style.cssText = 'width:100%;height:100%;border:0;';
 
     box.appendChild(closeBtn);
@@ -96,7 +96,7 @@
             style="margin-top:12px;"
           >
           <div class="custom-modal-text" style="margin-top:10px;">
-            Pas de code ? <button type="button" id="ada-code-contact-link" style="background:none;border:none;padding:0;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;">Contacte agôn pour en obtenir un</button>.
+            Pas de code ? <button type="button" id="ada-code-contact-link" style="background:none;border:none;padding:0;color:inherit;text-decoration:underline;cursor:pointer;font:inherit;">Contacte mnoria pour en obtenir un</button>.
           </div>
           <div class="custom-modal-actions" style="margin-top:16px;">
             <button type="button" class="button button-secondary" id="ada-code-cancel">Annuler</button>
@@ -144,7 +144,7 @@
   const analysisFetchCache = new Map();
 
   // Grille de notation de la dernière analyse rendue (utilisée par le modal
-  // "Comment Agôn évalue les idées" pour afficher le barème personnalisé
+  // "Comment Mnoria évalue les idées" pour afficher le barème personnalisé
   // réellement appliqué, au lieu de toujours montrer la grille générique.
   let lastScoringGrid = null;
 
@@ -199,8 +199,8 @@
 
   // Exposé globalement pour que script.js partage le même cache et la même
   // promise in-flight, évitant tout double aller-retour réseau.
-  window.__agonRememberAnalysis = rememberStoredAnalysis;
-  window.__agonFetchAnalysis = fetchStoredAnalysis;
+  window.__mnoriaRememberAnalysis = rememberStoredAnalysis;
+  window.__mnoriaFetchAnalysis = fetchStoredAnalysis;
 
   // ── Styles ──────────────────────────────────────────────────────────
   function injectStyles() {
@@ -2398,7 +2398,7 @@
 
     if (grid.axisHidden) {
       return `<h3>2. Cette arène utilise un barème personnalisé</h3>
-      <p>Le créateur de cette arène a défini une orientation propre, mais a choisi de ne pas la dévoiler publiquement. Agôn applique malgré tout cette orientation, stabilisée en un barème unique sur 100 points, à toutes les contributions de l'arène — sans la grille générique ni le bonus source habituel.</p>
+      <p>Le créateur de cette arène a défini une orientation propre, mais a choisi de ne pas la dévoiler publiquement. Mnoria applique malgré tout cette orientation, stabilisée en un barème unique sur 100 points, à toutes les contributions de l'arène — sans la grille générique ni le bonus source habituel.</p>
       <div class="ada-bareme-rule"><strong>Total : 100 points · Score final = total obtenu sur le barème personnalisé, sans bonus source séparé.</strong></div>`;
     }
 
@@ -2410,7 +2410,7 @@
       .map((line) => `<li>${esc(line)}</li>`)
       .join('');
     return `<h3>2. Cette arène utilise un barème personnalisé</h3>
-      <p>Le créateur de cette arène a défini une orientation propre${orientation ? ` : <strong>« ${orientation} »</strong>` : ''}. Agôn a stabilisé cette orientation en un barème unique, sur 100 points, appliqué à l'identique à toutes les contributions de l'arène — sans la grille générique ni le bonus source habituel.</p>
+      <p>Le créateur de cette arène a défini une orientation propre${orientation ? ` : <strong>« ${orientation} »</strong>` : ''}. Mnoria a stabilisé cette orientation en un barème unique, sur 100 points, appliqué à l'identique à toutes les contributions de l'arène — sans la grille générique ni le bonus source habituel.</p>
       ${ruleLines ? `<ul>${ruleLines}</ul>` : ''}
       <div class="ada-bareme-rule"><strong>Total : 100 points · Score final = total obtenu sur le barème personnalisé, sans bonus source séparé.</strong></div>`;
   }
@@ -2425,16 +2425,16 @@
     overlay.className = 'ada-bareme-overlay';
     overlay.innerHTML = `<div class="ada-bareme-modal">
       <button class="ada-bareme-close" aria-label="Fermer">✕</button>
-      <h2>Comment Agôn évalue les idées ?</h2>
+      <h2>Comment Mnoria évalue les idées ?</h2>
       <p>${isOpenArena
-        ? "Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quelles idées sont, dans cette arène libre, les plus solides argumentativement."
-        : "Agôn ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les idées les plus solides."}</p>
+        ? "Mnoria ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quelles idées sont, dans cette arène libre, les plus solides argumentativement."
+        : "Mnoria ne cherche pas à dire qui a « raison » de manière absolue. Il indique seulement quel camp présente, dans une arène donnée, les idées les plus solides."}</p>
       <p><strong>L'analyse IA n'évalue pas la vérité absolue d'une opinion. Elle évalue la qualité argumentative des contributions selon des critères publics — c'est une analyse contestable, pas un verdict de vérité.</strong></p>
 
       <h3>1. Les doublons sont regroupés</h3>
       <p>${isOpenArena
-        ? "Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'une idée paraisse plus soutenue simplement parce qu'elle est répétée plusieurs fois."
-        : "Avant la notation, Agôn repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois."}</p>
+        ? "Avant la notation, Mnoria repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'une idée paraisse plus soutenue simplement parce qu'elle est répétée plusieurs fois."
+        : "Avant la notation, Mnoria repère les idées qui défendent la même idée avec la même justification principale. Quand plusieurs idées sont de vrais doublons, elles sont regroupées. Cela évite qu'un camp soit avantagé simplement parce qu'une même idée est répétée plusieurs fois."}</p>
 
       ${_baremeCriteriaSectionHtml()}
 
@@ -2445,16 +2445,17 @@
         <li><strong>70 à 84 : bonne idée</strong> — claire, pertinente et raisonnablement solide.</li>
         <li><strong>85 à 100 : excellente idée</strong> — très solide, bien construite, nuancée et bien appuyée.</li>
       </ul>
+      <p>Seules les meilleures contributions sont rendues publiques. Le créateur de l'arène est le seul à avoir accès à toutes les notes, y compris celles des idées faibles ou moyennes.</p>
 
       ${(lastScoringGrid && lastScoringGrid.scoringMode === 'custom') ? '' : `<h3>4. Les sources renforcent, elles ne remplacent pas</h3>
-      <p>Quand une idée contient une URL, Agôn évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut atteindre 100 si elle est claire, logique et bien construite.</p>`}
+      <p>Quand une idée contient une URL, Mnoria évalue la qualité de la source et peut ajouter jusqu'à 10 points. Une source fiable et directement liée à l'argument améliore le score, mais une idée mal raisonnée reste pénalisée même avec un excellent lien. À l'inverse, une idée sans URL peut atteindre 100 si elle est claire, logique et bien construite.</p>`}
 
       ${isOpenArena ? `
       <h3>5. Les idées sont classées, sans camps ni verdict</h3>
       <p>Une arène libre n'oppose pas deux camps : il n'y a donc pas de verdict global. Chaque idée est simplement classée selon son propre score, de la plus solide à la plus faible.</p>
 
       <h3>En résumé</h3>
-      <p>Agôn valorise la qualité de chaque idée plutôt que la quantité brute. Les répétitions sont regroupées, chaque idée est notée selon un barème transparent, et les idées sont classées du score le plus élevé au plus faible — sans comparaison entre camps.</p>
+      <p>Mnoria valorise la qualité de chaque idée plutôt que la quantité brute. Les répétitions sont regroupées, chaque idée est notée selon un barème transparent, et les idées sont classées du score le plus élevé au plus faible — sans comparaison entre camps.</p>
       ` : `
       <h3>5. Seules les bonnes et excellentes idées comptent pour le verdict</h3>
       <p>Les idées faibles et moyennes peuvent apparaître dans l'analyse, mais elles ne participent pas au calcul du verdict final.</p>
@@ -2464,17 +2465,17 @@
         idée faible ou moyenne = coefficient 0
       </div>
 
-      <h3>6. Agôn calcule le score de chaque camp</h3>
-      <p>Pour chaque camp, Agôn calcule une moyenne pondérée des bonnes et excellentes idées. Les excellentes comptent double. Le camp qui obtient le meilleur score est désigné comme ayant l'avantage.</p>
+      <h3>6. Mnoria calcule le score de chaque camp</h3>
+      <p>Pour chaque camp, Mnoria calcule une moyenne pondérée des bonnes et excellentes idées. Les excellentes comptent double. Le camp qui obtient le meilleur score est désigné comme ayant l'avantage.</p>
 
       <h3>7. Une réserve est ajoutée si l'arène est déséquilibrée</h3>
-      <p>Si un camp a plus du double d'idées solides que l'autre, le résultat est affiché avec prudence. Un camp peut avoir une excellente idée isolée face à de nombreuses bonnes idées dans l'autre camp — Agôn signale alors que le résultat doit être interprété prudemment.</p>
+      <p>Si un camp a plus du double d'idées solides que l'autre, le résultat est affiché avec prudence. Un camp peut avoir une excellente idée isolée face à de nombreuses bonnes idées dans l'autre camp — Mnoria signale alors que le résultat doit être interprété prudemment.</p>
 
       <h3>8. Ce que signifie le verdict</h3>
-      <p>Le verdict ne signifie pas que le camp gagnant a forcément raison. Il signifie seulement que, parmi les contributions analysées, ce camp présente en moyenne les idées distinctes les plus solides selon le barème d'Agôn.</p>
+      <p>Le verdict ne signifie pas que le camp gagnant a forcément raison. Il signifie seulement que, parmi les contributions analysées, ce camp présente en moyenne les idées distinctes les plus solides selon le barème d'Mnoria.</p>
 
       <h3>En résumé</h3>
-      <p>Agôn valorise la qualité des idées plutôt que la quantité brute. Les répétitions sont regroupées, chaque idée est notée selon un barème transparent, les idées faibles ne pèsent pas dans le verdict, et les excellentes idées sont davantage valorisées. Lorsque la comparaison entre les camps est trop déséquilibrée, Agôn l'indique clairement.</p>
+      <p>Mnoria valorise la qualité des idées plutôt que la quantité brute. Les répétitions sont regroupées, chaque idée est notée selon un barème transparent, les idées faibles ne pèsent pas dans le verdict, et les excellentes idées sont davantage valorisées. Lorsque la comparaison entre les camps est trop déséquilibrée, Mnoria l'indique clairement.</p>
       `}
     </div>`;
 
@@ -2484,7 +2485,7 @@
     // Masquer la flèche de fermeture iframe dans le document parent
     const _syncParent = (open) => {
       if (window.parent !== window) {
-        try { window.parent.postMessage({ type: 'agon:argument-form-visibility', open }, '*'); } catch (_) {}
+        try { window.parent.postMessage({ type: 'mnoria:argument-form-visibility', open }, '*'); } catch (_) {}
       }
     };
     _syncParent(true);

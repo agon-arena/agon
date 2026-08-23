@@ -1,51 +1,51 @@
 // ─────────────────────────────────────────────────────────────────────────
-// États globaux window.__agon* — récapitulatif (coordination entre script.js
+// États globaux window.__mnoria* — récapitulatif (coordination entre script.js
 // et les templates views/*.html, ou entre la page index et l'iframe /debate).
 // Ne pas renommer/supprimer sans vérifier toutes les occurrences ci-dessous.
 //
-// - __agonDebateModalOpen
+// - __mnoriaDebateModalOpen
 //     Écrit : ouverture/fermeture de la modale débat (index).
 //     Lu : auto-scroll des médias index, idle guard, refresh en arrière-plan
 //          — tous suspendus pendant que la modale est ouverte.
-// - __agonDebateModalOpenedFromNotifications
+// - __mnoriaDebateModalOpenedFromNotifications
 //     Écrit à l'ouverture de la modale (selon location.pathname === "/notifications").
 //     Lu pour déterminer le comportement de fermeture/retour de la modale.
-// - __agonDebateModalNewDebateCreated
+// - __mnoriaDebateModalNewDebateCreated
 //     Écrit quand un débat est créé depuis la modale.
 //     Lu+remis à false par l'index pour rafraîchir/insérer ce débat.
-// - __agonDebateModalPendingDebates
+// - __mnoriaDebateModalPendingDebates
 //     Écrit avec la liste fraîche de débats pendant que la modale est ouverte.
 //     Lu+vidé à la fermeture de la modale pour appliquer le rafraîchissement
 //     différé sans perturber l'affichage pendant que la modale est ouverte.
-// - __agonIframeCurrentPathname
+// - __mnoriaIframeCurrentPathname
 //     Écrit par l'iframe /debate (pathname courant affiché dans la modale).
 //     Lu par le parent (index) pour la gestion du bouton retour/navigation.
-// - __agonDebateBackNavigationInitialized
+// - __mnoriaDebateBackNavigationInitialized
 //     Garde d'idempotence : empêche de rebrancher plusieurs fois le handler
 //     de navigation retour de la modale débat.
-// - __agonPrefetchedDebateData
+// - __mnoriaPrefetchedDebateData
 //     Écrit par l'index (préchargement des données d'un débat avant ouverture
 //     de sa modale), sous la forme { id, debate }.
-//     Lu+vidé par loadDebate() dans l'iframe (window.parent.__agonPrefetchedDebateData)
+//     Lu+vidé par loadDebate() dans l'iframe (window.parent.__mnoriaPrefetchedDebateData)
 //     pour afficher instantanément le débat sans nouvel appel API.
-// - __agonSuspendedIndexEmbeds
+// - __mnoriaSuspendedIndexEmbeds
 //     Écrit à l'ouverture de la modale (état des embeds index suspendus :
 //     vidéos/iframes mis en pause).
 //     Lu+vidé à la fermeture pour restaurer ces embeds.
-// - __agonIdleHomeGuard
+// - __mnoriaIdleHomeGuard
 //     Défini dans views/create.html, notifications.html et debate.html sous la
 //     forme { check, markHidden, markVisible } (logique propre à chaque page).
 //     Lu par script.js pour rediriger vers l'accueil si la page est restée
 //     inactive trop longtemps.
-// - __agonIndexShareDropdownScan
+// - __mnoriaIndexShareDropdownScan
 //     Défini dans views/index.html (= scheduleScan).
 //     Appelé par initIndexCardShareMenus() sur la page d'accueil à la place de
 //     son scan générique, car l'index a sa propre logique optimisée.
-// - __agonIndexStatsScan
+// - __mnoriaIndexStatsScan
 //     Défini dans views/index.html (= scheduleScanCards).
 //     Appelé par script.js après rendu de cartes pour rescanner les
 //     statistiques/badges IA des cartes de l'index.
-// - __agonIdeaXMobileColumnFitBound
+// - __mnoriaIdeaXMobileColumnFitBound
 //     Garde d'idempotence : empêche de rebrancher plusieurs fois l'observer de
 //     mise à l'échelle des embeds X (Twitter) en colonne mobile.
 // ─────────────────────────────────────────────────────────────────────────
@@ -67,19 +67,19 @@ const COLOR_B_BORDER   = '#AEC0CC';
 
 // DIAGNOSTIC TEMPORAIRE — à retirer une fois le bug du "refresh" de l'index résolu.
 // Trace tous les déclencheurs suspects de reload/navigation/loader/rerender.
-// Mettre __AGON_DEBUG_REFRESH_ENABLED = true pour réactiver (désactivé en prod
+// Mettre __MNORIA_DEBUG_REFRESH_ENABLED = true pour réactiver (désactivé en prod
 // Activé temporairement pour diagnostiquer les rechargements spontanés mobile.
 // pour éviter console.log + localStorage synchrone à chaque interaction).
-const __AGON_DEBUG_REFRESH_ENABLED = true;
-const AGON_LAST_LIFECYCLE_SNAPSHOT_KEY = "agon_last_lifecycle_snapshot";
-const AGON_LAST_HEARTBEAT_KEY = "agon_last_heartbeat";
-const AGON_FREEZE_LOG_KEY = "agon_freeze_log";
-let __agonLastHiddenAt = 0;
-let __agonLastVisibleAt = Date.now();
-let __agonLastUserInputAt = 0;
-let __agonLastRuntimeError = null;
+const __MNORIA_DEBUG_REFRESH_ENABLED = true;
+const MNORIA_LAST_LIFECYCLE_SNAPSHOT_KEY = "mnoria_last_lifecycle_snapshot";
+const MNORIA_LAST_HEARTBEAT_KEY = "mnoria_last_heartbeat";
+const MNORIA_FREEZE_LOG_KEY = "mnoria_freeze_log";
+let __mnoriaLastHiddenAt = 0;
+let __mnoriaLastVisibleAt = Date.now();
+let __mnoriaLastUserInputAt = 0;
+let __mnoriaLastRuntimeError = null;
 
-function __agonGetModalDebugContext() {
+function __mnoriaGetModalDebugContext() {
   try {
     const modal = document.getElementById("debate-iframe-modal");
     const closeButton = document.getElementById("debate-iframe-modal-close");
@@ -88,8 +88,8 @@ function __agonGetModalDebugContext() {
     const closeStyle = closeButton ? window.getComputedStyle(closeButton) : null;
     return {
       modalExists: !!modal,
-      modalOpen: window.__agonDebateModalOpen === true || !!modal?.classList?.contains("open"),
-      iframePathname: String(window.__agonIframeCurrentPathname || ""),
+      modalOpen: window.__mnoriaDebateModalOpen === true || !!modal?.classList?.contains("open"),
+      iframePathname: String(window.__mnoriaIframeCurrentPathname || ""),
       modalClassName: modal ? String(modal.className || "") : "",
       frameSrc: frame ? String(frame.getAttribute("src") || frame.src || "") : "",
       scrollLockMode: typeof _debateModalScrollLockMode !== "undefined" ? String(_debateModalScrollLockMode || "") : "",
@@ -114,27 +114,27 @@ function __agonGetModalDebugContext() {
   }
 }
 
-function __agonStoreFreezeLog(entry = {}) {
-  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+function __mnoriaStoreFreezeLog(entry = {}) {
+  if (!__MNORIA_DEBUG_REFRESH_ENABLED) return;
   // Les iframes sont des documents distincts mais partagent le même
   // localStorage que leur parent. Elles ne doivent jamais écraser le journal
   // de cycle de vie de la vraie page standalone : sinon /apprentissage peut
   // être pris pour la dernière URL principale après un kill/reload WebKit.
   if (window.self !== window.top) return;
   try {
-    const prev = JSON.parse(localStorage.getItem(AGON_FREEZE_LOG_KEY) || "[]");
+    const prev = JSON.parse(localStorage.getItem(MNORIA_FREEZE_LOG_KEY) || "[]");
     prev.unshift({
       timestamp: new Date().toISOString(),
       url: String(window.location.href || ""),
-      ...__agonGetDebugRuntimeContext(),
+      ...__mnoriaGetDebugRuntimeContext(),
       ...entry
     });
     if (prev.length > 20) prev.length = 20;
-    localStorage.setItem(AGON_FREEZE_LOG_KEY, JSON.stringify(prev));
+    localStorage.setItem(MNORIA_FREEZE_LOG_KEY, JSON.stringify(prev));
   } catch (e) {}
 }
 
-function __agonGetDebugRuntimeContext(extra = {}) {
+function __mnoriaGetDebugRuntimeContext(extra = {}) {
   const now = Date.now();
   let memory = null;
   try {
@@ -167,9 +167,9 @@ function __agonGetDebugRuntimeContext(extra = {}) {
     online: navigator.onLine !== false,
     wasDiscarded: document.wasDiscarded === true,
     standalone: !!(window.navigator.standalone || window.matchMedia?.("(display-mode: standalone)")?.matches),
-    timeSinceHiddenMs: __agonLastHiddenAt ? now - __agonLastHiddenAt : null,
-    timeSinceVisibleMs: __agonLastVisibleAt ? now - __agonLastVisibleAt : null,
-    timeSinceUserInputMs: __agonLastUserInputAt ? now - __agonLastUserInputAt : null,
+    timeSinceHiddenMs: __mnoriaLastHiddenAt ? now - __mnoriaLastHiddenAt : null,
+    timeSinceVisibleMs: __mnoriaLastVisibleAt ? now - __mnoriaLastVisibleAt : null,
+    timeSinceUserInputMs: __mnoriaLastUserInputAt ? now - __mnoriaLastUserInputAt : null,
     viewport: {
       width: window.innerWidth || null,
       height: window.innerHeight || null,
@@ -179,29 +179,29 @@ function __agonGetDebugRuntimeContext(extra = {}) {
     hardwareConcurrency: navigator.hardwareConcurrency || null,
     memory,
     connection,
-    lastRuntimeError: __agonLastRuntimeError,
-    modal: __agonGetModalDebugContext(),
+    lastRuntimeError: __mnoriaLastRuntimeError,
+    modal: __mnoriaGetModalDebugContext(),
     ...extra
   };
 }
 
-function __agonStoreLifecycleSnapshot(reason, extra = {}) {
-  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+function __mnoriaStoreLifecycleSnapshot(reason, extra = {}) {
+  if (!__MNORIA_DEBUG_REFRESH_ENABLED) return;
   if (window.self !== window.top) return;
   try {
-    localStorage.setItem(AGON_LAST_LIFECYCLE_SNAPSHOT_KEY, JSON.stringify({
+    localStorage.setItem(MNORIA_LAST_LIFECYCLE_SNAPSHOT_KEY, JSON.stringify({
       reason,
       timestamp: new Date().toISOString(),
       url: String(window.location.href || ""),
       scrollY: Math.round(window.scrollY || 0),
-      modalOpen: window.__agonDebateModalOpen === true,
-      ...__agonGetDebugRuntimeContext(extra)
+      modalOpen: window.__mnoriaDebateModalOpen === true,
+      ...__mnoriaGetDebugRuntimeContext(extra)
     }));
   } catch (e) {}
 }
 
-function __agonDebugRefreshLog(source, type, extra = {}) {
-  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+function __mnoriaDebugRefreshLog(source, type, extra = {}) {
+  if (!__MNORIA_DEBUG_REFRESH_ENABLED) return;
   if (window.self !== window.top) return;
   try {
     const entry = {
@@ -210,13 +210,13 @@ function __agonDebugRefreshLog(source, type, extra = {}) {
       timestamp: new Date().toISOString(),
       url: String(window.location.href || ""),
       scrollY: Math.round(window.scrollY || 0),
-      modalOpen: window.__agonDebateModalOpen === true,
-      ...__agonGetDebugRuntimeContext(),
+      modalOpen: window.__mnoriaDebateModalOpen === true,
+      ...__mnoriaGetDebugRuntimeContext(),
       ...extra
     };
-    console.log("[AGON DEBUG REFRESH]", entry);
+    console.log("[MNORIA DEBUG REFRESH]", entry);
     try {
-      const KEY = "agon_refresh_log";
+      const KEY = "mnoria_refresh_log";
       const prev = JSON.parse(localStorage.getItem(KEY) || "[]");
       prev.unshift(entry);
       if (prev.length > 30) prev.length = 30;
@@ -226,20 +226,20 @@ function __agonDebugRefreshLog(source, type, extra = {}) {
 }
 
 // DIAGNOSTIC TEMPORAIRE — à appeler juste avant tout location.reload()/replace()/href
-// connu du code Agôn, pour pouvoir distinguer au prochain démarrage un reload
+// connu du code Mnoria, pour pouvoir distinguer au prochain démarrage un reload
 // déclenché par notre propre code d'un reload déclenché par le navigateur mobile
 // (onglet déchargé pour mémoire) ou d'un crash/timeout réseau dont notre code n'a
 // pas connaissance (dans ce dernier cas, aucun motif ne sera trouvé au démarrage).
-const AGON_LAST_RELOAD_REASON_KEY = "agon_last_reload_reason";
-function __agonRecordReloadReason(reason) {
+const MNORIA_LAST_RELOAD_REASON_KEY = "mnoria_last_reload_reason";
+function __mnoriaRecordReloadReason(reason) {
   if (window.self !== window.top) return;
   try {
-    sessionStorage.setItem(AGON_LAST_RELOAD_REASON_KEY, JSON.stringify({ reason, at: Date.now() }));
+    sessionStorage.setItem(MNORIA_LAST_RELOAD_REASON_KEY, JSON.stringify({ reason, at: Date.now() }));
   } catch (e) {}
 }
 
 // DIAGNOSTIC TEMPORAIRE — s'exécute au tout début de chaque chargement de script.js.
-(function __agonDebugStartupDiagnostic() {
+(function __mnoriaDebugStartupDiagnostic() {
   try {
     // Ce diagnostic pilote aussi la restauration de la dernière URL après un
     // crash iOS. Dans une iframe il consommerait les clés du parent et pourrait
@@ -258,26 +258,26 @@ function __agonRecordReloadReason(reason) {
     const wasDiscarded = document.wasDiscarded === true;
     let lastLifecycleSnapshot = null;
     try {
-      const rawLifecycle = localStorage.getItem(AGON_LAST_LIFECYCLE_SNAPSHOT_KEY);
+      const rawLifecycle = localStorage.getItem(MNORIA_LAST_LIFECYCLE_SNAPSHOT_KEY);
       if (rawLifecycle) lastLifecycleSnapshot = JSON.parse(rawLifecycle);
     } catch (e) {}
 
     let lastHeartbeat = null;
     try {
-      const rawHeartbeat = localStorage.getItem(AGON_LAST_HEARTBEAT_KEY);
+      const rawHeartbeat = localStorage.getItem(MNORIA_LAST_HEARTBEAT_KEY);
       if (rawHeartbeat) lastHeartbeat = JSON.parse(rawHeartbeat);
     } catch (e) {}
 
     let lastReloadReason = null;
     try {
-      const raw = sessionStorage.getItem(AGON_LAST_RELOAD_REASON_KEY);
+      const raw = sessionStorage.getItem(MNORIA_LAST_RELOAD_REASON_KEY);
       if (raw) {
         lastReloadReason = JSON.parse(raw);
-        sessionStorage.removeItem(AGON_LAST_RELOAD_REASON_KEY);
+        sessionStorage.removeItem(MNORIA_LAST_RELOAD_REASON_KEY);
       }
     } catch (e) {}
 
-    const skipStartup = window.__agonSkipStartupOnce === true;
+    const skipStartup = window.__mnoriaSkipStartupOnce === true;
 
     // Un déchargement normal (navigation, fermeture) écrit toujours un snapshot
     // "pagehide"/"beforeunload" en dernier. Si le dernier snapshot est un simple
@@ -296,7 +296,7 @@ function __agonRecordReloadReason(reason) {
 
     let likelyCause = "navigation normale (premier chargement ou lien cliqué)";
     if (lastReloadReason) {
-      likelyCause = "code Agôn : " + lastReloadReason.reason;
+      likelyCause = "code Mnoria : " + lastReloadReason.reason;
     } else if (navigationType === "reload" && wasDiscarded) {
       likelyCause = "navigateur mobile : onglet déchargé pour mémoire puis rechargé (tab discard)";
     } else if (navigationType === "reload" && !wasDiscarded) {
@@ -342,7 +342,7 @@ function __agonRecordReloadReason(reason) {
       } catch (e) {}
     }
 
-    if (__AGON_DEBUG_REFRESH_ENABLED) {
+    if (__MNORIA_DEBUG_REFRESH_ENABLED) {
       const entry = {
         navigationType,
         wasDiscarded,
@@ -369,11 +369,11 @@ function __agonRecordReloadReason(reason) {
         previousHeartbeatAgeMs: heartbeatAgeMs,
         previousHeartbeatUrl: lastHeartbeat?.url || null,
         previousHeartbeatModal: lastHeartbeat?.modal || null,
-        ...__agonGetDebugRuntimeContext()
+        ...__mnoriaGetDebugRuntimeContext()
       };
-      console.log("[AGON DEBUG STARTUP]", entry);
+      console.log("[MNORIA DEBUG STARTUP]", entry);
       try {
-        const KEY = "agon_startup_log";
+        const KEY = "mnoria_startup_log";
         const prev = JSON.parse(localStorage.getItem(KEY) || "[]");
         prev.unshift(entry);
         if (prev.length > 20) prev.length = 20;
@@ -389,12 +389,12 @@ function __agonRecordReloadReason(reason) {
 
 ["pointerdown", "touchstart", "keydown", "click"].forEach((eventName) => {
   window.addEventListener(eventName, () => {
-    __agonLastUserInputAt = Date.now();
+    __mnoriaLastUserInputAt = Date.now();
   }, { passive: true, capture: true });
 });
 
 window.addEventListener("error", (event) => {
-  __agonLastRuntimeError = {
+  __mnoriaLastRuntimeError = {
     type: "error",
     message: String(event.message || ""),
     source: String(event.filename || ""),
@@ -402,52 +402,52 @@ window.addEventListener("error", (event) => {
     column: event.colno || null,
     at: new Date().toISOString()
   };
-  __agonDebugRefreshLog("window-error", "error", { error: __agonLastRuntimeError });
+  __mnoriaDebugRefreshLog("window-error", "error", { error: __mnoriaLastRuntimeError });
 });
 
 window.addEventListener("unhandledrejection", (event) => {
   const reason = event.reason;
-  __agonLastRuntimeError = {
+  __mnoriaLastRuntimeError = {
     type: "unhandledrejection",
     message: String(reason?.message || reason || ""),
     at: new Date().toISOString()
   };
-  __agonDebugRefreshLog("window-unhandledrejection", "error", { error: __agonLastRuntimeError });
+  __mnoriaDebugRefreshLog("window-unhandledrejection", "error", { error: __mnoriaLastRuntimeError });
 });
 
 window.addEventListener("pagehide", (event) => {
-  __agonStoreLifecycleSnapshot("pagehide", { pagehidePersisted: event.persisted === true });
-  __agonDebugRefreshLog("window-pagehide", "lifecycle", { persisted: event.persisted === true });
+  __mnoriaStoreLifecycleSnapshot("pagehide", { pagehidePersisted: event.persisted === true });
+  __mnoriaDebugRefreshLog("window-pagehide", "lifecycle", { persisted: event.persisted === true });
 }, true);
 
 window.addEventListener("beforeunload", () => {
-  __agonStoreLifecycleSnapshot("beforeunload");
-  __agonDebugRefreshLog("window-beforeunload", "lifecycle");
+  __mnoriaStoreLifecycleSnapshot("beforeunload");
+  __mnoriaDebugRefreshLog("window-beforeunload", "lifecycle");
 }, true);
 
 document.addEventListener("freeze", () => {
-  __agonStoreLifecycleSnapshot("document-freeze");
-  __agonDebugRefreshLog("document-freeze", "lifecycle");
+  __mnoriaStoreLifecycleSnapshot("document-freeze");
+  __mnoriaDebugRefreshLog("document-freeze", "lifecycle");
 }, true);
 
 document.addEventListener("resume", () => {
-  __agonLastVisibleAt = Date.now();
-  __agonDebugRefreshLog("document-resume", "lifecycle");
+  __mnoriaLastVisibleAt = Date.now();
+  __mnoriaDebugRefreshLog("document-resume", "lifecycle");
 }, true);
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    __agonLastHiddenAt = Date.now();
-    __agonStoreLifecycleSnapshot("visibility-hidden");
+    __mnoriaLastHiddenAt = Date.now();
+    __mnoriaStoreLifecycleSnapshot("visibility-hidden");
   } else {
-    __agonLastVisibleAt = Date.now();
-    __agonStoreLifecycleSnapshot("visibility-visible");
+    __mnoriaLastVisibleAt = Date.now();
+    __mnoriaStoreLifecycleSnapshot("visibility-visible");
   }
-  __agonDebugRefreshLog("document-visibilitychange", "rerender", { hidden: document.hidden });
+  __mnoriaDebugRefreshLog("document-visibilitychange", "rerender", { hidden: document.hidden });
 });
 
-(function __agonBindFreezeHeartbeat() {
-  if (!__AGON_DEBUG_REFRESH_ENABLED) return;
+(function __mnoriaBindFreezeHeartbeat() {
+  if (!__MNORIA_DEBUG_REFRESH_ENABLED) return;
   if (window.self !== window.top) return;
   const HEARTBEAT_INTERVAL_MS = 5000;
   const STALL_THRESHOLD_MS = 12000;
@@ -455,11 +455,11 @@ document.addEventListener("visibilitychange", () => {
 
   function writeHeartbeat(reason = "heartbeat") {
     try {
-      localStorage.setItem(AGON_LAST_HEARTBEAT_KEY, JSON.stringify({
+      localStorage.setItem(MNORIA_LAST_HEARTBEAT_KEY, JSON.stringify({
         reason,
         timestamp: new Date().toISOString(),
         url: String(window.location.href || ""),
-        ...__agonGetDebugRuntimeContext()
+        ...__mnoriaGetDebugRuntimeContext()
       }));
     } catch (e) {}
   }
@@ -477,7 +477,7 @@ document.addEventListener("visibilitychange", () => {
     const wasVisible = !document.hidden;
     writeHeartbeat("interval");
     if (wasVisible && driftMs > STALL_THRESHOLD_MS) {
-      __agonStoreFreezeLog({
+      __mnoriaStoreFreezeLog({
         source: "heartbeat",
         type: "main-thread-stall",
         driftMs,
@@ -506,9 +506,9 @@ function registerServiceWorker() {
   // dans le cache par le service worker : on la laisse donc simplement servir au
   // prochain chargement volontaire, sans interrompre la session en cours.
   navigator.serviceWorker.addEventListener("message", (event) => {
-    if (event.data?.type !== "agon:page-stale" || window.__agonStalePageRefreshed) return;
-    window.__agonStalePageRefreshed = true;
-    window.__agonPageUpdateAvailable = true;
+    if (event.data?.type !== "mnoria:page-stale" || window.__mnoriaStalePageRefreshed) return;
+    window.__mnoriaStalePageRefreshed = true;
+    window.__mnoriaPageUpdateAvailable = true;
   });
 }
 
@@ -521,27 +521,27 @@ registerServiceWorker();
 // worker à ignorer le cache pour CETTE navigation précise et à attendre une
 // réponse fraîche du serveur (avec son propre filet de récupération si le
 // serveur ne répond pas). Nettoyé de l'URL visible juste après, plus bas.
-function showAgonStartupBeforeRefresh() {
+function showMnoriaStartupBeforeRefresh() {
   // L'animation de démarrage n'existe que sur l'index. Les boutons Actualiser
   // des autres pages conservent donc leur rechargement direct habituel.
-  if (!document.getElementById("agon-startup-critical-css")) return false;
+  if (!document.getElementById("mnoria-startup-critical-css")) return false;
 
-  document.documentElement.classList.remove("agon-skip-startup-once", "agon-startup-stuck");
-  document.documentElement.classList.add("agon-startup-active", "agon-user-refresh-startup");
-  window.__agonSkipStartupOnce = false;
+  document.documentElement.classList.remove("mnoria-skip-startup-once", "mnoria-startup-stuck");
+  document.documentElement.classList.add("mnoria-startup-active", "mnoria-user-refresh-startup");
+  window.__mnoriaSkipStartupOnce = false;
 
-  let loader = document.getElementById("agon-startup-loader");
+  let loader = document.getElementById("mnoria-startup-loader");
   if (!loader) {
     loader = document.createElement("div");
-    loader.id = "agon-startup-loader";
-    loader.className = "agon-startup-loader";
+    loader.id = "mnoria-startup-loader";
+    loader.className = "mnoria-startup-loader";
     loader.innerHTML =
-      '<div class="agon-startup-loader-inner">' +
-        '<div class="agon-startup-brand">' +
-          '<img src="/mnoria-logo.png?v=20260815-startup-v1" class="agon-startup-logo-img" alt="Mnoria" width="2172" height="724">' +
+      '<div class="mnoria-startup-loader-inner">' +
+        '<div class="mnoria-startup-brand">' +
+          '<img src="/mnoria-logo.png?v=20260815-startup-v1" class="mnoria-startup-logo-img" alt="Mnoria" width="2172" height="724">' +
         '</div>' +
-        '<div class="agon-startup-lines">' +
-          '<p class="agon-startup-line agon-startup-line-1">Cultivez votre esprit</p>' +
+        '<div class="mnoria-startup-lines">' +
+          '<p class="mnoria-startup-line mnoria-startup-line-1">Cultive ton esprit</p>' +
         '</div>' +
       '</div>';
     document.body.appendChild(loader);
@@ -558,7 +558,7 @@ function showAgonStartupBeforeRefresh() {
 }
 
 function forceFullPageRefresh() {
-  const startupShown = showAgonStartupBeforeRefresh();
+  const startupShown = showMnoriaStartupBeforeRefresh();
   const navigate = function() {
     try {
       const url = new URL(window.location.href);
@@ -595,11 +595,11 @@ window.forceFullPageRefresh = forceFullPageRefresh;
 })();
 
 (function initOffscreenAnimationPause() {
-  const PAUSE_CLASS = 'agon-anim-paused';
+  const PAUSE_CLASS = 'mnoria-anim-paused';
   const SELECTORS = [
-    '#agon-tag-trends-section',
-    '#agon-cloud-loading-spinner',
-    '.agon-cloud-loading',
+    '#mnoria-tag-trends-section',
+    '#mnoria-cloud-loading-spinner',
+    '.mnoria-cloud-loading',
     '.scroll-arrows',
     '.ranking-gain-box',
     '.debate-card-trend-badge',
@@ -663,8 +663,8 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   });
 })();
 
-(function initAgonStartupLoader() {
-  const loader = document.getElementById("agon-startup-loader");
+(function initMnoriaStartupLoader() {
+  const loader = document.getElementById("mnoria-startup-loader");
   if (!loader) return;
 
   try { history.scrollRestoration = 'manual'; } catch (_) {}
@@ -699,11 +699,11 @@ window.forceFullPageRefresh = forceFullPageRefresh;
     if (!line) return;
     await waitForPaint();
     if (!line.classList.contains('is-playing')) {
-      window.__agonStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+      window.__mnoriaStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
       line.classList.add('is-playing');
     }
 
-    const startedAt = Number(window.__agonStartupLineStartedAt || 0);
+    const startedAt = Number(window.__mnoriaStartupLineStartedAt || 0);
     const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
     const elapsed = startedAt ? Math.max(0, now - startedAt) : 0;
 
@@ -724,19 +724,19 @@ window.forceFullPageRefresh = forceFullPageRefresh;
     hidden = true;
     try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
     loader.classList.add('is-hiding');
-    // agon-startup-active (qui masque barre basse + pastille "Autres actus" +
+    // mnoria-startup-active (qui masque barre basse + pastille "Autres actus" +
     // flèches flottantes, cf. CSS critique d'index.html) n'est retirée qu'une
     // fois le loader réellement parti : pendant le fondu, WebKit (PWA iPhone)
     // ne peint pas la couche fixed du loader dans les ~60px du bas — des
     // éléments réaffichés à cet instant y apparaîtraient sous l'animation.
     setTimeout(function() {
-      document.documentElement.classList.remove('agon-startup-active');
+      document.documentElement.classList.remove('mnoria-startup-active');
       if (loader.parentNode) loader.parentNode.removeChild(loader);
     }, 500);
   }
 
   // Condition contenu : le feed index doit avoir rendu ses cartes.
-  window.addEventListener('agon:feed-ready', function() {
+  window.addEventListener('mnoria:feed-ready', function() {
     contentReady = true;
     tryHide();
   }, { once: true });
@@ -758,21 +758,41 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   setTimeout(function() {
     if (hidden) return;
     hidden = true;
-    document.documentElement.classList.remove('agon-startup-active');
+    document.documentElement.classList.remove('mnoria-startup-active');
     if (loader.parentNode) loader.parentNode.removeChild(loader);
   }, 10000);
 
   async function runIntroSequence() {
+    // Continuité d'un refresh utilisateur (bouton "Actualiser", cf. forceFullPageRefresh —
+    // mnoria-user-refresh-startup posé dès la tête de <head> quand _swrefresh est dans l'URL) :
+    // le texte a déjà fini de s'afficher en entier sur la page précédente, juste avant la
+    // navigation. Rejouer ici son fondu d'entrée ET l'attente artificielle qui le précède/suit
+    // donnait l'impression que "l'animation se lance deux fois" (demande du 17/08/2026) — en
+    // plus de ralentir inutilement le refresh d'un cycle d'intro complet. Affiché directement à
+    // son état final, sans animation ni délai : tryHide() reste seul juge du moment réel de
+    // fermeture (contentReady/fontsReady), rien n'est masqué prématurément si la page n'est pas
+    // encore prête.
+    if (document.documentElement.classList.contains('mnoria-user-refresh-startup')) {
+      const refreshLine = loader.querySelector('.mnoria-startup-line-1');
+      if (refreshLine) {
+        refreshLine.classList.add('is-playing');
+        refreshLine.style.opacity = '1';
+      }
+      introSequenceDone = true;
+      tryHide();
+      return;
+    }
+
     // Pause sur le logo avant les messages
-    if (window.__agonStartupInlineStarted !== true) {
+    if (window.__mnoriaStartupInlineStarted !== true) {
       await wait(400);
     } else {
-      const delayUntil = Number(window.__agonStartupLineDelayUntil || 0);
+      const delayUntil = Number(window.__mnoriaStartupLineDelayUntil || 0);
       const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
       if (delayUntil > now) await wait(delayUntil - now);
     }
 
-    await playStartupLine(loader.querySelector('.agon-startup-line-1'), 1600);
+    await playStartupLine(loader.querySelector('.mnoria-startup-line-1'), 1600);
 
     introSequenceDone = true;
     tryHide();
@@ -794,20 +814,20 @@ function lsRemove(key) { try { localStorage.removeItem(key); } catch {} }
 // que sa barre de recherche, même si la navigation détruit la page qui a démarré le fetch.
 // `slot` est connu avant l'appel (même convention que server.js) et permet à la page cible de
 // reconnaître le QCM dès qu'il apparaît dans GET /api/users/notion-quizzes.
-const AGON_PENDING_NOTION_QUIZZES_KEY = "agon_pending_notion_quizzes_v1";
-const AGON_PENDING_NOTION_QUIZ_MAX_AGE_MS = 30 * 60 * 1000;
+const MNORIA_PENDING_NOTION_QUIZZES_KEY = "mnoria_pending_notion_quizzes_v1";
+const MNORIA_PENDING_NOTION_QUIZ_MAX_AGE_MS = 30 * 60 * 1000;
 
 function readPendingNotionQuizGenerations() {
   let rows = [];
   try {
-    const parsed = JSON.parse(lsGet(AGON_PENDING_NOTION_QUIZZES_KEY) || "[]");
+    const parsed = JSON.parse(lsGet(MNORIA_PENDING_NOTION_QUIZZES_KEY) || "[]");
     if (Array.isArray(parsed)) rows = parsed;
   } catch {}
   const now = Date.now();
   const fresh = rows.filter((row) => row && row.slot && row.label
     && Number.isFinite(Number(row.startedAt))
-    && now - Number(row.startedAt) <= AGON_PENDING_NOTION_QUIZ_MAX_AGE_MS);
-  if (fresh.length !== rows.length) lsSet(AGON_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(fresh));
+    && now - Number(row.startedAt) <= MNORIA_PENDING_NOTION_QUIZ_MAX_AGE_MS);
+  if (fresh.length !== rows.length) lsSet(MNORIA_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(fresh));
   return fresh;
 }
 
@@ -817,20 +837,20 @@ function startPendingNotionQuizGeneration({ slot, label, quizDate = null } = {})
   if (!normalizedSlot || !normalizedLabel) return;
   const rows = readPendingNotionQuizGenerations().filter((row) => row.slot !== normalizedSlot);
   rows.push({ slot: normalizedSlot, label: normalizedLabel, quizDate, startedAt: Date.now() });
-  lsSet(AGON_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
+  lsSet(MNORIA_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
 }
 
 function finishPendingNotionQuizGeneration(slot) {
   const normalizedSlot = String(slot || "").trim();
   if (!normalizedSlot) return;
   const rows = readPendingNotionQuizGenerations().filter((row) => row.slot !== normalizedSlot);
-  if (rows.length) lsSet(AGON_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
-  else lsRemove(AGON_PENDING_NOTION_QUIZZES_KEY);
+  if (rows.length) lsSet(MNORIA_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
+  else lsRemove(MNORIA_PENDING_NOTION_QUIZZES_KEY);
 }
 
-window.agonGetPendingNotionQuizGenerations = readPendingNotionQuizGenerations;
-window.agonStartPendingNotionQuizGeneration = startPendingNotionQuizGeneration;
-window.agonFinishPendingNotionQuizGeneration = finishPendingNotionQuizGeneration;
+window.mnoriaGetPendingNotionQuizGenerations = readPendingNotionQuizGenerations;
+window.mnoriaStartPendingNotionQuizGeneration = startPendingNotionQuizGeneration;
+window.mnoriaFinishPendingNotionQuizGeneration = finishPendingNotionQuizGeneration;
 
 const PUSH_INVITE_LAST_SHOWN_KEY = "pushInviteLastShownAt";
 const PUSH_INVITE_DISMISSED_KEY = "pushInviteDismissed";
@@ -842,7 +862,7 @@ const PUSH_INVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 // coup (pénible pour l'utilisateur) : chacune enregistre son horodatage,
 // l'autre vérifie qu'aucune des deux n'est apparue dans les 5 dernières
 // minutes avant de s'afficher à son tour.
-const SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY = "agon_score_change_notif_last_shown_at";
+const SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY = "mnoria_score_change_notif_last_shown_at";
 const SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS = 5 * 60 * 1000;
 let pushInviteToastEl = null;
 let pushInviteEnablePending = false;
@@ -876,27 +896,27 @@ window.addEventListener("appinstalled", () => {
     const btn = document.getElementById(id);
     if (btn) btn.style.display = "none";
   });
-  ["install-modal-overlay", "agon-install-modal-fallback"].forEach((id) => {
+  ["install-modal-overlay", "mnoria-install-modal-fallback"].forEach((id) => {
     const modal = document.getElementById(id);
     if (modal) modal.style.display = "none";
   });
 
-  let overlay = document.getElementById("agon-install-success-overlay");
+  let overlay = document.getElementById("mnoria-install-success-overlay");
   if (!overlay) {
     overlay = document.createElement("div");
-    overlay.id = "agon-install-success-overlay";
+    overlay.id = "mnoria-install-success-overlay";
     overlay.className = "install-modal-overlay";
     overlay.innerHTML = `
       <div class="install-modal" onclick="event.stopPropagation()">
         <div class="install-modal-brand">
           <img src="/mnoria-icon-192.png" alt="" class="install-modal-app-icon">
         </div>
-        <h3 class="install-modal-title">Agôn est installé&nbsp;!</h3>
+        <h3 class="install-modal-title">Mnoria est installé&nbsp;!</h3>
         <div class="install-modal-section">
-          <p class="install-modal-text">L'icône <strong>Agôn</strong> vient d'être ajoutée à ton écran d'accueil. Appuie dessus pour ouvrir l'application en plein écran.</p>
+          <p class="install-modal-text">L'icône <strong>Mnoria</strong> vient d'être ajoutée à ton écran d'accueil. Appuie dessus pour ouvrir l'application en plein écran.</p>
         </div>
         <button class="install-modal-android-btn" type="button" style="display:flex"
-          onclick="document.getElementById('agon-install-success-overlay').style.display='none';document.body.style.overflow='';">
+          onclick="document.getElementById('mnoria-install-success-overlay').style.display='none';document.body.style.overflow='';">
           Compris
         </button>
       </div>`;
@@ -959,13 +979,13 @@ if (isStandaloneMode()) {
 
 // Alignement du dock flottant bas débat (retour/fermeture, refresh, compteur
 // de voix) : voir le bloc CSS "Dock flottant bas débat unifié".
-// --agon-dock-lift : dégagement au-dessus du bord bas visible. 0 en Safari
+// --mnoria-dock-lift : dégagement au-dessus du bord bas visible. 0 en Safari
 //   (barre d'outils) et sur les vieux iPhones PWA au viewport tronqué
 //   (screen.height - innerHeight >> 0 en standalone) ; sinon safe-area.
 //   Calculé dans le document parent, hérité tel quel par l'iframe du modal.
-// --agon-embedded-bottom-ext : débordement de l'iframe du modal sous le
+// --mnoria-embedded-bottom-ext : débordement de l'iframe du modal sous le
 //   viewport parent (bottom négatif posé par le parent pour la safe-area).
-(function initAgonDockAlignment() {
+(function initMnoriaDockAlignment() {
   const root = document.documentElement;
   let topWin = window;
   try { if (window.top && window.top.document) topWin = window.top; } catch {}
@@ -989,7 +1009,7 @@ if (isStandaloneMode()) {
     try {
       if (isEmbedded) {
         ext = Math.max(0, Math.round((Number(window.innerHeight) || 0) - (Number(topWin.innerHeight) || 0)));
-        const inherited = parseFloat(topWin.document.documentElement.style.getPropertyValue("--agon-dock-lift"));
+        const inherited = parseFloat(topWin.document.documentElement.style.getPropertyValue("--mnoria-dock-lift"));
         lift = Number.isFinite(inherited) ? Math.max(0, Math.round(inherited)) : 0;
       } else if (isStandaloneMode()) {
         const portrait = (Number(window.innerHeight) || 0) >= (Number(window.innerWidth) || 0);
@@ -1003,8 +1023,8 @@ if (isStandaloneMode()) {
     if (applied.lift === lift && applied.ext === ext) return;
     applied.lift = lift;
     applied.ext = ext;
-    root.style.setProperty("--agon-dock-lift", `${lift}px`);
-    root.style.setProperty("--agon-embedded-bottom-ext", `${ext}px`);
+    root.style.setProperty("--mnoria-dock-lift", `${lift}px`);
+    root.style.setProperty("--mnoria-embedded-bottom-ext", `${ext}px`);
   };
 
   update();
@@ -1041,7 +1061,7 @@ if (isStandaloneMode()) {
 // place du bouton de fermeture du parent) : une seule mesure directe de la
 // position du bandeau suffit, plus besoin de synchroniser 2 documents avec
 // des window.innerHeight différents et un état de barre Safari changeant.
-(function initAgonDebateDockLineSync() {
+(function initMnoriaDebateDockLineSync() {
   const DOCK_BUTTON_HEIGHT = 42;
 
   function sync() {
@@ -1051,7 +1071,7 @@ if (isStandaloneMode()) {
 
     const navTop = nav.getBoundingClientRect().top;
     const bottomOffset = Math.round(window.innerHeight - navTop - DOCK_BUTTON_HEIGHT / 2);
-    document.documentElement.style.setProperty("--agon-dock-button-bottom", `${bottomOffset}px`);
+    document.documentElement.style.setProperty("--mnoria-dock-button-bottom", `${bottomOffset}px`);
   }
 
   sync();
@@ -1073,8 +1093,8 @@ if (isStandaloneMode()) {
 // ci-dessous. Le posait auparavant sur "appInstallPinged", qui n'est fixé que
 // si le ping serveur réussit — un aléa réseau au lancement de l'app suffisait
 // alors à empêcher le bandeau de s'afficher pour toujours sur cet appareil.
-if (isStandaloneMode() && lsGet("agonStandaloneSeen") !== "1") {
-  lsSet("agonStandaloneSeen", "1");
+if (isStandaloneMode() && lsGet("mnoriaStandaloneSeen") !== "1") {
+  lsSet("mnoriaStandaloneSeen", "1");
 }
 
 // Ping serveur (stats d'installation) : indépendant du flag ci-dessus, peut
@@ -1102,7 +1122,7 @@ function maybeShowOpenAppBanner() {
   // Safari où le storage peut ne pas se comporter comme sur Android Chrome).
   if (/(?:^|[?&])debugflags=1(?:&|$)/i.test(location.search)) {
     alert(
-      "agonStandaloneSeen: " + lsGet("agonStandaloneSeen") +
+      "mnoriaStandaloneSeen: " + lsGet("mnoriaStandaloneSeen") +
       "\nappInstallPinged: " + lsGet("appInstallPinged") +
       "\nopenAppBannerLastShownAt: " + lsGet(OPEN_APP_BANNER_LAST_SHOWN_KEY) +
       "\nisStandaloneMode(): " + isStandaloneMode() +
@@ -1126,7 +1146,7 @@ function maybeShowOpenAppBanner() {
 
   // Cas direct : ce navigateur a déjà tourné en standalone (Android/Chrome,
   // où PWA et navigateur partagent le même stockage).
-  if (lsGet("agonStandaloneSeen") === "1") {
+  if (lsGet("mnoriaStandaloneSeen") === "1") {
     lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
     renderOpenAppBanner();
     return;
@@ -1146,7 +1166,7 @@ function maybeShowOpenAppBanner() {
     .then((data) => {
       if (!data || !data.installed) return;
       // Mémorisé : les prochains passages prennent le cas direct sans requête.
-      lsSet("agonStandaloneSeen", "1");
+      lsSet("mnoriaStandaloneSeen", "1");
       lsSet(OPEN_APP_BANNER_LAST_SHOWN_KEY, String(Date.now()));
       renderOpenAppBanner();
     })
@@ -1154,11 +1174,11 @@ function maybeShowOpenAppBanner() {
 }
 
 function renderOpenAppBanner() {
-  if (!document.getElementById("agon-open-app-banner-styles")) {
+  if (!document.getElementById("mnoria-open-app-banner-styles")) {
     const style = document.createElement("style");
-    style.id = "agon-open-app-banner-styles";
+    style.id = "mnoria-open-app-banner-styles";
     style.textContent = `
-      .agon-open-app-banner {
+      .mnoria-open-app-banner {
         position: fixed;
         top: 0;
         left: 0;
@@ -1178,10 +1198,10 @@ function renderOpenAppBanner() {
         transform: translateY(-100%);
         transition: transform .35s ease;
       }
-      .agon-open-app-banner.agon-open-app-banner-visible { transform: translateY(0); }
-      .agon-open-app-banner img { width: 28px; height: 28px; border-radius: 7px; }
-      .agon-open-app-banner span { line-height: 1.35; }
-      .agon-open-app-banner-link {
+      .mnoria-open-app-banner.mnoria-open-app-banner-visible { transform: translateY(0); }
+      .mnoria-open-app-banner img { width: 28px; height: 28px; border-radius: 7px; }
+      .mnoria-open-app-banner span { line-height: 1.35; }
+      .mnoria-open-app-banner-link {
         background: none;
         border: none;
         color: #fff;
@@ -1191,7 +1211,7 @@ function renderOpenAppBanner() {
         padding: 2px 0;
         cursor: pointer;
       }
-      .agon-open-app-banner-close {
+      .mnoria-open-app-banner-close {
         position: absolute;
         top: calc(8px + env(safe-area-inset-top, 0px));
         right: 8px;
@@ -1208,23 +1228,23 @@ function renderOpenAppBanner() {
   }
 
   const banner = document.createElement("div");
-  banner.className = "agon-open-app-banner";
+  banner.className = "mnoria-open-app-banner";
   banner.innerHTML = `
-    <button type="button" class="agon-open-app-banner-close" aria-label="Fermer">&times;</button>
+    <button type="button" class="mnoria-open-app-banner-close" aria-label="Fermer">&times;</button>
     <img src="/mnoria-icon-192.png" alt="">
-    <span>Utilise l'app Agôn déjà installée sur ton mobile pour retrouver tes contributions.</span>
-    <button type="button" class="agon-open-app-banner-link">Comment l'ouvrir&nbsp;?</button>
+    <span>Utilise l'app Mnoria déjà installée sur ton mobile pour retrouver tes contributions.</span>
+    <button type="button" class="mnoria-open-app-banner-link">Comment l'ouvrir&nbsp;?</button>
   `;
   document.body.appendChild(banner);
 
   const hide = () => {
-    banner.classList.remove("agon-open-app-banner-visible");
+    banner.classList.remove("mnoria-open-app-banner-visible");
     setTimeout(() => banner.remove(), 400);
   };
 
-  banner.querySelector(".agon-open-app-banner-close").addEventListener("click", hide);
-  banner.querySelector(".agon-open-app-banner-link").addEventListener("click", showOpenAppHowToModal);
-  requestAnimationFrame(() => banner.classList.add("agon-open-app-banner-visible"));
+  banner.querySelector(".mnoria-open-app-banner-close").addEventListener("click", hide);
+  banner.querySelector(".mnoria-open-app-banner-link").addEventListener("click", showOpenAppHowToModal);
+  requestAnimationFrame(() => banner.classList.add("mnoria-open-app-banner-visible"));
   // Pas de disparition automatique : seul le bouton de fermeture masque le bandeau,
   // pour laisser le temps de lire et de cliquer sur "Comment l'ouvrir ?".
 }
@@ -1233,19 +1253,19 @@ function renderOpenAppBanner() {
 // la relancer depuis un lien (ni iOS ni Android sans wrapper natif), donc le
 // lien du bandeau ouvre ces instructions plutôt qu'une tentative de lancement.
 function showOpenAppHowToModal() {
-  let overlay = document.getElementById("agon-open-app-howto-overlay");
+  let overlay = document.getElementById("mnoria-open-app-howto-overlay");
   if (!overlay) {
     overlay = document.createElement("div");
-    overlay.id = "agon-open-app-howto-overlay";
+    overlay.id = "mnoria-open-app-howto-overlay";
     overlay.className = "install-modal-overlay";
     overlay.innerHTML = `
       <div class="install-modal" onclick="event.stopPropagation()">
         <div class="install-modal-brand">
           <img src="/mnoria-icon-192.png" alt="" class="install-modal-app-icon">
         </div>
-        <h3 class="install-modal-title">Ouvrir l'app Agôn</h3>
+        <h3 class="install-modal-title">Ouvrir l'app Mnoria</h3>
         <div class="install-modal-section">
-          <p class="install-modal-text">Aucun lien ne peut lancer l'app installée depuis le navigateur. Va sur ton <strong>écran d'accueil</strong> et appuie sur l'icône <strong>Agôn</strong> pour l'ouvrir en plein écran.</p>
+          <p class="install-modal-text">Aucun lien ne peut lancer l'app installée depuis le navigateur. Va sur ton <strong>écran d'accueil</strong> et appuie sur l'icône <strong>Mnoria</strong> pour l'ouvrir en plein écran.</p>
         </div>
         <button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>
       </div>`;
@@ -1289,38 +1309,47 @@ function formatPct(n) {
 // Icône du score Logos : volute grecque (spirale) en SVG inline — pas
 // d'équivalent dans Font Awesome. Le wrapper <i> conserve les styles
 // existants qui ciblent les balises i (couleur, font-size → taille 1em).
-const AGON_LOGOS_ICON = '<i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
+const MNORIA_LOGOS_ICON = '<i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
 
 function renderUserScoreWidget(data) {
   const votesScoreRaw = numOrNull(data?.votesScore);
   const notesScoreRaw = numOrNull(data?.notesScore);
   const gnosisScoreRaw = numOrNull(data?.gnosisScore);
+  const noesisScoreRaw = numOrNull(data?.noesisScore);
   // 1 décimale (pas Math.round entier) : préserve les bornes 0,1 / 99,9 posées
   // côté serveur pour les extrêmes, sinon Math.round(0.1) = 0 les efface.
   const votesScore = votesScoreRaw === null ? null : Math.round(votesScoreRaw * 10) / 10;
   const notesScore = notesScoreRaw === null ? null : Math.round(notesScoreRaw * 10) / 10;
   const gnosisScore = gnosisScoreRaw === null ? null : Math.round(gnosisScoreRaw * 10) / 10;
+  const noesisScore = noesisScoreRaw === null ? null : Math.round(noesisScoreRaw * 10) / 10;
   const tierLabel = String(data?.tierLabel || "").trim();
   const tier = numOrNull(data?.tier);
   const tierCount = numOrNull(data?.tierCount);
   const gnosisTierLabel = String(data?.gnosisTierLabel || "").trim();
   const gnosisTier = numOrNull(data?.gnosisTier);
   const gnosisTierCount = numOrNull(data?.gnosisTierCount);
+  const noesisTierLabel = String(data?.noesisTierLabel || "").trim();
+  const noesisTier = numOrNull(data?.noesisTier);
+  const noesisTierCount = numOrNull(data?.noesisTierCount);
   const stats = {
     votesTotalUsers: numOrNull(data?.votesTotalUsers),
     notesTotalUsers: numOrNull(data?.notesTotalUsers),
     gnosisTotalUsers: numOrNull(data?.gnosisTotalUsers),
+    noesisTotalUsers: numOrNull(data?.noesisTotalUsers),
     votesTierUsers: numOrNull(data?.votesTierUsers),
     notesTierUsers: numOrNull(data?.notesTierUsers),
     gnosisTierUsers: numOrNull(data?.gnosisTierUsers),
+    noesisTierUsers: numOrNull(data?.noesisTierUsers),
     votesValue: numOrNull(data?.votesValue),
     notesValue: numOrNull(data?.notesValue),
     gnosisAnswered: numOrNull(data?.gnosisAnswered),
-    gnosisCorrect: numOrNull(data?.gnosisCorrect)
+    gnosisCorrect: numOrNull(data?.gnosisCorrect),
+    relierAnswered: numOrNull(data?.relierAnswered),
+    relierCorrect: numOrNull(data?.relierCorrect)
   };
 
   maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, () =>
-    showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount)
+    showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount, noesisTierLabel, noesisTier, noesisTierCount)
   );
 }
 
@@ -1330,7 +1359,7 @@ function renderUserScoreWidget(data) {
 // Aucune notification au tout premier chargement connu (pas de valeur de
 // référence à comparer) : seulement à partir de la 2e visite, quand une
 // évolution est réellement détectable.
-const AGON_SCORE_CHANGE_BASELINE_KEY = "agon_last_known_scores";
+const MNORIA_SCORE_CHANGE_BASELINE_KEY = "mnoria_last_known_scores";
 function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail) {
   // Pas de valeur mémorisée (tout premier chargement connu) : traité comme
   // une base à null/null/null plutôt qu'un "rien à comparer, on ignore" —
@@ -1339,11 +1368,11 @@ function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail)
   // entre deux valeurs déjà connues.
   let previous = { votesScore: null, notesScore: null, gnosisScore: null };
   try {
-    const stored = JSON.parse(localStorage.getItem(AGON_SCORE_CHANGE_BASELINE_KEY) || "null");
+    const stored = JSON.parse(localStorage.getItem(MNORIA_SCORE_CHANGE_BASELINE_KEY) || "null");
     if (stored) previous = stored;
   } catch (e) {}
   try {
-    localStorage.setItem(AGON_SCORE_CHANGE_BASELINE_KEY, JSON.stringify({ votesScore, notesScore, gnosisScore }));
+    localStorage.setItem(MNORIA_SCORE_CHANGE_BASELINE_KEY, JSON.stringify({ votesScore, notesScore, gnosisScore }));
   } catch (e) {}
 
   // Aucune notification quand les 3 scores sont déjà à 100% : il n'y a plus
@@ -1355,7 +1384,7 @@ function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail)
     changes.push({ icon: '<i class="fa-solid fa-bolt"></i>', label: "Rhetor", value: votesScore });
   }
   if (notesScore !== null && previous.notesScore !== notesScore) {
-    changes.push({ icon: AGON_LOGOS_ICON, label: "Logos", value: notesScore });
+    changes.push({ icon: MNORIA_LOGOS_ICON, label: "Logos", value: notesScore });
   }
   if (gnosisScore !== null && previous.gnosisScore !== gnosisScore) {
     changes.push({ icon: '<i class="fa-solid fa-brain"></i>', label: "Gnosis", value: gnosisScore });
@@ -1388,11 +1417,11 @@ function showScoreChangeNotification(changes, openDetail) {
   let topDoc = document;
   try { if (window.top && window.top.document) topDoc = window.top.document; } catch (e) {}
 
-  const existing = topDoc.getElementById("agon-score-change-overlay");
+  const existing = topDoc.getElementById("mnoria-score-change-overlay");
   if (existing) existing.remove();
 
   const overlay = topDoc.createElement("div");
-  overlay.id = "agon-score-change-overlay";
+  overlay.id = "mnoria-score-change-overlay";
   overlay.className = "install-modal-overlay";
   overlay.style.display = "flex";
   const lines = changes
@@ -1400,26 +1429,26 @@ function showScoreChangeNotification(changes, openDetail) {
     .join("");
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
-    '<button class="install-modal-close" type="button" aria-label="Fermer" id="agon-score-change-close-btn"><i class="fa-solid fa-xmark"></i></button>' +
+    '<button class="install-modal-close" type="button" aria-label="Fermer" id="mnoria-score-change-close-btn"><i class="fa-solid fa-xmark"></i></button>' +
     '<h3 class="install-modal-title">Ton score a évolué</h3>' +
     lines +
-    '<button class="install-modal-secondary-btn" type="button" id="agon-score-change-close-btn-bottom">Fermer</button>' +
+    '<button class="install-modal-secondary-btn" type="button" id="mnoria-score-change-close-btn-bottom">Fermer</button>' +
     '</div>';
   const close = () => overlay.remove();
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  overlay.querySelector("#agon-score-change-close-btn").addEventListener("click", close);
-  overlay.querySelector("#agon-score-change-close-btn-bottom").addEventListener("click", close);
+  overlay.querySelector("#mnoria-score-change-close-btn").addEventListener("click", close);
+  overlay.querySelector("#mnoria-score-change-close-btn-bottom").addEventListener("click", close);
   topDoc.body.appendChild(overlay);
 }
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
-// classique (Agôn = joute oratoire) : Rhetor pour les voix récoltées, Logos
+// classique (Mnoria = joute oratoire) : Rhetor pour les voix récoltées, Logos
 // pour la qualité argumentative notée par l'IA.
 function formatUserCount(n) {
   return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
 }
 
-function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount, initialTab) {
+function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount, noesisTierLabel, noesisTier, noesisTierCount, initialTab) {
   // Même raisonnement que showScoreChangeNotification : le badge (et donc ce
   // clic) peut venir de l'iframe /debate, mais le détail doit toujours
   // s'afficher dans le document le plus haut pour rester cohérent avec la
@@ -1427,11 +1456,11 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   let topDoc = document;
   try { if (window.top && window.top.document) topDoc = window.top.document; } catch (e) {}
 
-  const existing = topDoc.getElementById("agon-user-score-overlay");
+  const existing = topDoc.getElementById("mnoria-user-score-overlay");
   if (existing) existing.remove();
 
   const overlay = topDoc.createElement("div");
-  overlay.id = "agon-user-score-overlay";
+  overlay.id = "mnoria-user-score-overlay";
   overlay.className = "install-modal-overlay";
 
   const s = stats || {};
@@ -1463,13 +1492,26 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
       '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>'
     : '';
 
-  // Chaque score a son propre onglet (clic sur Rhetor / Logos / Gnosis dans
-  // le menu) plutôt que d'être tous empilés à la suite dans la modale. Les 3
+  // Palier propre à Noesis (QCM "Relier", compréhension des liens) — même
+  // principe que Gnosis ci-dessus, population distincte (volume de questions
+  // répondues dans Relier, pas dans Ancrer).
+  const noesisTierRank = (Number.isFinite(noesisTier) && Number.isFinite(noesisTierCount)) ? (' (' + noesisTier + '/' + noesisTierCount + ')') : '';
+  const noesisTierCountHint = (Number.isFinite(s.noesisTierUsers) && Number.isFinite(s.noesisTotalUsers))
+    ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.noesisTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.noesisTotalUsers) + '</p>'
+    : '';
+  const noesisTierIntro = noesisTierLabel
+    ? '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier Noesis' + noesisTierRank + ' — ' + noesisTierLabel + '</h4>' +
+      '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>'
+    : '';
+
+  // Chaque score a son propre onglet (clic sur Rhetor / Logos / Gnosis / Noesis
+  // dans le menu) plutôt que d'être tous empilés à la suite dans la modale. Les 4
   // scores existent toujours (pire note tant qu'on n'a rien posté/répondu,
-  // cf. USER_SCORE_EMPTY côté serveur), donc toujours 3 onglets.
+  // cf. USER_SCORE_EMPTY côté serveur), donc toujours 4 onglets.
   const hasVotesScore = Number.isFinite(s.votesValue);
   const hasNotesScore = Number.isFinite(s.notesValue);
   const hasGnosisScore = Number.isFinite(s.gnosisCorrect) && Number.isFinite(s.gnosisAnswered);
+  const hasNoesisScore = Number.isFinite(s.relierCorrect) && Number.isFinite(s.relierAnswered);
   const votesValueLine = hasVotesScore
     ? '<p class="install-modal-text"><strong>' + s.votesValue.toLocaleString("fr-FR") + (s.votesValue > 1 ? ' voix reçues' : ' voix reçue') + '</strong> au total sur toutes tes idées.</p>'
     : '';
@@ -1478,6 +1520,9 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
     : '';
   const gnosisValueLine = hasGnosisScore
     ? '<p class="install-modal-text"><strong>' + s.gnosisCorrect.toLocaleString("fr-FR") + ' / ' + s.gnosisAnswered.toLocaleString("fr-FR") + ' bonnes réponses</strong> au QCM.</p>'
+    : '';
+  const noesisValueLine = hasNoesisScore
+    ? '<p class="install-modal-text"><strong>' + s.relierCorrect.toLocaleString("fr-FR") + ' / ' + s.relierAnswered.toLocaleString("fr-FR") + ' bonnes réponses</strong> au QCM Relier.</p>'
     : '';
   const votesExplanation = hasVotesScore
     ? 'Mesure les voix récoltées sur toutes tes idées. ' + formatPct(votesScore) + '% des contributeurs de ton palier ont reçu plus de voix que toi, ' + formatPct(100 - votesScore) + '% en ont reçu moins.'
@@ -1488,6 +1533,9 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   const gnosisExplanation = hasGnosisScore
     ? 'Mesure ta justesse au QCM. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.'
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu au QCM.';
+  const noesisExplanation = hasNoesisScore
+    ? 'Mesure ta compréhension des liens entre connaissances, au QCM Relier. ' + formatPct(noesisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - noesisScore) + '% ont une part inférieure.'
+    : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu dans Relier.';
   const tabs = [
     {
       key: "rhetor",
@@ -1502,12 +1550,12 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
     },
     {
       key: "logos",
-      icon: AGON_LOGOS_ICON,
+      icon: MNORIA_LOGOS_ICON,
       label: "Logos",
       content:
         (hasNotesScore ? tierIntro + notesTierCountHint : '') +
         '<div class="install-modal-divider"></div>' +
-        '<h4 class="install-modal-platform">' + AGON_LOGOS_ICON + ' Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
+        '<h4 class="install-modal-platform">' + MNORIA_LOGOS_ICON + ' Score Logos — Top ' + formatPct(notesScore) + '%</h4>' +
         notesValueLine +
         '<p class="install-modal-text">' + notesExplanation + '</p>'
     },
@@ -1521,31 +1569,42 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
         '<h4 class="install-modal-platform"><i class="fa-solid fa-brain"></i> Score Gnosis — Top ' + formatPct(gnosisScore) + '%</h4>' +
         gnosisValueLine +
         '<p class="install-modal-text">' + gnosisExplanation + '</p>'
+    },
+    {
+      key: "noesis",
+      icon: '<i class="fa-solid fa-link"></i>',
+      label: "Noesis",
+      content:
+        (hasNoesisScore ? noesisTierIntro + noesisTierCountHint : '') +
+        '<div class="install-modal-divider"></div>' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-link"></i> Score Noesis — Top ' + formatPct(noesisScore) + '%</h4>' +
+        noesisValueLine +
+        '<p class="install-modal-text">' + noesisExplanation + '</p>'
     }
   ];
 
   const activeTabKey = tabs.some((t) => t.key === initialTab) ? initialTab : tabs[0].key;
   const tabButtons = tabs.map((t) =>
-    '<button type="button" class="agon-score-tab' + (t.key === activeTabKey ? ' active' : '') + '" data-score-tab="' + t.key + '">' + t.icon + '<span>' + t.label + '</span></button>'
+    '<button type="button" class="mnoria-score-tab' + (t.key === activeTabKey ? ' active' : '') + '" data-score-tab="' + t.key + '">' + t.icon + '<span>' + t.label + '</span></button>'
   ).join('');
   const tabPanels = tabs.map((t) =>
-    '<div class="agon-score-tab-panel install-modal-section" data-score-tab="' + t.key + '"' + (t.key === activeTabKey ? '' : ' hidden') + '>' + t.content + '</div>'
+    '<div class="mnoria-score-tab-panel install-modal-section" data-score-tab="' + t.key + '"' + (t.key === activeTabKey ? '' : ' hidden') + '>' + t.content + '</div>'
   ).join('');
-  const bodyHtml = '<div class="agon-score-tabs" role="tablist">' + tabButtons + '</div>' + tabPanels;
+  const bodyHtml = '<div class="mnoria-score-tabs" role="tablist">' + tabButtons + '</div>' + tabPanels;
 
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
-      '<button class="install-modal-close" type="button" aria-label="Fermer" id="agon-user-score-close-btn"><i class="fa-solid fa-xmark"></i></button>' +
+      '<button class="install-modal-close" type="button" aria-label="Fermer" id="mnoria-user-score-close-btn"><i class="fa-solid fa-xmark"></i></button>' +
       '<h3 class="install-modal-title">Tes scores</h3>' +
       bodyHtml +
       '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
     '</div>';
 
-  overlay.querySelectorAll(".agon-score-tab").forEach((btn) => {
+  overlay.querySelectorAll(".mnoria-score-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       const key = btn.dataset.scoreTab;
-      overlay.querySelectorAll(".agon-score-tab").forEach((b) => b.classList.toggle("active", b === btn));
-      overlay.querySelectorAll(".agon-score-tab-panel").forEach((panel) => {
+      overlay.querySelectorAll(".mnoria-score-tab").forEach((b) => b.classList.toggle("active", b === btn));
+      overlay.querySelectorAll(".mnoria-score-tab-panel").forEach((panel) => {
         panel.hidden = panel.dataset.scoreTab !== key;
       });
     });
@@ -1557,7 +1616,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   overlay.querySelector(".install-modal-android-btn").addEventListener("click", close);
-  overlay.querySelector("#agon-user-score-close-btn").addEventListener("click", close);
+  overlay.querySelector("#mnoria-user-score-close-btn").addEventListener("click", close);
   topDoc.body.appendChild(overlay);
   overlay.style.display = "flex";
   topDoc.body.style.overflow = "hidden";
@@ -1575,7 +1634,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
   fetch(API + "/my-score?key=" + encodeURIComponent(key))
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => { if (data) renderUserScoreWidget(data); })
-    .then(renderAgonTimeWidget)
+    .then(renderMnoriaTimeWidget)
     .catch(() => {});
 })();
 
@@ -1586,12 +1645,12 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, tierLabel, stat
 // survivre aux navigations, aux nouveaux onglets et aux fermetures/réouvertures
 // du site (pas de blocage à zéro une fois écoulé, juste un repère visuel qui
 // passe au rouge dans les 10 dernières minutes).
-const AGON_TIME_WIDGET_MINUTES = 60;
-const AGON_TIME_WIDGET_WARNING_S = 10 * 60;
-function renderAgonTimeWidget() {
-  if (document.querySelector(".agon-time-widget")) return;
+const MNORIA_TIME_WIDGET_MINUTES = 60;
+const MNORIA_TIME_WIDGET_WARNING_S = 10 * 60;
+function renderMnoriaTimeWidget() {
+  if (document.querySelector(".mnoria-time-widget")) return;
 
-  const elapsedKey = "agon_time_widget_daily_v2";
+  const elapsedKey = "mnoria_time_widget_daily_v2";
   function getParisDayKey() {
     try {
       const parts = new Intl.DateTimeFormat("fr-FR", {
@@ -1656,15 +1715,15 @@ function renderAgonTimeWidget() {
   window.addEventListener("focus", resumeTimeWidget);
   window.addEventListener("pagehide", pauseTimeWidget);
 
-  if (!document.getElementById("agon-time-widget-styles")) {
+  if (!document.getElementById("mnoria-time-widget-styles")) {
     const style = document.createElement("style");
-    style.id = "agon-time-widget-styles";
+    style.id = "mnoria-time-widget-styles";
     style.textContent = `
-      .agon-time-widget-anchor {
+      .mnoria-time-widget-anchor {
         position: relative;
         overflow: visible;
       }
-      .agon-time-widget-logo-overlay {
+      .mnoria-time-widget-logo-overlay {
         position: absolute;
         top: 4px;
         left: 50%;
@@ -1673,11 +1732,11 @@ function renderAgonTimeWidget() {
         max-width: min(220px, calc(100vw - 40px));
       }
       @media (max-width: 768px) {
-        .agon-time-widget-logo-overlay {
+        .mnoria-time-widget-logo-overlay {
           top: -3px;
         }
       }
-      .agon-time-widget {
+      .mnoria-time-widget {
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -1691,18 +1750,18 @@ function renderAgonTimeWidget() {
         white-space: nowrap;
         cursor: pointer;
       }
-      .agon-time-widget i { font-size: 10px; color: #9cc3f0; }
-      .agon-time-widget-warning { border-color: #d64545; color: #d64545; }
-      .agon-time-widget-warning i { color: #d64545; }
-      .agon-time-widget-expired {
+      .mnoria-time-widget i { font-size: 10px; color: #9cc3f0; }
+      .mnoria-time-widget-warning { border-color: #d64545; color: #d64545; }
+      .mnoria-time-widget-warning i { color: #d64545; }
+      .mnoria-time-widget-expired {
         text-align: center;
       }
-      @keyframes agon-time-widget-blink {
+      @keyframes mnoria-time-widget-blink {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.15; }
       }
-      .agon-time-widget-blinking {
-        animation: agon-time-widget-blink 0.4s ease-in-out 3;
+      .mnoria-time-widget-blinking {
+        animation: mnoria-time-widget-blink 0.4s ease-in-out 3;
       }
     `;
     document.head.appendChild(style);
@@ -1710,10 +1769,10 @@ function renderAgonTimeWidget() {
 
   const widget = document.createElement("button");
   widget.type = "button";
-  widget.className = "agon-time-widget";
-  widget.setAttribute("aria-label", "Temps passé sur agôn aujourd'hui");
+  widget.className = "mnoria-time-widget";
+  widget.setAttribute("aria-label", "Temps passé sur mnoria aujourd'hui");
   widget.innerHTML = '<i class="fa-regular fa-clock"></i><span></span>';
-  widget.addEventListener("click", showAgonTimeWidgetExplanation);
+  widget.addEventListener("click", showMnoriaTimeWidgetExplanation);
 
   // Une fois les 60 min dépassées, le badge bascule sur un message d'alerte
   // et clignote 3 fois à chaque transition vers l'état "visible + dépassé"
@@ -1727,15 +1786,15 @@ function renderAgonTimeWidget() {
   function maybeBlink() {
     const shouldBlink = expired && visible;
     if (shouldBlink && !wasBlinkActive) {
-      widget.classList.remove("agon-time-widget-blinking");
+      widget.classList.remove("mnoria-time-widget-blinking");
       void widget.offsetWidth;
-      widget.classList.add("agon-time-widget-blinking");
+      widget.classList.add("mnoria-time-widget-blinking");
     }
     wasBlinkActive = shouldBlink;
   }
   function tick() {
     resetIfNewDay();
-    const remaining = Math.max(0, AGON_TIME_WIDGET_MINUTES * 60 - Math.floor(currentElapsedMs() / 1000));
+    const remaining = Math.max(0, MNORIA_TIME_WIDGET_MINUTES * 60 - Math.floor(currentElapsedMs() / 1000));
     const isExpired = remaining <= 0;
     if (isExpired) {
       widget.querySelector("span").textContent = "Attention à ta santé numérique !";
@@ -1744,8 +1803,8 @@ function renderAgonTimeWidget() {
       const ss = String(remaining % 60).padStart(2, "0");
       widget.querySelector("span").textContent = mm + ":" + ss;
     }
-    widget.classList.toggle("agon-time-widget-warning", remaining <= AGON_TIME_WIDGET_WARNING_S);
-    widget.classList.toggle("agon-time-widget-expired", isExpired);
+    widget.classList.toggle("mnoria-time-widget-warning", remaining <= MNORIA_TIME_WIDGET_WARNING_S);
+    widget.classList.toggle("mnoria-time-widget-expired", isExpired);
     expired = isExpired;
     maybeBlink();
     // Persisté à chaque tick (pas seulement à la pause) pour ne pas perdre
@@ -1773,25 +1832,25 @@ function renderAgonTimeWidget() {
   const logoEl = document.querySelector(".home-logo");
   const anchor = logoEl ? logoEl.parentElement : null;
   if (anchor) {
-    anchor.classList.add("agon-time-widget-anchor");
-    widget.classList.add("agon-time-widget-logo-overlay");
+    anchor.classList.add("mnoria-time-widget-anchor");
+    widget.classList.add("mnoria-time-widget-logo-overlay");
     anchor.appendChild(widget);
   } else {
     document.querySelector(".topbar-inner")?.appendChild(widget);
   }
 }
 
-function showAgonTimeWidgetExplanation() {
-  const existing = document.getElementById("agon-time-widget-overlay");
+function showMnoriaTimeWidgetExplanation() {
+  const existing = document.getElementById("mnoria-time-widget-overlay");
   if (existing) existing.remove();
   const overlay = document.createElement("div");
-  overlay.id = "agon-time-widget-overlay";
+  overlay.id = "mnoria-time-widget-overlay";
   overlay.className = "install-modal-overlay";
   overlay.style.display = "flex";
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
     '<h3 class="install-modal-title"><i class="fa-regular fa-clock"></i> Temps passé</h3>' +
-    '<p class="install-modal-text">Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes par jour sur les réseaux et plateformes comme agôn. Ce compteur ne bloque rien, c\'est juste un repère.</p>' +
+    '<p class="install-modal-text">Pour rester en bonne santé numérique, il est conseillé de ne pas rester plus de 60 minutes par jour sur les réseaux et plateformes comme mnoria. Ce compteur ne bloque rien, c\'est juste un repère.</p>' +
     '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
     '</div>';
   const close = () => overlay.remove();
@@ -1800,7 +1859,7 @@ function showAgonTimeWidgetExplanation() {
   document.body.appendChild(overlay);
 }
 
-function isAgonMobileCloudViewport() {
+function isMnoriaMobileCloudViewport() {
   const viewportWidth = Math.min(
     window.innerWidth || Number.POSITIVE_INFINITY,
     window.visualViewport?.width || Number.POSITIVE_INFINITY
@@ -1813,14 +1872,14 @@ function isAgonMobileCloudViewport() {
   return cssMobile || (isStandaloneMode() && coarseTouch && narrowDevice);
 }
 
-function syncAgonMobileCloudViewportClass() {
+function syncMnoriaMobileCloudViewportClass() {
   if (!document.body) return;
-  document.body.classList.toggle("agon-mobile-cloud-viewport", isAgonMobileCloudViewport());
+  document.body.classList.toggle("mnoria-mobile-cloud-viewport", isMnoriaMobileCloudViewport());
 }
 
-syncAgonMobileCloudViewportClass();
-window.addEventListener("resize", syncAgonMobileCloudViewportClass, { passive: true });
-window.visualViewport?.addEventListener("resize", syncAgonMobileCloudViewportClass, { passive: true });
+syncMnoriaMobileCloudViewportClass();
+window.addEventListener("resize", syncMnoriaMobileCloudViewportClass, { passive: true });
+window.visualViewport?.addEventListener("resize", syncMnoriaMobileCloudViewportClass, { passive: true });
 
 function ensurePushMenuItemElement() {
   let item = document.getElementById("push-menu-item");
@@ -1864,7 +1923,7 @@ function ensurePushDeniedModal() {
       <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
       <p style="font-weight:700; color:#e8e8e8; font-size:15px; margin:0 0 10px; text-align:center;">Notifications bloquées</p>
       <p style="color:#a0b0bb; font-size:13px; line-height:1.6; margin:0 0 10px;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur → Notifications → Autoriser.</p>
-      <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : <strong style="color:#a0b0bb">Réglages → Agôn → Notifications → Autoriser</strong></p>
+      <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : <strong style="color:#a0b0bb">Réglages → Mnoria → Notifications → Autoriser</strong></p>
       <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
     </div>
   `;
@@ -2108,27 +2167,27 @@ async function enablePushNotificationsFromInvite() {
 }
 
 function openInstallModalFallback() {
-  if (document.getElementById("agon-install-modal-fallback")) {
-    document.getElementById("agon-install-modal-fallback").style.display = "flex";
+  if (document.getElementById("mnoria-install-modal-fallback")) {
+    document.getElementById("mnoria-install-modal-fallback").style.display = "flex";
     document.body.style.overflow = "hidden";
     return;
   }
 
   const overlay = document.createElement("div");
-  overlay.id = "agon-install-modal-fallback";
+  overlay.id = "mnoria-install-modal-fallback";
   overlay.style.cssText = "position:fixed;inset:0;z-index:2147483600;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
   overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.style.display = "none"; document.body.style.overflow = ""; } });
 
   overlay.innerHTML = `
     <div class="install-modal" onclick="event.stopPropagation()">
       <button class="install-modal-close" type="button" aria-label="Fermer"
-        onclick="document.getElementById('agon-install-modal-fallback').style.display='none';document.body.style.overflow='';">
+        onclick="document.getElementById('mnoria-install-modal-fallback').style.display='none';document.body.style.overflow='';">
         <i class="fa-solid fa-xmark"></i>
       </button>
       <div class="install-modal-brand">
         <img src="/mnoria-icon-192.png" alt="" class="install-modal-app-icon">
       </div>
-      <h3 class="install-modal-title">Installer l'icône Agôn</h3>
+      <h3 class="install-modal-title">Installer l'icône Mnoria</h3>
       <div class="install-modal-section">
         <ol class="install-modal-steps">
           <li><span class="install-modal-step-icon"><i class="fa-brands fa-safari" style="font-size:17px;color:#006CFF;"></i></span><span>Ouvre cette page dans <strong>Safari</strong> (pas Chrome ni autre).</span></li>
@@ -2191,8 +2250,8 @@ function showPushInvite(reason = "action", options = {}) {
     });
   } else if (isIOSDevice()) {
     // iPhone / iPad → guide install PWA
-    toast.setAttribute("aria-label", "Installer Agôn");
-    title.textContent = "Ajoute Agôn à ton écran";
+    toast.setAttribute("aria-label", "Installer Mnoria");
+    title.textContent = "Ajoute Mnoria à ton écran";
     text.textContent = "Sans compte. Zéro mémoire — juste une icône Safari.";
     primaryButton.textContent = "Voir comment";
     primaryButton.addEventListener("click", () => {
@@ -2205,8 +2264,8 @@ function showPushInvite(reason = "action", options = {}) {
     });
   } else {
     // Android → install PWA
-    toast.setAttribute("aria-label", "Installer Agôn");
-    title.textContent = "Installe Agôn";
+    toast.setAttribute("aria-label", "Installer Mnoria");
+    title.textContent = "Installe Mnoria";
     text.textContent = "Sans compte. Zéro mémoire prise sur le téléphone. Une icône, c'est tout.";
     primaryButton.textContent = "Installer";
     primaryButton.addEventListener("click", () => {
@@ -2240,7 +2299,7 @@ function showPushInviteAfterAction(reason = "action") {
   window.setTimeout(() => {
     try {
       if (window !== window.top) {
-        window.parent.postMessage({ type: "agon:push-invite-action", reason }, "*");
+        window.parent.postMessage({ type: "mnoria:push-invite-action", reason }, "*");
         return;
       }
       showPushInvite(reason, { ignoreCooldown: true });
@@ -2249,7 +2308,7 @@ function showPushInviteAfterAction(reason = "action") {
 }
 
 window.addEventListener("message", (e) => {
-  if (e.data?.type === "agon:push-invite-action" && window === window.top) {
+  if (e.data?.type === "mnoria:push-invite-action" && window === window.top) {
     try { showPushInvite(e.data.reason || "action", { ignoreCooldown: true }); } catch {}
   }
 });
@@ -2306,7 +2365,7 @@ let currentDebateSourceHistoryItems = [];
 let currentDebateSourceHistoryIndex = -1;
 let debateSourceSwipeTouchState = null;
 let debateSourceSwipeHandlersBound = false;
-const DEFAULT_INDEX_TYPE_FILTER = "agon";
+const DEFAULT_INDEX_TYPE_FILTER = "mnoria";
 let currentTypeFilter = DEFAULT_INDEX_TYPE_FILTER;
 let currentCategoryFilter = "all";
 let currentCategoryFilters = [];
@@ -2456,9 +2515,9 @@ let pendingMobileColumnFocusElementTop = null
 let pendingColumnFocusScrollMode = null;
 let pendingVoicesSummaryHighlight = false;
 
-const INDEX_DEBATES_CACHE_KEY = "agon_debates_cache_paged_v2";
-const INDEX_DEBATES_CACHE_TIME_KEY = "agon_debates_cache_time_paged_v2";
-const INDEX_DEBATES_CACHE_META_KEY = "agon_debates_cache_meta_paged_v2";
+const INDEX_DEBATES_CACHE_KEY = "mnoria_debates_cache_paged_v2";
+const INDEX_DEBATES_CACHE_TIME_KEY = "mnoria_debates_cache_time_paged_v2";
+const INDEX_DEBATES_CACHE_META_KEY = "mnoria_debates_cache_meta_paged_v2";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 120;
 const INDEX_DEBATES_PAGE_SIZE = 60;
@@ -2466,10 +2525,10 @@ const INDEX_SIMILAR_DEBATES_FETCH_LIMIT = 120;
 const IDEA_OG_PREVIEW_CACHE_TTL = 24 * 60 * 60 * 1000;
 const IDEA_OG_PREVIEW_EMPTY_CACHE_TTL = 2 * 60 * 1000;
 const IDEA_OG_PREVIEW_CACHE_MAX = 80;
-const CREATE_RETURN_CONTEXT_KEY = "agon_create_return_context";
-const CREATE_TO_DEBATE_LOADING_KEY = "agon_create_to_debate_loading";
-const CREATE_NEW_DEBATE_CONTEXT_KEY = "agon_create_new_debate_context";
-const IFRAME_LATEST_MODAL_URL_KEY = "agon_iframe_latest_modal_url";
+const CREATE_RETURN_CONTEXT_KEY = "mnoria_create_return_context";
+const CREATE_TO_DEBATE_LOADING_KEY = "mnoria_create_to_debate_loading";
+const CREATE_NEW_DEBATE_CONTEXT_KEY = "mnoria_create_new_debate_context";
+const IFRAME_LATEST_MODAL_URL_KEY = "mnoria_iframe_latest_modal_url";
 const ideaOpenGraphPreviewCache = new Map();
 const ideaOpenGraphPreviewPending = new Map();
 
@@ -2817,11 +2876,11 @@ function isIframeDebateLoadingOverlayContext() {
 // différents points d'entrée (ouverture, navigation historique, voile posé
 // par la page elle-même) plutôt que répétée à chaque appel. Vide pour
 // l'instant : Connaissances et Éclairages ont toutes deux redemandé l'écran
-// de chargement du parent (cf. AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY),
+// de chargement du parent (cf. MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY),
 // comme Ce jour dans l'Histoire (jamais dans cette liste).
-const AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = [];
+const MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = [];
 function isIframePageWithoutLoadingOverlay(pathname) {
-  return AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
+  return MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
 }
 
 // Pages qui gardent le bandeau du PARENT (fond bleu pétrole + sablier +
@@ -2829,11 +2888,11 @@ function isIframePageWithoutLoadingOverlay(pathname) {
 // le voile posé par la page elle-même (page-arrival-loading-overlay, cf.
 // initPageArrivalLoadingOverlay) affiche en plus son propre cadre blanc
 // (.page-arrival-loading-box) — redondant avec le bandeau du parent déjà
-// suffisant. Distinct de AGON_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY (qui
+// suffisant. Distinct de MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY (qui
 // supprime les deux) : ici seul le voile de la page elle-même est coupé.
-const AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/apprentissage", "/eclairages"];
+const MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/apprentissage", "/eclairages"];
 function isIframePageUsingParentLoadingOnly(pathname) {
-  return AGON_IFRAME_PAGES_USING_PARENT_LOADING_ONLY.includes(String(pathname || ""));
+  return MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY.includes(String(pathname || ""));
 }
 
 function isCreateToDebateLoadingTransition() {
@@ -2912,7 +2971,7 @@ function markCreatedDebateContext(debateId, returnUrl = "") {
       ts: Date.now()
     }));
     if (window.self !== window.top) {
-      window.parent.postMessage({ type: 'agon:debate-created', debateId: normalizedDebateId }, '*');
+      window.parent.postMessage({ type: 'mnoria:debate-created', debateId: normalizedDebateId }, '*');
     }
   } catch (error) {}
 }
@@ -2992,7 +3051,7 @@ function updatePageArrivalLoadingOverlayBounds() {
 }
 
 function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
-  __agonDebugRefreshLog("showPageArrivalLoadingOverlay", "loader", { message, stack: String(new Error().stack || "").split("\n").slice(1, 4).join(" | ") });
+  __mnoriaDebugRefreshLog("showPageArrivalLoadingOverlay", "loader", { message, stack: String(new Error().stack || "").split("\n").slice(1, 4).join(" | ") });
   ensurePageArrivalLoadingOverlayStyles();
 
   let overlay = document.getElementById("page-arrival-loading-overlay");
@@ -3063,15 +3122,15 @@ function markPageArrivalLoadingOverlayReady() {
     location.pathname === "/create" &&
     isIframeDebateLoadingOverlayContext() &&
     document.fonts &&
-    window.__agonCreateFontsReady !== true
+    window.__mnoriaCreateFontsReady !== true
   ) {
-    if (window.__agonCreateFontsReady !== "pending") {
-      window.__agonCreateFontsReady = "pending";
+    if (window.__mnoriaCreateFontsReady !== "pending") {
+      window.__mnoriaCreateFontsReady = "pending";
       Promise.race([
         document.fonts.ready,
         new Promise(resolve => setTimeout(resolve, 1200))
       ]).finally(() => {
-        window.__agonCreateFontsReady = true;
+        window.__mnoriaCreateFontsReady = true;
         markPageArrivalLoadingOverlayReady();
       });
     }
@@ -3079,12 +3138,12 @@ function markPageArrivalLoadingOverlayReady() {
   }
 
   pageArrivalLoadingOverlayReady = true;
-  window.__agonPageArrivalReady = true;
+  window.__mnoriaPageArrivalReady = true;
 
   if (isIframeDebateLoadingOverlayContext()) {
     try {
       window.parent.postMessage({
-        type: "agon:debate-iframe-ready",
+        type: "mnoria:debate-iframe-ready",
         pathname: String(location.pathname || ""),
         href: String(location.href || "")
       }, "*");
@@ -3121,11 +3180,11 @@ function initPageArrivalLoadingOverlay() {
   pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/" && location.pathname !== "/apprentissage";
 
   const isNotificationsInIframe = window.self !== window.top && location.pathname === "/notifications";
-  // Retour depuis Autres actus (ou reload interne à l'index) : window.__agonSkipStartupOnce
+  // Retour depuis Autres actus (ou reload interne à l'index) : window.__mnoriaSkipStartupOnce
   // est déjà posé pour sauter l'intro logo (cf. index.html) — même logique ici, sans quoi
   // le voile sombre/flou plein écran s'affiche par-dessus le cadre nuages ET les boutons
-  // Bulles Actu/Agôn en dessous le temps que les débats se rechargent.
-  const skipForIndexReturn = location.pathname === "/" && window.__agonSkipStartupOnce === true;
+  // Bulles Actu/Mnoria en dessous le temps que les débats se rechargent.
+  const skipForIndexReturn = location.pathname === "/" && window.__mnoriaSkipStartupOnce === true;
   // Éclairages a son propre rendu léger et quasi immédiat : ce voile
   // "Chargement en cours" (posé par la page embarquée elle-même, distinct du
   // bandeau du parent déjà supprimé pour cette page) n'apporte qu'un flash
@@ -3894,7 +3953,7 @@ function setSortMenuVisible(isVisible) {
 
   if (window.parent !== window) {
     try {
-      window.parent.postMessage({ type: "agon:sort-menu-visibility", open: isVisible }, "*");
+      window.parent.postMessage({ type: "mnoria:sort-menu-visibility", open: isVisible }, "*");
     } catch (_) {}
   }
 }
@@ -3996,7 +4055,7 @@ function getLastVotedAtTimestamp(arg) {
   return new Date(String(arg?.last_voted_at || "").replace(" ", "T")).getTime() || 0;
 }
 
-const ARGUMENT_VOTE_HISTORY_STORAGE_KEY = "agon_argument_vote_history_v1";
+const ARGUMENT_VOTE_HISTORY_STORAGE_KEY = "mnoria_argument_vote_history_v1";
 
 function getArgumentVoteHistoryStore() {
   try {
@@ -4127,7 +4186,7 @@ function renderStrongProgressBadge(arg) {
 }
 
 const ARGUMENT_PASTE_BADGE_THRESHOLD = 30;
-const ARGUMENT_PASTE_META_STORAGE_KEY = "agon_argument_paste_meta";
+const ARGUMENT_PASTE_META_STORAGE_KEY = "mnoria_argument_paste_meta";
 const argumentPasteDraftStats = {};
 const argumentVoiceDraftStats = {};
 
@@ -4701,7 +4760,7 @@ function syncDebateIframeParentScrollModeForPath(pathname = "", options = {}) {
   if (
     !nativeParentScroll &&
     options.lockWhenOpen === true &&
-    window.__agonDebateModalOpen === true &&
+    window.__mnoriaDebateModalOpen === true &&
     _debateModalScrollLockMode === ""
   ) {
     lockPageScrollForDebateModal(window.scrollY || document.documentElement.scrollTop || 0);
@@ -4849,7 +4908,7 @@ function ensureDebateIframeParentLoadingStyles() {
          de sécurité (+80px) plutôt que de synchroniser sur visualViewport ici
          (chargement bref, l'imprécision de 100vh suffit à absorber avec cette
          marge). */
-      height: calc(100vh - var(--debate-iframe-parent-loading-top, 0px) + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) + 80px);
+      height: calc(100vh - var(--debate-iframe-parent-loading-top, 0px) + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 80px);
       z-index: 10000;
       display: flex;
       align-items: center;
@@ -4879,18 +4938,18 @@ function ensureDebateIframeParentLoadingStyles() {
 	    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-box {
 	      will-change: transform;
 	      -webkit-backface-visibility: hidden;
-	      /* Le débordement volontaire de +80px + --agon-safe-bottom sous le bas
+	      /* Le débordement volontaire de +80px + --mnoria-safe-bottom sous le bas
 	         visible (cf. le commentaire sur "height" ci-dessus) déborde
 	         uniquement vers le bas, jamais vers le haut : centrée par
 	         align-items:center sur cette boîte devenue asymétrique, la vignette
 	         de chargement se retrouvait donc décalée sous le vrai centre de
-	         l'écran, de la moitié de ce débordement. --agon-safe-bottom (posé en
+	         l'écran, de la moitié de ce débordement. --mnoria-safe-bottom (posé en
 	         JS, cf. updateHomeBottomNavViewportOffset) vaut 0 en navigateur
 	         mobile classique mais pas en PWA standalone (encoche/barre
 	         d'accueil) — un décalage fixe corrigeait donc le centrage en mobile
 	         mais pas en standalone : recalculé ici via calc() sur la même
 	         variable pour rester exact dans les deux cas. */
-	      transform: translateY(calc(-40px - (var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)) / 2))) translateZ(0);
+	      transform: translateY(calc(-40px - (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) / 2))) translateZ(0);
 	    }
 
 	    @media (max-width: 768px) {
@@ -5007,7 +5066,7 @@ function updateDebateIframeParentLoadingOverlayBounds(options = {}) {
   const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
   if (!overlay) return;
 
-  if (!options.force && overlay.dataset.agonBoundsFrozen === "true") return;
+  if (!options.force && overlay.dataset.mnoriaBoundsFrozen === "true") return;
 
   overlay.style.setProperty("--debate-iframe-parent-loading-top", `${getStableTopbarBottomOffset()}px`);
 }
@@ -5028,7 +5087,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   // comptait à l'origine (pathname === "/", cf. git blame) reste pertinent :
   // ne jamais afficher ce bandeau depuis l'INTÉRIEUR d'une iframe.
   if (window.self !== window.top) return;
-  __agonDebugRefreshLog("showDebateIframeParentLoadingOverlay", "loader", { message, stack: String(new Error().stack || "").split("\n").slice(1, 4).join(" | ") });
+  __mnoriaDebugRefreshLog("showDebateIframeParentLoadingOverlay", "loader", { message, stack: String(new Error().stack || "").split("\n").slice(1, 4).join(" | ") });
 
   ensurePageArrivalLoadingOverlayStyles();
   ensureDebateIframeParentLoadingStyles();
@@ -5086,17 +5145,17 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   document.body.classList.add("debate-iframe-parent-loading-open");
 
   if (overlay.classList.contains("debate-iframe-parent-loading-overlay-visible")) {
-    overlay.dataset.agonBoundsFrozen = "true";
+    overlay.dataset.mnoriaBoundsFrozen = "true";
     return;
   }
 
-  overlay.dataset.agonBoundsFrozen = "false";
+  overlay.dataset.mnoriaBoundsFrozen = "false";
   updateDebateIframeParentLoadingOverlayBounds({ force: true });
   requestAnimationFrame(() => {
     updateDebateIframeParentLoadingOverlayBounds({ force: true });
     requestAnimationFrame(() => {
       updateDebateIframeParentLoadingOverlayBounds({ force: true });
-      overlay.dataset.agonBoundsFrozen = "true";
+      overlay.dataset.mnoriaBoundsFrozen = "true";
       overlay.classList.add("debate-iframe-parent-loading-overlay-visible");
     });
   });
@@ -5112,7 +5171,7 @@ function hideDebateIframeParentLoadingOverlay() {
   }
 
   if (!overlay) return;
-  delete overlay.dataset.agonBoundsFrozen;
+  delete overlay.dataset.mnoriaBoundsFrozen;
   overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
 }
 
@@ -5121,8 +5180,8 @@ function cleanupStaleDebateIframeModalBlockers() {
   const isModalReallyOpen = !!modal?.classList?.contains("open");
   if (isModalReallyOpen) return;
 
-  window.__agonDebateModalOpen = false;
-  window.__agonDebateModalOpenedFromNotifications = false;
+  window.__mnoriaDebateModalOpen = false;
+  window.__mnoriaDebateModalOpenedFromNotifications = false;
   setDebateIframeNativeParentScrollMode(false);
   document.body.classList.remove("index-background-suspended");
   document.body.classList.remove("debate-iframe-parent-loading-open");
@@ -5138,7 +5197,7 @@ function cleanupStaleDebateIframeModalBlockers() {
 
   const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
   if (overlay) {
-    delete overlay.dataset.agonBoundsFrozen;
+    delete overlay.dataset.mnoriaBoundsFrozen;
     overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
     overlay.classList.remove("debate-iframe-parent-loading-stuck");
   }
@@ -5171,7 +5230,7 @@ if (document.readyState === "loading") {
 // "prêt" de l'iframe n'arrive jamais (navigation qui échoue, redirection
 // inattendue, page qui ne répond plus...), vérifie où l'iframe a réellement
 // atterri ET si elle a réellement fini de charger son contenu (drapeau
-// __agonPageArrivalReady posé par markPageArrivalLoadingOverlayReady).
+// __mnoriaPageArrivalReady posé par markPageArrivalLoadingOverlayReady).
 // Si la page est sur la bonne URL mais encore en train de charger ses données
 // (cas d'un débat simplement lent à charger, pas bloqué), on retente plutôt
 // que de masquer le loader trop tôt et révéler une page à moitié rendue.
@@ -5213,7 +5272,7 @@ function resolveStuckDebateIframeParentLoading(expectedPathname, onResolved, att
   let landedPathname = "";
   let iframeContentReady = false;
   try { landedPathname = frame?.contentWindow?.location?.pathname || ""; } catch (e) {}
-  try { iframeContentReady = frame?.contentWindow?.__agonPageArrivalReady === true; } catch (e) {}
+  try { iframeContentReady = frame?.contentWindow?.__mnoriaPageArrivalReady === true; } catch (e) {}
 
   if (landedPathname === expectedPathname && iframeContentReady) {
     resolveAsLoaded();
@@ -5333,9 +5392,9 @@ function bindDebateIframeAiParentAnimationViewportSync() {
 
 function showDebateIframeAiParentAnimationOverlay() {
   if (!document.body) return;
-  if (window.__agonDebateAiParentAnimationHideTimer) {
-    clearTimeout(window.__agonDebateAiParentAnimationHideTimer);
-    window.__agonDebateAiParentAnimationHideTimer = null;
+  if (window.__mnoriaDebateAiParentAnimationHideTimer) {
+    clearTimeout(window.__mnoriaDebateAiParentAnimationHideTimer);
+    window.__mnoriaDebateAiParentAnimationHideTimer = null;
   }
 
   let overlay = document.getElementById("debate-ai-parent-animation-overlay");
@@ -5368,19 +5427,19 @@ function hideDebateIframeAiParentAnimationOverlay() {
   const overlay = document.getElementById("debate-ai-parent-animation-overlay");
   if (!overlay) return;
   overlay.classList.add("is-hiding");
-  if (window.__agonDebateAiParentAnimationHideTimer) {
-    clearTimeout(window.__agonDebateAiParentAnimationHideTimer);
+  if (window.__mnoriaDebateAiParentAnimationHideTimer) {
+    clearTimeout(window.__mnoriaDebateAiParentAnimationHideTimer);
   }
-  window.__agonDebateAiParentAnimationHideTimer = setTimeout(() => {
+  window.__mnoriaDebateAiParentAnimationHideTimer = setTimeout(() => {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    window.__agonDebateAiParentAnimationHideTimer = null;
+    window.__mnoriaDebateAiParentAnimationHideTimer = null;
   }, 180);
 }
 
-function refreshAgonStandaloneBottomSurfacesAfterViewportChange() {
+function refreshMnoriaStandaloneBottomSurfacesAfterViewportChange() {
   const refresh = () => {
     try { scheduleHomeBottomNavViewportOffsetUpdate(); } catch {}
-    try { scheduleAgonStandaloneBottomSurfaceFillUpdate(); } catch {}
+    try { scheduleMnoriaStandaloneBottomSurfaceFillUpdate(); } catch {}
   };
   refresh();
   requestAnimationFrame(refresh);
@@ -5396,7 +5455,7 @@ function setDebateIframeAiLoadingAnimationState(isOpen) {
   if (document.body) document.body.classList.toggle("ai-loading-animation-open-in-child", open);
   if (open) showDebateIframeAiParentAnimationOverlay();
   else hideDebateIframeAiParentAnimationOverlay();
-  refreshAgonStandaloneBottomSurfacesAfterViewportChange();
+  refreshMnoriaStandaloneBottomSurfacesAfterViewportChange();
 }
 
 function syncDebateIframeModalCloseButtonWithFramePage(frame) {
@@ -5474,7 +5533,7 @@ function notifyParentAboutIframePageContext(pathname = location.pathname, href =
 
   try {
     window.parent.postMessage({
-      type: "agon:iframe-page-context",
+      type: "mnoria:iframe-page-context",
       pathname: safePathname,
       href: safeHref
     }, "*");
@@ -5513,7 +5572,7 @@ function initIframePageContextBridge() {
         if (notifEl) {
           const wasUnread = markNotificationElementAsReadLocally(notifEl);
           if (wasUnread) {
-            try { window.parent.postMessage({ type: "agon:notif-read-decrement" }, "*"); } catch {}
+            try { window.parent.postMessage({ type: "mnoria:notif-read-decrement" }, "*"); } catch {}
           }
           const notifId = notifEl.getAttribute("data-notif-id");
           if (notifId) fireAndForgetMarkOneNotificationAsRead(notifId);
@@ -5521,7 +5580,7 @@ function initIframePageContextBridge() {
         event.preventDefault();
         event.stopPropagation();
         window.parent.postMessage({
-          type: "agon:open-debate-in-parent-modal",
+          type: "mnoria:open-debate-in-parent-modal",
           url: `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
         }, "*");
         return;
@@ -5554,7 +5613,7 @@ function initIframeScrollProxyForBrowserChrome() {
 
     try {
       window.parent.postMessage({
-        type: "agon:iframe-scroll-proxy",
+        type: "mnoria:iframe-scroll-proxy",
         pathname: location.pathname,
         scrollY,
         direction,
@@ -5624,7 +5683,7 @@ function revealDebateIframeModalFrame(frame = document.getElementById("debate-if
 
 function isCurrentDebateIframeModalNavigation(frame, href = "", pathname = "") {
   if (!(frame instanceof HTMLIFrameElement)) return true;
-  const expectedUrl = String(frame.dataset.agonExpectedSrc || "").trim();
+  const expectedUrl = String(frame.dataset.mnoriaExpectedSrc || "").trim();
   if (!expectedUrl) return true;
 
   const readyUrl = normalizeDebateIframeModalUrl(href);
@@ -5641,8 +5700,8 @@ function navigateDebateIframeModalFrame(frame, url = "") {
   const expectedUrl = normalizeDebateIframeModalUrl(targetUrl);
   const token = String(++debateIframeModalNavigationToken);
 
-  frame.dataset.agonNavigationToken = token;
-  frame.dataset.agonExpectedSrc = expectedUrl || targetUrl;
+  frame.dataset.mnoriaNavigationToken = token;
+  frame.dataset.mnoriaExpectedSrc = expectedUrl || targetUrl;
   concealDebateIframeModalFrame(frame);
 
   try {
@@ -5841,7 +5900,7 @@ function ensureDebateIframeModal() {
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
        même document que #voices-float-badge) plutôt que ce bouton du parent —
        un seul document à positionner par rapport au bandeau bas au lieu de
-       synchroniser 2 documents (cf. initAgonDebateDockLineSync). */
+       synchroniser 2 documents (cf. initMnoriaDebateDockLineSync). */
     @media (max-width: 768px) {
       #debate-iframe-modal.debate-frame-open #debate-iframe-modal-close {
         display: none !important;
@@ -5865,7 +5924,7 @@ function ensureDebateIframeModal() {
       --debate-ai-parent-bleed: 0px;
       --debate-ai-parent-vvh: 100vh;
       --debate-ai-parent-center-y: calc(var(--debate-ai-parent-vvh, 100vh) / 2);
-      --debate-ai-parent-safe-bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
+      --debate-ai-parent-safe-bottom: var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px));
       position: fixed;
       top: 0;
       right: 0;
@@ -6057,7 +6116,7 @@ function ensureDebateIframeModal() {
         visibility: visible !important;
         opacity: 1 !important;
         pointer-events: auto !important;
-        bottom: calc(34px + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+        bottom: calc(34px + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
         z-index: 10002 !important;
       }
       #debate-iframe-modal.open.qcm-frame-open.qcm-fiche-open-in-child #debate-iframe-modal-close {
@@ -6146,17 +6205,17 @@ function ensureDebateIframeModal() {
   window.addEventListener("message", (e) => {
     if (!e.data || typeof e.data !== "object") return;
 
-    if (e.data.type === "agon:close-debate-modal") {
+    if (e.data.type === "mnoria:close-debate-modal") {
       closeDebateIframeModal({ skipReturnLoader: e.data.skipReturnLoader === true });
       return;
     }
 
-    if (e.data.type === "agon:debate-created") {
-      window.__agonDebateModalNewDebateCreated = true;
+    if (e.data.type === "mnoria:debate-created") {
+      window.__mnoriaDebateModalNewDebateCreated = true;
       return;
     }
 
-    if (e.data.type === "agon:sort-menu-visibility") {
+    if (e.data.type === "mnoria:sort-menu-visibility") {
       // Le menu "Trier les idées" de la page débat embarquée doit passer
       // devant le bouton refresh du chrome de la modale
       // (#debate-iframe-modal-refresh) — masqué via cette classe, même
@@ -6166,7 +6225,7 @@ function ensureDebateIframeModal() {
       return;
     }
 
-    if (e.data.type === "agon:open-debate-in-parent-modal") {
+    if (e.data.type === "mnoria:open-debate-in-parent-modal") {
       const nextUrl = String(e.data.url || "").trim();
       if (!nextUrl) return;
       syncIndexUrlWithOpenIframeModal(nextUrl);
@@ -6174,7 +6233,7 @@ function ensureDebateIframeModal() {
       return;
     }
 
-    if (e.data.type === "agon:open-page-in-parent-modal") {
+    if (e.data.type === "mnoria:open-page-in-parent-modal") {
       const nextUrl = String(e.data.url || "").trim();
       if (!nextUrl) return;
       const returnUrl = String(e.data.returnUrl || "").trim();
@@ -6193,22 +6252,22 @@ function ensureDebateIframeModal() {
       return;
     }
 
-    if (e.data.type === "agon:open-notifications-in-parent-modal") {
+    if (e.data.type === "mnoria:open-notifications-in-parent-modal") {
       openNotificationsInDebateIframeModal(null, String(e.data.returnUrl || ""));
       return;
     }
 
-    if (e.data.type === "agon:debate-iframe-ready") {
+    if (e.data.type === "mnoria:debate-iframe-ready") {
       const readyPathname = String(e.data.pathname || "/debate");
       const readyHref = String(e.data.href || "").trim();
       const readyFrame = document.getElementById("debate-iframe-modal-frame");
       if (!isCurrentDebateIframeModalNavigation(readyFrame, readyHref, readyPathname)) return;
-      window.__agonIframeCurrentPathname = readyPathname;
+      window.__mnoriaIframeCurrentPathname = readyPathname;
       syncDebateIframeModalPageClass(readyPathname);
-      // Contrairement à agon:iframe-page-context, ce message ne restaurait pas la visibilité
-      // du bouton fermeture : s'il avait été masqué juste avant (ex. agon:notification-back-
+      // Contrairement à mnoria:iframe-page-context, ce message ne restaurait pas la visibilité
+      // du bouton fermeture : s'il avait été masqué juste avant (ex. mnoria:notification-back-
       // transition-start) puis que la page embarquée suivante répondait par ce message plutôt
-      // que par agon:notification-target-ready (seul autre chemin qui le restaure), le bouton
+      // que par mnoria:notification-target-ready (seul autre chemin qui le restaure), le bouton
       // restait invisible pour le reste de la session iframe — reproductible sur qcm-du-jour
       // et toute autre page embarquée utilisant ce protocole (about, contact, notifications,
       // autres-sources, les pages "éclairages"...).
@@ -6225,7 +6284,7 @@ function ensureDebateIframeModal() {
               syncIndexUrlWithOpenIframeModal(`${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
             }
             shouldKeepLoadingUntilNotificationTarget =
-              window.__agonDebateModalOpenedFromNotifications === true &&
+              window.__mnoriaDebateModalOpenedFromNotifications === true &&
               parsedUrl.pathname === "/debate" &&
               parsedUrl.searchParams.has("highlight");
           }
@@ -6240,18 +6299,18 @@ function ensureDebateIframeModal() {
       return;
     }
 
-    if (e.data.type === "agon:notif-read-decrement") {
+    if (e.data.type === "mnoria:notif-read-decrement") {
       decrementStoredUnreadNotificationCount(1);
       return;
     }
 
-    if (e.data.type === "agon:notif-reset-count") {
+    if (e.data.type === "mnoria:notif-reset-count") {
       setStoredUnreadNotificationCount(Number(e.data.count) || 0);
       return;
     }
 
-    if (e.data.type === "agon:notification-target-ready") {
-      window.__agonIframeCurrentPathname = String(e.data.pathname || "/debate");
+    if (e.data.type === "mnoria:notification-target-ready") {
+      window.__mnoriaIframeCurrentPathname = String(e.data.pathname || "/debate");
       revealDebateIframeModalFrame();
       if (debateIframeParentLoadingFallbackTimer) {
         clearTimeout(debateIframeParentLoadingFallbackTimer);
@@ -6262,22 +6321,22 @@ function ensureDebateIframeModal() {
       return;
     }
 
-    if (e.data.type === "agon:notification-back-transition-start") {
-      window.__agonIframeCurrentPathname = String(e.data.pathname || "/notifications");
+    if (e.data.type === "mnoria:notification-back-transition-start") {
+      window.__mnoriaIframeCurrentPathname = String(e.data.pathname || "/notifications");
       setDebateIframeModalLoadingState(true);
       setDebateIframeModalCloseButtonVisible(false);
-      armDebateIframeParentLoadingFallback(window.__agonIframeCurrentPathname, () => {
+      armDebateIframeParentLoadingFallback(window.__mnoriaIframeCurrentPathname, () => {
         syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
       });
       return;
     }
 
-    if (e.data.type === "agon:iframe-scroll-proxy") {
+    if (e.data.type === "mnoria:iframe-scroll-proxy") {
       handleDebateIframeBrowserChromeScrollProxy(e.data);
       return;
     }
 
-    if (e.data.type === "agon:iframe-page-context") {
+    if (e.data.type === "mnoria:iframe-page-context") {
       const rawPathname = String(e.data.pathname || e.data.page || "");
       const knownPagePaths = {
         notifications: "/notifications",
@@ -6294,13 +6353,13 @@ function ensureDebateIframeModal() {
 
       // Si l'iframe revient sur /debate depuis une autre page (ex: /notifications)
       // → déclencher le loading overlay pour masquer l'écran blanc
-      const prevPathname = window.__agonIframeCurrentPathname || "";
+      const prevPathname = window.__mnoriaIframeCurrentPathname || "";
       if (newPathname === "/debate" && prevPathname !== "/debate" && prevPathname !== "") {
         setDebateIframeModalLoadingState(true, "Entrée dans l'arène en cours");
         armDebateIframeParentLoadingFallback("/debate");
       }
 
-      window.__agonIframeCurrentPathname = newPathname;
+      window.__mnoriaIframeCurrentPathname = newPathname;
       if (newHref) {
         try {
           const parsedUrl = new URL(newHref, window.location.origin);
@@ -6313,7 +6372,7 @@ function ensureDebateIframeModal() {
         } catch (error) {}
       }
       if (newPathname === "/debate") {
-        window.__agonDebateModalOpenedFromNotifications = false;
+        window.__mnoriaDebateModalOpenedFromNotifications = false;
       } else if (newPathname) {
         const frame = document.getElementById("debate-iframe-modal-frame");
         if (isCurrentDebateIframeModalNavigation(frame, newHref, newPathname)) {
@@ -6325,29 +6384,29 @@ function ensureDebateIframeModal() {
       return;
     }
 
-    if (e.data.type === "agon:pause-page-media") {
+    if (e.data.type === "mnoria:pause-page-media") {
       pauseDebatePageMediaForIframeClose();
       return;
     }
 
-    if (e.data.type === "agon:ai-score-modal-visibility") {
+    if (e.data.type === "mnoria:ai-score-modal-visibility") {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) debateModal.classList.toggle("ai-score-modal-open-in-child", !!e.data.open);
       return;
     }
 
-    if (e.data.type === "agon:qcm-fiche-visibility") {
+    if (e.data.type === "mnoria:qcm-fiche-visibility") {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) debateModal.classList.toggle("qcm-fiche-open-in-child", !!e.data.open);
       return;
     }
 
-    if (e.data.type === "agon:ai-loading-animation-visibility") {
+    if (e.data.type === "mnoria:ai-loading-animation-visibility") {
       setDebateIframeAiLoadingAnimationState(!!e.data.open);
       return;
     }
 
-    if (e.data.type === "agon:argument-form-visibility") {
+    if (e.data.type === "mnoria:argument-form-visibility") {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) {
         debateModal.classList.toggle("argument-form-open-in-child", !!e.data.open);
@@ -6383,7 +6442,7 @@ function ensureDebateIframeModal() {
       if (!frameSrc || frameSrc === "about:blank") return;
       let expectedPathname = "";
       try {
-        expectedPathname = new URL(frame.dataset.agonExpectedSrc || frameSrc, window.location.origin).pathname;
+        expectedPathname = new URL(frame.dataset.mnoriaExpectedSrc || frameSrc, window.location.origin).pathname;
       } catch (error) {}
       let loadedHref = "";
       let loadedPathname = "";
@@ -6424,12 +6483,12 @@ function findIndexDebateCardById(debateId = "") {
 // en mémoire provoque un pic mémoire qui peut faire tuer le processus WebKit
 // sur les vieux iPhones en standalone (relance PWA + animation de démarrage).
 const INDEX_EMBED_RESUME_STAGGER_MS = 350;
-let __agonIndexEmbedResumeTimer = null;
+let __mnoriaIndexEmbedResumeTimer = null;
 
 function cancelStaggeredIndexEmbedResume() {
-  if (__agonIndexEmbedResumeTimer !== null) {
-    clearTimeout(__agonIndexEmbedResumeTimer);
-    __agonIndexEmbedResumeTimer = null;
+  if (__mnoriaIndexEmbedResumeTimer !== null) {
+    clearTimeout(__mnoriaIndexEmbedResumeTimer);
+    __mnoriaIndexEmbedResumeTimer = null;
   }
 }
 
@@ -6437,8 +6496,8 @@ function suspendIndexEmbedsForDebateModal() {
   // Toujours exécuter même si déjà suspendu : l'ouverture d'iframe doit
   // éteindre la vidéo index à chaque fois, sans exception.
   cancelStaggeredIndexEmbedResume();
-  const pendingState = window.__agonSuspendedIndexEmbeds;
-  window.__agonSuspendedIndexEmbeds = null;
+  const pendingState = window.__mnoriaSuspendedIndexEmbeds;
+  window.__mnoriaSuspendedIndexEmbeds = null;
 
   const state = {
     localVideos: [],
@@ -6487,12 +6546,12 @@ function suspendIndexEmbedsForDebateModal() {
     try { iframe.setAttribute('src', 'about:blank'); } catch (error) {}
   });
 
-  window.__agonSuspendedIndexEmbeds = state;
+  window.__mnoriaSuspendedIndexEmbeds = state;
 }
 
 function resumeIndexEmbedsAfterDebateModal() {
   cancelStaggeredIndexEmbedResume();
-  const state = window.__agonSuspendedIndexEmbeds;
+  const state = window.__mnoriaSuspendedIndexEmbeds;
   if (!state) return;
 
   (state.localVideos || []).forEach(({ video }) => {
@@ -6520,20 +6579,20 @@ function resumeIndexEmbedsAfterDebateModal() {
     .filter(({ iframe, src }) => iframe instanceof HTMLIFrameElement && String(src || '').trim())
     .sort((a, b) => distanceToViewport(a.iframe) - distanceToViewport(b.iframe));
 
-  // L'état reste dans window.__agonSuspendedIndexEmbeds tant que la file n'est
+  // L'état reste dans window.__mnoriaSuspendedIndexEmbeds tant que la file n'est
   // pas vidée : si une arène est rouverte pendant la reprise, la suspension
   // suivante y retrouve les src pas encore restaurés.
   const restoreNext = () => {
-    __agonIndexEmbedResumeTimer = null;
+    __mnoriaIndexEmbedResumeTimer = null;
     const entry = state.iframes.shift();
     if (entry && entry.iframe.isConnected) {
       try { entry.iframe.setAttribute('src', entry.src); } catch (error) {}
     }
     if (!state.iframes.length) {
-      if (window.__agonSuspendedIndexEmbeds === state) window.__agonSuspendedIndexEmbeds = null;
+      if (window.__mnoriaSuspendedIndexEmbeds === state) window.__mnoriaSuspendedIndexEmbeds = null;
       return;
     }
-    __agonIndexEmbedResumeTimer = setTimeout(restoreNext, INDEX_EMBED_RESUME_STAGGER_MS);
+    __mnoriaIndexEmbedResumeTimer = setTimeout(restoreNext, INDEX_EMBED_RESUME_STAGGER_MS);
   };
   restoreNext();
 }
@@ -6695,7 +6754,7 @@ function handleIndexHistoryPopState() {
 
   if (currentPathAndSearch && currentPathAndSearch === desiredPathAndSearch) return;
 
-  window.__agonIframeCurrentPathname = desiredPathname || window.__agonIframeCurrentPathname;
+  window.__mnoriaIframeCurrentPathname = desiredPathname || window.__mnoriaIframeCurrentPathname;
   setDebateIframeModalLoadingState(true, "Chargement en cours", !isIframePageWithoutLoadingOverlay(desiredPathname));
   navigateDebateIframeModalFrame(frame, desiredUrl);
   armDebateIframeParentLoadingFallback(desiredPathname);
@@ -6806,12 +6865,12 @@ function openDebateIframeModal(url, options = {}) {
       try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
       if (iframeUrlPathname === "/notifications") {
         window.parent.postMessage({
-          type: "agon:open-notifications-in-parent-modal",
+          type: "mnoria:open-notifications-in-parent-modal",
           returnUrl: `${location.pathname}${location.search}${location.hash}`
         }, "*");
       } else {
         window.parent.postMessage({
-          type: "agon:open-page-in-parent-modal",
+          type: "mnoria:open-page-in-parent-modal",
           url,
           returnUrl: `${location.pathname}${location.search}${location.hash}`
         }, "*");
@@ -6823,7 +6882,7 @@ function openDebateIframeModal(url, options = {}) {
   closeHomeTopbarMenu();
   ensureDebateIframeModal();
   setDebateIframeModalCloseButtonVisible(true);
-  window.__agonDebateModalOpenedFromNotifications = location.pathname === "/notifications";
+  window.__mnoriaDebateModalOpenedFromNotifications = location.pathname === "/notifications";
 
   const existingModal = document.getElementById("debate-iframe-modal");
   if (existingModal) {
@@ -6832,18 +6891,18 @@ function openDebateIframeModal(url, options = {}) {
   }
 
   const preferredDebateId = String(options?.debateId || "").trim() || getDebateIdFromUrl(url);
-  const modalAlreadyOpen = window.__agonDebateModalOpen === true;
+  const modalAlreadyOpen = window.__mnoriaDebateModalOpen === true;
 
   // Si le modal est déjà ouvert (navigation A → arène similaire B), on préserve
   // la position de scroll d'origine et la liste en attente de re-rendu.
   if (!modalAlreadyOpen) {
     _debateModalSavedScrollY = Math.round(window.scrollY || 0);
     _debateModalSavedScrollAnchor = captureIndexScrollRestoreAnchor(preferredDebateId);
-    window.__agonDebateModalPendingDebates = null;
+    window.__mnoriaDebateModalPendingDebates = null;
     cleanupIndexInfiniteScrollObserver();
   }
 
-  window.__agonDebateModalOpen = true;
+  window.__mnoriaDebateModalOpen = true;
   document.body.classList.add("index-background-suspended");
 
   const modal = document.getElementById("debate-iframe-modal");
@@ -6857,9 +6916,9 @@ function openDebateIframeModal(url, options = {}) {
   requestAnimationFrame(() => syncIndexUrlWithOpenIframeModal(url));
   setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 250);
   setTimeout(() => syncIndexUrlWithOpenIframeModal(url), 900);
-  window.__agonIframeCurrentPathname = iframeUrlPathname;
+  window.__mnoriaIframeCurrentPathname = iframeUrlPathname;
   syncDebateIframeModalPageClass(iframeUrlPathname);
-  __agonDebugRefreshLog("openDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay", targetUrl: url });
+  __mnoriaDebugRefreshLog("openDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay", targetUrl: url });
   setDebateIframeModalCloseButtonVisible(true);
   if (!modalAlreadyOpen) suspendIndexEmbedsForDebateModal();
   // .loading DOIT être posé AVANT .open (jamais après) : #debate-iframe-modal-inner
@@ -6928,7 +6987,7 @@ function initDebateLinkPrewarm() {
     prewarmDebateUrl(url);
     if (Array.isArray(debatesCache)) {
       const debate = debatesCache.find((d) => String(d?.id || "") === id);
-      if (debate) window.__agonPrefetchedDebateData = { id, debate };
+      if (debate) window.__mnoriaPrefetchedDebateData = { id, debate };
     }
   };
 
@@ -7102,13 +7161,13 @@ async function waitForEmbedsAboveScrollY(targetScrollY = 0, timeoutMs = 9000) {
 }
 
 function closeDebateIframeModal(options = {}) {
-  __agonDebugRefreshLog("closeDebateIframeModal", "rerender", { phase: "enter" });
+  __mnoriaDebugRefreshLog("closeDebateIframeModal", "rerender", { phase: "enter" });
   const modal = document.getElementById("debate-iframe-modal");
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
   if (!modal) return;
   const notificationsReturnContext = getNotificationsReturnContext();
-  const currentIframePathname = String(window.__agonIframeCurrentPathname || "");
+  const currentIframePathname = String(window.__mnoriaIframeCurrentPathname || "");
   const shouldReturnToTribunesFromChildPage =
     modal.classList.contains("open") &&
     notificationsReturnContext?.pathname === "/autres-sources" &&
@@ -7124,14 +7183,14 @@ function closeDebateIframeModal(options = {}) {
     return;
   }
   const skipReturnLoader = options && options.skipReturnLoader === true;
-  const openedFromNotifications = window.__agonDebateModalOpenedFromNotifications === true;
+  const openedFromNotifications = window.__mnoriaDebateModalOpenedFromNotifications === true;
   const shouldReturnDirectlyToIndex = openedFromNotifications && location.pathname === "/notifications";
 
   if (shouldReturnDirectlyToIndex) {
     setDebateIframeModalLoadingState(true, "Retour aux arènes en cours");
     setDebateIframeModalCloseButtonVisible(false);
-    window.__agonDebateModalOpen = false;
-    window.__agonDebateModalOpenedFromNotifications = false;
+    window.__mnoriaDebateModalOpen = false;
+    window.__mnoriaDebateModalOpenedFromNotifications = false;
     setDebateIframeAiLoadingAnimationState(false);
     setDebateIframeNativeParentScrollMode(false);
     document.body.classList.remove("index-background-suspended");
@@ -7139,26 +7198,26 @@ function closeDebateIframeModal(options = {}) {
     _debateModalSavedScrollY = null;
     _debateModalSavedScrollAnchor = null;
     try { sessionStorage.setItem(INDEX_SKIP_STARTUP_ONCE_KEY, "1"); } catch (error) {}
-    __agonDebugRefreshLog("closeDebateIframeModal", "navigation", { target: "/?skipStartup=1", via: "window.location.replace" });
-    __agonRecordReloadReason("close-modal-from-notifications-return-to-index");
+    __mnoriaDebugRefreshLog("closeDebateIframeModal", "navigation", { target: "/?skipStartup=1", via: "window.location.replace" });
+    __mnoriaRecordReloadReason("close-modal-from-notifications-return-to-index");
     window.location.replace("/?skipStartup=1");
     return;
   }
 
   const shouldShowReturnLoader = !skipReturnLoader && (
-    window.__agonDebateModalNewDebateCreated === true ||
-    window.__agonDebateModalPendingDebates !== null
+    window.__mnoriaDebateModalNewDebateCreated === true ||
+    window.__mnoriaDebateModalPendingDebates !== null
   );
 
   if (shouldShowReturnLoader) {
-    __agonDebugRefreshLog("closeDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay" });
+    __mnoriaDebugRefreshLog("closeDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay" });
     showDebateIframeParentLoadingOverlay("Chargement en cours");
   } else {
     hideDebateIframeParentLoadingOverlay();
   }
 
   try {
-    frame?.contentWindow?.postMessage({ type: "agon:pause-page-media" }, "*");
+    frame?.contentWindow?.postMessage({ type: "mnoria:pause-page-media" }, "*");
   } catch (error) {}
 
   modal.classList.remove("open");
@@ -7166,13 +7225,13 @@ function closeDebateIframeModal(options = {}) {
   setDebateIframeAiLoadingAnimationState(false);
   setDebateIframeModalLoadingState(false);
   syncIndexUrlWithOpenIframeModal("");
-  window.__agonDebateModalOpen = false;
-  window.__agonDebateModalOpenedFromNotifications = false;
+  window.__mnoriaDebateModalOpen = false;
+  window.__mnoriaDebateModalOpenedFromNotifications = false;
 
   // Lance maintenant (et non à l'entrée de closeDebateIframeModal) la garde de
-  // stabilisation de la légende mobile. Avant, __agonDebateModalOpen valait encore
+  // stabilisation de la légende mobile. Avant, __mnoriaDebateModalOpen valait encore
   // true : waitForTrendsSectionStableThenSync quittait donc immédiatement sans poser
-  // __agonTrendsCaptionSyncPending. Les événements viewport de la fermeture pouvaient
+  // __mnoriaTrendsCaptionSyncPending. Les événements viewport de la fermeture pouvaient
   // alors recalculer "Les tendances…" sur une géométrie intermédiaire, d'où son saut
   // vers le haut puis vers le bas. L'appel async pose la garde synchroniquement avant
   // le premier await, donc avant le déverrouillage du scroll effectué plus bas.
@@ -7225,8 +7284,8 @@ function closeDebateIframeModal(options = {}) {
   _debateModalSavedScrollAnchor = null;
 
   // Rafraîchit le feed si une nouvelle arène vient d'être créée dans la modale
-  if (window.__agonDebateModalNewDebateCreated) {
-    window.__agonDebateModalNewDebateCreated = false;
+  if (window.__mnoriaDebateModalNewDebateCreated) {
+    window.__mnoriaDebateModalNewDebateCreated = false;
     fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: 'no-store' })
       .then((fresh) => {
         if (!Array.isArray(fresh)) return;
@@ -7241,9 +7300,9 @@ function closeDebateIframeModal(options = {}) {
 
   // Applique le re-rendu différé seulement après stabilisation des embeds
   // X / Instagram au-dessus de la zone à restaurer.
-  if (window.__agonDebateModalPendingDebates !== null) {
-    const pending = window.__agonDebateModalPendingDebates;
-    window.__agonDebateModalPendingDebates = null;
+  if (window.__mnoriaDebateModalPendingDebates !== null) {
+    const pending = window.__mnoriaDebateModalPendingDebates;
+    window.__mnoriaDebateModalPendingDebates = null;
     requestAnimationFrame(async () => {
       renderDebatesList(pending);
 
@@ -7283,8 +7342,8 @@ function isTopLevelIframeModalPage() {
   return false;
 }
 
-const NOTIFICATIONS_RETURN_CONTEXT_KEY = "agon_notifications_return_context";
-const INDEX_SKIP_STARTUP_ONCE_KEY = "agon_skip_startup_once";
+const NOTIFICATIONS_RETURN_CONTEXT_KEY = "mnoria_notifications_return_context";
+const INDEX_SKIP_STARTUP_ONCE_KEY = "mnoria_skip_startup_once";
 
 function normalizeSameOriginPathUrl(url = "", fallback = "") {
   const safeFallback = String(fallback || "").trim();
@@ -7475,10 +7534,10 @@ function initDebateBottomExplorerLink() {
       if (typeof window.parent.closeDebateIframeModal === "function") {
         window.parent.closeDebateIframeModal({ skipReturnLoader: true });
       } else {
-        window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*");
+        window.parent.postMessage({ type: "mnoria:close-debate-modal", skipReturnLoader: true }, "*");
       }
     } catch (error) {
-      try { window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*"); } catch (nestedError) {}
+      try { window.parent.postMessage({ type: "mnoria:close-debate-modal", skipReturnLoader: true }, "*"); } catch (nestedError) {}
     }
   });
 }
@@ -7498,10 +7557,10 @@ function initDebateTopExplorerLink() {
       if (typeof window.parent.closeDebateIframeModal === "function") {
         window.parent.closeDebateIframeModal({ skipReturnLoader: true });
       } else {
-        window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*");
+        window.parent.postMessage({ type: "mnoria:close-debate-modal", skipReturnLoader: true }, "*");
       }
     } catch (error) {
-      try { window.parent.postMessage({ type: "agon:close-debate-modal", skipReturnLoader: true }, "*"); } catch (nestedError) {}
+      try { window.parent.postMessage({ type: "mnoria:close-debate-modal", skipReturnLoader: true }, "*"); } catch (nestedError) {}
     }
   });
 }
@@ -7521,13 +7580,13 @@ function openIndexDebateFromMedia(debateId, event) {
     const cached = Array.isArray(debatesCache)
       ? debatesCache.find((d) => String(d?.id || "") === safeDebateId)
       : null;
-    if (cached) window.__agonPrefetchedDebateData = { id: safeDebateId, debate: cached };
+    if (cached) window.__mnoriaPrefetchedDebateData = { id: safeDebateId, debate: cached };
   } catch(e) {}
 
   if (window.self !== window.top) {
     try {
       window.parent.postMessage({
-        type: "agon:open-debate-in-parent-modal",
+        type: "mnoria:open-debate-in-parent-modal",
         url: nextUrl,
         returnUrl: `${location.pathname}${location.search}${location.hash}`
       }, "*");
@@ -7543,8 +7602,8 @@ function openIndexDebateFromMedia(debateId, event) {
 
 function initIndexReturnNavigation() {
   if (location.pathname !== "/debate") return;
-  if (window.__agonDebateBackNavigationInitialized) return;
-  window.__agonDebateBackNavigationInitialized = true;
+  if (window.__mnoriaDebateBackNavigationInitialized) return;
+  window.__mnoriaDebateBackNavigationInitialized = true;
 
   const backSelectors = [
     ".debate-title-side-tools .debate-back-arrow",
@@ -7603,11 +7662,11 @@ function initIndexReturnNavigation() {
     event.preventDefault();
 
     if (window.parent !== window) {
-      window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+      window.parent.postMessage({ type: "mnoria:close-debate-modal" }, "*");
       return;
     }
 
-    // Page débat ouverte en page complète : revenir vers la page Agôn qui l'a
+    // Page débat ouverte en page complète : revenir vers la page Mnoria qui l'a
     // ouverte quand elle est connue, sinon revenir à l'index.
     setPendingBackButtonsState();
     const returnTarget = getDebateReturnTarget("/");
@@ -8221,11 +8280,11 @@ function normalizeSourcePreviewData(preview, sourceUrl = "") {
     title,
     description,
     image,
-    videoDurationSeconds: getAgonVideoDurationSeconds(safePreview)
+    videoDurationSeconds: getMnoriaVideoDurationSeconds(safePreview)
   };
 }
 
-function getAgonVideoDurationSeconds(value) {
+function getMnoriaVideoDurationSeconds(value) {
   const rawValue = value && typeof value === "object"
     ? (value.videoDurationSeconds ?? value.durationSeconds ?? value.video_duration_seconds ?? value.duration_seconds)
     : value;
@@ -8233,8 +8292,8 @@ function getAgonVideoDurationSeconds(value) {
   return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 0;
 }
 
-function formatAgonVideoDuration(value) {
-  const totalSeconds = getAgonVideoDurationSeconds(value);
+function formatMnoriaVideoDuration(value) {
+  const totalSeconds = getMnoriaVideoDurationSeconds(value);
   if (!totalSeconds) return "";
 
   const hours = Math.floor(totalSeconds / 3600);
@@ -8247,46 +8306,46 @@ function formatAgonVideoDuration(value) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function buildAgonVideoDurationBadgeHtml(value) {
-  const label = formatAgonVideoDuration(value);
-  return `<span class="agon-video-duration-badge" data-video-duration-badge${label ? "" : " hidden"}>${escapeHtml(label)}</span>`;
+function buildMnoriaVideoDurationBadgeHtml(value) {
+  const label = formatMnoriaVideoDuration(value);
+  return `<span class="mnoria-video-duration-badge" data-video-duration-badge${label ? "" : " hidden"}>${escapeHtml(label)}</span>`;
 }
 
-function updateAgonVideoDurationBadge(shell, value) {
+function updateMnoriaVideoDurationBadge(shell, value) {
   const badge = shell?.querySelector?.("[data-video-duration-badge]");
   if (!badge) return;
 
-  const seconds = getAgonVideoDurationSeconds(value);
-  const label = formatAgonVideoDuration(seconds);
+  const seconds = getMnoriaVideoDurationSeconds(value);
+  const label = formatMnoriaVideoDuration(seconds);
   if (seconds) shell.dataset.videoDurationSeconds = String(seconds);
   badge.textContent = label;
   badge.hidden = !label || shell.dataset.active === "true";
 }
 
-const pendingAgonYouTubeDurationHydrations = new Map();
-let agonYouTubeDurationObserver = null;
+const pendingMnoriaYouTubeDurationHydrations = new Map();
+let mnoriaYouTubeDurationObserver = null;
 
-async function hydrateAgonYouTubeDuration(shell) {
-  if (!shell || getAgonVideoDurationSeconds(shell.dataset.videoDurationSeconds) > 0) return;
+async function hydrateMnoriaYouTubeDuration(shell) {
+  if (!shell || getMnoriaVideoDurationSeconds(shell.dataset.videoDurationSeconds) > 0) return;
 
   const sourceUrl = String(shell.dataset.sourceUrl || "").trim();
   if (!sourceUrl) return;
 
-  let pending = pendingAgonYouTubeDurationHydrations.get(sourceUrl);
+  let pending = pendingMnoriaYouTubeDurationHydrations.get(sourceUrl);
   if (!pending) {
     pending = getIndexSourcePreviewData(sourceUrl, { forceRefresh: true })
-      .finally(() => pendingAgonYouTubeDurationHydrations.delete(sourceUrl));
-    pendingAgonYouTubeDurationHydrations.set(sourceUrl, pending);
+      .finally(() => pendingMnoriaYouTubeDurationHydrations.delete(sourceUrl));
+    pendingMnoriaYouTubeDurationHydrations.set(sourceUrl, pending);
   }
 
   try {
     const preview = await pending;
-    const durationSeconds = getAgonVideoDurationSeconds(preview);
+    const durationSeconds = getMnoriaVideoDurationSeconds(preview);
     if (!durationSeconds) return;
 
     document.querySelectorAll("[data-index-youtube-shell]").forEach((candidate) => {
       if (String(candidate.dataset.sourceUrl || "").trim() === sourceUrl) {
-        updateAgonVideoDurationBadge(candidate, durationSeconds);
+        updateMnoriaVideoDurationBadge(candidate, durationSeconds);
       }
     });
   } catch (error) {
@@ -8294,17 +8353,17 @@ async function hydrateAgonYouTubeDuration(shell) {
   }
 }
 
-function observeAgonYouTubeDurations(root = document) {
+function observeMnoriaYouTubeDurations(root = document) {
   const scope = root && typeof root.querySelectorAll === "function" ? root : document;
   const shells = Array.from(scope.querySelectorAll("[data-index-youtube-shell]"));
   if (!shells.length) return;
 
-  if (!agonYouTubeDurationObserver && typeof IntersectionObserver === "function") {
-    agonYouTubeDurationObserver = new IntersectionObserver((entries) => {
+  if (!mnoriaYouTubeDurationObserver && typeof IntersectionObserver === "function") {
+    mnoriaYouTubeDurationObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
-        agonYouTubeDurationObserver.unobserve(entry.target);
-        hydrateAgonYouTubeDuration(entry.target);
+        mnoriaYouTubeDurationObserver.unobserve(entry.target);
+        hydrateMnoriaYouTubeDuration(entry.target);
       });
     }, {
       root: null,
@@ -8314,11 +8373,11 @@ function observeAgonYouTubeDurations(root = document) {
   }
 
   shells.forEach((shell) => {
-    if (getAgonVideoDurationSeconds(shell.dataset.videoDurationSeconds) > 0) return;
-    if (agonYouTubeDurationObserver) {
-      agonYouTubeDurationObserver.observe(shell);
+    if (getMnoriaVideoDurationSeconds(shell.dataset.videoDurationSeconds) > 0) return;
+    if (mnoriaYouTubeDurationObserver) {
+      mnoriaYouTubeDurationObserver.observe(shell);
     } else {
-      hydrateAgonYouTubeDuration(shell);
+      hydrateMnoriaYouTubeDuration(shell);
     }
   });
 }
@@ -8514,7 +8573,7 @@ function toggleCardOptionsMenu(btn) {
 }
 
 document.addEventListener('click', (e) => {
-  if (window._agonAutoAdvancing) return;
+  if (window._mnoriaAutoAdvancing) return;
   if (e.target && e.target.closest && e.target.closest('.debate-card-options-wrap')) return;
   closeAllCardOptionsMenus();
 });
@@ -8623,8 +8682,8 @@ function getIndexTrendBadgeMeta(rawTrend) {
 
 function getIndexBubbleTrendForDebateId(debateId) {
   const id = String(debateId || "").trim();
-  if (!id || !Array.isArray(window.AGON_TAG_TRENDS)) return null;
-  return window.AGON_TAG_TRENDS.find((item) => String(item?.subjectId || "").trim() === id) || null;
+  if (!id || !Array.isArray(window.MNORIA_TAG_TRENDS)) return null;
+  return window.MNORIA_TAG_TRENDS.find((item) => String(item?.subjectId || "").trim() === id) || null;
 }
 
 function getIndexCardTrendBadgeHtml(debate) {
@@ -8640,7 +8699,7 @@ function getIndexCardTrendBadgeHtml(debate) {
 
 function syncIndexBubbleTrendBadges(root = document) {
   const scope = root?.querySelectorAll ? root : document;
-  const bubbleTrends = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
+  const bubbleTrends = Array.isArray(window.MNORIA_TAG_TRENDS) ? window.MNORIA_TAG_TRENDS : [];
   const bubbleTrendByDebateId = new Map(
     bubbleTrends
       .map((item) => [String(item?.subjectId || "").trim(), item])
@@ -8711,7 +8770,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml, episodeNavHtml);
   const isNewDebate = isDebateNew(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
-  const agonBadgeHtml = getIndexCardTrendBadgeHtml(d);
+  const mnoriaBadgeHtml = getIndexCardTrendBadgeHtml(d);
   const shortDate = formatShortDate(d.created_at);
   const dateBadgeHtml = (!isNewDebate && shortDate) ? `<div class="debate-card-date-badge">${shortDate}</div>` : '';
   const topBadgesInnerHtml = newBadgeHtml + dateBadgeHtml;
@@ -8724,7 +8783,7 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
 
   return `
     <div class="debate-card${isCommunityCard ? ' debate-card--community' : ''}${mediaOutsideLink ? ' has-title-banner' : ''}" data-debate-id="${d.id}">
-      ${agonBadgeHtml}
+      ${mnoriaBadgeHtml}
       ${topBadgesHtml}
       <div class="debate-card-link" role="link" tabindex="0" data-debate-href="/debate?id=${escapeAttribute(String(d.id || ''))}" onclick="openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)" onkeydown="if(event.key==='Enter'||event.key===' ')openIndexDebateFromMedia('${escapeAttribute(String(d.id || ''))}', event)">
         <div class="debate-card-top-row">
@@ -8773,8 +8832,8 @@ function initIndexCardShareMenus(root = document) {
   const isHomeIndexShare =
     document.body.classList.contains('page-home') ||
     document.body.classList.contains('page-home-mobile');
-  if (isHomeIndexShare && typeof window.__agonIndexShareDropdownScan === "function") {
-    window.__agonIndexShareDropdownScan(scope);
+  if (isHomeIndexShare && typeof window.__mnoriaIndexShareDropdownScan === "function") {
+    window.__mnoriaIndexShareDropdownScan(scope);
     return;
   }
   const selector = [
@@ -9203,13 +9262,13 @@ function buildIndexSourcePreviewLoadingCardHtml(debateId = "") {
   `;
 }
 
-function ensureAgonEmbedLoadingStyles() {
-  if (document.getElementById('agon-embed-loading-style')) return;
+function ensureMnoriaEmbedLoadingStyles() {
+  if (document.getElementById('mnoria-embed-loading-style')) return;
 
   const style = document.createElement('style');
-  style.id = 'agon-embed-loading-style';
+  style.id = 'mnoria-embed-loading-style';
   style.textContent = `
-    .agon-embed-loading-overlay {
+    .mnoria-embed-loading-overlay {
       position: absolute;
       inset: 0;
       z-index: 5;
@@ -9223,11 +9282,11 @@ function ensureAgonEmbedLoadingStyles() {
       pointer-events: none;
     }
 
-    .agon-embed-loading-overlay.agon-embed-loading-overlay-visible {
+    .mnoria-embed-loading-overlay.mnoria-embed-loading-overlay-visible {
       display: flex;
     }
 
-    .agon-embed-loading-box {
+    .mnoria-embed-loading-box {
       display: inline-flex;
       flex-direction: column;
       align-items: center;
@@ -9242,23 +9301,23 @@ function ensureAgonEmbedLoadingStyles() {
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
     }
 
-    .agon-embed-loading-box img {
+    .mnoria-embed-loading-box img {
       width: 38px;
       height: 38px;
       object-fit: contain;
-      animation: agonEmbedLoadingSpin 1s linear infinite;
+      animation: mnoriaEmbedLoadingSpin 1s linear infinite;
       transform-origin: center;
       filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.24));
     }
 
-    .agon-embed-loading-text {
+    .mnoria-embed-loading-text {
       font-size: 12px;
       font-weight: 800;
       line-height: 1.25;
       color: #ffffff;
     }
 
-    @keyframes agonEmbedLoadingSpin {
+    @keyframes mnoriaEmbedLoadingSpin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
@@ -9267,31 +9326,31 @@ function ensureAgonEmbedLoadingStyles() {
   document.head.appendChild(style);
 }
 
-function buildAgonEmbedLoadingOverlayHtml(label = 'Chargement…') {
-  ensureAgonEmbedLoadingStyles();
+function buildMnoriaEmbedLoadingOverlayHtml(label = 'Chargement…') {
+  ensureMnoriaEmbedLoadingStyles();
 
   return `
-    <div class="agon-embed-loading-overlay" data-agon-embed-loading aria-hidden="true">
-      <div class="agon-embed-loading-box">
+    <div class="mnoria-embed-loading-overlay" data-mnoria-embed-loading aria-hidden="true">
+      <div class="mnoria-embed-loading-box">
         <img src="/sablier-96.png" alt="">
-        <span class="agon-embed-loading-text">${escapeHtml(label)}</span>
+        <span class="mnoria-embed-loading-text">${escapeHtml(label)}</span>
       </div>
     </div>
   `;
 }
 
-function setAgonEmbedLoading(shell, isLoading, label = '') {
+function setMnoriaEmbedLoading(shell, isLoading, label = '') {
   if (!shell) return;
 
-  const loading = shell.querySelector('[data-agon-embed-loading]');
+  const loading = shell.querySelector('[data-mnoria-embed-loading]');
   if (!loading) return;
 
-  const labelEl = loading.querySelector('.agon-embed-loading-text');
+  const labelEl = loading.querySelector('.mnoria-embed-loading-text');
   if (label && labelEl) {
     labelEl.textContent = String(label);
   }
 
-  loading.classList.toggle('agon-embed-loading-overlay-visible', !!isLoading);
+  loading.classList.toggle('mnoria-embed-loading-overlay-visible', !!isLoading);
   loading.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
 }
 
@@ -9303,11 +9362,11 @@ function setDebateSourcePreviewLoadingElement(sourceLoading, isVisible, label = 
     return;
   }
 
-  ensureAgonEmbedLoadingStyles();
+  ensureMnoriaEmbedLoadingStyles();
   sourceLoading.innerHTML = `
-    <span class="agon-embed-loading-box" style="min-width:0; padding:8px 10px; border-radius:12px; flex-direction:row; gap:8px;">
+    <span class="mnoria-embed-loading-box" style="min-width:0; padding:8px 10px; border-radius:12px; flex-direction:row; gap:8px;">
       <img src="/sablier-96.png" alt="" style="width:24px; height:24px;">
-      <span class="agon-embed-loading-text">${escapeHtml(label)}</span>
+      <span class="mnoria-embed-loading-text">${escapeHtml(label)}</span>
     </span>
   `;
   sourceLoading.style.display = 'flex';
@@ -9732,7 +9791,7 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "", s
   const safeDebateId = escapeAttribute(String(debateId || "").trim());
   const safeVideoId = escapeAttribute(String(embedData.videoId || "").trim());
   const thumbnailUrl = `https://img.youtube.com/vi/${safeVideoId}/hqdefault.jpg`;
-  const durationSeconds = getAgonVideoDurationSeconds(sourcePreview);
+  const durationSeconds = getMnoriaVideoDurationSeconds(sourcePreview);
 
   return `
     <div
@@ -9771,9 +9830,9 @@ function buildIndexYouTubeEmbedHtml(sourceUrl, debateId = "", mediaLabel = "", s
           </span>
         </button>
 
-        ${buildAgonVideoDurationBadgeHtml(durationSeconds)}
+        ${buildMnoriaVideoDurationBadgeHtml(durationSeconds)}
 
-        ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
+        ${buildMnoriaEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
 
         <span data-index-youtube-iframe-slot aria-hidden="true"></span>
 
@@ -9840,8 +9899,8 @@ function buildIndexLocalVideoCardHtml(videoUrl) {
             <span class="debate-card-local-video-label debate-card-youtube-label">Cliquer pour lire</span>
           </span>
         </button>
-        ${buildAgonVideoDurationBadgeHtml(0)}
-        ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
+        ${buildMnoriaVideoDurationBadgeHtml(0)}
+        ${buildMnoriaEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
         <video
           class="debate-card-youtube-iframe debate-card-local-video-player"
           data-index-local-video-player
@@ -10390,7 +10449,7 @@ function initMediaSwipeAutoScroll(scope = document) {
     const videoSelector = 'video, iframe, .debate-card-instagram-shell, .debate-card-x-shell, [data-index-instagram-shell], [data-index-x-shell], .debate-card-media-local-video, .debate-card-youtube-shell, [data-index-local-video-shell], [data-index-youtube-shell]';
 
     const advance = () => {
-      if (window.__agonDebateModalOpen === true) {
+      if (window.__mnoriaDebateModalOpen === true) {
         stopTimer();
         return;
       }
@@ -10406,14 +10465,14 @@ function initMediaSwipeAutoScroll(scope = document) {
       }
       const nextBtn = shell.querySelector("[data-index-media-swipe-step='next']");
       if (nextBtn) {
-        window._agonAutoAdvancing = true;
+        window._mnoriaAutoAdvancing = true;
         nextBtn.click();
-        window._agonAutoAdvancing = false;
+        window._mnoriaAutoAdvancing = false;
       }
     };
 
     const start = () => {
-      if (window.__agonDebateModalOpen === true) return;
+      if (window.__mnoriaDebateModalOpen === true) return;
       if (shouldDisableMobileAutoScroll()) return;
       if (document.hidden || !isInView || !shell.isConnected) return;
       if (!timer) timer = setInterval(advance, DELAY);
@@ -10501,14 +10560,14 @@ function initMediaSwipeAutoScroll(scope = document) {
 }
 
 const INDEX_DEFAULT_FALLBACK_IMAGES = [
-  "/visuels/agon_optimisee_01.webp",
-  "/visuels/agon_optimisee_02.webp",
-  "/visuels/agon_optimisee_03.webp",
-  "/visuels/agon_optimisee_04.webp",
-  "/visuels/agon_optimisee_05.webp",
-  "/visuels/agon_optimisee_06.webp",
-  "/visuels/agon_optimisee_07.webp",
-  "/visuels/agon_optimisee_08.webp"
+  "/visuels/mnoria_optimisee_01.webp",
+  "/visuels/mnoria_optimisee_02.webp",
+  "/visuels/mnoria_optimisee_03.webp",
+  "/visuels/mnoria_optimisee_04.webp",
+  "/visuels/mnoria_optimisee_05.webp",
+  "/visuels/mnoria_optimisee_06.webp",
+  "/visuels/mnoria_optimisee_07.webp",
+  "/visuels/mnoria_optimisee_08.webp"
 ];
 
 function getIndexDefaultFallbackImage(debateId) {
@@ -10635,7 +10694,7 @@ function getIndexHydratableSourceUrls(debate) {
 
     if (isIndexYouTubeSourceDebate({ source_url: url })) {
       const preview = getResolvedIndexSourcePreview(url, debate);
-      return getAgonVideoDurationSeconds(preview) <= 0;
+      return getMnoriaVideoDurationSeconds(preview) <= 0;
     }
 
     if (hasPrimaryMedia) return false;
@@ -10741,7 +10800,7 @@ function hydrateIndexSourcePreviewForDebate(debateId) {
       const normalizedPreview = normalizeSourcePreviewData(preview, url);
       const hasUsableImage = String(normalizedPreview.image || '').trim();
       const hasUsableAuthor = String(preview?.author || '').trim();
-      const hasUsableDuration = getAgonVideoDurationSeconds(preview) > 0;
+      const hasUsableDuration = getMnoriaVideoDurationSeconds(preview) > 0;
       if (!preview || (!hasUsableImage && !hasUsableAuthor && !hasUsableDuration)) return;
       previewMap[url] = preview;
       if (String(refreshedDebate.source_url || '').trim() === url) {
@@ -10781,7 +10840,7 @@ function ensureIndexMissingSourcePreviewObserver() {
 
 function observeIndexCardsMissingSourcePreview(root = document) {
   const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
-  observeAgonYouTubeDurations(scope);
+  observeMnoriaYouTubeDurations(scope);
   const observer = ensureIndexMissingSourcePreviewObserver();
 
   scope.querySelectorAll('.debate-card[data-debate-id]').forEach((card) => {
@@ -10966,7 +11025,7 @@ function prepareIndexLocalVideoPoster(shell) {
   }
 
   const markReady = () => {
-    updateAgonVideoDurationBadge(shell, player.duration);
+    updateMnoriaVideoDurationBadge(shell, player.duration);
     shell.dataset.posterReady = player.readyState >= 2 ? 'true' : 'false';
     updateIndexLocalVideoShellOverlay(shell);
     syncIndexLocalVideoPosterVisibility(shell);
@@ -10974,7 +11033,7 @@ function prepareIndexLocalVideoPoster(shell) {
 
   const seekPreviewFrame = () => {
     const duration = Number(player.duration || 0);
-    updateAgonVideoDurationBadge(shell, duration);
+    updateMnoriaVideoDurationBadge(shell, duration);
     if (!Number.isFinite(duration) || duration <= 0.2) {
       markReady();
       return;
@@ -11098,7 +11157,7 @@ function unloadIndexYouTubeShell(shell) {
   shell.dataset.soundEnabled = 'false';
 
   if (poster) poster.style.display = '';
-  setAgonEmbedLoading(shell, false);
+  setMnoriaEmbedLoading(shell, false);
   updateIndexYouTubeShellOverlay(shell);
 }
 
@@ -11117,7 +11176,7 @@ shell.dataset.soundEnabled = shouldEnableSound ? 'true' : 'false';
 
 if (isNewLoad) {
   shell.dataset.lastUserActivation = String(Date.now());
-  setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
+  setMnoriaEmbedLoading(shell, true, 'Chargement de la vidéo…');
   iframe.src = getIndexYouTubeEmbedSrc(baseUrl, {
     autoplay: true,
     muted: !shouldEnableSound
@@ -11137,7 +11196,7 @@ if (isNewLoad) {
 
   if (isNewLoad) {
     iframe.onload = () => {
-      setAgonEmbedLoading(shell, false);
+      setMnoriaEmbedLoading(shell, false);
       if (poster) {
         poster.style.display = 'none';
         poster.style.visibility = 'hidden';
@@ -11155,7 +11214,7 @@ if (isNewLoad) {
       queueIndexYouTubeSoundActivation(shell, iframe);
     }
   } else {
-    setAgonEmbedLoading(shell, false);
+    setMnoriaEmbedLoading(shell, false);
     if (poster) poster.style.display = 'none';
     if (shell.dataset.userActivated === 'true') {
       iframe.onload = () => {
@@ -11406,7 +11465,7 @@ function bindIndexLocalVideoPosterLifecycle(shell) {
   };
 
   const markVideoReady = () => {
-    setAgonEmbedLoading(shell, false);
+    setMnoriaEmbedLoading(shell, false);
     syncIndexLocalVideoPosterVisibility(shell);
   };
 
@@ -11442,7 +11501,7 @@ function unloadIndexLocalVideoShell(shell) {
   shell.dataset.userStarted = 'false';
 
   if (poster) poster.style.display = '';
-  setAgonEmbedLoading(shell, false);
+  setMnoriaEmbedLoading(shell, false);
   updateIndexLocalVideoShellOverlay(shell);
 }
 
@@ -11462,7 +11521,7 @@ function activateIndexLocalVideoShell(shell) {
     shell.dataset.lastUserActivation = String(Date.now());
     if (poster) poster.style.display = '';
     if (hasUserStarted) {
-      setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
+      setMnoriaEmbedLoading(shell, true, 'Chargement de la vidéo…');
     }
     video.src = videoSrc;
     video.load();
@@ -12267,7 +12326,7 @@ function initIndexYouTubeObserver(root = document) {
   state.observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       entry.target.dataset.inView = entry.isIntersecting && entry.intersectionRatio >= 0.35 ? 'true' : 'false';
-      if (entry.isIntersecting) hydrateAgonYouTubeDuration(entry.target);
+      if (entry.isIntersecting) hydrateMnoriaYouTubeDuration(entry.target);
     });
     scheduleIndexYouTubeActiveUpdate();
   }, {
@@ -13107,7 +13166,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   const description = normalizedPreview.description || "";
   // Aperçu sans image (site qui bloque la récupération, ex. 403 anti-bot) :
   // le logo du média prend le relais pour ces domaines connus, sinon le visuel
-  // Agôn par défaut, pour ne jamais laisser une carte sans image.
+  // Mnoria par défaut, pour ne jamais laisser une carte sans image.
   const image = normalizedPreview.image
     || (isLiberationSourceUrl(safeUrl) ? LIBERATION_FALLBACK_IMAGE : "")
     || (isLePointSourceUrl(safeUrl) ? LEPOINT_FALLBACK_IMAGE : "")
@@ -13187,32 +13246,32 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   `;
 }
 
-function ensureAgonSourcePanel() {
-  let overlay = document.getElementById("agon-source-panel-overlay");
+function ensureMnoriaSourcePanel() {
+  let overlay = document.getElementById("mnoria-source-panel-overlay");
   if (overlay) return overlay;
 
   overlay = document.createElement("div");
-  overlay.id = "agon-source-panel-overlay";
-  overlay.className = "agon-source-panel-overlay";
+  overlay.id = "mnoria-source-panel-overlay";
+  overlay.className = "mnoria-source-panel-overlay";
   overlay.setAttribute("aria-hidden", "true");
   overlay.innerHTML = `
-    <div class="agon-source-panel-wrap">
-    <div class="agon-source-panel" role="dialog" aria-modal="true" aria-label="Source externe">
-      <div class="agon-source-panel-topbar">
-        <img src="/mnoria-icon-64.png" alt="mnoria" class="agon-source-panel-logo">
-        <span id="agon-source-panel-domain" class="agon-source-panel-domain"></span>
-        <button type="button" class="agon-source-panel-close" data-agon-source-panel-close>Retour</button>
+    <div class="mnoria-source-panel-wrap">
+    <div class="mnoria-source-panel" role="dialog" aria-modal="true" aria-label="Source externe">
+      <div class="mnoria-source-panel-topbar">
+        <img src="/mnoria-icon-64.png" alt="mnoria" class="mnoria-source-panel-logo">
+        <span id="mnoria-source-panel-domain" class="mnoria-source-panel-domain"></span>
+        <button type="button" class="mnoria-source-panel-close" data-mnoria-source-panel-close>Retour</button>
       </div>
-      <div class="agon-source-panel-media">
-        <img id="agon-source-panel-image" src="/logovisuel.png" alt="">
+      <div class="mnoria-source-panel-media">
+        <img id="mnoria-source-panel-image" src="/logovisuel.png" alt="">
       </div>
-      <div class="agon-source-panel-body">
-        <div id="agon-source-panel-source" class="agon-source-panel-source"></div>
-        <h2 id="agon-source-panel-title" class="agon-source-panel-title"></h2>
-        <p id="agon-source-panel-summary" class="agon-source-panel-summary"></p>
-        <div class="agon-source-panel-actions">
-          <a id="agon-source-panel-open" class="agon-source-panel-open" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>
-          <button type="button" class="agon-source-panel-back" data-agon-source-panel-close>Retour vers agôn</button>
+      <div class="mnoria-source-panel-body">
+        <div id="mnoria-source-panel-source" class="mnoria-source-panel-source"></div>
+        <h2 id="mnoria-source-panel-title" class="mnoria-source-panel-title"></h2>
+        <p id="mnoria-source-panel-summary" class="mnoria-source-panel-summary"></p>
+        <div class="mnoria-source-panel-actions">
+          <a id="mnoria-source-panel-open" class="mnoria-source-panel-open" href="#" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i> Ouvrir la source</a>
+          <button type="button" class="mnoria-source-panel-back" data-mnoria-source-panel-close>Retour vers mnoria</button>
         </div>
       </div>
     </div>
@@ -13221,16 +13280,16 @@ function ensureAgonSourcePanel() {
   document.body.appendChild(overlay);
 
   overlay.addEventListener("click", (event) => {
-    if (event.target === overlay || event.target.closest("[data-agon-source-panel-close]")) {
+    if (event.target === overlay || event.target.closest("[data-mnoria-source-panel-close]")) {
       event.preventDefault();
-      closeAgonSourcePanel();
+      closeMnoriaSourcePanel();
     }
   });
 
   return overlay;
 }
 
-function getAgonSourcePanelFallbackImage() {
+function getMnoriaSourcePanelFallbackImage() {
   try {
     if (typeof getIndexDefaultFallbackImage === "function") {
       return getIndexDefaultFallbackImage(typeof getDebateId === "function" ? getDebateId() : "");
@@ -13239,7 +13298,7 @@ function getAgonSourcePanelFallbackImage() {
   return "/logovisuel.png";
 }
 
-function getAgonSourcePanelPreviewFromElement(element, fallbackUrl = "") {
+function getMnoriaSourcePanelPreviewFromElement(element, fallbackUrl = "") {
   const root = element?.closest?.("[data-source-panel-url]") || element;
   const dataset = root?.dataset || {};
   const card = root?.closest?.(".debate-source-card") || root;
@@ -13253,24 +13312,24 @@ function getAgonSourcePanelPreviewFromElement(element, fallbackUrl = "") {
   };
 }
 
-function openAgonSourcePanel(sourceUrl, preview = {}) {
+function openMnoriaSourcePanel(sourceUrl, preview = {}) {
   const safeUrl = String(sourceUrl || preview?.url || "").trim();
   if (!safeUrl) return;
 
-  const overlay = ensureAgonSourcePanel();
+  const overlay = ensureMnoriaSourcePanel();
   const normalized = normalizeSourcePreviewData(preview, safeUrl);
-  const fallbackImage = getAgonSourcePanelFallbackImage();
+  const fallbackImage = getMnoriaSourcePanelFallbackImage();
   const imageUrl = normalized.image || String(preview?.image || "").trim() || fallbackImage;
   const domainLabel = normalized.domain || getDomainLabel(safeUrl) || "Source externe";
   const title = normalized.title || domainLabel || "Source externe";
-  const description = normalized.description || "Le site original s’ouvre hors d’Agôn pour éviter les pages blanches et les blocages d’affichage.";
+  const description = normalized.description || "Le site original s’ouvre hors d’Mnoria pour éviter les pages blanches et les blocages d’affichage.";
 
-  const domainEl = document.getElementById("agon-source-panel-domain");
-  const sourceEl = document.getElementById("agon-source-panel-source");
-  const titleEl = document.getElementById("agon-source-panel-title");
-  const summaryEl = document.getElementById("agon-source-panel-summary");
-  const imageEl = document.getElementById("agon-source-panel-image");
-  const openEl = document.getElementById("agon-source-panel-open");
+  const domainEl = document.getElementById("mnoria-source-panel-domain");
+  const sourceEl = document.getElementById("mnoria-source-panel-source");
+  const titleEl = document.getElementById("mnoria-source-panel-title");
+  const summaryEl = document.getElementById("mnoria-source-panel-summary");
+  const imageEl = document.getElementById("mnoria-source-panel-image");
+  const openEl = document.getElementById("mnoria-source-panel-open");
 
   if (domainEl) domainEl.textContent = (() => { try { return new URL(safeUrl).hostname; } catch (_) { return domainLabel; } })();
   if (sourceEl) sourceEl.textContent = domainLabel;
@@ -13290,35 +13349,35 @@ function openAgonSourcePanel(sourceUrl, preview = {}) {
 
   overlay.style.display = "flex";
   overlay.setAttribute("aria-hidden", "false");
-  document.body.classList.add("agon-source-panel-is-open");
+  document.body.classList.add("mnoria-source-panel-is-open");
 
   // Indicateur "suite ↓" en bas du panneau tant que la carte dépasse (titre ou
   // résumé longs, petit écran) : la carte semble sinon complète alors que les
   // boutons sont hors champ. Rattaché après affichage : les mesures de
   // scroll/clientHeight seraient nulles tant que l'overlay est en display:none.
-  const panelEl = overlay.querySelector(".agon-source-panel");
-  const panelWrapEl = overlay.querySelector(".agon-source-panel-wrap");
+  const panelEl = overlay.querySelector(".mnoria-source-panel");
+  const panelWrapEl = overlay.querySelector(".mnoria-source-panel-wrap");
   if (panelEl && panelWrapEl && typeof attachScrollFadeHint === "function") {
     panelEl.scrollTop = 0;
     attachScrollFadeHint(panelEl, panelWrapEl, "#ffffff");
   }
 }
 
-function closeAgonSourcePanel() {
-  const overlay = document.getElementById("agon-source-panel-overlay");
+function closeMnoriaSourcePanel() {
+  const overlay = document.getElementById("mnoria-source-panel-overlay");
   if (!overlay) return;
   overlay.style.display = "none";
   overlay.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("agon-source-panel-is-open");
+  document.body.classList.remove("mnoria-source-panel-is-open");
 }
 
-window.openAgonSourcePanel = openAgonSourcePanel;
-window.closeAgonSourcePanel = closeAgonSourcePanel;
+window.openMnoriaSourcePanel = openMnoriaSourcePanel;
+window.closeMnoriaSourcePanel = closeMnoriaSourcePanel;
 
 // En standalone (PWA), iOS ouvre déjà sa propre vue navigateur intégrée
 // (croix/flèche de retour) pour les liens target="_blank" — même mécanisme
 // que sur la page "Autres actus" (cf. openCardArticle dans autres-sources.html).
-// Le panneau d'aperçu (openAgonSourcePanel) n'a donc pas de raison d'être dans
+// Le panneau d'aperçu (openMnoriaSourcePanel) n'a donc pas de raison d'être dans
 // ce contexte : il ajoutait un écran intermédiaire avant d'atteindre la même
 // vue native. On garde le panneau uniquement hors standalone (desktop/mobile
 // web), où il évite les pages blanches/blocages d'affichage.
@@ -13343,12 +13402,12 @@ document.addEventListener("click", (event) => {
     openExternalSourceDirect(url);
     return;
   }
-  openAgonSourcePanel(url, getAgonSourcePanelPreviewFromElement(sourceTrigger, url));
+  openMnoriaSourcePanel(url, getMnoriaSourcePanelPreviewFromElement(sourceTrigger, url));
 }, true);
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    closeAgonSourcePanel();
+    closeMnoriaSourcePanel();
     return;
   }
 
@@ -13362,7 +13421,7 @@ document.addEventListener("keydown", (event) => {
     openExternalSourceDirect(url);
     return;
   }
-  openAgonSourcePanel(url, getAgonSourcePanelPreviewFromElement(sourceTrigger, url));
+  openMnoriaSourcePanel(url, getMnoriaSourcePanelPreviewFromElement(sourceTrigger, url));
 });
 
 function linkifyText(str) {
@@ -13531,7 +13590,7 @@ function renderIdeaSourceCardHtml(url) {
                 </span>
               </span>
             </button>
-            ${buildAgonEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
+            ${buildMnoriaEmbedLoadingOverlayHtml('Chargement de la vidéo…')}
             <iframe
               class="idea-source-iframe"
               title="Vidéo YouTube"
@@ -13872,8 +13931,8 @@ function activateIdeaYouTubeShell(shell) {
   if (!iframe || iframe.src) return;
   const poster = shell.querySelector('button[aria-label="Lire la vidéo YouTube"]');
   if (poster) poster.style.display = 'none';
-  setAgonEmbedLoading(shell, true, 'Chargement de la vidéo…');
-  iframe.addEventListener('load', () => setAgonEmbedLoading(shell, false), { once: true });
+  setMnoriaEmbedLoading(shell, true, 'Chargement de la vidéo…');
+  iframe.addEventListener('load', () => setMnoriaEmbedLoading(shell, false), { once: true });
   iframe.src = `${base}${base.includes('?') ? '&' : '?'}autoplay=1&mute=0`;
 }
 
@@ -14164,8 +14223,8 @@ function refitIdeaXEmbedsInMobileColumns() {
   });
 }
 
-if (!window.__agonIdeaXMobileColumnFitBound) {
-  window.__agonIdeaXMobileColumnFitBound = true;
+if (!window.__mnoriaIdeaXMobileColumnFitBound) {
+  window.__mnoriaIdeaXMobileColumnFitBound = true;
   window.addEventListener("resize", () => {
     window.requestAnimationFrame(refitIdeaXEmbedsInMobileColumns);
   }, { passive: true });
@@ -14318,7 +14377,7 @@ function notifyParentAboutNotificationBackTransition(payload = {}) {
 
   try {
     window.parent.postMessage({
-      type: "agon:notification-back-transition-start",
+      type: "mnoria:notification-back-transition-start",
       pathname: location.pathname || "/notifications",
       targetPathname: "/debate",
       ...payload
@@ -14348,7 +14407,7 @@ function notifyParentAboutNotificationTargetReady() {
 
   try {
     window.parent.postMessage({
-      type: "agon:notification-target-ready",
+      type: "mnoria:notification-target-ready",
       pathname: location.pathname || "/debate",
       href: String(location.href || "")
     }, "*");
@@ -14428,7 +14487,7 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
       try {
         clearNotificationsReturnContext();
         window.parent.postMessage({
-          type: "agon:open-page-in-parent-modal",
+          type: "mnoria:open-page-in-parent-modal",
           url: targetHref
         }, "*");
       } catch (error) {}
@@ -14436,7 +14495,7 @@ function handleNotificationsBackNavigation(event, fallbackHref = "/") {
     }
 
     try {
-      window.parent.postMessage({ type: "agon:close-debate-modal" }, "*");
+      window.parent.postMessage({ type: "mnoria:close-debate-modal" }, "*");
     } catch (error) {}
     return false;
   }
@@ -14693,7 +14752,7 @@ function canDeleteDebate(debate) {
   return isAdmin() || isDebateOwner(debate);
 }
 
-function isAgonGeneratedDebate(debate) {
+function isMnoriaGeneratedDebate(debate) {
   if (!debate) return false;
   return !!debate.is_official;
 }
@@ -14911,8 +14970,8 @@ function getDebateShareUrl() {
 
 function getDebateShareTitle() {
   const titleEl = document.getElementById("debate-question");
-  const title = titleEl ? titleEl.textContent.trim() : "Arène sur agôn";
-  return title || "Arène sur agôn";
+  const title = titleEl ? titleEl.textContent.trim() : "Arène sur mnoria";
+  return title || "Arène sur mnoria";
 }
 
 
@@ -14945,7 +15004,7 @@ function getDebateShareText() {
 function buildVisibleShareMessage(text, url) {
   const cleanText = String(text || "")
     .trim()
-    .replace(/(?:\n\s*)?(?:→\s*)?agôn\s*:?\s*\S+\s*$/u, "")
+    .replace(/(?:\n\s*)?(?:→\s*)?mnoria\s*:?\s*\S+\s*$/u, "")
     .trim();
   const cleanUrl = String(url || "").trim();
 
@@ -14953,7 +15012,7 @@ function buildVisibleShareMessage(text, url) {
     return cleanText;
   }
 
-  return [cleanText, `→ agôn ${cleanUrl}`].filter(Boolean).join("\n\n");
+  return [cleanText, `→ mnoria ${cleanUrl}`].filter(Boolean).join("\n\n");
 }
 
 async function writeTextToClipboard(text) {
@@ -15751,9 +15810,9 @@ function getGlobalShareData() {
 
   if (path === "/create") {
     return {
-      title: "Ouvrir une arène sur agôn",
+      title: "Ouvrir une arène sur mnoria",
       text: [
-        "Ouvrir une arène sur agôn.",
+        "Ouvrir une arène sur mnoria.",
         "",
         `Qu'est-ce qui vous paraît le plus convaincant ?`
       ].join("\n"),
@@ -15762,9 +15821,9 @@ function getGlobalShareData() {
   }
 
   return {
-    title: "agôn, la plateforme de confrontation d'idées",
+    title: "mnoria, la plateforme de confrontation d'idées",
     text: [
-      "Découvrez agôn.",
+      "Découvrez mnoria.",
       "",
      `Qu'est-ce qui vous paraît le plus convaincant ?`
     ].join("\n"),
@@ -15932,8 +15991,8 @@ function getIndexDebateResolvedShareFields(debateId, question, optionA = "", opt
       || debate?.question
       || debate?.title
       || question
-      || "Arène sur agôn"
-  ).trim() || "Arène sur agôn";
+      || "Arène sur mnoria"
+  ).trim() || "Arène sur mnoria";
 
   const safeOptionA = String(
     domSnapshot?.optionA
@@ -15999,7 +16058,7 @@ function getIndexDebateShareData(debateId, question, optionA = "", optionB = "",
   }
 
   lines.push("Qu'est-ce qui vous paraît le plus convaincant ?");
-  lines.push(`→ agôn ${url}`);
+  lines.push(`→ mnoria ${url}`);
 
   return {
     url,
@@ -16357,8 +16416,8 @@ async function adminLogout() {
 
     clearAdminToken();
     refreshAdminUI();
-    __agonRecordReloadReason("admin-logout");
-    try { sessionStorage.setItem('agon_skip_startup_once', '1'); } catch (e) {}
+    __mnoriaRecordReloadReason("admin-logout");
+    try { sessionStorage.setItem('mnoria_skip_startup_once', '1'); } catch (e) {}
     location.reload();
   } catch (error) {
     alert(error.message);
@@ -16393,10 +16452,10 @@ function attachAdminButtons() {
         try {
           const cloudRes = await fetchJSON(API + "/cloud-bubbles");
           const newTrends = Array.isArray(cloudRes?.bubbles) ? cloudRes.bubbles : [];
-          window.AGON_TAG_TRENDS = newTrends;
+          window.MNORIA_TAG_TRENDS = newTrends;
           syncIndexBubbleTrendBadges();
           if (window._tagTrendCloudModule && newTrends.length) {
-            const container = document.querySelector("#agon-tag-trends-cloud");
+            const container = document.querySelector("#mnoria-tag-trends-cloud");
             if (container) window._tagTrendCloudModule.renderTagTrendCloud(container, newTrends);
           }
         } catch {}
@@ -16498,7 +16557,7 @@ async function resetNotifications() {
     });
 
     if (window.self !== window.top) {
-      try { window.parent.postMessage({ type: "agon:notif-reset-count", count: 0 }, "*"); } catch {}
+      try { window.parent.postMessage({ type: "mnoria:notif-reset-count", count: 0 }, "*"); } catch {}
     } else {
       setStoredUnreadNotificationCount(0);
     }
@@ -16563,7 +16622,7 @@ function decrementStoredUnreadNotificationCount(step = 1) {
   const current = getStoredUnreadNotificationCount();
   setStoredUnreadNotificationCount(Math.max(0, current - Math.max(1, Number(step || 1))));
 }
-const NOTIF_READ_LS_KEY = "agon_read_notif_ids";
+const NOTIF_READ_LS_KEY = "mnoria_read_notif_ids";
 function getLocallyReadNotifIds() {
   try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_LS_KEY) || "[]")); } catch { return new Set(); }
 }
@@ -16682,7 +16741,7 @@ async function handleNotificationClick(event, notificationId, link, element = nu
   const wasUnread = markNotificationElementAsReadLocally(element);
   if (wasUnread) {
     if (window.self !== window.top) {
-      try { window.parent.postMessage({ type: "agon:notif-read-decrement" }, "*"); } catch {}
+      try { window.parent.postMessage({ type: "mnoria:notif-read-decrement" }, "*"); } catch {}
     } else {
       decrementStoredUnreadNotificationCount(1);
     }
@@ -17550,7 +17609,7 @@ async function saveAdminCardEdit(debateId, btn) {
         "Content-Type": "application/json",
         "x-admin-token": getAdminToken()
       },
-      body: JSON.stringify({ ...body, mark_as_agon_generated: false })
+      body: JSON.stringify({ ...body, mark_as_mnoria_generated: false })
     });
 
     // Met à jour les caches
@@ -17705,7 +17764,7 @@ async function saveAndPublishAdminCard(debateId, btn) {
     await fetchJSON(API + "/admin/debate/" + debateId, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "x-admin-token": getAdminToken() },
-      body: JSON.stringify({ ...body, mark_as_agon_generated: true })
+      body: JSON.stringify({ ...body, mark_as_mnoria_generated: true })
     });
     await fetchJSON(API + "/admin/debate/" + debateId + "/bump", {
       method: "POST",
@@ -17713,12 +17772,12 @@ async function saveAndPublishAdminCard(debateId, btn) {
         "Content-Type": "application/json",
         "x-admin-token": getAdminToken()
       },
-      body: JSON.stringify({ preserve_agon_generated: true })
+      body: JSON.stringify({ preserve_mnoria_generated: true })
     });
     await fetchJSON(API + "/admin/debate/" + debateId, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "x-admin-token": getAdminToken() },
-      body: JSON.stringify({ ...body, mark_as_agon_generated: true })
+      body: JSON.stringify({ ...body, mark_as_mnoria_generated: true })
     });
 
     // Met à jour les caches
@@ -18176,7 +18235,7 @@ function buildAdminEditPanelHtml(d) {
           </button>
           <button class="admin-edit-bump" type="button"
             onclick="event.stopPropagation(); saveAndPublishAdminCard('${escapeAttribute(String(d.id || ''))}', this)">
-            <i class="fa-solid fa-floppy-disk"></i><i class="fa-solid fa-arrow-up" style="margin-left:3px;"></i> Sauvegarder et publier (publié par agôn)
+            <i class="fa-solid fa-floppy-disk"></i><i class="fa-solid fa-arrow-up" style="margin-left:3px;"></i> Sauvegarder et publier (publié par mnoria)
           </button>
         </div>
         ${(() => {
@@ -18368,8 +18427,8 @@ function renderIndexContextExpandedText(text, isOpen = false) {
 
   const signature = parts[parts.length - 1] || "";
   const question = parts[parts.length - 2] || "";
-  const hasAgonTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
-  const latinQuestion = hasAgonTail && parts.length >= 4 && !/[?？]$/.test(parts[parts.length - 3] || "")
+  const hasMnoriaTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
+  const latinQuestion = hasMnoriaTail && parts.length >= 4 && !/[?？]$/.test(parts[parts.length - 3] || "")
     ? parts[parts.length - 3]
     : "";
   if (!latinQuestion) {
@@ -18388,7 +18447,7 @@ function renderIndexContextExpandedText(text, isOpen = false) {
   }
   const beforeLatin = rawText.slice(0, latinStart);
   const afterLatin = rawText.slice(latinStart + latinQuestion.length, questionStart).replace(/^\n{2,}/, "\n");
-  const signatureStart = hasAgonTail
+  const signatureStart = hasMnoriaTail
     ? rawText.indexOf(signature, questionStart + question.length)
     : -1;
   const rawAfterQuestion = rawText.slice(questionStart + question.length, signatureStart >= 0 ? signatureStart : undefined);
@@ -18915,7 +18974,7 @@ function addCurrentCategoryFilter(value) {
   const label = String(value || "").trim();
   if (!label || label === "all") return;
 
-  if (currentTypeFilter === "agon") {
+  if (currentTypeFilter === "mnoria") {
     currentTypeFilter = "all";
   }
 
@@ -18938,7 +18997,7 @@ function getIndexTypeFilterLabel(type) {
   if (type === "debate") return "Arènes à positions";
   if (type === "question") return "Arènes libres";
   if (type === "visited") return "Arènes consultées";
-  if (type === "agon") return "Arènes ouvertes par agôn";
+  if (type === "mnoria") return "Arènes ouvertes par mnoria";
   if (type === "community") return "Arènes ouvertes par la communauté";
   return "Tous";
 }
@@ -18948,7 +19007,7 @@ function syncIndexTypeFilterButtons() {
   document.getElementById("filter-debate")?.classList.toggle("active", currentTypeFilter === "debate");
   document.getElementById("filter-question")?.classList.toggle("active", currentTypeFilter === "question");
   document.getElementById("filter-visited")?.classList.toggle("active", currentTypeFilter === "visited");
-  document.getElementById("filter-agon")?.classList.toggle("active", currentTypeFilter === "agon");
+  document.getElementById("filter-mnoria")?.classList.toggle("active", currentTypeFilter === "mnoria");
 
   const mobileSelect = document.getElementById("index-type-mobile-select");
   const mobileWrap = document.querySelector(".index-type-filter-mobile");
@@ -18975,7 +19034,7 @@ function syncIndexShortcutFilterButtons() {
 }
 
 function setIndexMobileTypeFilter(value) {
-  const normalized = ["all", "debate", "question", "visited", "agon", "youth"].includes(value)
+  const normalized = ["all", "debate", "question", "visited", "mnoria", "youth"].includes(value)
     ? value
     : "all";
 
@@ -18988,7 +19047,7 @@ function setIndexMobileTypeFilter(value) {
     visitedDebatesVisible = 5;
     otherDebatesVisible = INDEX_OTHER_DEBATES_BATCH_SIZE;
     applyIndexFilters();
-    if (previousTypeFilter === "agon") warmIndexFeedAfterLeavingAgonFilter();
+    if (previousTypeFilter === "mnoria") warmIndexFeedAfterLeavingMnoriaFilter();
     return;
   }
 
@@ -19008,9 +19067,9 @@ function getCurrentIndexSearchQuery() {
 // l'intérieur de ses bords gauche et inférieur. Les anciennes coordonnées fixes dérivaient
 // dès que cloud.style.marginTop était recalculé.
 function syncMemoireMobileBackButtonPosition() {
-  const wrapper = document.getElementById('agon-memoire-embed-after');
-  const cloud = document.getElementById('agon-tag-trends-cloud');
-  const section = document.getElementById('agon-tag-trends-section');
+  const wrapper = document.getElementById('mnoria-memoire-embed-after');
+  const cloud = document.getElementById('mnoria-tag-trends-cloud');
+  const section = document.getElementById('mnoria-tag-trends-section');
   if (!wrapper || !cloud || !section) return;
 
   if (window.innerWidth > 768) {
@@ -19020,7 +19079,7 @@ function syncMemoireMobileBackButtonPosition() {
   }
 
   requestAnimationFrame(() => {
-    if (!document.body.classList.contains('agon-memoire-cloud-mode')) return;
+    if (!document.body.classList.contains('mnoria-memoire-cloud-mode')) return;
     const cloudRect = cloud.getBoundingClientRect();
     const sectionRect = section.getBoundingClientRect();
     if (!cloudRect.width || !cloudRect.height || !sectionRect.width) return;
@@ -19041,18 +19100,18 @@ window.addEventListener('resize', syncMemoireMobileBackButtonPosition, { passive
 
 function alignStandaloneBubbleFrameToActiveFilter() {
   if (!document.body.classList.contains('is-standalone')) return;
-  if (!isAgonMobileCloudViewport()) return;
+  if (!isMnoriaMobileCloudViewport()) return;
   // En mode "Ma mémoire", le tag de filtre actif reste dans le DOM (juste masqué en
   // visibility, cf. setMemoireCloudMode) : sans cette garde, les appels déclenchés par le
   // ResizeObserver du cadre (initBubbleFrameSync, ce même cadre changeant de hauteur en
-  // entrant/sortant de "Ma mémoire") recalculaient un alignement pensé pour Bulles Actu/Agôn
+  // entrant/sortant de "Ma mémoire") recalculaient un alignement pensé pour Bulles Actu/Mnoria
   // et réappliquaient un margin-top parasite au cadre "Ma mémoire", écrasant le reset fait à
   // l'entrée du mode — le fil d'Ariane (positionné indépendamment) se retrouvait enfoncé loin
   // sous le bord haut du cadre au lieu d'y rester collé (demande du 10/08/2026).
   if (typeof _memoireCloudMode !== "undefined" && _memoireCloudMode) return;
 
   requestAnimationFrame(() => {
-    const cloud = document.getElementById('agon-tag-trends-cloud');
+    const cloud = document.getElementById('mnoria-tag-trends-cloud');
     const activeTag = document.querySelector('#index-active-filters .index-active-filter-tag');
     if (!cloud || !activeTag) return;
     if (!cloud.getClientRects().length || !activeTag.getClientRects().length) return;
@@ -19070,7 +19129,7 @@ function alignStandaloneBubbleFrameToActiveFilter() {
     // avant le premier rendu à la visite suivante (retour Autres actus, reprise) :
     // le cadre apparaît directement à sa position définitive, sans saut.
     try {
-      sessionStorage.setItem('agonCloudMarginTop:' + location.pathname, JSON.stringify({ w: window.innerWidth, m: Math.round(nextMarginTop * 10) / 10 }));
+      sessionStorage.setItem('mnoriaCloudMarginTop:' + location.pathname, JSON.stringify({ w: window.innerWidth, m: Math.round(nextMarginTop * 10) / 10 }));
     } catch (e) {}
     syncMemoireMobileBackButtonPosition();
   });
@@ -19084,7 +19143,7 @@ function renderIndexActiveFilterTags() {
   // aussi appelée par d'autres chemins (rafraîchissement de la liste, changement de filtre
   // thématique, etc.) qui ignorent le mode courant et forçaient display:flex plus bas,
   // ré-affichant le bandeau (et le tag "Arènes ouvertes par la communauté" hérité d'un passage
-  // précédent en Bulles Agôn) par-dessus "Ma mémoire". On sort avant d'y toucher.
+  // précédent en Bulles Mnoria) par-dessus "Ma mémoire". On sort avant d'y toucher.
   if (typeof _memoireCloudMode !== "undefined" && _memoireCloudMode) return;
 
   const tags = [];
@@ -19099,7 +19158,7 @@ function renderIndexActiveFilterTags() {
     `);
   }
 
-  if (currentTypeFilter && currentTypeFilter !== "all" && currentTypeFilter !== "agon" && currentTypeFilter !== "community") {
+  if (currentTypeFilter && currentTypeFilter !== "all" && currentTypeFilter !== "mnoria" && currentTypeFilter !== "community") {
     tags.push(`
       <button type="button" class="index-active-filter-tag" onclick="removeIndexActiveFilterTag('type')" aria-label="Retirer le filtre ${escapeAttribute(getIndexTypeFilterLabel(currentTypeFilter))}">
         <span>${escapeHtml(getIndexTypeFilterLabel(currentTypeFilter))}</span>
@@ -19135,10 +19194,10 @@ function renderIndexActiveFilterTags() {
 
 function clearActiveBubbles() {
   currentBubbleTag = null;
-  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
-    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
-  document.querySelectorAll('.agon-tag-label-overlay.agon-tag-label-overlay-active')
-    .forEach(label => label.classList.remove('agon-tag-label-overlay-active'));
+  document.querySelectorAll('.mnoria-tag-bubble.mnoria-tag-bubble-active')
+    .forEach(b => b.classList.remove('mnoria-tag-bubble-active'));
+  document.querySelectorAll('.mnoria-tag-label-overlay.mnoria-tag-label-overlay-active')
+    .forEach(label => label.classList.remove('mnoria-tag-label-overlay-active'));
 }
 
 let _tagCloudSecondaryMode = false;
@@ -19146,7 +19205,7 @@ let _tagCloudOriginalTrends = null;
 let _tagCloudSecondaryTrends = null;
 
 function _showSecondaryTagsInCloud(primaryTag, primaryDebateId) {
-  const container = document.querySelector('#agon-tag-trends-cloud');
+  const container = document.querySelector('#mnoria-tag-trends-cloud');
   if (!container || !window._tagTrendCloudModule || !window._tagTrendsModule) return;
   if (!Array.isArray(debatesCache) || !debatesCache.length) return;
 
@@ -19195,54 +19254,54 @@ function _showSecondaryTagsInCloud(primaryTag, primaryDebateId) {
 
 function _restoreMainTagCloud() {
   if (!_tagCloudSecondaryMode) return;
-  const container = document.querySelector('#agon-tag-trends-cloud');
+  const container = document.querySelector('#mnoria-tag-trends-cloud');
   if (!container || !window._tagTrendCloudModule) return;
   _tagCloudSecondaryMode = false;
   _tagCloudOriginalTrends = null;
   _tagCloudSecondaryTrends = null;
-  window._tagTrendCloudModule.renderTagTrendCloud(container, window.AGON_TAG_TRENDS || []);
+  window._tagTrendCloudModule.renderTagTrendCloud(container, window.MNORIA_TAG_TRENDS || []);
 }
 
-// ── Bulles Agôn : bascule entre le nuage actualité et le top 10 des arènes actives ──
+// ── Bulles Mnoria : bascule entre le nuage actualité et le top 10 des arènes actives ──
 
-let _agonCloudMode = false;
+let _mnoriaCloudMode = false;
 // Destination la plus récemment demandée. Sert aussi avant que le module de rendu paresseux
 // soit prêt : seul le dernier clic est rejoué quand son import se termine.
-let _agonCloudRequestedMode = false;
-// Débats du top 10 des Bulles Agôn, dans l'ordre du nuage : placés en tête du
-// bandeau "Arènes sous tension" en mode Agôn pour que chaque bulle ait toujours
+let _mnoriaCloudRequestedMode = false;
+// Débats du top 10 des Bulles Mnoria, dans l'ordre du nuage : placés en tête du
+// bandeau "Arènes sous tension" en mode Mnoria pour que chaque bulle ait toujours
 // sa carte dans le carrousel, même une vieille arène redevenue active qui n'est
-// pas dans les débats récents chargés par l'index (cf. loadAgonBubbleTensionDebates).
-let _agonBubbleTensionDebates = [];
-let _agonCloudOriginalCaptionHtml = null;
-let _agonCloudSwitchLoading = false;
-let _agonCloudSwitchToken = 0;
+// pas dans les débats récents chargés par l'index (cf. loadMnoriaBubbleTensionDebates).
+let _mnoriaBubbleTensionDebates = [];
+let _mnoriaCloudOriginalCaptionHtml = null;
+let _mnoriaCloudSwitchLoading = false;
+let _mnoriaCloudSwitchToken = 0;
 // Dernier nuage communautaire réellement reçu de l'API. Si un rafraîchissement
 // ponctuel expire, on conserve ses tags plutôt que de reconstruire des bulles
 // à partir des titres d'arènes.
-let _agonBubbleTrendsClientCache = [];
+let _mnoriaBubbleTrendsClientCache = [];
 // Jeton partagé avec mon-univers.js (module séparé, pas d'accès aux variables ci-dessus) : posé
 // sur window pour que loadUniverse() (fetch asynchrone) puisse détecter qu'un autre mode a
-// déjà pris le relais entre-temps sur le même conteneur partagé #agon-tag-trends-cloud, et
-// inversement pour que toggleAgonCloud()/setPoliticalCloudGroup() détectent qu'on est reparti
-// sur "Ma mémoire" pendant leur propre fetch. _agonCloudSwitchToken ci-dessus ne suffisait pas
-// seul : setMemoireCloudMode ne le touchait jamais, donc un fetch Actu/Agôn lent (ou coupé par
+// déjà pris le relais entre-temps sur le même conteneur partagé #mnoria-tag-trends-cloud, et
+// inversement pour que toggleMnoriaCloud()/setPoliticalCloudGroup() détectent qu'on est reparti
+// sur "Ma mémoire" pendant leur propre fetch. _mnoriaCloudSwitchToken ci-dessus ne suffisait pas
+// seul : setMemoireCloudMode ne le touchait jamais, donc un fetch Actu/Mnoria lent (ou coupé par
 // le timeout de sécurité de 6.5s) pouvait résoudre après coup et écraser du contenu "Ma
 // mémoire" déjà affiché — demande du 09/08/2026, "ça mélange ... parfois mais pas tout le
 // temps" (course, pas bug systématique).
-window._agonCloudModeToken = window._agonCloudModeToken || 0;
-let _agonCloudFrameTopLocked = false;
-let _agonCloudSwitchSafetyTimer = null;
-let _agonCloudScrollBlockersAttached = false;
+window._mnoriaCloudModeToken = window._mnoriaCloudModeToken || 0;
+let _mnoriaCloudFrameTopLocked = false;
+let _mnoriaCloudSwitchSafetyTimer = null;
+let _mnoriaCloudScrollBlockersAttached = false;
 
-function preventAgonCloudSwitchScroll(event) {
-  if (!_agonCloudSwitchLoading) return;
+function preventMnoriaCloudSwitchScroll(event) {
+  if (!_mnoriaCloudSwitchLoading) return;
   event.preventDefault();
   event.stopPropagation();
 }
 
-function preventAgonCloudSwitchKeys(event) {
-  if (!_agonCloudSwitchLoading) return;
+function preventMnoriaCloudSwitchKeys(event) {
+  if (!_mnoriaCloudSwitchLoading) return;
   const blockedKeys = new Set([" ", "PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"]);
   if (!blockedKeys.has(event.key)) return;
   event.preventDefault();
@@ -19251,104 +19310,104 @@ function preventAgonCloudSwitchKeys(event) {
 
 // wheel/touchmove non-passifs attachés uniquement pendant le switch (voir begin/finish).
 // keydown reste permanent car il ne bloque pas le scroll natif.
-window.addEventListener("keydown", preventAgonCloudSwitchKeys, { capture: true });
+window.addEventListener("keydown", preventMnoriaCloudSwitchKeys, { capture: true });
 
-function _attachAgonCloudScrollBlockers() {
-  if (_agonCloudScrollBlockersAttached) return;
-  _agonCloudScrollBlockersAttached = true;
-  window.addEventListener("wheel", preventAgonCloudSwitchScroll, { passive: false, capture: true });
-  window.addEventListener("touchmove", preventAgonCloudSwitchScroll, { passive: false, capture: true });
+function _attachMnoriaCloudScrollBlockers() {
+  if (_mnoriaCloudScrollBlockersAttached) return;
+  _mnoriaCloudScrollBlockersAttached = true;
+  window.addEventListener("wheel", preventMnoriaCloudSwitchScroll, { passive: false, capture: true });
+  window.addEventListener("touchmove", preventMnoriaCloudSwitchScroll, { passive: false, capture: true });
 }
 
-function _detachAgonCloudScrollBlockers() {
-  if (!_agonCloudScrollBlockersAttached) return;
-  _agonCloudScrollBlockersAttached = false;
-  window.removeEventListener("wheel", preventAgonCloudSwitchScroll, { capture: true });
-  window.removeEventListener("touchmove", preventAgonCloudSwitchScroll, { capture: true });
+function _detachMnoriaCloudScrollBlockers() {
+  if (!_mnoriaCloudScrollBlockersAttached) return;
+  _mnoriaCloudScrollBlockersAttached = false;
+  window.removeEventListener("wheel", preventMnoriaCloudSwitchScroll, { capture: true });
+  window.removeEventListener("touchmove", preventMnoriaCloudSwitchScroll, { capture: true });
 }
 
-function beginAgonCloudSwitchLoading(container) {
-  _agonCloudSwitchLoading = true;
-  _attachAgonCloudScrollBlockers();
-  const token = ++_agonCloudSwitchToken;
-  // En lockstep avec _agonCloudSwitchToken : mon-univers.js (module séparé) vérifie celui-ci
-  // pour détecter qu'un switch Actu/Agôn a pris le relais pendant son propre fetch encore en
-  // vol — cf. window._agonCloudModeToken, setMemoireCloudMode.
-  window._agonCloudModeToken = (window._agonCloudModeToken || 0) + 1;
-  if (_agonCloudSwitchSafetyTimer) clearTimeout(_agonCloudSwitchSafetyTimer);
-  try { document.body.dataset.agonCloudSwitchStartedAt = String(Date.now()); } catch (error) {}
-  lockAgonCloudFrameTop(container);
-  document.body.classList.add("agon-cloud-switch-loading");
-  container?.classList.add("agon-cloud-switching");
+function beginMnoriaCloudSwitchLoading(container) {
+  _mnoriaCloudSwitchLoading = true;
+  _attachMnoriaCloudScrollBlockers();
+  const token = ++_mnoriaCloudSwitchToken;
+  // En lockstep avec _mnoriaCloudSwitchToken : mon-univers.js (module séparé) vérifie celui-ci
+  // pour détecter qu'un switch Actu/Mnoria a pris le relais pendant son propre fetch encore en
+  // vol — cf. window._mnoriaCloudModeToken, setMemoireCloudMode.
+  window._mnoriaCloudModeToken = (window._mnoriaCloudModeToken || 0) + 1;
+  if (_mnoriaCloudSwitchSafetyTimer) clearTimeout(_mnoriaCloudSwitchSafetyTimer);
+  try { document.body.dataset.mnoriaCloudSwitchStartedAt = String(Date.now()); } catch (error) {}
+  lockMnoriaCloudFrameTop(container);
+  document.body.classList.add("mnoria-cloud-switch-loading");
+  container?.classList.add("mnoria-cloud-switching");
   showBubbleCloudLoadingSpinner({ switchMode: true });
-  _agonCloudSwitchSafetyTimer = window.setTimeout(() => {
-    if (token !== _agonCloudSwitchToken) return;
-    finishAgonCloudSwitchLoading(token, container);
+  _mnoriaCloudSwitchSafetyTimer = window.setTimeout(() => {
+    if (token !== _mnoriaCloudSwitchToken) return;
+    finishMnoriaCloudSwitchLoading(token, container);
   }, 6500);
   return token;
 }
 
-function finishAgonCloudSwitchLoading(token, container) {
+function finishMnoriaCloudSwitchLoading(token, container) {
   requestAnimationFrame(() => {
     window.setTimeout(() => {
-      if (token !== _agonCloudSwitchToken) return;
-      if (_agonCloudSwitchSafetyTimer) {
-        clearTimeout(_agonCloudSwitchSafetyTimer);
-        _agonCloudSwitchSafetyTimer = null;
+      if (token !== _mnoriaCloudSwitchToken) return;
+      if (_mnoriaCloudSwitchSafetyTimer) {
+        clearTimeout(_mnoriaCloudSwitchSafetyTimer);
+        _mnoriaCloudSwitchSafetyTimer = null;
       }
-      _agonCloudSwitchLoading = false;
-      _detachAgonCloudScrollBlockers();
-      _agonCloudFrameTopLocked = false;
-      try { delete document.body.dataset.agonCloudSwitchStartedAt; } catch (error) {}
-      document.body.classList.remove("agon-cloud-switch-loading");
-      container?.classList.remove("agon-cloud-switching");
+      _mnoriaCloudSwitchLoading = false;
+      _detachMnoriaCloudScrollBlockers();
+      _mnoriaCloudFrameTopLocked = false;
+      try { delete document.body.dataset.mnoriaCloudSwitchStartedAt; } catch (error) {}
+      document.body.classList.remove("mnoria-cloud-switch-loading");
+      container?.classList.remove("mnoria-cloud-switching");
       hideBubbleCloudLoadingSpinner();
     }, 40);
   });
 }
 
-function cleanupStaleAgonCloudSwitchBlockers(force = false) {
-  const container = document.querySelector("#agon-tag-trends-cloud");
-  const bodyHasBlocker = document.body?.classList?.contains("agon-cloud-switch-loading");
-  const containerHasBlocker = container?.classList?.contains("agon-cloud-switching");
+function cleanupStaleMnoriaCloudSwitchBlockers(force = false) {
+  const container = document.querySelector("#mnoria-tag-trends-cloud");
+  const bodyHasBlocker = document.body?.classList?.contains("mnoria-cloud-switch-loading");
+  const containerHasBlocker = container?.classList?.contains("mnoria-cloud-switching");
   if (!bodyHasBlocker && !containerHasBlocker) return;
 
-  const startedAt = Number(document.body?.dataset?.agonCloudSwitchStartedAt || 0);
+  const startedAt = Number(document.body?.dataset?.mnoriaCloudSwitchStartedAt || 0);
   const isStale = !startedAt || Date.now() - startedAt > 7000;
-  if (!force && _agonCloudSwitchLoading && !isStale) return;
+  if (!force && _mnoriaCloudSwitchLoading && !isStale) return;
 
-  if (_agonCloudSwitchSafetyTimer) {
-    clearTimeout(_agonCloudSwitchSafetyTimer);
-    _agonCloudSwitchSafetyTimer = null;
+  if (_mnoriaCloudSwitchSafetyTimer) {
+    clearTimeout(_mnoriaCloudSwitchSafetyTimer);
+    _mnoriaCloudSwitchSafetyTimer = null;
   }
-  _agonCloudSwitchLoading = false;
-  _detachAgonCloudScrollBlockers();
-  _agonCloudFrameTopLocked = false;
-  try { delete document.body.dataset.agonCloudSwitchStartedAt; } catch (error) {}
-  document.body.classList.remove("agon-cloud-switch-loading");
-  container?.classList.remove("agon-cloud-switching");
+  _mnoriaCloudSwitchLoading = false;
+  _detachMnoriaCloudScrollBlockers();
+  _mnoriaCloudFrameTopLocked = false;
+  try { delete document.body.dataset.mnoriaCloudSwitchStartedAt; } catch (error) {}
+  document.body.classList.remove("mnoria-cloud-switch-loading");
+  container?.classList.remove("mnoria-cloud-switching");
   hideBubbleCloudLoadingSpinner();
 }
 
-function initAgonCloudSwitchBlockerRecovery() {
-  if (document.documentElement.dataset.agonCloudSwitchBlockerRecoveryInitialized === "true") return;
-  document.documentElement.dataset.agonCloudSwitchBlockerRecoveryInitialized = "true";
+function initMnoriaCloudSwitchBlockerRecovery() {
+  if (document.documentElement.dataset.mnoriaCloudSwitchBlockerRecoveryInitialized === "true") return;
+  document.documentElement.dataset.mnoriaCloudSwitchBlockerRecoveryInitialized = "true";
 
-  window.addEventListener("pageshow", () => cleanupStaleAgonCloudSwitchBlockers(true), true);
+  window.addEventListener("pageshow", () => cleanupStaleMnoriaCloudSwitchBlockers(true), true);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) cleanupStaleAgonCloudSwitchBlockers(true);
+    if (!document.hidden) cleanupStaleMnoriaCloudSwitchBlockers(true);
   }, true);
-  document.addEventListener("pointerdown", () => cleanupStaleAgonCloudSwitchBlockers(false), true);
-  document.addEventListener("touchstart", () => cleanupStaleAgonCloudSwitchBlockers(false), { passive: true, capture: true });
+  document.addEventListener("pointerdown", () => cleanupStaleMnoriaCloudSwitchBlockers(false), true);
+  document.addEventListener("touchstart", () => cleanupStaleMnoriaCloudSwitchBlockers(false), { passive: true, capture: true });
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initAgonCloudSwitchBlockerRecovery);
+  document.addEventListener("DOMContentLoaded", initMnoriaCloudSwitchBlockerRecovery);
 } else {
-  initAgonCloudSwitchBlockerRecovery();
+  initMnoriaCloudSwitchBlockerRecovery();
 }
 
-function afterAgonCloudSpinnerPaint(callback) {
+function afterMnoriaCloudSpinnerPaint(callback) {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       callback();
@@ -19357,19 +19416,19 @@ function afterAgonCloudSpinnerPaint(callback) {
 }
 
 // Top 10 des arènes communautaires les plus actives : calculé côté serveur
-// (GET /api/agon-bubbles) directement en base, pour ne plus avoir à charger
+// (GET /api/mnoria-bubbles) directement en base, pour ne plus avoir à charger
 // toutes les arènes dans le navigateur juste pour ce classement. Garde-fou de
 // 10s : fetchJSON n'a pas de timeout propre, donc si la requête reste bloquée,
 // on n'attend jamais indéfiniment (sans quoi le sablier de la bascule Bulles
-// Actu/Agôn tournerait à l'infini).
-const AGON_COMMUNITY_GENERIC_TAGS = new Set([
+// Actu/Mnoria tournerait à l'infini).
+const MNORIA_COMMUNITY_GENERIC_TAGS = new Set([
   "actualite", "actualites", "politique", "international", "societe", "economie",
   "education", "justice", "culture", "medias", "sport", "sports", "sante",
   "climat", "environnement", "france", "monde", "europe", "debat", "debats",
   "information", "infos"
 ]);
 
-function getFallbackAgonBubbleTag(debate) {
+function getFallbackMnoriaBubbleTag(debate) {
   const cloudLabel = String(debate?.cloud_label || "").trim();
   if (cloudLabel) return cloudLabel;
   const keywords = Array.isArray(debate?.keywords) ? debate.keywords : [];
@@ -19377,17 +19436,17 @@ function getFallbackAgonBubbleTag(debate) {
     const cleaned = String(keyword || "").replace(/#/g, "").replace(/\s+/g, " ").trim();
     const normalized = cleaned.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-    if (normalized.length >= 3 && !AGON_COMMUNITY_GENERIC_TAGS.has(normalized)) return cleaned;
+    if (normalized.length >= 3 && !MNORIA_COMMUNITY_GENERIC_TAGS.has(normalized)) return cleaned;
   }
   return "";
 }
 
-function buildFallbackAgonBubbleTrends() {
+function buildFallbackMnoriaBubbleTrends() {
   const communityDebates = (Array.isArray(debatesCache) ? debatesCache : [])
-    .filter((debate) => !isAgonGeneratedDebate(debate))
+    .filter((debate) => !isMnoriaGeneratedDebate(debate))
     .map((debate) => ({
       debate,
-      tag: getFallbackAgonBubbleTag(debate),
+      tag: getFallbackMnoriaBubbleTag(debate),
       score: Math.max(0,
         Number(debate?.tension_score) ||
         (Number(debate?.argument_count) || 0) + (Number(debate?.comment_count) || 0) * 0.5
@@ -19406,34 +19465,34 @@ function buildFallbackAgonBubbleTrends() {
   })).filter((item) => item.tag && item.subjectId);
 }
 
-async function fetchAgonBubbleTrends() {
+async function fetchMnoriaBubbleTrends() {
   try {
     const result = await Promise.race([
-      fetchJSON(API + "/agon-bubbles"),
+      fetchJSON(API + "/mnoria-bubbles"),
       // Le premier calcul serveur à froid prend parfois un peu plus de 5 s.
       // Lui laisser 10 s évite un repli inutile tout en gardant une borne.
       new Promise((resolve) => setTimeout(() => resolve(null), 10000))
     ]);
     const remoteTrends = Array.isArray(result?.bubbles) ? result.bubbles : [];
     if (remoteTrends.length) {
-      _agonBubbleTrendsClientCache = remoteTrends;
+      _mnoriaBubbleTrendsClientCache = remoteTrends;
       return remoteTrends;
     }
-    if (_agonBubbleTrendsClientCache.length) return _agonBubbleTrendsClientCache;
-    return buildFallbackAgonBubbleTrends();
+    if (_mnoriaBubbleTrendsClientCache.length) return _mnoriaBubbleTrendsClientCache;
+    return buildFallbackMnoriaBubbleTrends();
   } catch (error) {
-    console.warn('Chargement des Bulles Agôn interrompu :', error);
-    if (_agonBubbleTrendsClientCache.length) return _agonBubbleTrendsClientCache;
-    return buildFallbackAgonBubbleTrends();
+    console.warn('Chargement des Bulles Mnoria interrompu :', error);
+    if (_mnoriaBubbleTrendsClientCache.length) return _mnoriaBubbleTrendsClientCache;
+    return buildFallbackMnoriaBubbleTrends();
   }
 }
 
-// Retour Agôn -> Actu : le cache global peut être momentanément vide si un rafraîchissement
+// Retour Mnoria -> Actu : le cache global peut être momentanément vide si un rafraîchissement
 // de l'index s'est produit pendant une bascule. Dans ce cas, recharge le nuage Actu avant de
-// quitter visuellement Agôn, afin de ne jamais valider une transition vers un cadre vide.
+// quitter visuellement Mnoria, afin de ne jamais valider une transition vers un cadre vide.
 async function resolveActuBubbleTrends() {
-  const cached = Array.isArray(window.AGON_TAG_TRENDS)
-    ? window.AGON_TAG_TRENDS.filter((item) => String(item?.tag || '').trim())
+  const cached = Array.isArray(window.MNORIA_TAG_TRENDS)
+    ? window.MNORIA_TAG_TRENDS.filter((item) => String(item?.tag || '').trim())
     : [];
   if (cached.length) return cached;
 
@@ -19445,7 +19504,7 @@ async function resolveActuBubbleTrends() {
     const fresh = Array.isArray(result?.bubbles)
       ? result.bubbles.filter((item) => String(item?.tag || '').trim())
       : [];
-    if (fresh.length) window.AGON_TAG_TRENDS = fresh;
+    if (fresh.length) window.MNORIA_TAG_TRENDS = fresh;
     return fresh;
   } catch (error) {
     console.warn('Rechargement des Bulles Actu interrompu :', error);
@@ -19453,11 +19512,11 @@ async function resolveActuBubbleTrends() {
   }
 }
 
-// Résout les débats du top 10 des Bulles Agôn dans l'ordre du nuage : ceux déjà
+// Résout les débats du top 10 des Bulles Mnoria dans l'ordre du nuage : ceux déjà
 // dans debatesCache sont réutilisés tels quels, les autres (arènes anciennes hors
 // des débats récents de l'index) sont récupérés via GET /api/debates?ids=…, avec
-// le même garde-fou de 5s que fetchAgonBubbleTrends.
-async function loadAgonBubbleTensionDebates(trends) {
+// le même garde-fou de 5s que fetchMnoriaBubbleTrends.
+async function loadMnoriaBubbleTensionDebates(trends) {
   const subjectIds = (Array.isArray(trends) ? trends : [])
     .map((item) => String(item?.subjectId || "").trim())
     .filter(Boolean);
@@ -19477,7 +19536,7 @@ async function loadAgonBubbleTensionDebates(trends) {
         if (debate && debate.id != null) debateById.set(String(debate.id), debate);
       });
     } catch (error) {
-      console.warn('Chargement des arènes du top 10 Agôn interrompu :', error);
+      console.warn('Chargement des arènes du top 10 Mnoria interrompu :', error);
     }
   }
 
@@ -19485,68 +19544,68 @@ async function loadAgonBubbleTensionDebates(trends) {
 }
 
 // Met le segment actif du sélecteur en phase avec le mode courant
-function syncAgonCloudModeSwitch() {
-  document.getElementById('agon-cloud-mode-actu')?.classList.toggle('agon-cloud-mode-segment-active', !_memoireCloudMode && !_agonCloudMode);
-  document.getElementById('agon-cloud-mode-agon-btn')?.classList.toggle('agon-cloud-mode-segment-active', !_memoireCloudMode && _agonCloudMode);
-  document.getElementById('agon-cloud-mode-memoire-btn')?.classList.toggle('agon-cloud-mode-segment-active', _memoireCloudMode);
-  // Bouton "Autres actus" masqué en Bulles Agôn / Ma mémoire (demande du 09/08/2026) : n'a de
+function syncMnoriaCloudModeSwitch() {
+  document.getElementById('mnoria-cloud-mode-actu')?.classList.toggle('mnoria-cloud-mode-segment-active', !_memoireCloudMode && !_mnoriaCloudMode);
+  document.getElementById('mnoria-cloud-mode-mnoria-btn')?.classList.toggle('mnoria-cloud-mode-segment-active', !_memoireCloudMode && _mnoriaCloudMode);
+  document.getElementById('mnoria-cloud-mode-memoire-btn')?.classList.toggle('mnoria-cloud-mode-segment-active', _memoireCloudMode);
+  // Bouton "Autres actus" masqué en Bulles Mnoria / Ma mémoire (demande du 09/08/2026) : n'a de
   // sens qu'en Bulles Actu, seul mode qui affiche réellement des arènes liées à l'actualité.
-  const tribunesBtn = document.querySelector('.agon-tribunes-btn');
-  if (tribunesBtn) tribunesBtn.hidden = _memoireCloudMode || _agonCloudMode;
+  const tribunesBtn = document.querySelector('.mnoria-tribunes-btn');
+  if (tribunesBtn) tribunesBtn.hidden = _memoireCloudMode || _mnoriaCloudMode;
   // Légende toujours visible désormais, quel que soit le mode : Bulles Actu (texte par défaut du
-  // HTML), Bulles Agôn et Ma mémoire réécrivent chacun son propre texte dans ce même élément
-  // (cf. toggleAgonCloud / setMemoireCloudMode, caption.textContent) — plus de raison de la
+  // HTML), Bulles Mnoria et Ma mémoire réécrivent chacun son propre texte dans ce même élément
+  // (cf. toggleMnoriaCloud / setMemoireCloudMode, caption.textContent) — plus de raison de la
   // masquer une fois qu'elle a toujours un contenu pertinent (demande du 09/08/2026, retire le
   // masquage ajouté plus tôt pour Ma mémoire).
-  // Bandeau "Ce jour dans l'Histoire / Connaissances / Éclairages" masqué en Bulles Agôn / Ma
+  // Bandeau "Ce jour dans l'Histoire / Connaissances / Éclairages" masqué en Bulles Mnoria / Ma
   // mémoire (demande du 09/08/2026), même logique que le bouton "Autres actus" ci-dessus : ces
   // raccourcis n'ont de sens qu'en Bulles Actu. display en ligne (pas l'attribut hidden) :
   // .home-secondary-actions pose déjà display:flex dans une règle CSS de même spécificité que
   // le [hidden] par défaut du navigateur, qui perdrait face à elle (même piège déjà rencontré
   // sur #index-active-filters, cf. setMemoireCloudMode).
   const secondaryActions = document.querySelector('.home-secondary-actions');
-  if (secondaryActions) secondaryActions.style.display = (_memoireCloudMode || _agonCloudMode) ? 'none' : '';
+  if (secondaryActions) secondaryActions.style.display = (_memoireCloudMode || _mnoriaCloudMode) ? 'none' : '';
 }
 
 // Cible explicitement un mode (utilisé par les segments du sélecteur)
-function setAgonCloudMode(enableAgon) {
-  const targetAgonMode = Boolean(enableAgon);
-  _agonCloudRequestedMode = targetAgonMode;
+function setMnoriaCloudMode(enableMnoria) {
+  const targetMnoriaMode = Boolean(enableMnoria);
+  _mnoriaCloudRequestedMode = targetMnoriaMode;
   const wasMemoireMode = _memoireCloudMode;
   if (_memoireCloudMode) {
-    // skipSync=true : toggleAgonCloud() ci-dessous reçoit la vraie cible finale et
+    // skipSync=true : toggleMnoriaCloud() ci-dessous reçoit la vraie cible finale et
     // synchronisera lui-même le sélecteur une fois celle-ci acquise (cf. setMemoireCloudMode).
     setMemoireCloudMode(false, true);
   }
-  if (targetAgonMode === _agonCloudMode && !_agonCloudSwitchLoading && !wasMemoireMode) return;
-  // Pas de garde sur _agonCloudSwitchLoading ici (retirée le 09/08/2026, "je clique ... ça ne
-  // répond pas") : un précédent switch encore "en chargement" (fetch /api/agon-bubbles lent,
+  if (targetMnoriaMode === _mnoriaCloudMode && !_mnoriaCloudSwitchLoading && !wasMemoireMode) return;
+  // Pas de garde sur _mnoriaCloudSwitchLoading ici (retirée le 09/08/2026, "je clique ... ça ne
+  // répond pas") : un précédent switch encore "en chargement" (fetch /api/mnoria-bubbles lent,
   // jusqu'à 5-6.5s) bloquait silencieusement tout nouveau clic jusqu'à son propre abandon —
-  // le clic de l'utilisateur ne faisait alors rien du tout. beginAgonCloudSwitchLoading (dans
-  // toggleAgonCloud) reprend la main proprement à tout moment (nouveau jeton, nouveau timer de
+  // le clic de l'utilisateur ne faisait alors rien du tout. beginMnoriaCloudSwitchLoading (dans
+  // toggleMnoriaCloud) reprend la main proprement à tout moment (nouveau jeton, nouveau timer de
   // sécurité) ; la résolution tardive de l'ancien fetch est de toute façon ignorée grâce au
-  // jeton (_agonCloudSwitchToken / window._agonCloudModeToken) qu'elle ne matche plus.
-  // La cible est transmise explicitement : pendant un retour Agôn -> Actu encore en vol,
-  // _agonCloudMode vaut toujours true. Un nouveau clic sur "Bulles Agôn" ne doit donc pas
+  // jeton (_mnoriaCloudSwitchToken / window._mnoriaCloudModeToken) qu'elle ne matche plus.
+  // La cible est transmise explicitement : pendant un retour Mnoria -> Actu encore en vol,
+  // _mnoriaCloudMode vaut toujours true. Un nouveau clic sur "Bulles Mnoria" ne doit donc pas
   // être interprété comme une nouvelle bascule vers Actu ni être ignoré à cause de cet état
-  // ancien ; le nouveau jeton invalide la transition précédente et impose bien Agôn.
-  toggleAgonCloud(targetAgonMode);
+  // ancien ; le nouveau jeton invalide la transition précédente et impose bien Mnoria.
+  toggleMnoriaCloud(targetMnoriaMode);
 }
 
 // ── Mode "Ma mémoire" embarqué sur l'accueil (demande du 08/08/2026 : "je veux voir
 // juste mes bulles mémoire ... rien de plus", directement sur l'accueil plutôt que sur
-// une page à part) ── Réutilise le même conteneur #agon-tag-trends-cloud que Bulles
-// Actu/Bulles Agôn (mon-univers.js retombe dessus si #agon-universe-cloud est absent
+// une page à part) ── Réutilise le même conteneur #mnoria-tag-trends-cloud que Bulles
+// Actu/Bulles Mnoria (mon-univers.js retombe dessus si #mnoria-universe-cloud est absent
 // de la page, cf. mon-univers.js) — jamais un 2e cadre de bulles séparé. Charge
 // mon-univers.js en import dynamique, une seule fois, au premier clic (même principe
-// que le chargement paresseux de tagTrendCloud.js pour Bulles Agôn).
+// que le chargement paresseux de tagTrendCloud.js pour Bulles Mnoria).
 let _memoireCloudMode = false;
 let _memoireModuleLoadPromise = null;
 
 function setMemoireCloudMode(enable, skipSync = false) {
   const enableMemoire = Boolean(enable);
   if (enableMemoire === _memoireCloudMode) {
-    document.body.classList.toggle('agon-memoire-cloud-mode', enableMemoire);
+    document.body.classList.toggle('mnoria-memoire-cloud-mode', enableMemoire);
     // Reclique sur l'onglet "Ma mémoire" alors qu'on y est déjà, potentiellement à un niveau
     // profond (galaxie/système) : ramène à la racine (galaxies), comme un clic sur le premier
     // crumb du fil d'Ariane — demande du 09/08/2026, "ça devrait me ramener à la première page".
@@ -19555,90 +19614,90 @@ function setMemoireCloudMode(enable, skipSync = false) {
     }
     return;
   }
-  // Pas de garde sur _agonCloudSwitchLoading ici (retirée le 09/08/2026, "je clique ... ça ne
-  // répond pas") : un fetch Actu/Agôn encore en chargement (jusqu'à 5-6.5s) bloquait
+  // Pas de garde sur _mnoriaCloudSwitchLoading ici (retirée le 09/08/2026, "je clique ... ça ne
+  // répond pas") : un fetch Actu/Mnoria encore en chargement (jusqu'à 5-6.5s) bloquait
   // silencieusement ce clic jusqu'à l'abandon de l'ancien switch. À la place, on invalide tout
   // de suite l'ancien switch et on nettoie nous-mêmes son état "chargement" (spinner/bloqueurs
   // de scroll/classes), puisque lui ne le fera plus jamais — son propre callback et son propre
-  // timer de sécurité vérifient tous deux _agonCloudSwitchToken (incrémenté juste après) et ne
+  // timer de sécurité vérifient tous deux _mnoriaCloudSwitchToken (incrémenté juste après) et ne
   // feront donc plus rien une fois celui-ci périmé.
-  cleanupStaleAgonCloudSwitchBlockers(true);
-  // Invalide tout fetch Actu/Agôn encore en vol depuis un switch précédent : mêmes jetons que
-  // toggleAgonCloud/setPoliticalCloudGroup (_agonCloudSwitchToken, vérifié par leurs callbacks
+  cleanupStaleMnoriaCloudSwitchBlockers(true);
+  // Invalide tout fetch Actu/Mnoria encore en vol depuis un switch précédent : mêmes jetons que
+  // toggleMnoriaCloud/setPoliticalCloudGroup (_mnoriaCloudSwitchToken, vérifié par leurs callbacks
   // async existants) + le pendant exposé sur window pour mon-univers.js (module séparé, sans
-  // accès à _agonCloudSwitchToken) — cf. déclarations plus haut.
-  _agonCloudSwitchToken++;
-  window._agonCloudModeToken++;
+  // accès à _mnoriaCloudSwitchToken) — cf. déclarations plus haut.
+  _mnoriaCloudSwitchToken++;
+  window._mnoriaCloudModeToken++;
   _memoireCloudMode = enableMemoire;
-  document.body.classList.toggle('agon-memoire-cloud-mode', _memoireCloudMode);
-  const beforeEl = document.getElementById('agon-memoire-embed-before');
-  const afterEl = document.getElementById('agon-memoire-embed-after');
-  const politicalSwitch = document.getElementById('agon-political-cloud-switch');
-  const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
+  document.body.classList.toggle('mnoria-memoire-cloud-mode', _memoireCloudMode);
+  const beforeEl = document.getElementById('mnoria-memoire-embed-before');
+  const afterEl = document.getElementById('mnoria-memoire-embed-after');
+  const politicalSwitch = document.getElementById('mnoria-political-cloud-switch');
+  const caption = document.querySelector('#mnoria-tag-trends-section .mnoria-tag-trends-caption');
   // En entrant dans Ma mémoire, le contenu n'est pas encore connu : garde la légende masquée
   // jusqu'à ce que mon-univers.js confirme qu'au moins un niveau contient des éléments.
-  // Les modes Actu/Agôn, eux, repartent immédiatement avec leur légende visible.
+  // Les modes Actu/Mnoria, eux, repartent immédiatement avec leur légende visible.
   if (caption) caption.hidden = _memoireCloudMode;
   if (_memoireCloudMode) {
     if (beforeEl) beforeEl.hidden = false;
     if (afterEl) afterEl.hidden = false;
     if (politicalSwitch) politicalSwitch.hidden = true;
-    // Même légende que Bulles Actu/Agôn juste au-dessus (même sauvegarde/restauration —
-    // cf. toggleAgonCloud, _agonCloudOriginalCaptionHtml) : plus de raison de la masquer
-    // (syncAgonCloudModeSwitch) une fois qu'elle a un texte propre à ce mode — demande du
+    // Même légende que Bulles Actu/Mnoria juste au-dessus (même sauvegarde/restauration —
+    // cf. toggleMnoriaCloud, _mnoriaCloudOriginalCaptionHtml) : plus de raison de la masquer
+    // (syncMnoriaCloudModeSwitch) une fois qu'elle a un texte propre à ce mode — demande du
     // 09/08/2026.
     if (caption) {
-      if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
-      caption.textContent = "Les connaissances acquises grâce à agôn, ancrées ou en cours d'ancrage dans ta mémoire.";
+      if (_mnoriaCloudOriginalCaptionHtml === null) _mnoriaCloudOriginalCaptionHtml = caption.innerHTML;
+      caption.textContent = "Les connaissances acquises grâce à mnoria, ancrées ou en cours d'ancrage dans ta mémoire.";
     }
-    // La classe Bulles Agôn (dégradés/couleurs inversées, cf. .agon-cloud-mode-agon
-    // .agon-tag-bubble) resterait posée sur ce même conteneur partagé si on arrive ici
-    // depuis le mode Agôn — sans ce retrait, les bulles "Ma mémoire" hériteraient de ce
+    // La classe Bulles Mnoria (dégradés/couleurs inversées, cf. .mnoria-cloud-mode-mnoria
+    // .mnoria-tag-bubble) resterait posée sur ce même conteneur partagé si on arrive ici
+    // depuis le mode Mnoria — sans ce retrait, les bulles "Ma mémoire" hériteraient de ce
     // jeu de couleurs inversé au lieu du rendu habituel de mon-univers.js.
-    const cloudContainer = document.getElementById('agon-tag-trends-cloud');
-    cloudContainer?.classList.remove('agon-cloud-mode-agon');
+    const cloudContainer = document.getElementById('mnoria-tag-trends-cloud');
+    cloudContainer?.classList.remove('mnoria-cloud-mode-mnoria');
     // Fond/dimensions dédiés de "Ma mémoire" (image de fond, cadre carré, cf. style.css
-    // .agon-memoire-frame) — demande du 08/08/2026 "le fond de ma mémoire n'est pas le bon" :
+    // .mnoria-memoire-frame) — demande du 08/08/2026 "le fond de ma mémoire n'est pas le bon" :
     // sans cette classe, le conteneur partagé gardait le fond par défaut de l'accueil.
-    cloudContainer?.classList.add('agon-memoire-frame');
+    cloudContainer?.classList.add('mnoria-memoire-frame');
     // Efface le margin-top inline posé par alignStandaloneBubbleFrameToActiveFilter (calculé
-    // en mode Actu/Agôn pour aligner le cadre sous le tag de filtre actif, potentiellement
+    // en mode Actu/Mnoria pour aligner le cadre sous le tag de filtre actif, potentiellement
     // reposé dès le pré-rendu par le script inline d'index.html) : sans ce reset, ce décalage
     // négatif restait appliqué au cadre "Ma mémoire" alors que le tag de filtre y est masqué,
     // remontant tout le cadre sans bouger le fil d'Ariane (positionné indépendamment sur la
     // section) — celui-ci se retrouvait enfoncé loin sous son bord haut au lieu d'y rester
     // collé (demande du 10/08/2026, "le fil d'ariane des bulles ma mémoire n'est pas bien placé").
     if (cloudContainer) cloudContainer.style.marginTop = '';
-    // Bulles Actu/Agôn encore affichées (textes/badges de tendance, satellites) : le fond
+    // Bulles Actu/Mnoria encore affichées (textes/badges de tendance, satellites) : le fond
     // devient celui de "Ma mémoire" à l'instant ci-dessus, mais mon-univers.js (import
     // dynamique, ou fetch réseau si pas encore en cache) ne les remplace par les bulles
     // galaxies qu'un peu plus tard — sans ce nettoyage immédiat, elles restaient visibles par-
     // dessus le nouveau fond en attendant (même bug que la direction inverse, déjà corrigée :
     // demande du 09/08/2026, "il s'agit des textes des bulles communautés avec un mélange des
     // visuels bulles actu et communauté").
-    cloudContainer?.querySelectorAll('.agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector, .agon-tag-orbit-line').forEach((el) => el.remove());
-    // Même comportement de chargement que Bulles Actu/Agôn : le fond Ma mémoire est déjà
-    // visible grâce à .agon-memoire-frame, puis le sablier tourne dans ce cadre jusqu'au
+    cloudContainer?.querySelectorAll('.mnoria-tag-bubble, .mnoria-tag-center-btn, .mnoria-tag-label-overlay, .mnoria-tag-trend, .mnoria-tag-trend-connector, .mnoria-tag-orbit-line').forEach((el) => el.remove());
+    // Même comportement de chargement que Bulles Actu/Mnoria : le fond Ma mémoire est déjà
+    // visible grâce à .mnoria-memoire-frame, puis le sablier tourne dans ce cadre jusqu'au
     // callback de rendu des neurones déclenché par mon-univers.js.
     showBubbleCloudLoadingSpinner({ switchMode: true });
-    // Le filtre "Arènes ouvertes par agôn/la communauté" ne devait déjà plus s'appliquer
+    // Le filtre "Arènes ouvertes par mnoria/la communauté" ne devait déjà plus s'appliquer
     // pendant "Ma mémoire" (cf. commentaire ci-dessous), mais seul son TAG était masqué —
-    // currentTypeFilter restait actif en coulisses : si "Communauté" (ou "Agôn"/"Débats"/
+    // currentTypeFilter restait actif en coulisses : si "Communauté" (ou "Mnoria"/"Débats"/
     // "Questions") était sélectionné juste avant de basculer sur "Ma mémoire", le carrousel
     // d'arènes sous les bulles restait silencieusement filtré, sans aucun indice visible
     // (demande du 10/08/2026, "il doit y avoir tous les articles et aussi les arènes des
     // utilisateurs, tout mélangé"). setTypeFilter("all") remet réellement le filtre à zéro
     // (et rafraîchit la liste), pas seulement son affichage.
     if (currentTypeFilter !== 'all') setTypeFilter('all');
-    // Tag de filtre "Arènes ouvertes par agôn/la communauté" (cf. renderIndexActiveFilterTags,
+    // Tag de filtre "Arènes ouvertes par mnoria/la communauté" (cf. renderIndexActiveFilterTags,
     // reflète currentTypeFilter — sans rapport avec le mode bulles) : n'a aucun sens pendant la
     // navigation "Ma mémoire", qui ne filtre aucune liste d'arènes — demande du 08/08/2026.
     // Sur mobile, conserve sa hauteur mais masque son contenu : display:none retirait environ
-    // 32px du flux et remontait le cadre Ma mémoire par rapport aux cadres Actu/Agôn. Sur
+    // 32px du flux et remontait le cadre Ma mémoire par rapport aux cadres Actu/Mnoria. Sur
     // desktop, où cet alignement mobile ne s'applique pas, il peut rester retiré du flux.
     const activeFiltersEl = document.getElementById('index-active-filters');
     if (activeFiltersEl) {
-      if (isAgonMobileCloudViewport()) {
+      if (isMnoriaMobileCloudViewport()) {
         activeFiltersEl.style.display = '';
         activeFiltersEl.style.visibility = 'hidden';
         activeFiltersEl.style.pointerEvents = 'none';
@@ -19647,8 +19706,8 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260816-breadcrumb-root-hidden').catch((error) => {
-        console.warn('[Agôn] Module Ma mémoire indisponible :', error);
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260817-moon-closer2').catch((error) => {
+        console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
         return null;
@@ -19656,38 +19715,38 @@ function setMemoireCloudMode(enable, skipSync = false) {
     } else {
       // Retour sur "Ma mémoire" après un premier passage : le module est déjà évalué (import
       // mis en cache), son loadUniverse() de premier chargement ne se relance donc pas tout
-      // seul — sans cet appel explicite, les bulles Actu/Agôn affichées entre-temps restaient
+      // seul — sans cet appel explicite, les bulles Actu/Mnoria affichées entre-temps restaient
       // à l'écran par-dessus le nouveau fond (demande du 09/08/2026, "ça mélange tout").
       _memoireModuleLoadPromise.then((mod) => mod?.reinitMemoireEmbed?.());
     }
   } else {
     if (beforeEl) beforeEl.hidden = true;
     if (afterEl) afterEl.hidden = true;
-    // Filet de sécurité : mon-univers.js a pu masquer #agon-tag-trends-cloud et/ou
+    // Filet de sécurité : mon-univers.js a pu masquer #mnoria-tag-trends-cloud et/ou
     // afficher #universe-status (état "vide"/"erreur") pendant le mode mémoire — sans
-    // ce reset, le nuage Actu/Agôn qu'on rebascule juste après resterait invisible.
+    // ce reset, le nuage Actu/Mnoria qu'on rebascule juste après resterait invisible.
     const statusEl = document.getElementById('universe-status');
     if (statusEl) statusEl.hidden = true;
-    const cloudEl = document.getElementById('agon-tag-trends-cloud');
+    const cloudEl = document.getElementById('mnoria-tag-trends-cloud');
     if (cloudEl) cloudEl.hidden = false;
     // En standalone mobile, le cadre "Ma mémoire" possède déjà la bonne position verticale
     // via sa marge CSS dédiée (-84px actuellement). Lorsqu'on retire sa classe ci-dessous,
     // cette marge disparaissait immédiatement : le cadre partagé descendait pendant le fetch
-    // des Bulles Agôn, puis alignStandaloneBubbleFrameToActiveFilter le remontait seulement
+    // des Bulles Mnoria, puis alignStandaloneBubbleFrameToActiveFilter le remontait seulement
     // après l'apparition du tag "Communauté". Conserve donc la position effectivement rendue
     // avant de changer de fond ; le recalage normal affinera ensuite cette même marge dès que
     // le filtre cible sera disponible, sans image intermédiaire trop basse.
     const departingMemoireMarginTop = (
       cloudEl &&
       document.body.classList.contains('is-standalone') &&
-      isAgonMobileCloudViewport()
+      isMnoriaMobileCloudViewport()
     ) ? parseFloat(getComputedStyle(cloudEl).marginTop) : NaN;
-    cloudEl?.classList.remove('agon-memoire-frame');
+    cloudEl?.classList.remove('mnoria-memoire-frame');
     if (cloudEl && Number.isFinite(departingMemoireMarginTop)) {
       cloudEl.style.marginTop = departingMemoireMarginTop + 'px';
     }
     // La nouvelle vue spatiale monte une fenêtre caméra complète dans le conteneur partagé.
-    // Retirer seulement .agon-memoire-frame changeait bien le pseudo-fond du cadre, mais la
+    // Retirer seulement .mnoria-memoire-frame changeait bien le pseudo-fond du cadre, mais la
     // couche réelle .universe-zoom-background (enfant de cette fenêtre) restait au-dessus : le
     // fond Mnoria demeurait donc visible derrière les Bulles Actu et Communauté. Supprime toute
     // la scène dès la sortie ; reinitMemoireEmbed() la reconstruira proprement au prochain
@@ -19698,22 +19757,22 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // à côté des bulles (pas dedans) — clearTagTrendCloudVisualItems (tagTrendCloud.js,
     // générique) ne les connaît pas et ne les retire donc jamais. mon-univers.js les nettoie
     // lui-même à chaque changement de niveau EN INTERNE, mais rien ne le fait quand on quitte
-    // "Ma mémoire" pour Bulles Actu/Agôn : ils restaient superposés aux nouvelles bulles
+    // "Ma mémoire" pour Bulles Actu/Mnoria : ils restaient superposés aux nouvelles bulles
     // (demande du 09/08/2026, "les bulles qui se mélangent quand on passe de bulles mémoire à
     // bulles actus").
     cloudEl?.querySelectorAll('.universe-mini-star, .universe-star-moon, .universe-star-sparkle, .universe-galaxy-moon').forEach((el) => el.remove());
-    // Bulles galaxies/systèmes/étoiles de "Ma mémoire" elles-mêmes : le fond redevient Actu/Agôn
-    // à l'instant (retrait de .agon-memoire-frame juste au-dessus), mais Bulles Agôn ne remplace
-    // ces bulles qu'après son fetch réseau (fetchAgonBubbleTrends, pas instantané) — sans ce
+    // Bulles galaxies/systèmes/étoiles de "Ma mémoire" elles-mêmes : le fond redevient Actu/Mnoria
+    // à l'instant (retrait de .mnoria-memoire-frame juste au-dessus), mais Bulles Mnoria ne remplace
+    // ces bulles qu'après son fetch réseau (fetchMnoriaBubbleTrends, pas instantané) — sans ce
     // nettoyage immédiat, les bulles "Ma mémoire" restaient visibles par-dessus le nouveau fond
     // pendant tout le chargement (demande du 09/08/2026, "le fond des bulles actu avec les
     // galaxies de ma mémoire, le temps du chargement"). Bulles Actu, dont le rendu est
-    // synchrone (window.AGON_TAG_TRENDS déjà en mémoire), n'a pas ce délai mais ce nettoyage ne
+    // synchrone (window.MNORIA_TAG_TRENDS déjà en mémoire), n'a pas ce délai mais ce nettoyage ne
     // lui nuit pas non plus.
-    cloudEl?.querySelectorAll('.agon-tag-bubble, .agon-tag-center-btn, .agon-tag-label-overlay, .agon-tag-trend, .agon-tag-trend-connector, .agon-tag-orbit-line').forEach((el) => el.remove());
+    cloudEl?.querySelectorAll('.mnoria-tag-bubble, .mnoria-tag-center-btn, .mnoria-tag-label-overlay, .mnoria-tag-trend, .mnoria-tag-trend-connector, .mnoria-tag-orbit-line').forEach((el) => el.remove());
     // Retire le display:none posé à l'entrée en mode mémoire puis redessine réellement le tag
     // (pas juste un reset de style) : currentTypeFilter a pu changer entre-temps via
-    // toggleAgonCloud (Actu/Agôn), le tag affiché doit refléter l'état à jour.
+    // toggleMnoriaCloud (Actu/Mnoria), le tag affiché doit refléter l'état à jour.
     const activeFiltersEl = document.getElementById('index-active-filters');
     if (activeFiltersEl) {
       activeFiltersEl.style.display = '';
@@ -19722,38 +19781,38 @@ function setMemoireCloudMode(enable, skipSync = false) {
     }
     renderIndexActiveFilterTags();
   }
-  // skipSync : utilisé par setAgonCloudMode quand on sort de "Ma mémoire" pour aller DIRECTEMENT
-  // vers Bulles Agôn — sans ça, cet appel synchronise le sélecteur avec _agonCloudMode encore à
-  // sa valeur d'avant (toggleAgonCloud() ne le passe à true qu'après son fetch asynchrone), ce
+  // skipSync : utilisé par setMnoriaCloudMode quand on sort de "Ma mémoire" pour aller DIRECTEMENT
+  // vers Bulles Mnoria — sans ça, cet appel synchronise le sélecteur avec _mnoriaCloudMode encore à
+  // sa valeur d'avant (toggleMnoriaCloud() ne le passe à true qu'après son fetch asynchrone), ce
   // qui calcule "aucun mode actif" comme "Bulles Actu" et l'allume brièvement à tort, avant que
-  // le vrai résultat (Bulles Agôn) ne s'affiche une fois le fetch terminé (demande du 09/08/2026,
-  // "bulles actus devient coloré ... avant que le bon bouton, bulles agon, devienne coloré").
-  // toggleAgonCloud() appelle de toute façon syncAgonCloudModeSwitch() lui-même une fois l'état
+  // le vrai résultat (Bulles Mnoria) ne s'affiche une fois le fetch terminé (demande du 09/08/2026,
+  // "bulles actus devient coloré ... avant que le bon bouton, bulles mnoria, devienne coloré").
+  // toggleMnoriaCloud() appelle de toute façon syncMnoriaCloudModeSwitch() lui-même une fois l'état
   // réel connu, cet appel-ci serait de toute façon immédiatement corrigé — juste visible entre
   // les deux.
-  if (!skipSync) syncAgonCloudModeSwitch();
+  if (!skipSync) syncMnoriaCloudModeSwitch();
   // Sans cet appel, la hauteur de section calculée par syncCloudSectionHeight (desktop/
   // standalone) restait celle d'avant l'entrée en "Ma mémoire" — le fil d'Ariane ajoutant de la
-  // hauteur en haut, le switch Bulles Actu/Agôn/Ma mémoire (en bas, sous la ligne de flottaison)
+  // hauteur en haut, le switch Bulles Actu/Mnoria/Ma mémoire (en bas, sous la ligne de flottaison)
   // se retrouvait poussé hors de la zone scrollable, donc invisible (retour du 09/08/2026).
-  // toggleAgonCloud/setPoliticalCloudGroup font déjà cet appel après leurs propres changements
+  // toggleMnoriaCloud/setPoliticalCloudGroup font déjà cet appel après leurs propres changements
   // de hauteur (légende, switch gauche/droite) — celui-ci en était le seul absent.
   syncCloudSectionHeight();
   syncMemoireMobileBackButtonPosition();
-  // Remesure la min-height standalone (cf. syncAgonHomeTrendsSectionMinHeight) juste après
+  // Remesure la min-height standalone (cf. syncMnoriaHomeTrendsSectionMinHeight) juste après
   // l'activation réelle de "Ma mémoire" : les déclencheurs génériques (resize/scroll/timers,
-  // bindAgonMobileViewportBottomFillSync) peuvent tomber pendant une fenêtre où la section
+  // bindMnoriaMobileViewportBottomFillSync) peuvent tomber pendant une fenêtre où la section
   // partagée est masquée par une tâche Actu concurrente (cf. garde-fou ajouté juste au-dessus
   // dans updateIndexTagTrends) — sans ce point d'ancrage dédié, une mesure ratée pendant cette
   // fenêtre ne se rattrapait qu'au hasard du prochain scroll/resize de l'utilisateur.
-  window.__agonSyncMobileBottomNavViewport?.();
+  window.__mnoriaSyncMobileBottomNavViewport?.();
 }
 
 // ── Filtre gauche/droite du nuage Bulles Actu (veille mixte) ──
 // Uniquement disponible en mode Bulles Actu : "mixed" réutilise les tendances déjà
-// chargées (window.AGON_TAG_TRENDS), "left"/"right" vont chercher les 2 nuages
+// chargées (window.MNORIA_TAG_TRENDS), "left"/"right" vont chercher les 2 nuages
 // dédiés (GET /api/cloud-bubbles-left|right), jamais mélangés au nuage général ni
-// au nuage communautaire Bulles Agôn.
+// au nuage communautaire Bulles Mnoria.
 let _politicalCloudGroup = 'mixed';
 
 // Légende adaptée au nuage affiché : même lien "en savoir plus" dans les 3 cas,
@@ -19766,13 +19825,13 @@ const POLITICAL_CLOUD_CAPTION_TEXT = {
 };
 
 function applyPoliticalCloudCaption(group) {
-  const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
+  const caption = document.querySelector('#mnoria-tag-trends-section .mnoria-tag-trends-caption');
   if (!caption) return;
   const text = POLITICAL_CLOUD_CAPTION_TEXT[group] || POLITICAL_CLOUD_CAPTION_TEXT.mixed;
   caption.innerHTML = text + POLITICAL_CLOUD_CAPTION_LINK_HTML;
   // La hauteur de la légende change (2 ou 3 lignes) : recale son ancrage et
   // l'espace symétrique avec le bandeau thématique (standalone mobile).
-  window.__agonSyncMobileBottomNavViewport?.();
+  window.__mnoriaSyncMobileBottomNavViewport?.();
 }
 
 async function fetchPoliticalBubbleTrends(group) {
@@ -19790,28 +19849,28 @@ async function fetchPoliticalBubbleTrends(group) {
 }
 
 function syncPoliticalCloudSwitch() {
-  document.getElementById('agon-political-cloud-mixed')?.classList.toggle('agon-cloud-mode-segment-active', _politicalCloudGroup === 'mixed');
-  document.getElementById('agon-political-cloud-left')?.classList.toggle('agon-cloud-mode-segment-active', _politicalCloudGroup === 'left');
-  document.getElementById('agon-political-cloud-right')?.classList.toggle('agon-cloud-mode-segment-active', _politicalCloudGroup === 'right');
+  document.getElementById('mnoria-political-cloud-mixed')?.classList.toggle('mnoria-cloud-mode-segment-active', _politicalCloudGroup === 'mixed');
+  document.getElementById('mnoria-political-cloud-left')?.classList.toggle('mnoria-cloud-mode-segment-active', _politicalCloudGroup === 'left');
+  document.getElementById('mnoria-political-cloud-right')?.classList.toggle('mnoria-cloud-mode-segment-active', _politicalCloudGroup === 'right');
 }
 
 function setPoliticalCloudGroup(group) {
-  if (_agonCloudMode) return;
+  if (_mnoriaCloudMode) return;
   if (group === _politicalCloudGroup) return;
-  if (_agonCloudSwitchLoading) return;
-  const container = document.querySelector('#agon-tag-trends-cloud');
+  if (_mnoriaCloudSwitchLoading) return;
+  const container = document.querySelector('#mnoria-tag-trends-cloud');
   if (!container || !window._tagTrendCloudModule) return;
 
-  const token = beginAgonCloudSwitchLoading(container);
-  afterAgonCloudSpinnerPaint(async () => {
-    const trends = group === 'mixed' ? (window.AGON_TAG_TRENDS || []) : await fetchPoliticalBubbleTrends(group);
-    if (token !== _agonCloudSwitchToken) return;
+  const token = beginMnoriaCloudSwitchLoading(container);
+  afterMnoriaCloudSpinnerPaint(async () => {
+    const trends = group === 'mixed' ? (window.MNORIA_TAG_TRENDS || []) : await fetchPoliticalBubbleTrends(group);
+    if (token !== _mnoriaCloudSwitchToken) return;
 
     // renderTagTrendCloud() ne déclenche jamais son callback quand trends est vide
     // (cf. tagTrendCloud.js) — sans ce garde-fou le sablier tournerait indéfiniment,
-    // exactement comme le gère déjà toggleAgonCloud() pour le même cas.
+    // exactement comme le gère déjà toggleMnoriaCloud() pour le même cas.
     if (!trends.length) {
-      finishAgonCloudSwitchLoading(token, container);
+      finishMnoriaCloudSwitchLoading(token, container);
       return;
     }
 
@@ -19822,25 +19881,25 @@ function setPoliticalCloudGroup(group) {
     // le <br> mobile disparaissant en desktop) : resynchronise la hauteur de la section
     // desktop, sinon le bandeau "À la une" qui suit peut recouvrir le bas de la légende.
     syncCloudSectionHeight();
-    // Teinte légèrement les bulles selon le nuage affiché (cf. .agon-cloud-political-*
+    // Teinte légèrement les bulles selon le nuage affiché (cf. .mnoria-cloud-political-*
     // dans style.css) — purement visuel, aucun impact sur le rendu lui-même.
-    container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
-    if (group === 'left' || group === 'right') container.classList.add('agon-cloud-political-' + group);
+    container.classList.remove('mnoria-cloud-political-left', 'mnoria-cloud-political-right');
+    if (group === 'left' || group === 'right') container.classList.add('mnoria-cloud-political-' + group);
     // Les thématiques sous le nuage doivent suivre le même nuage (cf. filtre
     // _politicalCloudGroup ajouté dans getFilteredDebatesForIndex) — on force le
-    // filtre "agon" pour rester cohérent avec le mode Bulles Actu, comme le fait déjà
-    // toggleAgonCloud() pour Bulles Agôn.
-    setTypeFilter("agon");
+    // filtre "mnoria" pour rester cohérent avec le mode Bulles Actu, comme le fait déjà
+    // toggleMnoriaCloud() pour Bulles Mnoria.
+    setTypeFilter("mnoria");
     window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
-      finishAgonCloudSwitchLoading(token, container);
+      finishMnoriaCloudSwitchLoading(token, container);
     });
     showBubbleCloudLoadingSpinner({ switchMode: true });
   });
 }
 
-function toggleAgonCloud(targetAgonMode = !_agonCloudMode) {
-  const container = document.querySelector('#agon-tag-trends-cloud');
-  const caption = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
+function toggleMnoriaCloud(targetMnoriaMode = !_mnoriaCloudMode) {
+  const container = document.querySelector('#mnoria-tag-trends-cloud');
+  const caption = document.querySelector('#mnoria-tag-trends-section .mnoria-tag-trends-caption');
   if (!container) return;
   if (!window._tagTrendCloudModule) {
     // Un clic peut arriver pendant l'import initial de tagTrendCloud.js. Auparavant il était
@@ -19848,77 +19907,77 @@ function toggleAgonCloud(targetAgonMode = !_agonCloudMode) {
     // fois le module prêt, sauf si un clic plus récent ou Ma mémoire a pris le relais.
     Promise.resolve(indexTagTrendCloudModulePromise).then((cloudModule) => {
       window._tagTrendCloudModule = cloudModule;
-      if (_memoireCloudMode || _agonCloudRequestedMode !== Boolean(targetAgonMode)) return;
-      toggleAgonCloud(Boolean(targetAgonMode));
+      if (_memoireCloudMode || _mnoriaCloudRequestedMode !== Boolean(targetMnoriaMode)) return;
+      toggleMnoriaCloud(Boolean(targetMnoriaMode));
     }).catch((error) => {
-      console.warn('[Agôn] Module de rendu des bulles indisponible :', error);
+      console.warn('[Mnoria] Module de rendu des bulles indisponible :', error);
     });
     return;
   }
 
-  if (!targetAgonMode) {
-    const token = beginAgonCloudSwitchLoading(container);
-    afterAgonCloudSpinnerPaint(async () => {
-      // Ne retire pas encore les bulles Agôn : si le cache Actu a été vidé par un
+  if (!targetMnoriaMode) {
+    const token = beginMnoriaCloudSwitchLoading(container);
+    afterMnoriaCloudSpinnerPaint(async () => {
+      // Ne retire pas encore les bulles Mnoria : si le cache Actu a été vidé par un
       // rafraîchissement concurrent, on tente d'abord de le restaurer. En cas d'échec,
-      // le mode Agôn reste intact au lieu d'aboutir à un cadre vide.
+      // le mode Mnoria reste intact au lieu d'aboutir à un cadre vide.
       const trends = await resolveActuBubbleTrends();
-      if (token !== _agonCloudSwitchToken) return;
+      if (token !== _mnoriaCloudSwitchToken) return;
       if (!trends.length) {
-        finishAgonCloudSwitchLoading(token, container);
+        finishMnoriaCloudSwitchLoading(token, container);
         return;
       }
 
-      _agonCloudMode = false;
-      _agonBubbleTensionDebates = [];
-      container.classList.remove('agon-cloud-mode-agon');
-      syncAgonCloudModeSwitch();
+      _mnoriaCloudMode = false;
+      _mnoriaBubbleTensionDebates = [];
+      container.classList.remove('mnoria-cloud-mode-mnoria');
+      syncMnoriaCloudModeSwitch();
       // Retour en Bulles Actu : le filtre gauche/droite redevient disponible, repart
       // toujours sur "Général" pour rester simple et prévisible.
       _politicalCloudGroup = 'mixed';
       syncPoliticalCloudSwitch();
-      container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
-      document.getElementById('agon-political-cloud-switch')?.removeAttribute('hidden');
-      if (caption && _agonCloudOriginalCaptionHtml !== null) caption.innerHTML = _agonCloudOriginalCaptionHtml;
-      window.__agonSyncMobileBottomNavViewport?.();
+      container.classList.remove('mnoria-cloud-political-left', 'mnoria-cloud-political-right');
+      document.getElementById('mnoria-political-cloud-switch')?.removeAttribute('hidden');
+      if (caption && _mnoriaCloudOriginalCaptionHtml !== null) caption.innerHTML = _mnoriaCloudOriginalCaptionHtml;
+      window.__mnoriaSyncMobileBottomNavViewport?.();
       // La légende change de hauteur entre les modes : resynchronise la hauteur de la
       // section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
       syncCloudSectionHeight();
       window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
-        // Retour aux Bulles Actu : on restaure le filtre "Arènes ouvertes par agôn"
-        // retiré temporairement par le mode Bulles Agôn.
-        if (currentTypeFilter !== "agon") {
-          setTypeFilter("agon");
+        // Retour aux Bulles Actu : on restaure le filtre "Arènes ouvertes par mnoria"
+        // retiré temporairement par le mode Bulles Mnoria.
+        if (currentTypeFilter !== "mnoria") {
+          setTypeFilter("mnoria");
         } else {
           applyIndexFilters();
         }
-        finishAgonCloudSwitchLoading(token, container);
+        finishMnoriaCloudSwitchLoading(token, container);
       });
       showBubbleCloudLoadingSpinner({ switchMode: true });
     });
     return;
   }
 
-  const token = beginAgonCloudSwitchLoading(container);
-  // Fond "Bulles Agôn" (.agon-cloud-mode-agon::before, cf. style.css) posé tout de suite, avant
+  const token = beginMnoriaCloudSwitchLoading(container);
+  // Fond "Bulles Mnoria" (.mnoria-cloud-mode-mnoria::before, cf. style.css) posé tout de suite, avant
   // même le fetch : sinon, en venant de "Ma mémoire" (fond retiré à l'instant par
   // setMemoireCloudMode), le cadre retombait sur le fond par défaut "Bulles Actu" pendant tout
   // le chargement — visible derrière le sablier (demande du 09/08/2026, "je vois le fond bulles
   // actu derrière le sablier"). Retiré ci-dessous si le fetch échoue/est vide, puisqu'on reste
   // alors en réalité en Bulles Actu.
-  container.classList.add('agon-cloud-mode-agon');
+  container.classList.add('mnoria-cloud-mode-mnoria');
 
-  afterAgonCloudSpinnerPaint(async () => {
-    const trends = await fetchAgonBubbleTrends();
-    if (token !== _agonCloudSwitchToken) return;
+  afterMnoriaCloudSpinnerPaint(async () => {
+    const trends = await fetchMnoriaBubbleTrends();
+    if (token !== _mnoriaCloudSwitchToken) return;
 
     if (!trends.length) {
-      container.classList.remove('agon-cloud-mode-agon');
+      container.classList.remove('mnoria-cloud-mode-mnoria');
       // Resynchronise le sélecteur même en échec (fetch vide/expiré) : si on arrivait de "Ma
-      // mémoire" (setAgonCloudMode, skipSync), rien d'autre ne l'aurait fait — sans ça, "Ma
+      // mémoire" (setMnoriaCloudMode, skipSync), rien d'autre ne l'aurait fait — sans ça, "Ma
       // mémoire" restait affiché comme actif alors qu'on n'y est plus.
-      syncAgonCloudModeSwitch();
-      finishAgonCloudSwitchLoading(token, container);
+      syncMnoriaCloudModeSwitch();
+      finishMnoriaCloudSwitchLoading(token, container);
       return;
     }
 
@@ -19926,35 +19985,35 @@ function toggleAgonCloud(targetAgonMode = !_agonCloudMode) {
     // du feed : le bandeau "Arènes sous tension" les place en tête (cf.
     // buildIndexThematicSectionsHtml) pour que le clic sur une bulle trouve
     // toujours sa carte.
-    _agonBubbleTensionDebates = await loadAgonBubbleTensionDebates(trends);
-    if (token !== _agonCloudSwitchToken) return;
+    _mnoriaBubbleTensionDebates = await loadMnoriaBubbleTensionDebates(trends);
+    if (token !== _mnoriaCloudSwitchToken) return;
 
     // Nombre d'idées (arguments pour/contre) par arène, posé sur chaque trendItem pour les
-    // satellites "atome" du nuage Agôn (cf. computeRelativeIdeaOrbitCounts, tagTrendCloud.js)
-    // — indexé par subjectId plutôt que par position : loadAgonBubbleTensionDebates peut avoir
+    // satellites "atome" du nuage Mnoria (cf. computeRelativeIdeaOrbitCounts, tagTrendCloud.js)
+    // — indexé par subjectId plutôt que par position : loadMnoriaBubbleTensionDebates peut avoir
     // filtré des arènes non résolues, donc les deux tableaux ne sont pas forcément alignés
     // index à index. argument_count plutôt que comment_count : les commentaires (réponses sous
     // une idée) ne sont encore utilisés sur aucune arène en production, ce qui rendrait les
     // satellites invisibles partout.
     const ideaCountBySubjectId = new Map(
-      _agonBubbleTensionDebates.map((debate) => [String(debate.id), Number(debate.argument_count) || 0])
+      _mnoriaBubbleTensionDebates.map((debate) => [String(debate.id), Number(debate.argument_count) || 0])
     );
     trends.forEach((trendItem) => {
       trendItem.ideaCount = ideaCountBySubjectId.get(String(trendItem.subjectId)) || 0;
     });
 
     // Le mode est posé avant le re-render du feed pour que les bandeaux utilisent
-    // les compteurs de cartes du mode Agôn (10 en tension, 1 ailleurs sur mobile).
-    _agonCloudMode = true;
+    // les compteurs de cartes du mode Mnoria (10 en tension, 1 ailleurs sur mobile).
+    _mnoriaCloudMode = true;
 
-    // Bulles Agôn utilise son propre nuage communautaire : on sort d'abord des
+    // Bulles Mnoria utilise son propre nuage communautaire : on sort d'abord des
     // états propres aux Bulles Actu pour éviter qu'un re-render intermédiaire
     // filtre tout puis vide le nuage.
     _politicalCloudGroup = 'mixed';
     syncPoliticalCloudSwitch();
     clearActiveBubbles();
 
-    // Les bandeaux thématiques sous les Bulles Agôn ne montrent que les arènes
+    // Les bandeaux thématiques sous les Bulles Mnoria ne montrent que les arènes
     // ouvertes par la communauté, quel que soit le filtre actif avant le switch.
     setTypeFilter("community");
 
@@ -19962,18 +20021,18 @@ function toggleAgonCloud(targetAgonMode = !_agonCloudMode) {
     _tagCloudSecondaryMode = false;
     _tagCloudOriginalTrends = null;
     _tagCloudSecondaryTrends = null;
-    container.classList.add('agon-cloud-mode-agon');
-    container.classList.remove('agon-cloud-political-left', 'agon-cloud-political-right');
-    syncAgonCloudModeSwitch();
+    container.classList.add('mnoria-cloud-mode-mnoria');
+    container.classList.remove('mnoria-cloud-political-left', 'mnoria-cloud-political-right');
+    syncMnoriaCloudModeSwitch();
     // Le filtre gauche/droite ne s'applique qu'au nuage Actu : pas pertinent en
-    // Bulles Agôn, donc masqué tant qu'on reste dans ce mode.
-    document.getElementById('agon-political-cloud-switch')?.setAttribute('hidden', '');
+    // Bulles Mnoria, donc masqué tant qu'on reste dans ce mode.
+    document.getElementById('mnoria-political-cloud-switch')?.setAttribute('hidden', '');
     if (caption) {
-      if (_agonCloudOriginalCaptionHtml === null) _agonCloudOriginalCaptionHtml = caption.innerHTML;
+      if (_mnoriaCloudOriginalCaptionHtml === null) _mnoriaCloudOriginalCaptionHtml = caption.innerHTML;
       caption.textContent = "Les arènes créées par la communauté les plus tendues.";
-      window.__agonSyncMobileBottomNavViewport?.();
+      window.__mnoriaSyncMobileBottomNavViewport?.();
     }
-    // La légende passe de 2 lignes (Actu) à 1 ligne (Agôn) : resynchronise la hauteur
+    // La légende passe de 2 lignes (Actu) à 1 ligne (Mnoria) : resynchronise la hauteur
     // de la section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
     syncCloudSectionHeight();
     // Bulles plus petites (0.85, agrandies depuis 0.6 le 09/08/2026) et espacées
@@ -19990,7 +20049,7 @@ function toggleAgonCloud(targetAgonMode = !_agonCloudMode) {
     // placées, mais impuissant si les bulles elles-mêmes se chevauchent trop). 14 = valeur déjà
     // éprouvée par "Mon univers" (mon-univers.js) pour un nombre similaire de bulles.
     window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
-      finishAgonCloudSwitchLoading(token, container);
+      finishMnoriaCloudSwitchLoading(token, container);
     }, undefined, undefined, 14, 0.85);
     showBubbleCloudLoadingSpinner({ switchMode: true });
   });
@@ -19998,7 +20057,7 @@ function toggleAgonCloud(targetAgonMode = !_agonCloudMode) {
 
 function hydrateLazyCarouselCards(inner, row) {
   initIndexCardShareMenus(inner);
-  if (typeof window.__agonIndexStatsScan === "function") window.__agonIndexStatsScan(inner);
+  if (typeof window.__mnoriaIndexStatsScan === "function") window.__mnoriaIndexStatsScan(inner);
   initIndexMediaSwipeEnhancements(inner);
   initIndexYouTubeObserver(inner);
   initIndexLocalVideoObserver(inner);
@@ -20028,33 +20087,33 @@ function appendCarouselBatchBeforeSentinel(row, sentinel, batch) {
 }
 
 function handleBubbleTagClick(bubble) {
-  const label = bubble.querySelector('.agon-tag-label');
+  const label = bubble.querySelector('.mnoria-tag-label');
   if (!label) return;
-  const words = label.querySelectorAll('.agon-tag-word');
+  const words = label.querySelectorAll('.mnoria-tag-word');
   const tag = String(bubble.dataset.tag || "").trim() || (words.length
     ? Array.from(words).map(w => w.textContent.trim()).join(' ').trim()
     : label.textContent.trim());
   if (!tag) return;
 
-  const wasActive = bubble.classList.contains('agon-tag-bubble-active');
+  const wasActive = bubble.classList.contains('mnoria-tag-bubble-active');
 
   // Activer visuellement la bulle cliquée (noir/blanc)
-  document.querySelectorAll('.agon-tag-bubble.agon-tag-bubble-active')
-    .forEach(b => b.classList.remove('agon-tag-bubble-active'));
-  document.querySelectorAll('.agon-tag-label-overlay.agon-tag-label-overlay-active')
-    .forEach(overlay => overlay.classList.remove('agon-tag-label-overlay-active'));
+  document.querySelectorAll('.mnoria-tag-bubble.mnoria-tag-bubble-active')
+    .forEach(b => b.classList.remove('mnoria-tag-bubble-active'));
+  document.querySelectorAll('.mnoria-tag-label-overlay.mnoria-tag-label-overlay-active')
+    .forEach(overlay => overlay.classList.remove('mnoria-tag-label-overlay-active'));
 
   if (wasActive) return;
 
-  bubble.classList.add('agon-tag-bubble-active');
-  document.querySelectorAll('.agon-tag-label-overlay').forEach(overlay => {
+  bubble.classList.add('mnoria-tag-bubble-active');
+  document.querySelectorAll('.mnoria-tag-label-overlay').forEach(overlay => {
     if ((overlay.dataset.tag || "").toLowerCase() === tag.toLowerCase()) {
-      overlay.classList.add('agon-tag-label-overlay-active');
+      overlay.classList.add('mnoria-tag-label-overlay-active');
     }
   });
 
   let targetDebateId = String(bubble.dataset.subjectId || "").trim();
-  const trendsToSearch = Array.isArray(window.AGON_TAG_TRENDS) ? window.AGON_TAG_TRENDS : [];
+  const trendsToSearch = Array.isArray(window.MNORIA_TAG_TRENDS) ? window.MNORIA_TAG_TRENDS : [];
   if (!targetDebateId && window._tagTrendsModule && trendsToSearch.length) {
     const { normalizeTag } = window._tagTrendsModule;
     const normalizedTag = normalizeTag(tag);
@@ -20062,8 +20121,8 @@ function handleBubbleTagClick(bubble) {
     targetDebateId = String(activeTrend?.subjectId || "").trim();
   }
 
-  // Bulles Actu → bandeau "À la une" ; Bulles Agôn → bandeau "Arènes sous tension"
-  const bandSelector = _agonCloudMode ? '.theme-row-section--tension' : '.theme-row-section--a-la-une';
+  // Bulles Actu → bandeau "À la une" ; Bulles Mnoria → bandeau "Arènes sous tension"
+  const bandSelector = _mnoriaCloudMode ? '.theme-row-section--tension' : '.theme-row-section--a-la-une';
   scrollToIndexBandAndFlashCard(bandSelector, targetDebateId);
 }
 
@@ -20090,7 +20149,7 @@ function ensureCarouselCardLoaded(section, targetDebateId) {
 }
 
 // Scroll vers un bandeau de carrousel, centre la carte du débat ciblé et la fait
-// clignoter. Utilisé par les Bulles Actu (bandeau À la une) et les Bulles Agôn
+// clignoter. Utilisé par les Bulles Actu (bandeau À la une) et les Bulles Mnoria
 // (bandeau Arènes sous tension).
 function scrollToIndexBandAndFlashCard(sectionSelector, targetDebateId) {
   const section = document.querySelector(sectionSelector);
@@ -20113,7 +20172,7 @@ function scrollToIndexBandAndFlashCard(sectionSelector, targetDebateId) {
     window.setTimeout(() => {
       if (!card.isConnected) return;
       const flashEl = document.createElement('div');
-      flashEl.style.cssText = 'position:absolute;inset:0;border-radius:inherit;background:rgba(255,255,255,0.45);pointer-events:none;z-index:20;animation:agon-card-highlight 0.8s ease-in-out 2;';
+      flashEl.style.cssText = 'position:absolute;inset:0;border-radius:inherit;background:rgba(255,255,255,0.45);pointer-events:none;z-index:20;animation:mnoria-card-highlight 0.8s ease-in-out 2;';
       card.style.position = 'relative';
       card.appendChild(flashEl);
       flashEl.addEventListener('animationend', () => flashEl.remove(), { once: true });
@@ -20128,7 +20187,7 @@ function scrollToIndexBandAndFlashCard(sectionSelector, targetDebateId) {
   }
 }
 
-function showAgonOnlyFromTagCloud() {
+function showMnoriaOnlyFromTagCloud() {
   if (_tagCloudSecondaryMode) {
     _restoreMainTagCloud();
   }
@@ -20147,10 +20206,10 @@ function showAgonOnlyFromTagCloud() {
   fastWindowScrollTo(Math.max(0, top), 420);
 }
 
-window.addEventListener("agon:tag-trends-show-agon", showAgonOnlyFromTagCloud);
+window.addEventListener("mnoria:tag-trends-show-mnoria", showMnoriaOnlyFromTagCloud);
 
 document.addEventListener('click', (e) => {
-  const bubble = e.target.closest('.agon-tag-bubble');
+  const bubble = e.target.closest('.mnoria-tag-bubble');
   if (bubble) { handleBubbleTagClick(bubble); return; }
 });
 
@@ -20387,8 +20446,8 @@ function getFilteredDebatesForIndex(baseDebates) {
   if (currentBubbleTag && window._tagTrendsModule) {
     const { normalizeTag, extractRawTagsFromItem } = window._tagTrendsModule;
     const normalizedBubble = normalizeTag(currentBubbleTag);
-    const activeTrend = Array.isArray(window.AGON_TAG_TRENDS)
-      ? window.AGON_TAG_TRENDS.find((item) => normalizeTag(item?.tag || item?.subjectTitle || "") === normalizedBubble)
+    const activeTrend = Array.isArray(window.MNORIA_TAG_TRENDS)
+      ? window.MNORIA_TAG_TRENDS.find((item) => normalizeTag(item?.tag || item?.subjectTitle || "") === normalizedBubble)
       : null;
     const activeSubjectId = String(activeTrend?.subjectId || "").trim();
 
@@ -20438,12 +20497,12 @@ function getFilteredDebatesForIndex(baseDebates) {
     filteredDebates = filteredDebates.filter((debate) => visitedIds.has(String(debate.id)));
   }
 
-  if (currentTypeFilter === "agon") {
-    filteredDebates = filteredDebates.filter((debate) => isAgonGeneratedDebate(debate));
+  if (currentTypeFilter === "mnoria") {
+    filteredDebates = filteredDebates.filter((debate) => isMnoriaGeneratedDebate(debate));
   }
 
   if (currentTypeFilter === "community") {
-    filteredDebates = filteredDebates.filter((debate) => !isAgonGeneratedDebate(debate));
+    filteredDebates = filteredDebates.filter((debate) => !isMnoriaGeneratedDebate(debate));
   }
 
   // Tant que le filtre Gauche/Droite est actif, les thématiques sous le nuage
@@ -20451,7 +20510,7 @@ function getFilteredDebatesForIndex(baseDebates) {
   // appliqué indépendamment du sous-filtre (Toutes/Débats/Questions/catégorie) pour
   // que ça reste vrai même si l'utilisateur change de filtre sans revenir à "Général".
   if (_politicalCloudGroup === "left" || _politicalCloudGroup === "right") {
-    filteredDebates = filteredDebates.filter((debate) => isAgonGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
+    filteredDebates = filteredDebates.filter((debate) => isMnoriaGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
   } else {
     // Vue Générale : symétriquement, les variantes gauche/droite d'un même sujet
     // (une arène par groupe, fusionnées entre elles) ne doivent pas s'afficher ici,
@@ -20526,7 +20585,7 @@ function sortDebatesForIndex(debates) {
 
 
 function applyIndexFilters() {
-  __agonDebugRefreshLog("applyIndexFilters", "rerender", {});
+  __mnoriaDebugRefreshLog("applyIndexFilters", "rerender", {});
   syncIndexTypeFilterButtons();
   syncIndexShortcutFilterButtons();
   const filteredDebates = getFilteredDebatesForIndex(debatesCache);
@@ -21383,15 +21442,15 @@ function getAlaUneSourceForCurrentFilters(filteredDebates) {
   // (cf. commentaire plus haut), mais doit quand même respecter la séparation des
   // 3 nuages — sinon les arènes générales y réapparaissent malgré le filtre actif.
   if (_politicalCloudGroup === "left" || _politicalCloudGroup === "right") {
-    return source.filter((debate) => isAgonGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
+    return source.filter((debate) => isMnoriaGeneratedDebate(debate) && getDebatePoliticalGroup(debate) === _politicalCloudGroup);
   }
   // Vue Générale : exclut les variantes gauche/droite (cf. getFilteredDebatesForIndex).
   const generalSource = source.filter((debate) => getDebatePoliticalGroup(debate) === "mixed");
-  if (currentTypeFilter === "agon") {
-    return generalSource.filter((debate) => isAgonGeneratedDebate(debate));
+  if (currentTypeFilter === "mnoria") {
+    return generalSource.filter((debate) => isMnoriaGeneratedDebate(debate));
   }
   if (currentTypeFilter === "community") {
-    return generalSource.filter((debate) => !isAgonGeneratedDebate(debate));
+    return generalSource.filter((debate) => !isMnoriaGeneratedDebate(debate));
   }
   return generalSource;
 }
@@ -21408,17 +21467,17 @@ function buildIndexThematicSectionsHtml(debates) {
     const allDebates = Array.isArray(debates) ? debates : [];
     const sections = [];
     const isMobile = window.innerWidth <= 768;
-    // Mode Bulles Agôn (mobile) : le bandeau "Arènes sous tension" est la cible
+    // Mode Bulles Mnoria (mobile) : le bandeau "Arènes sous tension" est la cible
     // des bulles → 10 cartes d'emblée ; les autres bandeaux sont réduits à 1.
-    const agonCloudActive = isMobile && _agonCloudMode;
+    const mnoriaCloudActive = isMobile && _mnoriaCloudMode;
     const politicalActive = _politicalCloudGroup === 'left' || _politicalCloudGroup === 'right';
     const carouselInitial = isMobile ? 2 : _CAROUSEL_INITIAL;
-    const alaUneInitial = isMobile ? (agonCloudActive ? 2 : 12) : 12;
-    const tensionInitial = agonCloudActive ? 10 : carouselInitial;
+    const alaUneInitial = isMobile ? (mnoriaCloudActive ? 2 : 12) : 12;
+    const tensionInitial = mnoriaCloudActive ? 10 : carouselInitial;
 
     const byDate = (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0);
 
-    // ── À la une : jamais filtrée par bulle, mais respecte le filtre "ouvertes par agôn" ──
+    // ── À la une : jamais filtrée par bulle, mais respecte le filtre "ouvertes par mnoria" ──
     const hasActiveIndexSearch = !!getCurrentIndexSearchQuery();
     const alaUneSource = getAlaUneSourceForCurrentFilters(allDebates);
     if (!hasActiveIndexSearch && alaUneSource.length) {
@@ -21438,13 +21497,13 @@ function buildIndexThematicSectionsHtml(debates) {
         return new Date(b.last_activity_at || b.last_argument_at || b.created_at || 0)
           - new Date(a.last_activity_at || a.last_argument_at || a.created_at || 0);
       });
-    // Mode Bulles Agôn : les 10 arènes du nuage passent en tête, dans l'ordre du
+    // Mode Bulles Mnoria : les 10 arènes du nuage passent en tête, dans l'ordre du
     // nuage, pour que chaque bulle retrouve toujours sa carte dans ce bandeau —
     // y compris une vieille arène absente des débats chargés par l'index.
-    if (_agonCloudMode && _agonBubbleTensionDebates.length) {
-      const headIds = new Set(_agonBubbleTensionDebates.map((d) => String(d.id)));
+    if (_mnoriaCloudMode && _mnoriaBubbleTensionDebates.length) {
+      const headIds = new Set(_mnoriaBubbleTensionDebates.map((d) => String(d.id)));
       tensionDebates = [
-        ..._agonBubbleTensionDebates,
+        ..._mnoriaBubbleTensionDebates,
         ...tensionDebates.filter((d) => !headIds.has(String(d.id)))
       ];
     }
@@ -21599,15 +21658,15 @@ function initCarouselLazyLoad() {
 let indexTagTrendsModulePromise = import("/tagTrends.js?v=20260523-source-count-fix");
 let indexTagTrendCloudModulePromise = import("/tagTrendCloud.js?v=20260812-orbit-line-gradient");
 
-function lockAgonCloudFrameTop(container) {
-  const cloud = container || document.getElementById('agon-tag-trends-cloud');
+function lockMnoriaCloudFrameTop(container) {
+  const cloud = container || document.getElementById('mnoria-tag-trends-cloud');
   if (!cloud) return;
   cloud.style.setProperty('--bubble-frame-top', '55px');
-  _agonCloudFrameTopLocked = true;
+  _mnoriaCloudFrameTopLocked = true;
 }
 
 function syncBubbleFrameTop() {
-  const cloud = document.getElementById('agon-tag-trends-cloud');
+  const cloud = document.getElementById('mnoria-tag-trends-cloud');
   if (!cloud) return;
   cloud.style.setProperty('--bubble-frame-top', '55px');
   alignStandaloneBubbleFrameToActiveFilter();
@@ -21625,7 +21684,7 @@ function syncBubbleFrameTop() {
     new ResizeObserver(debouncedSync).observe(debatesSection);
   }
 
-  const cloud = document.getElementById('agon-tag-trends-cloud');
+  const cloud = document.getElementById('mnoria-tag-trends-cloud');
   if (cloud) {
     new ResizeObserver(debouncedSync).observe(cloud);
   }
@@ -21649,7 +21708,7 @@ function syncBubbleFrameTop() {
 
   // La section nuage anime min-height 0.25s (100dvh instable en standalone) : un
   // alignement mesuré pendant la transition fige une position intermédiaire.
-  const trendsSection = document.getElementById('agon-tag-trends-section');
+  const trendsSection = document.getElementById('mnoria-tag-trends-section');
   if (trendsSection) {
     trendsSection.addEventListener('transitionend', function(e) {
       if (e.propertyName === 'min-height') debouncedSync();
@@ -21671,21 +21730,21 @@ _bubbleSpinnerImg.src = '/sablier-96.png';
 if (typeof _bubbleSpinnerImg.decode === 'function') _bubbleSpinnerImg.decode().catch(() => {});
 
 function showBubbleCloudLoadingSpinner(options = {}) {
-  const section = document.querySelector("#agon-tag-trends-section");
-  const cloud = document.querySelector("#agon-tag-trends-cloud");
+  const section = document.querySelector("#mnoria-tag-trends-section");
+  const cloud = document.querySelector("#mnoria-tag-trends-cloud");
   if (!section || !cloud) return;
   ensurePageArrivalLoadingOverlayStyles();
   section.hidden = false;
   // La section vient d'apparaître : recale l'ancrage de la légende tendances.
-  window.__agonSyncMobileBottomNavViewport?.();
-  const existing = document.getElementById("agon-cloud-loading-spinner");
+  window.__mnoriaSyncMobileBottomNavViewport?.();
+  const existing = document.getElementById("mnoria-cloud-loading-spinner");
   if (existing) {
-    existing.classList.toggle("agon-cloud-loading-switch", options.switchMode === true);
+    existing.classList.toggle("mnoria-cloud-loading-switch", options.switchMode === true);
     return;
   }
   const spinner = document.createElement("div");
-  spinner.id = "agon-cloud-loading-spinner";
-  if (options.switchMode === true) spinner.classList.add("agon-cloud-loading-switch");
+  spinner.id = "mnoria-cloud-loading-spinner";
+  if (options.switchMode === true) spinner.classList.add("mnoria-cloud-loading-switch");
   const img = document.createElement('img');
   img.src = '/sablier-96.png';
   img.alt = '';
@@ -21695,39 +21754,39 @@ function showBubbleCloudLoadingSpinner(options = {}) {
 }
 
 function hideBubbleCloudLoadingSpinner() {
-  document.getElementById("agon-cloud-loading-spinner")?.remove();
+  document.getElementById("mnoria-cloud-loading-spinner")?.remove();
   // Le nuage vient de finir de se rendre : la position du bouton Autres actus
   // (référence de l'espace symétrique autour de la légende tendances) est
   // désormais définitive — recale l'ancrage (standalone mobile).
-  window.__agonSyncMobileBottomNavViewport?.();
+  window.__mnoriaSyncMobileBottomNavViewport?.();
 }
 
 // Le module dynamique mon-univers.js retire le sablier seulement une fois les neurones
 // réellement placés (ou lorsqu'un état vide/erreur est prêt). L'exposition reste volontairement
 // limitée au retrait : l'entrée en mode et la création du sablier appartiennent à script.js.
-window.__agonHideBubbleCloudLoadingSpinner = hideBubbleCloudLoadingSpinner;
+window.__mnoriaHideBubbleCloudLoadingSpinner = hideBubbleCloudLoadingSpinner;
 
 function updateIndexTagTrends(items) {
-  const trendsSection = document.querySelector("#agon-tag-trends-section");
-  const cloudContainer = document.querySelector("#agon-tag-trends-cloud");
+  const trendsSection = document.querySelector("#mnoria-tag-trends-section");
+  const cloudContainer = document.querySelector("#mnoria-tag-trends-cloud");
   // Capture l'époque du mode au lancement de cette initialisation Actu. Le chargement des
-  // modules puis /api/cloud-bubbles est asynchrone : si l'utilisateur choisit Bulles Agôn ou
+  // modules puis /api/cloud-bubbles est asynchrone : si l'utilisateur choisit Bulles Mnoria ou
   // Ma mémoire entre-temps, cette ancienne tâche ne doit plus toucher au conteneur partagé.
-  const requestedCloudModeToken = window._agonCloudModeToken || 0;
+  const requestedCloudModeToken = window._mnoriaCloudModeToken || 0;
 
   if (!Array.isArray(items) || !items.length) {
     // _memoireCloudMode : même garde-fou que plus bas dans cette fonction (cf. commentaire sur
-    // le guard après le fetch /cloud-bubbles) — "Ma mémoire" partage #agon-tag-trends-section/
-    // #agon-tag-trends-cloud avec Bulles Actu, et cette branche tournait SANS cette garde,
+    // le guard après le fetch /cloud-bubbles) — "Ma mémoire" partage #mnoria-tag-trends-section/
+    // #mnoria-tag-trends-cloud avec Bulles Actu, et cette branche tournait SANS cette garde,
     // masquant toute la section (contenu "Ma mémoire" y compris, plus aucune mesure de hauteur
     // possible tant qu'elle reste hidden) dès que la liste de débats Actu passait par un état
     // vide — même en tâche de fond, sans rapport avec le mode réellement affiché. Repéré le
     // 12/08/2026 : cadre "Ma mémoire" standalone à la mauvaise taille de façon intermittente
     // selon le timing de ce fetch Actu en arrière-plan.
-    if (_memoireCloudMode || ((_agonCloudMode || _agonCloudSwitchLoading) && cloudContainer?.querySelector(".agon-tag-bubble"))) {
+    if (_memoireCloudMode || ((_mnoriaCloudMode || _mnoriaCloudSwitchLoading) && cloudContainer?.querySelector(".mnoria-tag-bubble"))) {
       return;
     }
-    window.AGON_TAG_TRENDS = [];
+    window.MNORIA_TAG_TRENDS = [];
     if (trendsSection) trendsSection.hidden = true;
     if (cloudContainer) cloudContainer.innerHTML = "";
     return;
@@ -21736,12 +21795,12 @@ function updateIndexTagTrends(items) {
   // Les bulles sont déjà affichées : le cloud vient d'un endpoint indépendant
   // et ne change pas au rythme des refreshs de la liste — évite le flash de
   // disparition/réapparition causé par le double render (cache → API).
-  if (cloudContainer?.querySelector(".agon-tag-bubble")) {
+  if (cloudContainer?.querySelector(".mnoria-tag-bubble")) {
     syncIndexBubbleTrendBadges();
     return;
   }
 
-  // Si "Ma mémoire"/Bulles Agôn a déjà pris le relais avant même ce premier chargement Actu
+  // Si "Ma mémoire"/Bulles Mnoria a déjà pris le relais avant même ce premier chargement Actu
   // (course possible dès l'arrivée sur l'accueil, cf. garde-fou identique juste plus bas une
   // fois le fetch résolu), inutile de rallumer un sablier que ce mode a déjà retiré — sans
   // cette garde, ce sablier recréé n'était jamais retiré par le bail-out ci-dessous (son seul
@@ -21749,7 +21808,7 @@ function updateIndexTagTrends(items) {
   // le contenu du mode réellement actif (demande du 12/08/2026, "sablier qui tourne
   // indéfiniment sur le message [Ma mémoire] vide", surtout visible en PWA standalone où ce
   // fetch Actu, plus lent à froid, laisse plus de temps à la course de se produire).
-  if (!_memoireCloudMode && !_agonCloudMode) showBubbleCloudLoadingSpinner();
+  if (!_memoireCloudMode && !_mnoriaCloudMode) showBubbleCloudLoadingSpinner();
 
   Promise.all([indexTagTrendsModulePromise, indexTagTrendCloudModulePromise])
     .then(async ([module, cloudModule]) => {
@@ -21764,9 +21823,9 @@ function updateIndexTagTrends(items) {
 
       // Le cache Actu peut être conservé pour le prochain retour vers ce mode, mais aucun
       // rendu/masquage Actu n'est autorisé après qu'une transition plus récente a commencé.
-      if (tagTrends.length) window.AGON_TAG_TRENDS = tagTrends;
-      if (requestedCloudModeToken !== (window._agonCloudModeToken || 0) ||
-          _agonCloudMode || _memoireCloudMode || _agonCloudSwitchLoading) {
+      if (tagTrends.length) window.MNORIA_TAG_TRENDS = tagTrends;
+      if (requestedCloudModeToken !== (window._mnoriaCloudModeToken || 0) ||
+          _mnoriaCloudMode || _memoireCloudMode || _mnoriaCloudSwitchLoading) {
         // Le sablier est un élément partagé entre les trois modes. Dès qu'une transition plus
         // récente a pris le relais, cette ancienne tâche Actu n'en est plus propriétaire : le
         // retirer ici pouvait effacer celui que Ma mémoire venait de créer, laissant le fond
@@ -21776,7 +21835,7 @@ function updateIndexTagTrends(items) {
       }
 
       if (!tagTrends.length) {
-        window.AGON_TAG_TRENDS = [];
+        window.MNORIA_TAG_TRENDS = [];
         hideBubbleCloudLoadingSpinner();
         if (trendsSection) trendsSection.hidden = true;
         if (cloudContainer) cloudContainer.innerHTML = "";
@@ -21784,31 +21843,31 @@ function updateIndexTagTrends(items) {
       }
 
       syncIndexBubbleTrendBadges();
-      if (cloudContainer?.querySelector(".agon-tag-bubble")) return;
+      if (cloudContainer?.querySelector(".mnoria-tag-bubble")) return;
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => {
         window.setTimeout(() => {
           // Le callback de rendu Actu est volontairement différé. Entre-temps, l'utilisateur
           // peut avoir ouvert Ma mémoire : ne jamais retirer le sablier appartenant au nouveau
           // mode avec ce callback devenu périmé.
-          if (requestedCloudModeToken !== (window._agonCloudModeToken || 0) ||
-              _memoireCloudMode || _agonCloudMode || _agonCloudSwitchLoading) return;
+          if (requestedCloudModeToken !== (window._mnoriaCloudModeToken || 0) ||
+              _memoireCloudMode || _mnoriaCloudMode || _mnoriaCloudSwitchLoading) return;
           hideBubbleCloudLoadingSpinner();
         }, 150);
       });
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
         if (currentBubbleTag) {
-          document.querySelectorAll(".agon-tag-bubble").forEach(bubble => {
-            const label = bubble.querySelector(".agon-tag-label");
-            const words = label?.querySelectorAll(".agon-tag-word");
+          document.querySelectorAll(".mnoria-tag-bubble").forEach(bubble => {
+            const label = bubble.querySelector(".mnoria-tag-label");
+            const words = label?.querySelectorAll(".mnoria-tag-word");
             const tag = words?.length
               ? Array.from(words).map(w => w.textContent.trim()).join(" ").trim()
               : (label?.textContent.trim() || "");
             if (tag.toLowerCase() === currentBubbleTag.toLowerCase()) {
-              bubble.classList.add("agon-tag-bubble-active");
-              document.querySelectorAll(".agon-tag-label-overlay").forEach(overlay => {
+              bubble.classList.add("mnoria-tag-bubble-active");
+              document.querySelectorAll(".mnoria-tag-label-overlay").forEach(overlay => {
                 if ((overlay.dataset.tag || "").toLowerCase() === tag.toLowerCase()) {
-                  overlay.classList.add("agon-tag-label-overlay-active");
+                  overlay.classList.add("mnoria-tag-label-overlay-active");
                 }
               });
             }
@@ -21818,24 +21877,24 @@ function updateIndexTagTrends(items) {
     })
     .catch((error) => {
       // Même règle de propriété qu'au-dessus : une erreur tardive d'Actu ne doit pas effacer
-      // le chargement visuel de Ma mémoire ou de Bulles Agôn.
-      if (requestedCloudModeToken === (window._agonCloudModeToken || 0) &&
-          !_memoireCloudMode && !_agonCloudMode && !_agonCloudSwitchLoading) {
+      // le chargement visuel de Ma mémoire ou de Bulles Mnoria.
+      if (requestedCloudModeToken === (window._mnoriaCloudModeToken || 0) &&
+          !_memoireCloudMode && !_mnoriaCloudMode && !_mnoriaCloudSwitchLoading) {
         hideBubbleCloudLoadingSpinner();
       }
-      console.warn("[Agôn] Tag trends indisponibles:", error);
+      console.warn("[Mnoria] Tag trends indisponibles:", error);
     });
 }
 
 function renderDebatesList(debates) {
   // Si la modale iframe est ouverte, on ne re-rend pas maintenant
   // pour ne pas perturber la position de scroll ni recréer le DOM
-  if (window.__agonDebateModalOpen) {
-    __agonDebugRefreshLog("renderDebatesList", "rerender", { phase: "deferred-while-modal-open", count: Array.isArray(debates) ? debates.length : null });
-    window.__agonDebateModalPendingDebates = debates;
+  if (window.__mnoriaDebateModalOpen) {
+    __mnoriaDebugRefreshLog("renderDebatesList", "rerender", { phase: "deferred-while-modal-open", count: Array.isArray(debates) ? debates.length : null });
+    window.__mnoriaDebateModalPendingDebates = debates;
     return;
   }
-  __agonDebugRefreshLog("renderDebatesList", "rerender", { phase: "full-dom-rebuild", count: Array.isArray(debates) ? debates.length : null });
+  __mnoriaDebugRefreshLog("renderDebatesList", "rerender", { phase: "full-dom-rebuild", count: Array.isArray(debates) ? debates.length : null });
   // En mode admin, l'édition d'une carte peut contenir un menu thématique ouvert.
   // On évite alors que le scroll infini reconstruise la liste et referme ce menu.
   if (isIndexAdminEditInteractionActive()) {
@@ -21874,7 +21933,7 @@ function renderDebatesList(debates) {
 
   // Le premier bandeau thématique vient d'être (re)créé : recale son espace
   // sous la légende tendances (standalone mobile).
-  window.__agonSyncMobileBottomNavViewport?.();
+  window.__mnoriaSyncMobileBottomNavViewport?.();
 
   // Active/désactive le mode thématique : classes sur <html> et <body>
   const hasRows = !!div.querySelector(".theme-horizontal-row");
@@ -21916,7 +21975,7 @@ function renderDebatesList(debates) {
 
   refreshAdminUI();
   initIndexCardShareMenus(document);
-  if (typeof window.__agonIndexStatsScan === "function") window.__agonIndexStatsScan(document);
+  if (typeof window.__mnoriaIndexStatsScan === "function") window.__mnoriaIndexStatsScan(document);
   initIndexMediaSwipeEnhancements(document);
   initIndexYouTubeObserver(document);
   initIndexLocalVideoObserver(document);
@@ -22021,17 +22080,17 @@ function filterDebates() {
 async function applyIndexSearch() {
   const input = document.getElementById("debate-search");
   currentIndexSearchQuery = String(input?.value || "").trim();
-  const activeBubble = document.querySelector('.agon-tag-bubble.agon-tag-bubble-active');
+  const activeBubble = document.querySelector('.mnoria-tag-bubble.mnoria-tag-bubble-active');
   if (activeBubble) {
-    const label = activeBubble.querySelector('.agon-tag-label');
-    const words = label?.querySelectorAll('.agon-tag-word');
+    const label = activeBubble.querySelector('.mnoria-tag-label');
+    const words = label?.querySelectorAll('.mnoria-tag-word');
     const tag = words?.length
       ? Array.from(words).map(w => w.textContent.trim()).join(' ').trim()
       : (label?.textContent.trim() || '');
     if (tag.toLowerCase() !== currentIndexSearchQuery.toLowerCase()) clearActiveBubbles();
   }
 
-  if (currentIndexSearchQuery && currentTypeFilter === "agon") {
+  if (currentIndexSearchQuery && currentTypeFilter === "mnoria") {
     currentTypeFilter = "all";
   }
 
@@ -22059,8 +22118,8 @@ function setTypeFilter(type) {
 
   applyIndexFilters();
 
-  if (previousTypeFilter === 'agon' && String(type || '') !== 'agon') {
-    warmIndexFeedAfterLeavingAgonFilter();
+  if (previousTypeFilter === 'mnoria' && String(type || '') !== 'mnoria') {
+    warmIndexFeedAfterLeavingMnoriaFilter();
   }
 }
 
@@ -22288,7 +22347,7 @@ async function loadAllRemainingIndexDebatesPages() {
       pagesLoaded++;
     }
 
-    if (window.__agonDebateModalOpen) return;
+    if (window.__mnoriaDebateModalOpen) return;
 
     refreshCategoryFilterOptions(debatesCache);
     const restoreAnchor = captureIndexScrollRestoreAnchor();
@@ -22361,7 +22420,7 @@ function getIndexFeedFilterSnapshot() {
   });
 }
 
-function warmIndexFeedAfterLeavingAgonFilter() {
+function warmIndexFeedAfterLeavingMnoriaFilter() {
   if (indexFilterFeedWarmupPromise || !indexDebatesApiHasMore) return;
 
   const minimumReadyCount = Math.max(
@@ -22495,8 +22554,8 @@ async function initIndex() {
       await waitForInitialIndexFeedStability();
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
-      window.dispatchEvent(new Event("agon:feed-ready"));
-      try { sessionStorage.removeItem("agonIndexLoadRetries"); } catch {}
+      window.dispatchEvent(new Event("mnoria:feed-ready"));
+      try { sessionStorage.removeItem("mnoriaIndexLoadRetries"); } catch {}
 
       // Rafraîchissement silencieux en arrière-plan
       fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" }).then((fresh) => {
@@ -22515,7 +22574,7 @@ async function initIndex() {
           hasMore: indexDebatesApiHasMore
         });
         refreshCategoryFilterOptions(debatesCache);
-        if (window.__agonDebateModalOpen) {
+        if (window.__mnoriaDebateModalOpen) {
           return;
         }
 
@@ -22536,7 +22595,7 @@ async function initIndex() {
     } else {
       // Première visite — comportement normal
       const debates = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
-      try { sessionStorage.removeItem("agonIndexLoadRetries"); } catch {}
+      try { sessionStorage.removeItem("mnoriaIndexLoadRetries"); } catch {}
       debatesCache = Array.isArray(debates) ? debates : [];
       resetIndexDebatesPaginationState(
         debatesCache.length,
@@ -22558,7 +22617,7 @@ async function initIndex() {
       await waitForInitialIndexFeedStability();
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
-      window.dispatchEvent(new Event("agon:feed-ready"));
+      window.dispatchEvent(new Event("mnoria:feed-ready"));
 
       // Plus de chargement progressif au scroll : on récupère directement
       // toutes les arènes restantes dès l'arrivée sur la page.
@@ -22580,8 +22639,8 @@ async function initIndex() {
   } catch (error) {
     pageArrivalLoadingOverlayReady = true;
     hidePageArrivalLoadingOverlay();
-    window.dispatchEvent(new Event("agon:feed-ready"));
-    console.error('[Agôn] initIndex error:', error);
+    window.dispatchEvent(new Event("mnoria:feed-ready"));
+    console.error('[Mnoria] initIndex error:', error);
     showIndexLoadErrorState();
   }
 }
@@ -22594,17 +22653,17 @@ function showIndexLoadErrorState() {
   const list = document.getElementById("debates-list");
   if (!list) return;
   let autoRetries = 0;
-  try { autoRetries = Number(sessionStorage.getItem("agonIndexLoadRetries") || 0); } catch {}
+  try { autoRetries = Number(sessionStorage.getItem("mnoriaIndexLoadRetries") || 0); } catch {}
   const willAutoRetry = autoRetries < 2;
   list.innerHTML =
     '<div class="empty-state index-load-error">' +
       '<img src="/sablier2-64.png" alt="" style="width:36px;height:36px;object-fit:contain;display:block;margin:0 auto 10px;">' +
       '<p style="margin:0 0 12px;">Connexion instable — le contenu n\'a pas pu être chargé.' +
       (willAutoRetry ? '<br>Nouvelle tentative automatique dans quelques secondes…' : '') + '</p>' +
-      '<button type="button" class="button button-small" onclick="try{sessionStorage.removeItem(\'agonIndexLoadRetries\')}catch(e){};location.reload()">Réessayer</button>' +
+      '<button type="button" class="button button-small" onclick="try{sessionStorage.removeItem(\'mnoriaIndexLoadRetries\')}catch(e){};location.reload()">Réessayer</button>' +
     '</div>';
   if (willAutoRetry) {
-    try { sessionStorage.setItem("agonIndexLoadRetries", String(autoRetries + 1)); } catch {}
+    try { sessionStorage.setItem("mnoriaIndexLoadRetries", String(autoRetries + 1)); } catch {}
     setTimeout(() => location.reload(), 6000);
   }
 }
@@ -22680,7 +22739,7 @@ function getCreateContextText() {
   return input ? input.value.trim().slice(0, 1800) : "";
 }
 
-function renderAgonArticleContextHtml(content, isOpen = false) {
+function renderMnoriaArticleContextHtml(content, isOpen = false) {
   const parts = String(content || "").split(/\n\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
@@ -23902,7 +23961,7 @@ function applyCreateBackLinks() {
       if (isOpenedInsideDebateIframe) {
         if (isReturnToDebate) {
           try {
-            window.parent.postMessage({ type: 'agon:close-debate-modal' }, '*');
+            window.parent.postMessage({ type: 'mnoria:close-debate-modal' }, '*');
             return;
           } catch (error) {}
         }
@@ -24060,7 +24119,7 @@ const submitHelper = document.getElementById("create-submit-helper");
 const cancelPublishButton = document.getElementById("create-publish-cancel");
 let createPublishAbortController = null;
 let createPublishCancelRequested = false;
-const CREATE_PENDING_VIDEO_UPLOAD_STORAGE_KEY = "agon_pending_create_video_upload";
+const CREATE_PENDING_VIDEO_UPLOAD_STORAGE_KEY = "mnoria_pending_create_video_upload";
 
 function getCreatePendingVideoUploadState() {
   try {
@@ -27625,7 +27684,7 @@ function initDebateYouTubeShell(container) {
   shell.dataset.soundEnabled = 'false';
   ensureIndexYouTubeOverlayLayer(shell);
   updateIndexYouTubeShellOverlay(shell);
-  hydrateAgonYouTubeDuration(shell);
+  hydrateMnoriaYouTubeDuration(shell);
 
   const poster = shell.querySelector('[data-index-youtube-poster]');
   const overlay = shell.querySelector('[data-index-youtube-overlay]');
@@ -27752,7 +27811,7 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 async function hydrateDebateSourcePreviewIfNeeded(sourceUrl, preview = null) {
   const safeUrl = String(sourceUrl || "").trim();
   if (!safeUrl) return;
-  const needsYouTubeDuration = !!getYouTubeVideoId(safeUrl) && getAgonVideoDurationSeconds(preview) <= 0;
+  const needsYouTubeDuration = !!getYouTubeVideoId(safeUrl) && getMnoriaVideoDurationSeconds(preview) <= 0;
   if (!needsYouTubeDuration && !isWeakSourcePreviewData(preview, safeUrl)) return;
 
   try {
@@ -27764,7 +27823,7 @@ async function hydrateDebateSourcePreviewIfNeeded(sourceUrl, preview = null) {
       body: JSON.stringify({ url: safeUrl })
     });
 
-    const responseHasYouTubeDuration = getAgonVideoDurationSeconds(response?.preview) > 0;
+    const responseHasYouTubeDuration = getMnoriaVideoDurationSeconds(response?.preview) > 0;
     if (!response?.preview || (!responseHasYouTubeDuration && isWeakSourcePreviewData(response.preview, safeUrl))) {
       return;
     }
@@ -27904,9 +27963,9 @@ async function loadDebate(id) {
   saveVisitedDebate(id);
 
   try {
-    const p = window.parent?.__agonPrefetchedDebateData;
+    const p = window.parent?.__mnoriaPrefetchedDebateData;
     if (p && String(p.id || "") === String(id) && p.debate) {
-      window.parent.__agonPrefetchedDebateData = null;
+      window.parent.__mnoriaPrefetchedDebateData = null;
       applyDebateCachedPreview(p.debate);
       // Preview visible → on ne bloque plus sur le chargement complet.
       // markPageArrivalLoadingOverlayReady() sera appelé par le finally
@@ -27919,7 +27978,7 @@ async function loadDebate(id) {
   await loadDebateFullData(id);
 }
 
-const AGON_WEAK_IDEA_PUBLIC_COMMENTS = `
+const MNORIA_WEAK_IDEA_PUBLIC_COMMENTS = `
 Cette idée entre dans l'arène comme un champion et finit balayée comme une poussière.
 On dirait un argument écrit avec un casque trop grand et une épée en plastique.
 Cette idée ne perd pas le combat : elle se ridiculise avant même le salut.
@@ -28034,7 +28093,7 @@ Cette idée est une provocation sans carburant.
 Le verdict tombe : trop fragile, trop flou, trop facile à abattre.
 `.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
 
-const AGON_MEDIUM_IDEA_PUBLIC_COMMENTS = `
+const MNORIA_MEDIUM_IDEA_PUBLIC_COMMENTS = `
 Cette idée entre dans l'arène avec une vraie lame. L'idée ne décapite pas le débat, mais laisse une belle entaille.
 Bon coup porté : le raisonnement touche juste, même s'il manque encore le geste final.
 L'idée tient bien son bouclier. Cette idée encaisse, avance, et peut faire mal.
@@ -28167,7 +28226,7 @@ Cette idée fait couler un peu de sang argumentatif, et c'est déjà bien.
 Ce n'est pas l'idée du siècle, mais cette idée sait se battre.
 `.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
 
-const AGON_GOOD_IDEA_PUBLIC_COMMENTS = `
+const MNORIA_GOOD_IDEA_PUBLIC_COMMENTS = `
 Cette idée entre dans l'arène avec une vraie lame. Sans décapiter le débat, cette contribution laisse une belle entaille.
 Bon coup porté : le raisonnement touche juste, même s'il manque encore le geste final.
 L'idée tient bien son bouclier. Cette contribution encaisse, avance, et peut faire mal.
@@ -28300,7 +28359,7 @@ Cette idée fait couler un peu de sang argumentatif, et c'est déjà bien.
 Ce n'est pas l'idée du siècle, mais cette idée sait se battre.
 `.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
 
-const AGON_EXCELLENT_IDEA_PUBLIC_COMMENTS = `
+const MNORIA_EXCELLENT_IDEA_PUBLIC_COMMENTS = `
 Cette idée ne gagne pas le débat : elle traverse l'arène en hurlant et laisse les objections en petits morceaux dans le sable.
 Cette contribution arrive avec une lame trop grande, trop brillante, et manifestement aucune envie de faire des prisonniers.
 L'idée éclate les contre-arguments comme des amphores vides contre un mur.
@@ -28419,7 +28478,7 @@ Cette idée a la tendresse d'une porte de prison et la précision d'un maître d
 Le raisonnement chasse les faiblesses jusque dans les coins.
 Cette contribution ne laisse pas l'adversaire sans réponse : elle le laisse sans meuble intérieur.
 L'idée transforme les contre-arguments en poussière, puis éternue dessus.
-C'est du grand Agôn : la lame, le sable, le public, et quelqu'un qui regrette d'avoir parlé trop vite.
+C'est du grand Mnoria : la lame, le sable, le public, et quelqu'un qui regrette d'avoir parlé trop vite.
 Cette idée ne fait pas seulement gagner son camp : elle enterre les objections avec les honneurs militaires.
 Le propos a tellement de force qu'on devrait le lire avec un casque.
 Cette contribution découpe l'opposition en rondelles de mauvaise foi.
@@ -28457,10 +28516,10 @@ L'idée cloue le débat au mur et lui demande s'il a d'autres questions.
 C'est sanguinaire, excessif, un peu honteux, donc parfait pour l'arène.
 `.split('\n').map(function(line) { return line.trim(); }).filter(Boolean);
 
-function getAgonPublicIdeaComment(entry, fallbackId) {
+function getMnoriaPublicIdeaComment(entry, fallbackId) {
   const score = Number(entry && entry.final_score);
   const category = String((entry && (entry.final_category || entry.category)) || '').toLowerCase();
-  if (category === 'copie') return '';
+  if (category === 'copie' || category === 'trop_court' || category === 'masque') return '';
   const level = (category === 'faible' || (Number.isFinite(score) && score < 50))
     ? 'weak'
     : (category === 'moyen' || (Number.isFinite(score) && score >= 50 && score < 70))
@@ -28471,10 +28530,10 @@ function getAgonPublicIdeaComment(entry, fallbackId) {
           ? 'excellent'
           : '';
   const pools = {
-    weak: AGON_WEAK_IDEA_PUBLIC_COMMENTS,
-    medium: AGON_MEDIUM_IDEA_PUBLIC_COMMENTS,
-    good: AGON_GOOD_IDEA_PUBLIC_COMMENTS,
-    excellent: AGON_EXCELLENT_IDEA_PUBLIC_COMMENTS
+    weak: MNORIA_WEAK_IDEA_PUBLIC_COMMENTS,
+    medium: MNORIA_MEDIUM_IDEA_PUBLIC_COMMENTS,
+    good: MNORIA_GOOD_IDEA_PUBLIC_COMMENTS,
+    excellent: MNORIA_EXCELLENT_IDEA_PUBLIC_COMMENTS
   };
   const icons = {
     weak: '☠️',
@@ -28494,7 +28553,7 @@ function getAgonPublicIdeaComment(entry, fallbackId) {
   return comment ? `${icons[level]} ${comment}` : '';
 }
 
-window.getAgonPublicIdeaComment = getAgonPublicIdeaComment;
+window.getMnoriaPublicIdeaComment = getMnoriaPublicIdeaComment;
 
 function buildArgumentScoreMap(analysis) {
   const map = {};
@@ -28581,18 +28640,49 @@ function buildArgumentScoreMap(analysis) {
       };
     }
   });
+  // Ajouter les arguments trop courts (< 100 caractères, cf. MIN_ANALYZABLE_LENGTH
+  // dans lib/debate-analysis.js — à garder synchrone avec cette valeur) avec score 0 —
+  // même mécanique que le bloc copié-collé ci-dessus, jamais analysés par l'IA,
+  // catégorie distincte. Visible UNIQUEMENT en admin ou pour le créateur de l'arène
+  // (demande du 20/08/2026) : pour tout autre visiteur, aucune entrée n'est ajoutée au
+  // map — ni badge ni popup, jamais un "score 0" visible publiquement pour une idée qui
+  // n'a en réalité pas du tout été jugée.
+  var canSeeTooShortDetail = isAdmin() || !!(currentDebateCache && currentDebateCache.is_owner);
+  currentAllArguments.forEach(function(a) {
+    if (canSeeTooShortDetail && String(a.body || '').trim().length > 0 && String(a.body || '').trim().length < 100 && Number(a.paste_ratio || 0) <= 50 && !map[String(a.id)]) {
+      map[String(a.id)] = {
+        argumentId:        a.id,
+        final_score:       0,
+        final_category:    'trop_court',
+        scores_without_sources: null,
+        source_score:      null,
+        has_url_source:    false,
+        source_level:      '',
+        source_relevance:  '',
+        source_reliability:'',
+        source_supports_argument: '',
+        source_verification_level: '',
+        source_main_issue: '',
+        short_explanation: 'Caractères insuffisants pour être évaluée.',
+        source_explanation: '',
+        custom_rubric_report: null,
+        strengths:         [],
+        weaknesses:        []
+      };
+    }
+  });
   // Précalculer le classement par camp (meilleur = rang 1).
   // Les doublons hérités (merged_with) sont exclus du total — une idée regroupée
   // ne compte qu'une fois — puis reçoivent le rang de leur représentant.
   ['A', 'B'].forEach(function(side) {
     var campEntries = Object.values(map).filter(function(e) {
-      return e.camp === side && e.final_category !== 'copie' && e.final_score != null && !e.merged_with;
+      return e.camp === side && e.final_category !== 'copie' && e.final_category !== 'trop_court' && e.final_score != null && !e.merged_with;
     });
     var sorted = campEntries.slice().sort(function(a, b) { return b.final_score - a.final_score; });
     var total = sorted.length;
     Object.keys(map).forEach(function(id) {
       var e = map[id];
-      if (e.camp !== side || e.final_category === 'copie' || e.final_score == null || e.merged_with) return;
+      if (e.camp !== side || e.final_category === 'copie' || e.final_category === 'trop_court' || e.final_score == null || e.merged_with) return;
       e.rankPos   = sorted.filter(function(x) { return x.final_score > e.final_score; }).length + 1;
       e.rankTotal = total;
     });
@@ -28650,7 +28740,7 @@ function showActiveRubricModal() {
       html += '<div class="rubric-modal-section">'
         + '<p class="rubric-modal-text">Par défaut, l\'IA évalue chaque contribution sur 100 points : pertinence par rapport au sujet (/20), clarté (/15), solidité ou justification (/25), apport à l\'arène (/25), nuance (/10), ton (/5). Les sources fournies en URL donnent un bonus jusqu\'à +10 points, score final plafonné à 100.</p>'
         + '<p class="rubric-modal-text">Une contribution excellente peut atteindre 100 même sans source ; à l\'inverse, une source seule ne suffit jamais à rendre excellente une contribution moyenne.</p>'
-        + '<p class="rubric-modal-note">Aucun barème personnalisé n\'a été défini : le barème Agôn par défaut s\'applique.</p>'
+        + '<p class="rubric-modal-note">Aucun barème personnalisé n\'a été défini : le barème Mnoria par défaut s\'applique.</p>'
         + '</div>';
     }
   } else {
@@ -28899,7 +28989,7 @@ function attachPageScrollFadeHint(fadeColor, options) {
     // l'écran (limite déjà documentée) — un hint à bottom:0 (pas de nav en
     // dessous, ex. /qcm-du-jour en iframe) y devient invisible. Même
     // décalage que le dock flottant et le hint de la fiche Mes acquis.
-    hint.style.bottom = `calc(${navHeight}px + var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px)))`;
+    hint.style.bottom = `calc(${navHeight}px + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)))`;
 
     const contentEnd = getContentEnd();
     const hasOverflow = contentEnd > window.innerHeight + 2;
@@ -28928,7 +29018,11 @@ function attachPageScrollFadeHint(fadeColor, options) {
 
 function showArgumentAiDetail(argId, triggerEl) {
   const entry = currentArgumentScoreMap[argId];
-  if (!entry) return;
+  // Note masquée (idée ni "bon" ni "excellent", visible seulement par l'admin/le
+  // créateur côté serveur) : garde-fou défensif en plus du filtrage déjà fait sur
+  // final_score == null avant chaque appel à cette fonction — jamais de popup pour
+  // une entrée que le serveur n'a de toute façon pas détaillée.
+  if (!entry || entry.final_score == null || entry.final_category === 'masque') return;
 
   const existing = document.getElementById('argument-ai-detail-popup');
   if (existing) {
@@ -28938,14 +29032,15 @@ function showArgumentAiDetail(argId, triggerEl) {
     if (sameArg) return;
   }
 
-  const catLabels = { excellent: 'Excellent', bon: 'Bon', moyen: 'Moyen', faible: 'Faible', copie: 'Copié-collé' };
+  const catLabels = { excellent: 'Excellent', bon: 'Bon', moyen: 'Moyen', faible: 'Faible', copie: 'Copié-collé', trop_court: 'Trop court' };
   const catLabel = catLabels[entry.final_category] || '';
   const catCls = entry.final_category ? ' arg-ai-detail-cat-' + entry.final_category : '';
   const scoreCls = entry.final_category ? ' arg-ai-score-' + entry.final_category : '';
   const isCopie = entry.final_category === 'copie';
+  const isExcludedFromScoring = isCopie || entry.final_category === 'trop_court';
 
-  const rankPos   = isCopie ? null : (entry.rankPos   || null);
-  const rankTotal = isCopie ? null : (entry.rankTotal || null);
+  const rankPos   = isExcludedFromScoring ? null : (entry.rankPos   || null);
+  const rankTotal = isExcludedFromScoring ? null : (entry.rankTotal || null);
 
   let html = '<div class="arg-ai-detail-header">'
     + '<span class="arg-ai-detail-header-label">✦ Analyse IA</span>'
@@ -28971,7 +29066,7 @@ function showArgumentAiDetail(argId, triggerEl) {
       + '</div>';
   }
 
-  const publicComment = getAgonPublicIdeaComment(entry, argId);
+  const publicComment = getMnoriaPublicIdeaComment(entry, argId);
   const mainExplanation = publicComment || entry.short_explanation;
   if (mainExplanation) {
     html += '<div class="arg-ai-detail-expl' + (publicComment ? ' arg-ai-detail-public-comment' : '') + (isCopie ? ' arg-ai-detail-expl-copie' : '') + '">' + escapeHtml(mainExplanation) + '</div>';
@@ -29024,11 +29119,11 @@ function showArgumentAiDetail(argId, triggerEl) {
   const bottomClose = popup.querySelector('.arg-ai-detail-bottom-close');
   const scrollBody = popup.querySelector('.arg-ai-detail-popup-body');
   attachScrollFadeHint(scrollBody, popup);
-  try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: true }, '*'); } catch(e) {}
+  try { window.parent.postMessage({ type: 'mnoria:ai-score-modal-visibility', open: true }, '*'); } catch(e) {}
 
   function closeAiDetail() {
     overlay.remove();
-    try { window.parent.postMessage({ type: 'agon:ai-score-modal-visibility', open: false }, '*'); } catch(e) {}
+    try { window.parent.postMessage({ type: 'mnoria:ai-score-modal-visibility', open: false }, '*'); } catch(e) {}
   }
 
   popup.querySelector('.arg-ai-detail-close').addEventListener('click', function(e) {
@@ -29112,8 +29207,8 @@ function renderDebateAiProgressInlineFromAnalysis(debateId) {
   const safeDebateId = String(debateId || "").trim();
   if (!slot || !safeDebateId) return;
 
-  const fetchAnalysis = typeof window.__agonFetchAnalysis === "function"
-    ? window.__agonFetchAnalysis(safeDebateId).then((res) => (res && res.r && res.r.ok ? res.json : null))
+  const fetchAnalysis = typeof window.__mnoriaFetchAnalysis === "function"
+    ? window.__mnoriaFetchAnalysis(safeDebateId).then((res) => (res && res.r && res.r.ok ? res.json : null))
     : fetch(`${API}/debates/${encodeURIComponent(safeDebateId)}/analysis?key=${encodeURIComponent(getKey())}`, {
         headers: debateOwnerHeaders()
       }).then((response) => response.ok ? response.json() : null);
@@ -29398,8 +29493,8 @@ if (data.debate.ai_analysis_status !== 'none') {
   // ce rapport existant plutôt que de masquer les notes pendant l'attente.
   // Utiliser le fetch partagé de admin-debate-analysis.js si disponible
   // (même cache + même in-flight promise → 1 seule requête réseau au lieu de 2).
-  var analysisFetchPromise = typeof window.__agonFetchAnalysis === 'function'
-    ? window.__agonFetchAnalysis(id).then(function(res) { return res && res.r && res.r.ok ? res.json : null; })
+  var analysisFetchPromise = typeof window.__mnoriaFetchAnalysis === 'function'
+    ? window.__mnoriaFetchAnalysis(id).then(function(res) { return res && res.r && res.r.ok ? res.json : null; })
     : fetch(API + '/debates/' + id + '/analysis').then(function(r) { return r.ok ? r.json() : null; });
 
   analysisFetchPromise
@@ -33456,7 +33551,7 @@ function closeReplacementSuccessMessage() {
   }, 250);
 }
 function shouldRunBackgroundRefresh() {
-  return !document.hidden && window.__agonDebateModalOpen !== true;
+  return !document.hidden && window.__mnoriaDebateModalOpen !== true;
 }
 
 function hasNotificationBadgeTargets() {
@@ -33582,7 +33677,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // tâche de fond ; setMemoireCloudMode bascule aussitôt l'affichage, et le guard déjà
     // présent dans updateIndexTagTrends (_memoireCloudMode) empêche cette tâche Actu de
     // rendre ses bulles par-dessus une fois sa réponse réseau arrivée.
-    if (document.getElementById('agon-cloud-mode-memoire-btn')) {
+    if (document.getElementById('mnoria-cloud-mode-memoire-btn')) {
       setMemoireCloudMode(true);
     }
   }
@@ -33644,7 +33739,7 @@ if (location.pathname === "/debate") {
   }
 });
 
-const NOTIF_PAGE_CACHE_KEY = 'agon_notif_page_cache';
+const NOTIF_PAGE_CACHE_KEY = 'mnoria_notif_page_cache';
 const NOTIF_PAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 const NOTIF_PAGE_SIZE = 50;
 
@@ -34214,7 +34309,7 @@ function syncIframeParentArgumentFormState(isOpen) {
 
   try {
     window.parent.postMessage({
-      type: "agon:argument-form-visibility",
+      type: "mnoria:argument-form-visibility",
       open: !!isOpen
     }, "*");
   } catch (error) {}
@@ -34885,16 +34980,16 @@ window.scrollToTheme = scrollToTheme;
 let homeBottomNavViewportOffsetRaf = null;
 let homeBottomNavViewportOffsetTimeout = null;
 let homeBottomNavViewportOffsetLastRunAt = 0;
-let agonSafeAreaBottomProbe = null;
+let mnoriaSafeAreaBottomProbe = null;
 
-function isAgonMobileViewportBottomFillEnabled() {
+function isMnoriaMobileViewportBottomFillEnabled() {
   return window.innerWidth <= 768 ||
     window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches ||
     window.matchMedia?.("(display-mode: standalone)")?.matches;
 }
 
-function getAgonMobileViewportBottomFill() {
-  if (!isAgonMobileViewportBottomFillEnabled()) return 0;
+function getMnoriaMobileViewportBottomFill() {
+  if (!isMnoriaMobileViewportBottomFillEnabled()) return 0;
 
   const vv = window.visualViewport;
   const layoutHeight = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -34905,13 +35000,13 @@ function getAgonMobileViewportBottomFill() {
   return raw <= maxToolbarOffset ? raw : 0;
 }
 
-function getAgonCssSafeAreaBottomFill() {
-  if (!isAgonMobileViewportBottomFillEnabled()) return 0;
+function getMnoriaCssSafeAreaBottomFill() {
+  if (!isMnoriaMobileViewportBottomFillEnabled()) return 0;
 
-  if (!agonSafeAreaBottomProbe) {
-    agonSafeAreaBottomProbe = document.createElement("div");
-    agonSafeAreaBottomProbe.setAttribute("aria-hidden", "true");
-    agonSafeAreaBottomProbe.style.cssText = [
+  if (!mnoriaSafeAreaBottomProbe) {
+    mnoriaSafeAreaBottomProbe = document.createElement("div");
+    mnoriaSafeAreaBottomProbe.setAttribute("aria-hidden", "true");
+    mnoriaSafeAreaBottomProbe.style.cssText = [
       "position:fixed",
       "left:0",
       "bottom:0",
@@ -34922,14 +35017,14 @@ function getAgonCssSafeAreaBottomFill() {
       "pointer-events:none",
       "z-index:-1"
     ].join(";");
-    (document.body || document.documentElement).appendChild(agonSafeAreaBottomProbe);
+    (document.body || document.documentElement).appendChild(mnoriaSafeAreaBottomProbe);
   }
 
-  return Math.max(0, Math.round(parseFloat(window.getComputedStyle(agonSafeAreaBottomProbe).paddingBottom) || 0));
+  return Math.max(0, Math.round(parseFloat(window.getComputedStyle(mnoriaSafeAreaBottomProbe).paddingBottom) || 0));
 }
 
-function getAgonLegacyStandaloneBottomFallback(cssSafeOffset = 0) {
-  if (!isStandaloneMode() || !isIOSDevice() || !isAgonStandaloneMobileScreen()) return 0;
+function getMnoriaLegacyStandaloneBottomFallback(cssSafeOffset = 0) {
+  if (!isStandaloneMode() || !isIOSDevice() || !isMnoriaStandaloneMobileScreen()) return 0;
   if (Math.round(Number(cssSafeOffset) || 0) > 0) return 0;
 
   const shortSide = Math.min(
@@ -34939,13 +35034,13 @@ function getAgonLegacyStandaloneBottomFallback(cssSafeOffset = 0) {
   return shortSide <= 430 ? 36 : 0;
 }
 
-function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOffset, legacyOffset = 0) {
+function setMnoriaMobileViewportBottomFill(viewportOffset, safeOffset = viewportOffset, legacyOffset = 0) {
   const viewportValue = Math.max(0, Math.round(Number(viewportOffset) || 0));
   const safeValue = Math.max(0, Math.round(Number(safeOffset) || 0));
   const legacyValue = Math.max(0, Math.round(Number(legacyOffset) || 0));
-  document.documentElement.style.setProperty('--agon-mobile-bottom-fill', `${viewportValue}px`);
-  document.documentElement.style.setProperty('--agon-safe-bottom', `${safeValue}px`);
-  document.documentElement.style.setProperty('--agon-legacy-standalone-bottom-fill', `${legacyValue}px`);
+  document.documentElement.style.setProperty('--mnoria-mobile-bottom-fill', `${viewportValue}px`);
+  document.documentElement.style.setProperty('--mnoria-safe-bottom', `${safeValue}px`);
+  document.documentElement.style.setProperty('--mnoria-legacy-standalone-bottom-fill', `${legacyValue}px`);
 }
 
 // Légende "Les tendances…" (standalone mobile) : cachée juste sous le bord
@@ -34954,8 +35049,8 @@ function setAgonMobileViewportBottomFill(viewportOffset, safeOffset = viewportOf
 // (innerHeight < 100dvh) : la légende y atterrissait dans la bande morte du
 // bas, visible SOUS le bandeau. On mesure donc la position réelle du bandeau
 // (fixed → indépendante du scroll) et on pose le décalage en variable CSS.
-// TEMPORAIRE : trace chaque appel de syncAgonHomeTrendsCaptionAnchor vers le
-// serveur (fire-and-forget) pour diagnostiquer le saut de --agon-home-first-row-mt
+// TEMPORAIRE : trace chaque appel de syncMnoriaHomeTrendsCaptionAnchor vers le
+// serveur (fire-and-forget) pour diagnostiquer le saut de --mnoria-home-first-row-mt
 // au retour de Connaissances/Éclairages/Ce jour dans l'histoire en standalone.
 // À retirer une fois la cause identifiée (cf. conversation du 05/08/2026).
 function __scrollJumpDiagLog(reason, data) {
@@ -34978,28 +35073,28 @@ function __scrollJumpDiagLog(reason, data) {
 // Vrai polling de stabilisation (même patron que waitForIndexEmbedShellsReady
 // pour les embeds X/Instagram) plutôt qu'un délai fixe deviné : au retour de
 // Connaissances/Éclairages/Ce jour dans l'histoire en standalone,
-// .agon-tribunes-btn ("Autres actus", centré en flexbox avec le nuage de
-// bulles dans #agon-tag-trends-section) continue de se repositionner
+// .mnoria-tribunes-btn ("Autres actus", centré en flexbox avec le nuage de
+// bulles dans #mnoria-tag-trends-section) continue de se repositionner
 // pendant ~900ms (transition min-height de la section + recentrage). Bloque
-// syncAgonHomeTrendsCaptionAnchor (via __agonTrendsCaptionSyncPending) tant
+// syncMnoriaHomeTrendsCaptionAnchor (via __mnoriaTrendsCaptionSyncPending) tant
 // que la position de ce bouton n'est pas stable sur 2 passages consécutifs,
 // puis calcule une seule fois — au lieu de plusieurs calculs sur un délai
 // fixe, chacun capturant une position intermédiaire différente.
 async function waitForTrendsSectionStableThenSync(timeoutMs = 2000) {
-  if (window.__agonDebateModalOpen === true) return;
+  if (window.__mnoriaDebateModalOpen === true) return;
   const body = document.body;
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
-  const section = document.getElementById('agon-tag-trends-section');
+  const section = document.getElementById('mnoria-tag-trends-section');
   if (!section) return;
 
-  window.__agonTrendsCaptionSyncPending = true;
+  window.__mnoriaTrendsCaptionSyncPending = true;
   try {
     const deadline = Date.now() + timeoutMs;
     let previousSignature = null;
     let stablePasses = 0;
     while (Date.now() < deadline) {
-      if (window.__agonDebateModalOpen === true) return;
-      const tribunesBtn = section.querySelector('.agon-tribunes-btn');
+      if (window.__mnoriaDebateModalOpen === true) return;
+      const tribunesBtn = section.querySelector('.mnoria-tribunes-btn');
       const nav = document.querySelector('.home-bottom-nav');
       const navTop = nav ? Math.round(nav.getBoundingClientRect().top) : null;
       const tribunesBottom = tribunesBtn ? Math.round(tribunesBtn.getBoundingClientRect().bottom) : null;
@@ -35015,19 +35110,19 @@ async function waitForTrendsSectionStableThenSync(timeoutMs = 2000) {
       await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 90)));
     }
   } finally {
-    window.__agonTrendsCaptionSyncPending = false;
+    window.__mnoriaTrendsCaptionSyncPending = false;
   }
   if (typeof updateHomeBottomNavViewportOffset === 'function') updateHomeBottomNavViewportOffset();
 }
 
-function syncAgonHomeTrendsCaptionAnchor() {
+function syncMnoriaHomeTrendsCaptionAnchor() {
   const root = document.documentElement;
   const body = document.body;
-  if (window.__agonDebateModalOpen === true) {
+  if (window.__mnoriaDebateModalOpen === true) {
     // Confirmé par diagnostic (05/08/2026) : cette fonction tournait aussi
     // PENDANT que la modale débat (Connaissances/Éclairages/Ce jour dans
     // l'histoire) est ouverte, calculant à partir d'une mise en page
-    // transitoire (#agon-tag-trends-section couverte/suspendue) — la marge
+    // transitoire (#mnoria-tag-trends-section couverte/suspendue) — la marge
     // oscillait -12 → -67 → -56 → -67 avant même la fermeture, puis encore
     // -12 → 23 → 23 → 23 → -12 à la fermeture, pour finalement se stabiliser
     // exactement là où elle était au départ. Ce grand écart transitoire est
@@ -35037,9 +35132,9 @@ function syncAgonHomeTrendsCaptionAnchor() {
     __scrollJumpDiagLog('guard-modal-open', {});
     return;
   }
-  if (window.__agonTrendsCaptionSyncPending === true) {
+  if (window.__mnoriaTrendsCaptionSyncPending === true) {
     // waitForTrendsSectionStableThenSync (cf. plus bas) est en train
-    // d'attendre que .agon-tribunes-btn ("Autres actus", centré en flexbox
+    // d'attendre que .mnoria-tribunes-btn ("Autres actus", centré en flexbox
     // dans la section avec le reste du nuage) arrête de bouger avant de
     // calculer une seule fois — confirmé par diagnostic : ce bouton continue
     // de se repositionner ~900ms après la fermeture de la modale pendant que
@@ -35063,14 +35158,14 @@ function syncAgonHomeTrendsCaptionAnchor() {
     // que risquer un effacement transitoire pendant une bascule passagère.
     return;
   }
-  const section = document.getElementById('agon-tag-trends-section');
+  const section = document.getElementById('mnoria-tag-trends-section');
   const nav = document.querySelector('.home-bottom-nav');
-  if (!section || section.hidden || !nav || !isAgonVisibleElement(nav)) {
+  if (!section || section.hidden || !nav || !isMnoriaVisibleElement(nav)) {
     __scrollJumpDiagLog('guard-section-or-nav', {
       hasSection: !!section,
       sectionHidden: !!section && section.hidden,
       hasNav: !!nav,
-      navVisible: !!nav && isAgonVisibleElement(nav)
+      navVisible: !!nav && isMnoriaVisibleElement(nav)
     });
     // Ce garde se déclenche aussi transitoirement pendant l'ouverture/fermeture
     // de la modale débat (nav temporairement masqué/couvert) : même raison
@@ -35086,34 +35181,34 @@ function syncAgonHomeTrendsCaptionAnchor() {
   const sectionDocTop = section.getBoundingClientRect().top + scrollY;
 
   // Mode "Ma mémoire" : le bouton "Autres actus" (référence de la logique
-  // symétrique-à-la-légende plus bas) est masqué (cf. toggleAgonCloud), donc
+  // symétrique-à-la-légende plus bas) est masqué (cf. toggleMnoriaCloud), donc
   // contentBottomDoc reste toujours null et cette logique ne s'applique
   // jamais dans ce mode (guard plus bas). Le bouton Trier/Rechercher et le
   // bandeau "À la une" sont alors calés directement sur la section (nuage de
   // bulles), avec le même écart fixe des deux côtés du bouton — demande du
   // 16/08/2026 (harmoniser mobile classique/standalone, chacun symétrique à
   // 24px). Idempotent d'une passe à l'autre, même principe que plus bas.
-  const isMemoireMode = body.classList.contains('agon-memoire-cloud-mode');
+  const isMemoireMode = body.classList.contains('mnoria-memoire-cloud-mode');
   const sortBar = document.querySelector('.index-explorer-topbar');
   const firstRowForSort = document.querySelector('#debates-list .theme-row-section');
   if (isMemoireMode && sortBar && firstRowForSort) {
-    const AGON_SORT_BTN_GAP = 24;
+    const MNORIA_SORT_BTN_GAP = 24;
     const sectionBottomDoc = section.getBoundingClientRect().bottom + scrollY;
     const sortRect = sortBar.getBoundingClientRect();
     const sortTopDoc = sortRect.top + scrollY;
     const currentSortMarginTop = parseFloat(window.getComputedStyle(sortBar).marginTop) || 0;
-    const nextSortMarginTop = Math.round(currentSortMarginTop + ((sectionBottomDoc + AGON_SORT_BTN_GAP) - sortTopDoc));
+    const nextSortMarginTop = Math.round(currentSortMarginTop + ((sectionBottomDoc + MNORIA_SORT_BTN_GAP) - sortTopDoc));
     if (Number.isFinite(nextSortMarginTop)) {
-      root.style.setProperty('--agon-home-sort-btn-mt', `${nextSortMarginTop}px`);
+      root.style.setProperty('--mnoria-home-sort-btn-mt', `${nextSortMarginTop}px`);
     }
     const bandElForSort = firstRowForSort.querySelector('.theme-row-title') || firstRowForSort;
     const bandDocTopForSort = bandElForSort.getBoundingClientRect().top + scrollY;
     const currentBandMarginTop = parseFloat(window.getComputedStyle(firstRowForSort).marginTop) || 0;
-    const sortBottomDocAfterFix = sectionBottomDoc + AGON_SORT_BTN_GAP + sortRect.height;
-    const bandTargetTopFromSort = sortBottomDocAfterFix + AGON_SORT_BTN_GAP;
+    const sortBottomDocAfterFix = sectionBottomDoc + MNORIA_SORT_BTN_GAP + sortRect.height;
+    const bandTargetTopFromSort = sortBottomDocAfterFix + MNORIA_SORT_BTN_GAP;
     const nextBandMarginTop = Math.round(currentBandMarginTop + (bandTargetTopFromSort - bandDocTopForSort));
     if (Number.isFinite(nextBandMarginTop)) {
-      root.style.setProperty('--agon-home-first-row-mt', `${nextBandMarginTop}px`);
+      root.style.setProperty('--mnoria-home-first-row-mt', `${nextBandMarginTop}px`);
     }
   }
 
@@ -35125,7 +35220,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
   // sur le bouton Autres actus / les switches. Restée sous le contenu, elle est
   // alors simplement sous le bas d'écran (ou derrière le bandeau) : cachée
   // aussi.
-  const lastContent = section.querySelector('.agon-tribunes-btn');
+  const lastContent = section.querySelector('.mnoria-tribunes-btn');
   let contentBottomDoc = null;
   if (lastContent) {
     const lastRect = lastContent.getBoundingClientRect();
@@ -35139,14 +35234,14 @@ function syncAgonHomeTrendsCaptionAnchor() {
     // Pas de reset ici non plus, même raison que les gardes ci-dessus.
     return;
   }
-  root.style.setProperty('--agon-home-trends-caption-top', `${offset}px`);
+  root.style.setProperty('--mnoria-home-trends-caption-top', `${offset}px`);
 
   // Espace symétrique : autant de vide entre la légende et le bandeau
   // thématique ("À la une") en dessous qu'entre le bouton Autres actus et la
   // légende au-dessus. La marge est posée en variable (consommée par le
   // margin-top du premier .theme-row-section) et recalculée par delta sur la
   // position mesurée du bandeau : idempotent d'une passe à l'autre.
-  const caption = section.querySelector('.agon-tag-trends-caption');
+  const caption = section.querySelector('.mnoria-tag-trends-caption');
   const firstRow = document.querySelector('#debates-list .theme-row-section');
   if (!caption || !firstRow || contentBottomDoc === null) {
     __scrollJumpDiagLog('guard-caption-or-firstrow', {
@@ -35179,13 +35274,13 @@ function syncAgonHomeTrendsCaptionAnchor() {
     bandDocTop,
     currentMarginTop,
     nextMarginTop,
-    modalOpen: window.__agonDebateModalOpen === true
+    modalOpen: window.__mnoriaDebateModalOpen === true
   });
-  root.style.setProperty('--agon-home-first-row-mt', `${nextMarginTop}px`);
+  root.style.setProperty('--mnoria-home-first-row-mt', `${nextMarginTop}px`);
 }
 
-// Le min-height CSS de .agon-tag-trends-section en standalone (cf. style.css,
-// body.is-standalone .agon-tag-trends-section) suppose par défaut une hauteur de bandeau du
+// Le min-height CSS de .mnoria-tag-trends-section en standalone (cf. style.css,
+// body.is-standalone .mnoria-tag-trends-section) suppose par défaut une hauteur de bandeau du
 // haut fixe (110px, repli avant le premier passage de cette fonction) — hypothèse fragile :
 // devenue fausse une première fois avec l'ajout du bandeau de score et du bouton "Trier /
 // Rechercher" (cadre "Ma mémoire" affiché trop bas, 11/08/2026 puis reconstaté 12/08/2026).
@@ -35194,7 +35289,7 @@ function syncAgonHomeTrendsCaptionAnchor() {
 // min-height qu'on est en train de calculer), et .home-bottom-nav est position:fixed (73px
 // déjà correct dans le calc(), aucune mesure nécessaire de ce côté).
 // TEMPORAIRE : diagnostic du cadre "Ma mémoire" à la mauvaise taille de façon intermittente en
-// standalone (cf. syncAgonHomeTrendsSectionMinHeight juste en dessous). Réutilise le pipeline
+// standalone (cf. syncMnoriaHomeTrendsSectionMinHeight juste en dessous). Réutilise le pipeline
 // déjà en place pour un souci similaire (__scrollJumpDiagLog / /api/debug/scroll-jump-sample) —
 // à retirer une fois la cause identifiée (conversation du 12/08/2026). Ne logge que sur
 // changement de résultat (pas à chaque appel) pour ne pas noyer le fichier partagé.
@@ -35211,20 +35306,20 @@ function __memoireFrameDiagLog(outcome, data) {
 // lancement standalone à froid, sectionTop oscille violemment pendant plusieurs secondes
 // (127 → 171 → 229 → 211 → 80 → négatif → 34 → 161 → 229…) en même temps que window.innerHeight
 // lui-même rapporte des hauteurs provisoires avant de se stabiliser (768 → 806 → 812, même
-// symptôme que initAgonDockAlignment plus haut). Appliquer CHAQUE mesure immédiatement posait
+// symptôme que initMnoriaDockAlignment plus haut). Appliquer CHAQUE mesure immédiatement posait
 // donc parfois une valeur transitoire fausse si l'utilisateur regardait avant que ça se calme.
 // Même principe que le polling de stabilisation plus haut (retour de Connaissances/Éclairages/
 // Ce jour dans l'histoire) : n'appliquer une mesure qu'une fois confirmée par 2 passages
 // consécutifs identiques, jamais la toute première lecture isolée.
-let __agonTrendsSectionTopPending = null;
-function syncAgonHomeTrendsSectionMinHeight() {
+let __mnoriaTrendsSectionTopPending = null;
+function syncMnoriaHomeTrendsSectionMinHeight() {
   const body = document.body;
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
-  if (window.__agonDebateModalOpen === true) return;
-  const section = document.getElementById('agon-tag-trends-section');
+  if (window.__mnoriaDebateModalOpen === true) return;
+  const section = document.getElementById('mnoria-tag-trends-section');
   if (!section) return;
   if (section.hidden) {
-    __agonTrendsSectionTopPending = null;
+    __mnoriaTrendsSectionTopPending = null;
     __memoireFrameDiagLog('skip-hidden', { memoire: !!_memoireCloudMode });
     return;
   }
@@ -35249,26 +35344,26 @@ function syncAgonHomeTrendsSectionMinHeight() {
   // d'écraser avec du n'importe quoi. Plage large (0-400px) : couvre topbar + bandeau de score +
   // bouton "Trier / Rechercher" sur tous les téléphones.
   if (!Number.isFinite(sectionTop) || sectionTop < 0 || sectionTop > 400) {
-    __agonTrendsSectionTopPending = null;
+    __mnoriaTrendsSectionTopPending = null;
     __memoireFrameDiagLog('skip-out-of-range', { sectionTop, memoire: !!_memoireCloudMode });
     return;
   }
-  if (__agonTrendsSectionTopPending !== sectionTop) {
-    __agonTrendsSectionTopPending = sectionTop;
+  if (__mnoriaTrendsSectionTopPending !== sectionTop) {
+    __mnoriaTrendsSectionTopPending = sectionTop;
     __memoireFrameDiagLog('pending', { sectionTop, memoire: !!_memoireCloudMode });
     return;
   }
-  document.documentElement.style.setProperty('--agon-home-trends-section-top', `${sectionTop}px`);
+  document.documentElement.style.setProperty('--mnoria-home-trends-section-top', `${sectionTop}px`);
   // Mesures supplémentaires (hauteur réellement rendue de la section, position du switch de
   // mode et des flèches flottantes de scroll) : la min-height n'est qu'un plancher, la valeur
   // mesurée peut donc être correcte tout en laissant le rendu final incohérent pour une autre
   // raison — ces champs permettent de voir directement si la section grandit au-delà de sa
   // min-height (contenu qui déborde) plutôt que de le déduire par le calcul.
-  const switchEl = document.getElementById('agon-cloud-mode-switch');
+  const switchEl = document.getElementById('mnoria-cloud-mode-switch');
   const scrollDownBtn = document.querySelector('.index-floating-scroll-down');
-  const cloudEl = document.getElementById('agon-tag-trends-cloud');
-  const captionEl = document.querySelector('#agon-tag-trends-section .agon-tag-trends-caption');
-  const beforeEl = document.getElementById('agon-memoire-embed-before');
+  const cloudEl = document.getElementById('mnoria-tag-trends-cloud');
+  const captionEl = document.querySelector('#mnoria-tag-trends-section .mnoria-tag-trends-caption');
+  const beforeEl = document.getElementById('mnoria-memoire-embed-before');
   __memoireFrameDiagLog('applied', {
     sectionTop,
     memoire: !!_memoireCloudMode,
@@ -35292,13 +35387,13 @@ function syncAgonHomeTrendsSectionMinHeight() {
 }
 
 function updateHomeBottomNavViewportOffset() {
-  syncAgonHomeTrendsCaptionAnchor();
-  syncAgonHomeTrendsSectionMinHeight();
-  const viewportBottomFill = getAgonMobileViewportBottomFill();
-  const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
-  const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);
+  syncMnoriaHomeTrendsCaptionAnchor();
+  syncMnoriaHomeTrendsSectionMinHeight();
+  const viewportBottomFill = getMnoriaMobileViewportBottomFill();
+  const cssSafeBottomFill = getMnoriaCssSafeAreaBottomFill();
+  const legacyBottomFill = getMnoriaLegacyStandaloneBottomFallback(cssSafeBottomFill);
   const safeBottomFill = Math.max(viewportBottomFill, cssSafeBottomFill, legacyBottomFill);
-  setAgonMobileViewportBottomFill(viewportBottomFill, safeBottomFill, legacyBottomFill);
+  setMnoriaMobileViewportBottomFill(viewportBottomFill, safeBottomFill, legacyBottomFill);
 
   if (window.innerWidth > 768) {
     document.documentElement.style.setProperty('--home-bottom-nav-offset', '0px');
@@ -35348,7 +35443,7 @@ function scheduleHomeBottomNavViewportOffsetUpdate() {
 
   // Filet de secours seulement : si le rAF ci-dessus a déjà tourné il y a peu,
   // ne pas relancer updateHomeBottomNavViewportOffset une seconde fois — son
-  // ajustement de --agon-home-first-row-mt (syncAgonHomeTrendsCaptionAnchor)
+  // ajustement de --mnoria-home-first-row-mt (syncMnoriaHomeTrendsCaptionAnchor)
   // est par delta sur une mesure live, pas parfaitement idempotent d'une
   // passe à l'autre en pratique. Deux passes rapprochées se traduisaient par
   // un écart bandeau/boutons qui se réduisait deux fois de suite au retour de
@@ -35361,9 +35456,9 @@ function scheduleHomeBottomNavViewportOffsetUpdate() {
   }, 120);
 }
 
-function bindAgonMobileViewportBottomFillSync() {
-  if (document.documentElement.dataset.agonMobileViewportBottomFillBound === "true") return;
-  document.documentElement.dataset.agonMobileViewportBottomFillBound = "true";
+function bindMnoriaMobileViewportBottomFillSync() {
+  if (document.documentElement.dataset.mnoriaMobileViewportBottomFillBound === "true") return;
+  document.documentElement.dataset.mnoriaMobileViewportBottomFillBound = "true";
 
   window.addEventListener("resize", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
   window.addEventListener("orientationchange", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
@@ -35389,7 +35484,7 @@ function bindAgonMobileViewportBottomFillSync() {
   scheduleHomeBottomNavViewportOffsetUpdate();
 
   // Au lancement standalone, iOS peut rapporter une hauteur provisoire sans
-  // émettre de resize (cf. initAgonDockAlignment) : relances différées pour
+  // émettre de resize (cf. initMnoriaDockAlignment) : relances différées pour
   // recaler l'ancrage de la légende et l'offset du bandeau une fois la
   // hauteur stabilisée.
   setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 1000);
@@ -35397,14 +35492,14 @@ function bindAgonMobileViewportBottomFillSync() {
   setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 7000);
 }
 
-window.__agonSyncMobileBottomNavViewport = scheduleHomeBottomNavViewportOffsetUpdate;
+window.__mnoriaSyncMobileBottomNavViewport = scheduleHomeBottomNavViewportOffsetUpdate;
 
-let agonStandaloneBottomSurfaceRaf = null;
-let agonStandaloneBottomSurfaceTimeout = null;
-let agonStandaloneBottomSurfaceObserver = null;
-let agonDebateSourceBottomFillPx = 0;
+let mnoriaStandaloneBottomSurfaceRaf = null;
+let mnoriaStandaloneBottomSurfaceTimeout = null;
+let mnoriaStandaloneBottomSurfaceObserver = null;
+let mnoriaDebateSourceBottomFillPx = 0;
 
-function isAgonStandaloneMobileScreen() {
+function isMnoriaStandaloneMobileScreen() {
   if (!isStandaloneMode()) return false;
 
   const narrow = window.innerWidth <= 768 ||
@@ -35417,7 +35512,7 @@ function isAgonStandaloneMobileScreen() {
   return !!(narrow || (touch && phoneLike));
 }
 
-function getAgonViewportBottomY() {
+function getMnoriaViewportBottomY() {
   const vv = window.visualViewport;
   const layoutHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const visualBottom = vv
@@ -35426,7 +35521,7 @@ function getAgonViewportBottomY() {
   return Math.max(layoutHeight, visualBottom || 0);
 }
 
-function isAgonVisibleElement(el) {
+function isMnoriaVisibleElement(el) {
   if (!el) return false;
   const styles = window.getComputedStyle(el);
   if (styles.display === "none" || styles.visibility === "hidden") return false;
@@ -35434,7 +35529,7 @@ function isAgonVisibleElement(el) {
   return rect.width > 1 && rect.height > 1;
 }
 
-function getAgonDebateBottomSurface() {
+function getMnoriaDebateBottomSurface() {
   const selectors = [
     "#debate-source-fallback .debate-source-card-image-wrap",
     "#debate-source-fallback .debate-source-card-image",
@@ -35453,53 +35548,53 @@ function getAgonDebateBottomSurface() {
 
   for (const selector of selectors) {
     const el = document.querySelector(selector);
-    if (isAgonVisibleElement(el)) return el;
+    if (isMnoriaVisibleElement(el)) return el;
   }
 
   return null;
 }
 
-function hasAgonDebateYouTubeSourcePreview() {
+function hasMnoriaDebateYouTubeSourcePreview() {
   const wrap = document.getElementById("debate-source-preview-wrap");
   return !!(
     wrap &&
-    isAgonVisibleElement(wrap) &&
+    isMnoriaVisibleElement(wrap) &&
     wrap.querySelector("#debate-source-yt-container")
   );
 }
 
-function setAgonDebateSourceBottomFill(value) {
+function setMnoriaDebateSourceBottomFill(value) {
   const next = Math.max(0, Math.round(Number(value) || 0));
-  if (Math.abs(next - agonDebateSourceBottomFillPx) < 1) return;
-  agonDebateSourceBottomFillPx = next;
-  document.documentElement.style.setProperty("--agon-debate-source-bottom-fill", `${next}px`);
+  if (Math.abs(next - mnoriaDebateSourceBottomFillPx) < 1) return;
+  mnoriaDebateSourceBottomFillPx = next;
+  document.documentElement.style.setProperty("--mnoria-debate-source-bottom-fill", `${next}px`);
 }
 
-function updateAgonStandaloneBottomSurfaceFill() {
+function updateMnoriaStandaloneBottomSurfaceFill() {
   const body = document.body;
-  if (!body || !body.classList.contains("page-debate") || !isAgonStandaloneMobileScreen()) {
-    setAgonDebateSourceBottomFill(0);
+  if (!body || !body.classList.contains("page-debate") || !isMnoriaStandaloneMobileScreen()) {
+    setMnoriaDebateSourceBottomFill(0);
     return;
   }
 
-  const cssSafeBottomFill = getAgonCssSafeAreaBottomFill();
-  const legacyBottomFill = getAgonLegacyStandaloneBottomFallback(cssSafeBottomFill);
+  const cssSafeBottomFill = getMnoriaCssSafeAreaBottomFill();
+  const legacyBottomFill = getMnoriaLegacyStandaloneBottomFallback(cssSafeBottomFill);
   const minimumBottomFill = Math.max(cssSafeBottomFill, legacyBottomFill);
-  if (hasAgonDebateYouTubeSourcePreview()) {
-    setAgonDebateSourceBottomFill(0);
+  if (hasMnoriaDebateYouTubeSourcePreview()) {
+    setMnoriaDebateSourceBottomFill(0);
     return;
   }
-  const surface = getAgonDebateBottomSurface();
-  const viewportBottom = getAgonViewportBottomY();
+  const surface = getMnoriaDebateBottomSurface();
+  const viewportBottom = getMnoriaViewportBottomY();
   if (!surface || !viewportBottom) {
-    setAgonDebateSourceBottomFill(minimumBottomFill);
+    setMnoriaDebateSourceBottomFill(minimumBottomFill);
     return;
   }
 
   const rect = surface.getBoundingClientRect();
   if (rect.top >= viewportBottom || rect.bottom <= 0) return;
 
-  const current = agonDebateSourceBottomFillPx;
+  const current = mnoriaDebateSourceBottomFillPx;
   const gap = Math.round(viewportBottom - rect.bottom);
   let next = Math.max(current, minimumBottomFill);
 
@@ -35509,46 +35604,46 @@ function updateAgonStandaloneBottomSurfaceFill() {
     next = Math.max(minimumBottomFill, current + gap);
   }
 
-  setAgonDebateSourceBottomFill(next);
+  setMnoriaDebateSourceBottomFill(next);
 }
 
-function scheduleAgonStandaloneBottomSurfaceFillUpdate() {
-  if (agonStandaloneBottomSurfaceRaf !== null) {
-    cancelAnimationFrame(agonStandaloneBottomSurfaceRaf);
+function scheduleMnoriaStandaloneBottomSurfaceFillUpdate() {
+  if (mnoriaStandaloneBottomSurfaceRaf !== null) {
+    cancelAnimationFrame(mnoriaStandaloneBottomSurfaceRaf);
   }
 
-  agonStandaloneBottomSurfaceRaf = requestAnimationFrame(() => {
-    agonStandaloneBottomSurfaceRaf = null;
-    updateAgonStandaloneBottomSurfaceFill();
+  mnoriaStandaloneBottomSurfaceRaf = requestAnimationFrame(() => {
+    mnoriaStandaloneBottomSurfaceRaf = null;
+    updateMnoriaStandaloneBottomSurfaceFill();
   });
 
-  if (agonStandaloneBottomSurfaceTimeout !== null) {
-    clearTimeout(agonStandaloneBottomSurfaceTimeout);
+  if (mnoriaStandaloneBottomSurfaceTimeout !== null) {
+    clearTimeout(mnoriaStandaloneBottomSurfaceTimeout);
   }
 
-  agonStandaloneBottomSurfaceTimeout = window.setTimeout(() => {
-    agonStandaloneBottomSurfaceTimeout = null;
-    updateAgonStandaloneBottomSurfaceFill();
+  mnoriaStandaloneBottomSurfaceTimeout = window.setTimeout(() => {
+    mnoriaStandaloneBottomSurfaceTimeout = null;
+    updateMnoriaStandaloneBottomSurfaceFill();
   }, 160);
 }
 
-function bindAgonStandaloneBottomSurfaceFillSync() {
-  if (document.documentElement.dataset.agonStandaloneBottomSurfaceFillBound === "true") return;
-  document.documentElement.dataset.agonStandaloneBottomSurfaceFillBound = "true";
+function bindMnoriaStandaloneBottomSurfaceFillSync() {
+  if (document.documentElement.dataset.mnoriaStandaloneBottomSurfaceFillBound === "true") return;
+  document.documentElement.dataset.mnoriaStandaloneBottomSurfaceFillBound = "true";
 
-  window.addEventListener("resize", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
-  window.addEventListener("orientationchange", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
-  window.addEventListener("pageshow", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
-  window.addEventListener("load", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
-  document.addEventListener("visibilitychange", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+  window.addEventListener("resize", scheduleMnoriaStandaloneBottomSurfaceFillUpdate, { passive: true });
+  window.addEventListener("orientationchange", scheduleMnoriaStandaloneBottomSurfaceFillUpdate, { passive: true });
+  window.addEventListener("pageshow", scheduleMnoriaStandaloneBottomSurfaceFillUpdate, { passive: true });
+  window.addEventListener("load", scheduleMnoriaStandaloneBottomSurfaceFillUpdate, { passive: true });
+  document.addEventListener("visibilitychange", scheduleMnoriaStandaloneBottomSurfaceFillUpdate, { passive: true });
 
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
-    window.visualViewport.addEventListener("scroll", scheduleAgonStandaloneBottomSurfaceFillUpdate, { passive: true });
+    window.visualViewport.addEventListener("resize", scheduleMnoriaStandaloneBottomSurfaceFillUpdate, { passive: true });
+    window.visualViewport.addEventListener("scroll", scheduleMnoriaStandaloneBottomSurfaceFillUpdate, { passive: true });
   }
 
   const bindObserver = () => {
-    if (agonStandaloneBottomSurfaceObserver) return;
+    if (mnoriaStandaloneBottomSurfaceObserver) return;
     const targets = [
       document.getElementById("debate-source-fallback"),
       document.getElementById("debate-source-preview-wrap"),
@@ -35561,16 +35656,16 @@ function bindAgonStandaloneBottomSurfaceFillSync() {
       return;
     }
 
-    agonStandaloneBottomSurfaceObserver = new MutationObserver(scheduleAgonStandaloneBottomSurfaceFillUpdate);
+    mnoriaStandaloneBottomSurfaceObserver = new MutationObserver(scheduleMnoriaStandaloneBottomSurfaceFillUpdate);
     targets.forEach((target) => {
-      agonStandaloneBottomSurfaceObserver.observe(target, {
+      mnoriaStandaloneBottomSurfaceObserver.observe(target, {
         attributes: true,
         attributeFilter: ["class", "style"],
         childList: true,
         subtree: true
       });
     });
-    scheduleAgonStandaloneBottomSurfaceFillUpdate();
+    scheduleMnoriaStandaloneBottomSurfaceFillUpdate();
   };
 
   if (document.readyState === "loading") {
@@ -35579,12 +35674,12 @@ function bindAgonStandaloneBottomSurfaceFillSync() {
     bindObserver();
   }
 
-  scheduleAgonStandaloneBottomSurfaceFillUpdate();
+  scheduleMnoriaStandaloneBottomSurfaceFillUpdate();
 }
 
-bindAgonMobileViewportBottomFillSync();
-bindAgonStandaloneBottomSurfaceFillSync();
-window.__agonRefreshStandaloneBottomSurfaces = refreshAgonStandaloneBottomSurfacesAfterViewportChange;
+bindMnoriaMobileViewportBottomFillSync();
+bindMnoriaStandaloneBottomSurfaceFillSync();
+window.__mnoriaRefreshStandaloneBottomSurfaces = refreshMnoriaStandaloneBottomSurfacesAfterViewportChange;
 
 function ensureHomeTopbarContactLink() {
   const menu = document.getElementById("home-topbar-menu");
@@ -35794,7 +35889,7 @@ function showAccountsComingSoonMessage() {
   closeHomeTopbarMenu();
   showReplacementSuccessMessage(
     "Comptes bientôt disponibles",
-    "Super nouvelle : agôn t'intéresse, et ça nous fait vraiment plaisir. Le projet vient tout juste de naître, et la version avec comptes n'est pas encore disponible. Mais promis : elle arrive bientôt.",
+    "Super nouvelle : mnoria t'intéresse, et ça nous fait vraiment plaisir. Le projet vient tout juste de naître, et la version avec comptes n'est pas encore disponible. Mais promis : elle arrive bientôt.",
     null,
     "✨"
   );
@@ -35859,7 +35954,7 @@ async function handlePushMenuClick() {
       if (!inviteShown) {
         showReplacementSuccessMessage(
           "Notifications indisponibles",
-          "Installe Agôn sur l’écran d’accueil depuis un navigateur compatible pour activer les alertes.",
+          "Installe Mnoria sur l’écran d’accueil depuis un navigateur compatible pour activer les alertes.",
           null,
           "🔔"
         );
@@ -35983,8 +36078,14 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   const explorer = nav.querySelector("#index-explorer-toggle") || findByText("explorer");
   const open = findByText("ouvrir");
   // L'ancien emplacement Contributions/Univers porte désormais le libellé
-  // "Apprentissage" ; sa position dans le bandeau reste identique.
-  const contributions = findByText("apprentissage");
+  // "Apprentissages" (pluriel dans le DOM, cf. views/index.html) ; sa position dans le
+  // bandeau reste identique. Recherche exacte requise : un texte "apprentissage" (singulier,
+  // ancien libellé) ne matchait plus rien, findByText renvoyait undefined, et le garde-fou
+  // juste en dessous (!contributions) annulait tout le calage — les flèches restaient bloquées
+  // sur leur position CSS de repli (calc(50% ± 55px)), légèrement décalée par rapport aux vrais
+  // trous Ouvrir|Actualiser et Actualiser|Apprentissages (demande du 17/08/2026, "légèrement
+  // décalés à droite").
+  const contributions = findByText("apprentissages");
   const alerts = findByText("alertes");
   if (!explorer || !open || !contributions || !alerts) return;
 
@@ -36005,7 +36106,7 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   if (refresh) {
     const refreshRect = refresh.getBoundingClientRect();
     // Calé sur les voisins réels d'Actualiser (le cadre nuages/boutons du
-    // dessus est recalé séparément via #agon-tag-trends-section, cf.
+    // dessus est recalé séparément via #mnoria-tag-trends-section, cf.
     // style.css) plutôt que sur le centre théorique de la nav : sinon la
     // flèche ne tombe plus pile entre Ouvrir et Actualiser.
     leftMidpoint = (openRect.right + refreshRect.left) / 2;
@@ -36039,7 +36140,7 @@ function syncIndexFloatingScrollButtonsWithBottomNav() {
   // chargement — sinon les flèches restent sur la position CSS de repli
   // (collées au centre) le temps que script.min.js soit parsé, puis sautent.
   try {
-    sessionStorage.setItem("agonFloatingScrollBtnPos:" + location.pathname, JSON.stringify({
+    sessionStorage.setItem("mnoriaFloatingScrollBtnPos:" + location.pathname, JSON.stringify({
       w: window.innerWidth,
       up: up.style.left,
       down: down.style.left,
@@ -36108,9 +36209,9 @@ window.addEventListener('pageshow', (event) => {
   if (!event.persisted) return;
   const p = location.pathname;
   if (p !== "/" && p !== "/debates" && !p.startsWith("/debates/")) return;
-  __agonDebugRefreshLog("pageshow-bfcache", "rerender", { persisted: true, pathname: p });
+  __mnoriaDebugRefreshLog("pageshow-bfcache", "rerender", { persisted: true, pathname: p });
   clearIndexDebatesSessionCache();
-  if (window.__agonDebateModalOpen) {
+  if (window.__mnoriaDebateModalOpen) {
     try { closeDebateIframeModal(); } catch (e) {}
   }
   fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" })
@@ -36128,7 +36229,7 @@ window.addEventListener('pageshow', (event) => {
 // Le garde inline dans le <head> masque la page avant la redirection pour éviter
 // l'affichage furtif de la dernière page consultée au retour dans l'app.
 (function() {
-  const guard = window.__agonIdleHomeGuard;
+  const guard = window.__mnoriaIdleHomeGuard;
   if (!guard) return;
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) guard.markHidden();
@@ -36164,15 +36265,15 @@ window.addEventListener('pageshow', (event) => {
   function createBanner() {
     bannerEl = document.createElement('button');
     bannerEl.type = 'button';
-    bannerEl.className = 'agon-new-debates-banner';
+    bannerEl.className = 'mnoria-new-debates-banner';
     document.body.appendChild(bannerEl);
     bannerEl.addEventListener('click', function() {
       bannerEl.classList.remove('visible');
       var overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;';
       document.body.appendChild(overlay);
-      __agonRecordReloadReason("new-debates-banner-click");
-      try { sessionStorage.setItem('agon_skip_startup_once', '1'); } catch (e) {}
+      __mnoriaRecordReloadReason("new-debates-banner-click");
+      try { sessionStorage.setItem('mnoria_skip_startup_once', '1'); } catch (e) {}
       setTimeout(function() { window.location.reload(); }, 60);
     });
   }
@@ -36187,7 +36288,7 @@ window.addEventListener('pageshow', (event) => {
   }
 
   function poll() {
-    if (document.hidden || window.__agonDebateModalOpen === true || bannerShown || !latestSeenAt) return;
+    if (document.hidden || window.__mnoriaDebateModalOpen === true || bannerShown || !latestSeenAt) return;
     // Synchroniser avec le background refresh qui peut avoir mis à jour debatesCache
     var currentNewest = getNewestCreatedAt(debatesCache);
     if (currentNewest && currentNewest > latestSeenAt) latestSeenAt = currentNewest;
@@ -36202,7 +36303,7 @@ window.addEventListener('pageshow', (event) => {
       .catch(function() {});
   }
 
-  window.addEventListener('agon:feed-ready', function() {
+  window.addEventListener('mnoria:feed-ready', function() {
     latestSeenAt = getNewestCreatedAt(debatesCache);
     if (!latestSeenAt) return;
     pollTimer = setInterval(poll, POLL_INTERVAL);
@@ -36216,20 +36317,20 @@ window.addEventListener('pageshow', (event) => {
 // ===== ANTI-CHAUFFE — PAUSE DES ANIMATIONS DU CLOUD HORS ÉCRAN =====
 // Chaque bulle cumule 2 animations infinies (breathe + flash) : dès que la
 // section cloud sort du viewport (feed scrollé), tout est suspendu via
-// animation-play-state (classe agon-cloud-anims-paused, cf. style.css).
-(function initAgonCloudAnimationPause() {
+// animation-play-state (classe mnoria-cloud-anims-paused, cf. style.css).
+(function initMnoriaCloudAnimationPause() {
   if (typeof IntersectionObserver !== "function") return;
-  const section = document.getElementById("agon-tag-trends-section");
+  const section = document.getElementById("mnoria-tag-trends-section");
   if (!section) return;
   const observer = new IntersectionObserver((entries) => {
     const entry = entries[entries.length - 1];
-    section.classList.toggle("agon-cloud-anims-paused", !entry.isIntersecting);
+    section.classList.toggle("mnoria-cloud-anims-paused", !entry.isIntersecting);
   }, { rootMargin: "80px 0px" });
   observer.observe(section);
 })();
 
 // ===== CLOUD SECTION — PLEIN ÉCRAN DESKTOP =====
-// Donne à .agon-tag-trends-section exactement la hauteur disponible sous son bord supérieur.
+// Donne à .mnoria-tag-trends-section exactement la hauteur disponible sous son bord supérieur.
 // Le cloud (flex:1) remplit la section ; les bulles se repositionnent via ResizeObserver.
 var _cloudSectionBaseHeight = null;
 // ===== CLOUD FRAME — HAUTEUR DYNAMIQUE MOBILE NAVIGATEUR =====
@@ -36239,13 +36340,13 @@ var _cloudSectionBaseHeight = null;
 // version desktop plus haut) et le bas réel du bandeau blanc du haut, puis on épingle le cloud
 // (marge haute de la section + hauteur) pour que le cadre décoratif (::before, inset
 // top:55px/bottom:78px, cf. style.css) tombe exactement à 3px de chacun. Le sélecteur de mode
-// (#agon-cloud-mode-switch) est ensuite recalé 8px sous ce même bord bas, plutôt que la marge
+// (#mnoria-cloud-mode-switch) est ensuite recalé 8px sous ce même bord bas, plutôt que la marge
 // négative fixe précédente qui se déréglait dès que la hauteur du cadre changeait (demande du
 // 16/08/2026, "les boutons semblent accrochés au cadre").
-var AGON_MOBILE_FRAME_TOP_INSET = 55;
-var AGON_MOBILE_FRAME_BOTTOM_INSET = 78;
+var MNORIA_MOBILE_FRAME_TOP_INSET = 55;
+var MNORIA_MOBILE_FRAME_BOTTOM_INSET = 78;
 // Calculé une seule fois à l'arrivée sur le site (premier affichage réel du cadre), puis
-// verrouillé : les appels suivants (resize, changement de mode Actu/Agôn/Ma mémoire) ne
+// verrouillé : les appels suivants (resize, changement de mode Actu/Mnoria/Ma mémoire) ne
 // recalculent plus rien — demande du 16/08/2026, "il bouge plus" après ce premier calage.
 var _mobileCloudFrameLocked = false;
 // Sentinelle distincte du timestamp numérique que requestAnimationFrame passe à cette
@@ -36256,8 +36357,8 @@ function syncMobileCloudFrameHeight(recheckToken) {
   if (_mobileCloudFrameLocked) return;
   if (!document.body.classList.contains('page-home-mobile')) return;
   var isStandalone = document.body.classList.contains('is-standalone');
-  var section = document.getElementById('agon-tag-trends-section');
-  var cloud = document.getElementById('agon-tag-trends-cloud');
+  var section = document.getElementById('mnoria-tag-trends-section');
+  var cloud = document.getElementById('mnoria-tag-trends-cloud');
   if (!section || !cloud || section.hidden) return;
 
   // .offsetHeight (pas getBoundingClientRect) : le bandeau est en position:sticky top:0 et peut
@@ -36282,9 +36383,9 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // comme alignStandaloneBubbleFrameToActiveFilter le fait pour le standalone.
   section.style.marginTop = '0px';
   var naturalTop = section.getBoundingClientRect().top;
-  var boxTop = desiredFrameTop - AGON_MOBILE_FRAME_TOP_INSET;
+  var boxTop = desiredFrameTop - MNORIA_MOBILE_FRAME_TOP_INSET;
   if (isStandalone) {
-    // body.is-standalone .agon-tag-trends-section pose margin-top:0 et un min-height calc()
+    // body.is-standalone .mnoria-tag-trends-section pose margin-top:0 et un min-height calc()
     // basé sur 100dvh en !important (cf. style.css) : un simple .style.marginTop= perdrait
     // face à eux, comme pour le switch plus bas. setProperty(...,'important') les bat tous
     // les deux ; min-height repasse à 'auto' pour laisser boxHeight (cloud, ci-dessous)
@@ -36296,7 +36397,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
     section.style.marginTop = (boxTop - naturalTop) + 'px';
   }
 
-  var boxHeight = Math.max(200, (desiredFrameBottom + AGON_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
+  var boxHeight = Math.max(200, (desiredFrameBottom + MNORIA_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
   cloud.style.height = boxHeight + 'px';
   cloud.style.minHeight = boxHeight + 'px';
   if (isStandalone) {
@@ -36306,9 +36407,9 @@ function syncMobileCloudFrameHeight(recheckToken) {
     cloud.style.setProperty('margin-top', '0px', 'important');
   }
 
-  var switchRow = document.getElementById('agon-cloud-mode-switch');
+  var switchRow = document.getElementById('mnoria-cloud-mode-switch');
   if (switchRow) {
-    // #agon-cloud-mode-switch n'est PAS un enfant flex de .agon-tag-trends-section (donc pas un
+    // #mnoria-cloud-mode-switch n'est PAS un enfant flex de .mnoria-tag-trends-section (donc pas un
     // frère direct du cloud) : c'est un item de grille séparé, après la section entière (qui
     // contient aussi la légende après le cloud). Dériver sa marge depuis cloudBottom mesurait
     // donc la mauvaise référence (écart de plusieurs dizaines de px, chevauchement constaté le
@@ -36318,26 +36419,31 @@ function syncMobileCloudFrameHeight(recheckToken) {
     var switchNaturalTop = switchRow.getBoundingClientRect().top;
     var desiredSwitchTop = desiredFrameBottom + 35;
     // setProperty(...,'important') : la règle CSS dédiée à "Ma mémoire"
-    // (.agon-tag-trends-cloud.agon-memoire-frame ~ #agon-cloud-mode-switch, mobile) est elle-même
+    // (.mnoria-tag-trends-cloud.mnoria-memoire-frame ~ #mnoria-cloud-mode-switch, mobile) est elle-même
     // en !important — un simple .style.marginTop= perdait face à elle.
     switchRow.style.setProperty('margin-top', (desiredSwitchTop - switchNaturalTop) + 'px', 'important');
   }
   _mobileCloudFrameLocked = true;
 
-  // En standalone, env(safe-area-inset-top) (padding du bandeau haut, cf. style.css
-  // body.is-standalone.page-home-mobile .topbar) peut mettre un instant à se stabiliser après
-  // un lancement à froid : mesuré trop tôt, headerBottom (donc tout le calage ci-dessus) sort
-  // trop petit et le cadre se verrouille trop haut, en partie caché sous le bandeau (constaté
-  // le 16/08/2026, "parfois" — pas systématique, dépend du moment exact du premier calcul).
-  // Une revérification unique, un instant plus tard, referme la fenêtre : si la hauteur réelle
-  // du bandeau a changé entre-temps, on déverrouille et on recalcule une seule fois — sans
+  // En standalone, env(safe-area-inset-top) ET env(safe-area-inset-bottom) (bandeaux haut et
+  // bas, cf. style.css body.is-standalone.page-home-mobile .topbar / .home-bottom-nav) peuvent
+  // mettre un instant à se stabiliser après un lancement à froid ou un simple refresh : mesurés
+  // trop tôt, headerBottom ET/OU bottomBarTop (donc tout le calage ci-dessus) sortent faux — le
+  // cadre se verrouille soit trop haut/caché sous le bandeau (cf. demande du 16/08/2026, ne
+  // surveillait alors que le bandeau HAUT), soit trop court verticalement si c'est le bandeau
+  // BAS qui n'était pas stabilisé au premier calcul (demande du 17/08/2026, "pas assez long au
+  // refresh"). Une revérification unique, un instant plus tard, referme la fenêtre : si l'une ou
+  // l'autre mesure a changé entre-temps, on déverrouille et on recalcule une seule fois — sans
   // cette revérification, aucun autre appel ne recalculerait plus rien de toute la session.
   if (isStandalone && recheckToken !== MOBILE_CLOUD_FRAME_RECHECK) {
     var headerAtLock = header;
     var headerBottomAtLock = headerBottom;
+    var bottomNavAtLock = bottomNavEl;
+    var bottomBarTopAtLock = bottomBarTop;
     setTimeout(function() {
       var headerBottomNow = headerAtLock ? headerAtLock.offsetHeight : 0;
-      if (Math.abs(headerBottomNow - headerBottomAtLock) > 1) {
+      var bottomBarTopNow = bottomNavAtLock ? bottomNavAtLock.getBoundingClientRect().top : window.innerHeight;
+      if (Math.abs(headerBottomNow - headerBottomAtLock) > 1 || Math.abs(bottomBarTopNow - bottomBarTopAtLock) > 1) {
         _mobileCloudFrameLocked = false;
         syncMobileCloudFrameHeight(MOBILE_CLOUD_FRAME_RECHECK);
       }
@@ -36346,9 +36452,9 @@ function syncMobileCloudFrameHeight(recheckToken) {
 }
 
 function syncCloudSectionHeight(recomputeBase) {
-  if (isAgonMobileCloudViewport()) {
-    var mobileSection = document.getElementById('agon-tag-trends-section');
-    var mobileCloud = document.getElementById('agon-tag-trends-cloud');
+  if (isMnoriaMobileCloudViewport()) {
+    var mobileSection = document.getElementById('mnoria-tag-trends-section');
+    var mobileCloud = document.getElementById('mnoria-tag-trends-cloud');
     if (mobileSection) mobileSection.style.height = '';
     if (mobileCloud) {
       mobileCloud.style.flex = '';
@@ -36357,11 +36463,11 @@ function syncCloudSectionHeight(recomputeBase) {
     return;
   }
   if (window.innerWidth <= 768) return;
-  var section = document.getElementById('agon-tag-trends-section');
+  var section = document.getElementById('mnoria-tag-trends-section');
   if (!section || section.hidden) return;
   // Hauteur de base (espace visible pour le cloud) : calculée une seule fois à la
   // première synchro puis uniquement sur resize. Jamais pendant les bascules
-  // Actu/Agôn ni les re-renders du feed : docTop et l'offset du bandeau bas y
+  // Actu/Mnoria ni les re-renders du feed : docTop et l'offset du bandeau bas y
   // fluctuent de quelques px et feraient varier la hauteur du cadre entre modes.
   if (recomputeBase || _cloudSectionBaseHeight === null) {
     var docTop = section.getBoundingClientRect().top + window.scrollY;
@@ -36372,15 +36478,15 @@ function syncCloudSectionHeight(recomputeBase) {
     var bottomBarH = isStandaloneDesktop ? -standaloneBelowFoldGap : getStableBottomBarOffset();
     _cloudSectionBaseHeight = Math.max(300, window.innerHeight - docTop - bottomBarH);
   }
-  // Hauteur extérieure (boîte + marges) du switch Bulles Actu/Agôn et de la légende :
+  // Hauteur extérieure (boîte + marges) du switch Bulles Actu/Mnoria et de la légende :
   // ajoutée à la section pour qu'ils tombent sous la ligne de flottaison — le cloud
   // (flex:1) occupe tout l'espace visible, il faut scroller un peu pour voir les boutons.
   var belowFoldExtra = 0;
   [
-    document.getElementById('agon-cloud-mode-switch'),
-    document.getElementById('agon-political-cloud-switch'),
-    section.querySelector('.agon-tribunes-btn'),
-    section.querySelector('.agon-tag-trends-caption')
+    document.getElementById('mnoria-cloud-mode-switch'),
+    document.getElementById('mnoria-political-cloud-switch'),
+    section.querySelector('.mnoria-tribunes-btn'),
+    section.querySelector('.mnoria-tag-trends-caption')
   ].forEach(function(el) {
     if (!el) return;
     var cs = window.getComputedStyle(el);
@@ -36389,16 +36495,30 @@ function syncCloudSectionHeight(recomputeBase) {
   section.style.height = (_cloudSectionBaseHeight + belowFoldExtra) + 'px';
   // Hauteur du cloud (donc du cadre ::before) épinglée directement à la base : ne dépend
   // plus de la résolution flex ni des mesures du switch/légende, qui varient entre les
-  // modes Actu/Agôn et faisaient fluctuer la taille du cadre.
-  var cloud = document.getElementById('agon-tag-trends-cloud');
+  // modes Actu/Mnoria et faisaient fluctuer la taille du cadre.
+  var cloud = document.getElementById('mnoria-tag-trends-cloud');
   if (cloud) {
     cloud.style.flex = '0 0 auto';
     cloud.style.height = _cloudSectionBaseHeight + 'px';
   }
+  // Mémorise la hauteur calculée (même principe que mnoriaFloatingScrollBtnPos pour les flèches,
+  // cf. script inline de index.html) : "Ma mémoire" étant désormais le mode par défaut à
+  // l'arrivée (setMemoireCloudMode(true) dans DOMContentLoaded), le cadre restait ~1s à sa
+  // hauteur CSS de repli (min-height:260px, sans le fond étoilé — la classe .mnoria-memoire-frame
+  // n'existe pas encore côté HTML statique) avant de sauter à cette hauteur JS en même temps que
+  // le fond apparaissait — décalage visible à chaque rafraîchissement (demande du 17/08/2026, "il
+  // y a encore déplacement du fond quand je rafraîchis"). Le script inline restaure cette valeur
+  // avant même le premier rendu au prochain chargement, script.min.js n'a plus qu'à confirmer.
+  try {
+    sessionStorage.setItem('mnoriaMemoireCloudSize:' + location.pathname, JSON.stringify({
+      w: window.innerWidth,
+      h: _cloudSectionBaseHeight
+    }));
+  } catch (e) {}
 }
 
 (function initCloudSectionHeight() {
-  var section = document.getElementById('agon-tag-trends-section');
+  var section = document.getElementById('mnoria-tag-trends-section');
   if (!section) return;
 
   var obs = new MutationObserver(function() {
@@ -36492,7 +36612,7 @@ try {
     submitArgument,
     submitComment,
     submitListArgument,
-    toggleAgonCloud,
+    toggleMnoriaCloud,
     toggleCardOptionsMenu,
     toggleDebateTitleShareMenu,
     toggleHomeTopbarMenu,
@@ -36501,9 +36621,9 @@ try {
     toggleIndexExplorerMenu,
     vote
   });
-  window.__agonWindowHandlersRestored = true;
+  window.__mnoriaWindowHandlersRestored = true;
 } catch (error) {
-  window.__agonWindowHandlersRestored = false;
-  window.__agonWindowHandlersRestoreError = String(error?.message || error || "");
-  console.error("[Agon] impossible d'exposer les handlers globaux", error);
+  window.__mnoriaWindowHandlersRestored = false;
+  window.__mnoriaWindowHandlersRestoreError = String(error?.message || error || "");
+  console.error("[Mnoria] impossible d'exposer les handlers globaux", error);
 }

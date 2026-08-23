@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Apprentissage | agôn</title>
+  <title>Apprentissage | mnoria</title>
   <link rel="icon" type="image/png" href="/mnoria-icon-64.png">
   <link rel="manifest" href="/manifest.webmanifest?v=20260815-mnoria-app-icon-v1">
   <link rel="apple-touch-icon" href="/mnoria-icon-192.png">
   <meta name="theme-color" content="#243038">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Agôn">
-  <link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1">
+  <meta name="apple-mobile-web-app-title" content="Mnoria">
+  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
@@ -142,23 +142,39 @@
     .qcm-panel {
       position: relative;
       width: 100%;
-      background: #ffffff;
+      /* Légèrement translucide (demande du 18/08/2026) plutôt qu'un blanc
+         opaque plein : laisse deviner le fond de la question (cf.
+         applyQuestionBackgroundImage) sans jamais nuire à la lisibilité du
+         texte, toujours en pleine opacité. */
+      background: rgba(255, 255, 255, 0.94);
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       padding: 24px;
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
     }
-    /* Croix de fermeture du cadre, visible pendant "Refaire" (demande du
-       13/08/2026) : .qcm-panel n'a pas de scroll propre (c'est la page qui
-       défile), donc absolute suffit ici — contrairement à .qcm-fiche-close
-       (sticky) dont le conteneur scrollable est différent de .qcm-panel. */
+    /* Croix de fermeture du cadre — visible sur Découvrir/Ancrer/Relier (cf.
+       setPanelCloseVisible). Demande du 17/08/2026 : rester APPARENTE même
+       en scrollant, alors que .qcm-panel n'a pas de scroll propre (c'est la
+       page qui défile). Même motif que .qcm-fiche-close (sticky) plus haut,
+       adapté ici : un ancre position:sticky, hauteur 0 (ne pousse aucun
+       contenu, contrairement à un sticky "plein" qui réserverait sa propre
+       ligne), qui épingle son bord haut au défilement — le bouton, positionné
+       en absolute PAR RAPPORT À CETTE ANCRE, reste donc toujours à la même
+       distance de son bord haut, que l'ancre soit encore à sa position
+       naturelle (haut du cadre) ou déjà épinglée en haut du viewport. */
+    .qcm-panel-close-anchor {
+      position: sticky;
+      top: var(--qcm-topbar-height, 0px);
+      height: 0;
+      overflow: visible;
+      z-index: 5;
+    }
     .qcm-panel-close {
       display: none;
       position: absolute;
-      top: 16px;
-      right: 16px;
-      z-index: 5;
+      top: -20px;
+      right: -12px;
       width: 28px;
       height: 28px;
       align-items: center;
@@ -186,6 +202,78 @@
       margin: 0 0 16px;
       color: #6b7280;
       font-size: 14px;
+      text-align: center;
+    }
+    /* Jauge de charge d'apprentissage (demande du 17/08/2026) : compteur à
+       aiguille en 4 zones (calme -> surchargé), cf. renderLoadGauge. Le
+       needle est une <line> tournée par transform:rotate autour du centre
+       (100,100) plutôt que recalculée en JS à chaque fois — beaucoup plus
+       simple qu'une régénération de path. */
+    .qcm-load-gauge {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin: 0 auto 18px;
+      max-width: 260px;
+    }
+    .qcm-load-gauge.visible {
+      display: flex;
+    }
+    .qcm-load-gauge-svg {
+      width: 100%;
+      max-width: 220px;
+      height: auto;
+      overflow: visible;
+    }
+    .qcm-load-gauge-arc {
+      fill: none;
+      stroke-width: 16;
+      stroke-linecap: butt;
+    }
+    .qcm-load-gauge-arc-calm { stroke: #16a34a; }
+    .qcm-load-gauge-arc-moderate { stroke: #f59e0b; }
+    .qcm-load-gauge-arc-busy { stroke: #ea580c; }
+    .qcm-load-gauge-arc-overloaded { stroke: #dc2626; }
+    .qcm-load-gauge-needle {
+      stroke: #243038;
+      stroke-width: 4;
+      stroke-linecap: round;
+      transform-origin: 100px 100px;
+      transform: rotate(-90deg);
+      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .qcm-load-gauge-hub {
+      fill: #243038;
+    }
+    /* Repère "Idéal" (demande du 17/08/2026) : petit tiret fixe sur le
+       cadran, à la position correspondant à LOAD_GAUGE_IDEAL_QUESTIONS —
+       indépendant de la charge réelle affichée par l'aiguille, jamais
+       animé/tourné en CSS (transform posé une seule fois en JS via
+       initLoadGaugeIdealMarker, cf. plus bas). */
+    .qcm-load-gauge-ideal-tick {
+      stroke: #111827;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+    .qcm-load-gauge-ideal-label {
+      fill: #111827;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 9px;
+      font-weight: 700;
+      text-anchor: middle;
+    }
+    .qcm-load-gauge-label {
+      margin: 2px 0 0;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #111827;
+      text-align: center;
+    }
+    .qcm-load-gauge-caption {
+      margin: 2px 0 0;
+      color: #6b7280;
+      font-size: 12.5px;
       text-align: center;
     }
     .qcm-slot-switcher {
@@ -227,6 +315,37 @@
       color: #9ca3af;
       cursor: not-allowed;
     }
+    /* "Ancrer"/"Relier" dorés avec reflet quand de nouveaux éléments les attendent
+       (isCategoryAvailable, cf. renderCategorySwitcher) — même dégradé que le bouton
+       "Ma mémoire" du sélecteur de l'accueil (#mnoria-cloud-mode-memoire-btn, style.css), pour
+       une mise en avant cohérente sur tout le site. Retombe sur le style neutre habituel dès
+       que la série est faite (available forcé à false en local dans renderFinalScore, jamais
+       via un refetch serveur — cf. ce commentaire là-bas pour le pourquoi) — demande du
+       17/08/2026. Jamais posé sur l'onglet actif : .active a
+       une spécificité plus forte (2 classes) et l'emporterait de toute façon sur le fond, mais
+       le reflet animé resterait visible en trop sur un onglet déjà ouvert sans ce garde-fou
+       (cf. renderCategorySwitcher, qui n'ajoute cette classe que si !active).
+       overflow:hidden : contient le reflet (::after) dans la forme arrondie de la pastille. */
+    .qcm-slot-btn-new {
+      position: relative;
+      overflow: hidden;
+      border-color: transparent;
+      background: linear-gradient(135deg, #ffd166, #e99a2e);
+      color: #1A1F24;
+      box-shadow: inset 0 0 0 1px rgba(122, 72, 10, 0.28);
+    }
+    .qcm-slot-btn-new::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 18%, rgba(255, 255, 255, 0.55) 50%, transparent 82%);
+      transform: translateX(-130%);
+      animation: qcm-slot-btn-new-shine 2.8s ease-in-out infinite;
+    }
+    @keyframes qcm-slot-btn-new-shine {
+      0%, 55%, 100% { transform: translateX(-130%); }
+      75% { transform: translateX(130%); }
+    }
     @media (max-width: 480px) {
       .qcm-slot-switcher { gap: 4px; }
       .qcm-slot-btn {
@@ -234,8 +353,50 @@
         font-size: 12px;
       }
     }
+    /* "Mes acquis" (demande du 16/08/2026) : accueille désormais "Tous mes apprentissages"
+       (classé par thématique, y compris la rubrique "Comprendre les liens") — retiré de
+       Découvrir, qui ne garde que "En attente de réalisation" (cf. loadMesAcquis,
+       renderMesAcquisList). */
+    .qcm-mes-acquis-row {
+      display: none;
+      justify-content: center;
+      margin: -10px 0 20px;
+    }
+    /* Même règle de visibilité que le switcher juste au-dessus (#qcm-category-switcher.visible,
+       posée/retirée par renderCategorySwitcher) : masqué pendant le chargement initial, jamais
+       affiché seul sans ses boutons Découvrir/Ancrer/Relier. Margin-top négatif : rapproche le
+       bouton du switcher (demande du 16/08/2026), qui garde par ailleurs ses 20px de marge
+       basse habituels pour les autres pages n'ayant pas ce bouton. */
+    #qcm-category-switcher.visible + .qcm-mes-acquis-row {
+      display: flex;
+    }
+    .qcm-mes-acquis-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border: 1.5px solid #243038;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #243038;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .qcm-mes-acquis-btn i {
+      font-size: 12px;
+    }
+    .qcm-mes-acquis-btn:hover:not(.active) {
+      background: #eef2f5;
+    }
+    .qcm-mes-acquis-btn.active {
+      border-color: #243038;
+      background: #243038;
+      color: #ffffff;
+    }
     .qcm-custom-search {
       display: none;
+      flex-wrap: wrap;
       gap: 8px;
       margin: 0 0 20px;
     }
@@ -244,6 +405,7 @@
     }
     .qcm-custom-search-input {
       flex: 1;
+      flex-basis: 280px;
       min-width: 0;
       /* <textarea> plutôt qu'un <input> à une seule ligne (cf. 12/08/2026) :
          un placeholder/sujet trop long pour la largeur du champ passait à la
@@ -290,6 +452,81 @@
     .qcm-custom-search-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+    .qcm-knowledge-add {
+      position: relative;
+      flex: 0 0 100%;
+      display: flex;
+      justify-content: flex-start;
+    }
+    .qcm-knowledge-add-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 2px;
+      border: 0;
+      background: transparent;
+      color: #516776;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+    .qcm-knowledge-add-toggle:hover,
+    .qcm-knowledge-add-toggle:focus-visible,
+    .qcm-knowledge-add-toggle[aria-expanded="true"] {
+      color: #243038;
+    }
+    .qcm-knowledge-add-toggle:focus-visible {
+      outline: 2px solid #516776;
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+    .qcm-knowledge-add-menu {
+      position: absolute;
+      z-index: 20;
+      top: calc(100% + 4px);
+      left: 0;
+      width: min(390px, calc(100vw - 48px));
+      padding: 6px;
+      border: 1px solid #d9dfe3;
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 12px 30px rgba(36, 48, 56, 0.12);
+    }
+    .qcm-knowledge-add-menu[hidden] {
+      display: none;
+    }
+    .qcm-knowledge-add-option {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 0 9px;
+      align-items: center;
+      padding: 10px 11px;
+      border-radius: 9px;
+      color: #243038;
+      text-decoration: none;
+    }
+    .qcm-knowledge-add-option:hover,
+    .qcm-knowledge-add-option:focus-visible {
+      outline: none;
+      background: #eef2f5;
+    }
+    .qcm-knowledge-add-option i {
+      grid-row: 1 / span 2;
+      color: #516776;
+      text-align: center;
+    }
+    .qcm-knowledge-add-option strong {
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    .qcm-knowledge-add-option span {
+      color: #6b7280;
+      font-size: 12px;
+      line-height: 1.35;
     }
     .qcm-custom-search-status {
       margin: -8px 0 20px;
@@ -479,6 +716,15 @@
       .qcm-custom-search-btn {
         width: 100%;
       }
+      .qcm-knowledge-add {
+        justify-content: center;
+      }
+      .qcm-knowledge-add-menu {
+        left: 50%;
+        width: min(100%, 390px);
+        box-sizing: border-box;
+        transform: translateX(-50%);
+      }
       .qcm-custom-search-input {
         min-height: 56px;
       }
@@ -490,6 +736,67 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: #516776;
+    }
+    /* Barre de progression Ancrer/Relier (demande du 17/08/2026, cf.
+       renderProgressIndicatorHtml) — remplace le texte "Question X / Y" sur
+       ces deux catégories uniquement, centrée au-dessus de la question. */
+    .qcm-progress-bar {
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+      height: 10px;
+      margin: 0 auto 22px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12);
+      overflow: visible;
+    }
+    .qcm-progress-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2f6fed, #243038);
+      box-shadow: 0 0 8px rgba(47, 111, 237, 0.45);
+      transition: width 0.35s ease;
+      overflow: hidden;
+    }
+    /* +1 furtif au milieu de l'écran à chaque bonne réponse (Ancrer/Relier,
+       demande du 17/08/2026, agrandi + halo flouté le même jour) : apparaît
+       puis disparaît seul, pas un compteur persistant. Position fixe (pas liée
+       à la barre, ni au scroll), retiré du DOM par showProgressPlusOne() une
+       fois l'animation terminée. */
+    .qcm-progress-plus-one {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.6);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 34px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(31, 157, 85, 0.42), rgba(31, 157, 85, 0));
+      font-family: inherit;
+      font-weight: 800;
+      font-size: 96px;
+      color: #1f9d55;
+      text-shadow:
+        0 0 22px rgba(31, 157, 85, 0.95),
+        0 0 55px rgba(31, 157, 85, 0.8),
+        0 0 100px rgba(31, 157, 85, 0.6),
+        0 0 160px rgba(31, 157, 85, 0.4);
+      box-shadow:
+        0 0 50px 16px rgba(31, 157, 85, 0.45),
+        0 0 110px 40px rgba(31, 157, 85, 0.3);
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 500;
+      animation: qcm-progress-plus-one-pop 450ms ease forwards;
+    }
+    @keyframes qcm-progress-plus-one-pop {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); filter: blur(6px); }
+      12% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); filter: blur(0); }
+      50% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); filter: blur(4px); }
     }
     .qcm-question {
       margin: 0 0 18px;
@@ -920,19 +1227,22 @@
       margin: 0;
       cursor: pointer;
     }
+    /* Centrée sur la page (width:fit-content + margin auto plutôt qu'inline-flex, qui ne se
+       centre pas tout seul) et fond retiré pour rester discrète — demande du 16/08/2026,
+       Découvrir et Mes acquis. */
     .qcm-mesqcm-bulk-bar {
-      display: inline-flex;
+      display: flex;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       flex-wrap: nowrap;
       gap: 8px;
+      width: fit-content;
       max-width: 100%;
-      margin: 0 0 10px;
-      padding: 5px 7px;
+      margin: 0 auto 10px;
+      padding: 5px 0;
       box-sizing: border-box;
-      border: 1px solid rgba(209, 213, 219, 0.72);
-      border-radius: 7px;
-      background: rgba(249, 250, 251, 0.66);
+      border: none;
+      background: transparent;
     }
     .qcm-mesqcm-bulk-selectall {
       display: flex;
@@ -1001,6 +1311,10 @@
     .qcm-mesqcm-state.is-realized {
       background: #dcfce7;
       color: #166534;
+    }
+    .qcm-mesqcm-state.is-inprogress {
+      background: #fef3c7;
+      color: #92400e;
     }
     .qcm-mesqcm-name-btn {
       display: flex;
@@ -1286,7 +1600,7 @@
        standalone. */
     .qcm-fiche-fade-hint {
       position: fixed;
-      bottom: var(--agon-safe-bottom, env(safe-area-inset-bottom, 0px));
+      bottom: var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px));
       max-width: 480px;
       margin: 0 auto;
       z-index: 1001;
@@ -1607,7 +1921,11 @@
        remplissage (les stats agrégées ne représentent pas un choix par
        option ici, cf. commentaire côté serveur — pas de %). */
     .qcm-multi-hint {
-      margin: -12px 0 14px;
+      /* Marge haute positive (pas négative) : cet indice suit tantôt la question
+         (.qcm-question, déjà 18px de marge basse), tantôt le bouton "Réfléchis à ta
+         réponse..." quand la question est gate (qcm-reveal-btn, sans marge basse) —
+         une valeur négative le faisait chevaucher ce bouton. */
+      margin: 8px 0 14px;
       color: #6b7280;
       font-size: 13px;
     }
@@ -1709,12 +2027,287 @@
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }
+
+    /* Session QCM immersive : les règles ci-dessous affinent uniquement la
+       présentation des rendus existants. Aucun état ni événement ne dépend
+       de ces sélecteurs. */
+    #qcm-body {
+      width: 100%;
+      max-width: 720px;
+      margin-inline: auto;
+    }
+    .qcm-progress {
+      margin-bottom: 18px;
+      color: #8a97a3;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-align: center;
+    }
+    .qcm-progress-bar {
+      max-width: 280px;
+      height: 4px;
+      margin-bottom: 24px;
+      background: #e8ecef;
+      box-shadow: none;
+      overflow: hidden;
+    }
+    .qcm-progress-bar-fill {
+      background: #516776;
+      box-shadow: none;
+      transition-duration: 180ms;
+    }
+    .qcm-origin-badge,
+    .qcm-type-badge {
+      margin-bottom: 12px;
+      padding: 0;
+      background: transparent;
+      color: #8a97a3;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+    .qcm-question {
+      max-width: 680px;
+      margin: 4px auto 28px;
+      color: #17212a;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: clamp(24px, 3vw, 30px);
+      font-weight: 700;
+      line-height: 1.24;
+      text-wrap: balance;
+      animation: qcm-session-enter 160ms ease-out both;
+    }
+    .qcm-options {
+      gap: 9px;
+      animation: qcm-session-enter 160ms ease-out both;
+    }
+    .qcm-option-btn {
+      min-height: 54px;
+      padding: 14px 16px;
+      border-color: #dce2e6;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.78);
+      font-size: 15px;
+      line-height: 1.4;
+      transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+    }
+    .qcm-option-btn:hover:not(:disabled) {
+      border-color: #9eabb4;
+      background: #f7f9fa;
+      transform: translateY(-1px);
+    }
+    .qcm-option-btn:focus-visible,
+    .qcm-order-chip:focus-visible,
+    .qcm-difficulty-btn:focus-visible,
+    .qcm-assoc-select:focus-visible,
+    #qcm-reveal-btn:focus-visible {
+      outline: 2px solid #516776;
+      outline-offset: 2px;
+    }
+    .qcm-option-btn.is-selected:not(:disabled) {
+      border-color: #516776;
+      background: #f3f6f8;
+      box-shadow: 0 0 0 2px rgba(81, 103, 118, 0.12);
+    }
+    .qcm-option-btn.is-correct {
+      border-color: #69a981;
+      background: #f3faf6;
+      box-shadow: inset 3px 0 0 #1f9d55;
+    }
+    .qcm-option-btn.is-wrong-picked {
+      border-color: #d79a9a;
+      background: #fff7f7;
+      box-shadow: inset 3px 0 0 #c85b5b;
+    }
+    .qcm-option-btn:disabled:not(.is-correct):not(.is-wrong-picked) {
+      opacity: 0.68;
+    }
+    .qcm-feedback {
+      margin: 22px auto 0;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      color: #4b5563;
+      font-size: 15px;
+      line-height: 1.55;
+      text-align: left;
+    }
+    .qcm-feedback.visible {
+      animation: qcm-session-enter 160ms ease-out both;
+    }
+    .qcm-feedback .qcm-feedback-verdict {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin: 0 0 10px;
+      font-size: 13px;
+    }
+    .qcm-feedback .qcm-feedback-verdict::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      content: "";
+    }
+    .qcm-feedback-explanation {
+      display: block;
+      max-width: 640px;
+    }
+    .qcm-feedback-title {
+      display: block;
+      margin-bottom: 3px;
+      color: #243038;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .qcm-feedback.is-correct .qcm-feedback-verdict { color: #287a49; }
+    .qcm-feedback.is-wrong .qcm-feedback-verdict { color: #a74444; }
+    .qcm-difficulty-wrap {
+      max-width: 520px;
+      margin: 22px auto 0;
+      transition: opacity 140ms ease;
+    }
+    .qcm-difficulty-label {
+      margin-bottom: 9px;
+      color: #6b7280;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      text-align: center;
+    }
+    .qcm-difficulty-buttons {
+      justify-content: center;
+      gap: 7px;
+    }
+    .qcm-difficulty-btn,
+    .qcm-difficulty-btn-moyen {
+      flex: 0 1 132px;
+      min-height: 42px;
+      padding: 9px 12px;
+      border: 1px solid #d7dde2;
+      background: #ffffff;
+      color: #516776;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .qcm-difficulty-btn-moyen:hover:not(:disabled) {
+      background: #eef3f6;
+      color: #243038;
+    }
+    .qcm-difficulty-btn:disabled {
+      opacity: 0.38;
+    }
+    #qcm-reveal-btn {
+      margin: 6px auto 20px;
+      padding: 9px 14px;
+      border: 1px solid #d7dde2;
+      background: transparent;
+      color: #516776;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+    }
+    #qcm-reveal-btn:hover {
+      border-color: #aeb9c1;
+      background: #f7f9fa;
+      color: #243038;
+    }
+    .qcm-next-btn:not(#qcm-reveal-btn) {
+      min-height: 42px;
+      margin-top: 22px;
+      transition: background 140ms ease, transform 140ms ease;
+    }
+    .qcm-next-btn:not(#qcm-reveal-btn):hover {
+      background: #384852;
+      transform: translateY(-1px);
+    }
+    .qcm-exclude-btn {
+      margin-top: 14px;
+      border-color: transparent;
+      background: transparent;
+      font-weight: 600;
+    }
+    .qcm-assoc-row,
+    .qcm-order-chosen,
+    .qcm-order-pool {
+      animation: qcm-session-enter 160ms ease-out both;
+    }
+    .qcm-assoc-left,
+    .qcm-assoc-select,
+    .qcm-order-chip {
+      min-height: 48px;
+      border-color: #dce2e6;
+      border-radius: 10px;
+    }
+    @keyframes qcm-session-enter {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 480px) {
+      .qcm-panel {
+        padding: 20px 16px 24px;
+      }
+      .qcm-question {
+        margin-bottom: 22px;
+        font-size: clamp(23px, 7vw, 27px);
+        line-height: 1.25;
+      }
+      .qcm-option-btn {
+        min-height: 56px;
+        padding: 14px;
+      }
+      .qcm-difficulty-buttons {
+        gap: 6px;
+      }
+      .qcm-difficulty-btn,
+      .qcm-difficulty-btn-moyen {
+        min-width: 0;
+        min-height: 44px;
+        padding-inline: 8px;
+        font-size: 12px;
+      }
+      .qcm-assoc-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 7px;
+      }
+      .qcm-assoc-left,
+      .qcm-assoc-select,
+      .qcm-assoc-correct-hint {
+        width: 100%;
+      }
+      .qcm-order-chip {
+        width: 100%;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .qcm-question,
+      .qcm-options,
+      .qcm-feedback.visible,
+      .qcm-assoc-row,
+      .qcm-order-chosen,
+      .qcm-order-pool,
+      .qcm-progress-plus-one {
+        animation: none !important;
+      }
+      .qcm-option-btn,
+      .qcm-progress-bar-fill,
+      .qcm-difficulty-wrap,
+      #qcm-reveal-btn,
+      .qcm-next-btn {
+        transition: none !important;
+      }
+    }
   </style>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-qcm-du-jour">
 <a class="qcm-top-level-exit" href="/?skipStartup=1" aria-label="Retour à l'accueil"
-  onclick="try{sessionStorage.setItem('agon_skip_startup_once','1')}catch(e){}">
+  onclick="try{sessionStorage.setItem('mnoria_skip_startup_once','1')}catch(e){}">
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <polyline points="13,3 5,9 13,15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
   </svg>
@@ -1737,18 +2330,88 @@
     <i class="fa-solid fa-power-off" aria-hidden="true"></i>
   </button>
 </header>
+<script>
+  // Hauteur réelle du bandeau .topbar (sticky, z-index 20, cf. style.css) —
+  // mesurée plutôt que recopiée en dur : elle varie selon le breakpoint et
+  // grandit avec env(safe-area-inset-top) en PWA standalone sur encoche.
+  // .qcm-panel-close-anchor (juste plus bas) s'épingle à cette hauteur
+  // plutôt qu'à 0, sinon la croix du cadre se retrouverait masquée SOUS le
+  // bandeau une fois les deux épinglés au même point pendant le scroll
+  // (demande du 17/08/2026, "reste apparent même en scrollant").
+  (function () {
+    // +20px de marge (demande du 17/08/2026 : la croix passe à top:-20px sur
+    // .qcm-panel-close — assez haute pour rester lisible à côté du titre,
+    // mais sans déborder du cadre, cf. réajustement du même jour) : sans
+    // cette marge supplémentaire ici, une fois épinglée sous le bandeau
+    // pendant le scroll, ce même décalage négatif ferait remonter la croix
+    // SOUS le bandeau lui-même (chevauchement) plutôt que juste sous son
+    // bord — cf. .qcm-panel-close-anchor plus bas, qui s'épingle à cette
+    // hauteur.
+    var QCM_PANEL_CLOSE_TOP_MARGIN_PX = 20;
+    function syncTopbarHeightVar() {
+      var topbar = document.querySelector('.topbar');
+      var height = (topbar ? topbar.getBoundingClientRect().height : 0) + QCM_PANEL_CLOSE_TOP_MARGIN_PX;
+      document.documentElement.style.setProperty('--qcm-topbar-height', height + 'px');
+    }
+    syncTopbarHeightVar();
+    window.addEventListener('resize', syncTopbarHeightVar, { passive: true });
+  })();
+</script>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
-    <h1><span id="qcm-title-text">Mes apprentissages</span></h1>
+    <div class="qcm-panel-close-anchor">
+      <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <!-- "Découvrir" plutôt que l'ancien "Mes apprentissages" : c'est le texte affiché avant
+         même que le premier fetch (init) ne résolve, donc ce que voit tout visiteur qui
+         atterrit ici sans paramètre ?slot= (le cas le plus courant, cf. init) — un texte
+         différent flashait furtivement avant d'être remplacé (demande du 16/08/2026). -->
+    <h1><span id="qcm-title-text">Découvrir</span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
     <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
+    <div class="qcm-mes-acquis-row">
+      <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><i class="fa-solid fa-award" aria-hidden="true"></i> Mes acquis</button>
+    </div>
+    <!-- Jauge de charge d'apprentissage (demande du 17/08/2026, repositionnée
+         le 17/08/2026 sous Découvrir/Ancrer/Relier + Mes acquis, avant la
+         barre de recherche) : visible uniquement sur "Découvrir" (cf.
+         renderLoadGauge, appelée depuis loadMesQcm) — hidden par défaut pour
+         ne jamais apparaître un instant sur Ancrer/Relier ni avant la
+         première résolution des données. -->
+    <div class="qcm-load-gauge" id="qcm-load-gauge" hidden>
+      <svg class="qcm-load-gauge-svg" viewBox="0 0 200 112" aria-hidden="true">
+        <path d="M 20,100 A 80,80 0 0 1 43.43,43.43" class="qcm-load-gauge-arc qcm-load-gauge-arc-calm"></path>
+        <path d="M 43.43,43.43 A 80,80 0 0 1 100,20" class="qcm-load-gauge-arc qcm-load-gauge-arc-moderate"></path>
+        <path d="M 100,20 A 80,80 0 0 1 156.57,43.43" class="qcm-load-gauge-arc qcm-load-gauge-arc-busy"></path>
+        <path d="M 156.57,43.43 A 80,80 0 0 1 180,100" class="qcm-load-gauge-arc qcm-load-gauge-arc-overloaded"></path>
+        <line id="qcm-load-gauge-ideal-tick" class="qcm-load-gauge-ideal-tick" x1="100" y1="28" x2="100" y2="12"></line>
+        <text id="qcm-load-gauge-ideal-label" class="qcm-load-gauge-ideal-label" x="100" y="6">Idéal</text>
+        <line id="qcm-load-gauge-needle" class="qcm-load-gauge-needle" x1="100" y1="100" x2="100" y2="26"></line>
+        <circle cx="100" cy="100" r="6" class="qcm-load-gauge-hub"></circle>
+      </svg>
+      <p class="qcm-load-gauge-label" id="qcm-load-gauge-label"></p>
+      <p class="qcm-load-gauge-caption" id="qcm-load-gauge-caption"></p>
+    </div>
     <form class="qcm-custom-search" id="qcm-custom-search" hidden>
       <textarea id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150" rows="1"
         placeholder="Tape un sujet à mémoriser (ex. la photosynthèse)"></textarea>
       <button type="submit" class="qcm-custom-search-btn" id="qcm-custom-search-btn">
         <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Générer
       </button>
+      <div class="qcm-knowledge-add" id="qcm-knowledge-add">
+        <button class="qcm-knowledge-add-toggle" id="qcm-knowledge-add-toggle" type="button"
+          aria-expanded="false" aria-controls="qcm-knowledge-add-menu">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i> Ajouter des connaissances
+        </button>
+        <div class="qcm-knowledge-add-menu" id="qcm-knowledge-add-menu" hidden>
+          <a class="qcm-knowledge-add-option" href="/manual-knowledge"><i class="fa-solid fa-pen" aria-hidden="true"></i><strong>Manuellement</strong><span>Saisir directement ce que je veux mémoriser</span></a>
+          <a class="qcm-knowledge-add-option" href="/photo-knowledge"><i class="fa-solid fa-camera" aria-hidden="true"></i><strong>Photo</strong><span>Photographier une page ou un cours</span></a>
+          <a class="qcm-knowledge-add-option" href="/pdf-knowledge"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i><strong>PDF</strong><span>Importer un document</span></a>
+          <a class="qcm-knowledge-add-option" href="/text-knowledge"><i class="fa-solid fa-align-left" aria-hidden="true"></i><strong>Texte</strong><span>Coller un texte</span></a>
+          <a class="qcm-knowledge-add-option" href="/url-knowledge"><i class="fa-solid fa-link" aria-hidden="true"></i><strong>Lien</strong><span>Importer une page web</span></a>
+          <a class="qcm-knowledge-add-option" href="/youtube-knowledge"><i class="fa-brands fa-youtube" aria-hidden="true"></i><strong>YouTube</strong><span>Importer une vidéo</span></a>
+        </div>
+      </div>
     </form>
     <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
     <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
@@ -1767,7 +2430,7 @@
     <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -1778,7 +2441,46 @@
   var customSearchInput = document.getElementById('qcm-custom-search-input');
   var customSearchBtn = document.getElementById('qcm-custom-search-btn');
   var customSearchStatus = document.getElementById('qcm-custom-search-status');
+  var knowledgeAdd = document.getElementById('qcm-knowledge-add');
+  var knowledgeAddToggle = document.getElementById('qcm-knowledge-add-toggle');
+  var knowledgeAddMenu = document.getElementById('qcm-knowledge-add-menu');
   var exploreBtn = document.getElementById('qcm-explore-btn');
+  var mesAcquisBtn = document.getElementById('qcm-mes-acquis-btn');
+  var loadGaugeEl = document.getElementById('qcm-load-gauge');
+  var loadGaugeNeedle = document.getElementById('qcm-load-gauge-needle');
+  var loadGaugeLabel = document.getElementById('qcm-load-gauge-label');
+  var loadGaugeCaption = document.getElementById('qcm-load-gauge-caption');
+  var loadGaugeToken = 0;
+
+  function closeKnowledgeAddMenu(options) {
+    if (!knowledgeAddMenu || knowledgeAddMenu.hidden) return;
+    knowledgeAddMenu.hidden = true;
+    knowledgeAddToggle.setAttribute('aria-expanded', 'false');
+    if (options && options.restoreFocus) knowledgeAddToggle.focus();
+  }
+  if (knowledgeAddToggle && knowledgeAddMenu) {
+    knowledgeAddToggle.addEventListener('click', function () {
+      var willOpen = knowledgeAddMenu.hidden;
+      knowledgeAddMenu.hidden = !willOpen;
+      knowledgeAddToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+    knowledgeAddToggle.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      knowledgeAddMenu.hidden = false;
+      knowledgeAddToggle.setAttribute('aria-expanded', 'true');
+      knowledgeAddMenu.querySelector('a')?.focus();
+    });
+    document.addEventListener('click', function (event) {
+      if (!knowledgeAdd.contains(event.target)) closeKnowledgeAddMenu();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !knowledgeAddMenu.hidden) {
+        event.preventDefault();
+        closeKnowledgeAddMenu({ restoreFocus: true });
+      }
+    });
+  }
   var voterKey = null;
   var questions = [];
   // Référence stable du QCM complet (demande du 13/08/2026, "Refaire les
@@ -1803,6 +2505,10 @@
   // temps, dans une carte séparée.
   var practiceMode = false;
   var practiceAnsweredByQuestionId = {};
+  // Compte les bonnes réponses réelles du QCM en cours (+1, +2, +3…) plutôt que
+  // d'afficher systématiquement "+1" (demande du 17/08/2026) — remis à zéro à
+  // chaque nouveau QCM chargé (cf. loadSlot).
+  var qcmCorrectStreakCount = 0;
   function quizAnswerEndpoint() {
     return practiceMode ? '/api/daily-quiz/practice-answer' : '/api/daily-quiz/answer';
   }
@@ -1813,8 +2519,78 @@
     // sur l'accueil, le module attendra alors la réponse fraîche et ne montrera jamais
     // furtivement l'ancien message vide devant les nouvelles bulles.
     if (!practiceMode && data && data.correct) {
-      try { sessionStorage.removeItem('agonUniverseEmpty:' + voterKey); } catch (e) {}
+      try { sessionStorage.removeItem('mnoriaUniverseEmpty:' + voterKey); } catch (e) {}
+      qcmCorrectStreakCount += 1;
+      showProgressPlusOne(qcmCorrectStreakCount);
     }
+  }
+  // +N furtif au milieu de l'écran à chaque bonne réponse, sur les 3 catégories
+  // (Découvrir/Ancrer/Relier) : purement visuel, retiré du DOM après
+  // l'animation CSS (qcm-progress-plus-one-pop) pour ne jamais s'accumuler
+  // entre deux questions. N = qcmCorrectStreakCount (+1, +2, +3… au fil des
+  // bonnes réponses du QCM en cours, pas systématiquement "+1").
+  function showProgressPlusOne(count) {
+    var el = document.createElement('span');
+    el.className = 'qcm-progress-plus-one';
+    el.textContent = '+' + count;
+    document.body.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 500);
+    playEncouragingChime();
+  }
+  // Petit carillon encourageant synthétisé (Web Audio API, pas de fichier son
+  // à charger) joué en même temps que le +1 (demande du 17/08/2026). Contexte
+  // audio réutilisé d'un appel à l'autre plutôt que recréé (les navigateurs
+  // limitent le nombre d'AudioContext simultanés). La réponse au QCM déclenche
+  // un fetch avant d'arriver ici : le geste utilisateur (clic/tap) n'est donc
+  // plus "synchrone" au moment de jouer le son, ce que Safari/iOS en
+  // particulier refuse tant que le contexte n'a jamais été débloqué une
+  // première fois par un vrai geste — d'où le déblocage anticipé ci-dessous,
+  // au tout premier tap/clic sur la page.
+  var qcmChimeAudioCtx = null;
+  function getChimeAudioCtx() {
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!qcmChimeAudioCtx) qcmChimeAudioCtx = new Ctx();
+    return qcmChimeAudioCtx;
+  }
+  ['pointerdown', 'touchstart', 'click'].forEach(function (evt) {
+    document.addEventListener(evt, function () {
+      var ctx = getChimeAudioCtx();
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    }, { once: true, passive: true });
+  });
+  function playEncouragingChime() {
+    try {
+      var ctx = getChimeAudioCtx();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      var now = ctx.currentTime;
+      // Carillon grave et doux (demande du 17/08/2026, remplace la clochette
+      // cristalline trop aiguë/brillante) : fondamentale basse (A3) + un
+      // partenaire légèrement désaccordé pour le mouvement, plus deux
+      // harmoniques discrètes à ratios inharmoniques (proches d'une vraie
+      // barre de carillon plutôt que des octaves/quintes propres, pour un
+      // timbre plus naturel) — attaque plus lente et gain global plus bas
+      // pour un rendu posé.
+      [
+        { freq: 220, gain: 0.28, decay: 3.8 },
+        { freq: 221, gain: 0.2, decay: 3.8 },
+        { freq: 606, gain: 0.08, decay: 2.9 },
+        { freq: 920, gain: 0.04, decay: 2.3 }
+      ].forEach(function (partial) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = partial.freq;
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(partial.gain, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + partial.decay);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + partial.decay + 0.05);
+      });
+    } catch (e) {}
   }
   var slotsStatus = null;
   // Dernière liste "Mes apprentissages" reçue (cf. renderMesQcmList) : lue par
@@ -1853,7 +2629,7 @@
       return;
     }
     try {
-      window.parent.postMessage({ type: 'agon:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
+      window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
     } catch (e) {}
   }
 
@@ -1872,10 +2648,21 @@
   // charger un QCM directement — voir loadMesQcm ci-dessous.
   var CATEGORY_ORDER = ['mesqcm', 'renforcement', 'comprendre'];
   var CATEGORY_LABELS = { mesqcm: 'Découvrir', renforcement: 'Ancrer', comprendre: 'Relier' };
+  // Titre du QCM lui-même pour "Ancrer"/"Relier" (distinct du nom de l'onglet
+  // ci-dessus) — recopié tel quel depuis server.js (DAILY_QUIZ_REINFORCEMENT_LABEL/
+  // DAILY_QUIZ_COMPREHENSION_LABEL) pour l'afficher dès loadSlot, AVANT même la
+  // réponse du fetch. Demande du 17/08/2026 : sans cette copie, loadSlot affichait
+  // d'abord CATEGORY_LABELS[currentCategory] ("Ancrer") en attendant la réponse,
+  // puis la remplaçait par data.label ("Renforcement des connaissances") une fois
+  // arrivée — un flash de titre visible à chaque clic sur l'onglet.
+  var QCM_INITIAL_TITLE_BY_CATEGORY = {
+    renforcement: 'Renforcement des connaissances',
+    comprendre: 'Comprendre les liens'
+  };
   var QCM_SUBTITLE_BY_CATEGORY = {
     mesqcm: "Les connaissances que tu as choisi de mémoriser — chaque QCM réussi alimente « Ma mémoire ».",
-    renforcement: "Les questions de culture générale déjà répondues reviennent ici pour valider tes acquis durablement (4 bonnes réponses à intervalles croissants). Ne compte pas pour le score Gnosis.",
-    comprendre: "Relie tes connaissances entre elles : chaque question vérifie que tu comprends réellement le lien détecté entre deux notions. Ne compte pas pour le score Gnosis."
+    renforcement: "Les questions déjà répondues reviennent ici pour ancrer durablement tes connaissances. Ne compte pas pour le score Gnosis.",
+    comprendre: "Ces questions vérifient que tu comprends vraiment le lien entre deux connaissances. Ne compte pas pour le score Gnosis."
   };
   // Rubrique d'origine (sourceType, cf. server.js buildCultureGeneraleQuestionsForToday)
   // de chaque question de culture générale — mêmes icônes/libellés que la
@@ -1890,7 +2677,17 @@
     citation: { icon: 'fa-quote-left', label: 'Citation du jour' },
     oeuvre: { icon: 'fa-palette', label: "Œuvre d'art du jour" },
     latin: { icon: 'fa-scroll', label: 'Mot latin du jour' },
-    custom: { icon: 'fa-magnifying-glass', label: 'Sujet recherché' }
+    custom: { icon: 'fa-magnifying-glass', label: 'Sujet recherché' },
+    photo_import: { icon: 'fa-camera', label: 'Document importé' },
+    manual_import: { icon: 'fa-pen', label: 'Ajout manuel' },
+    pdf_import: { icon: 'fa-file-pdf', label: 'Document PDF' },
+    text_import: { icon: 'fa-align-left', label: 'Texte importé' },
+    url_import: { icon: 'fa-link', label: 'Page web' },
+    youtube_import: { icon: 'fa-brands fa-youtube', label: 'Vidéo YouTube' },
+    // Ajouté automatiquement ici après une bonne réponse à une question "Comprendre les
+    // liens" (demande du 16/08/2026, cf. server.js applyFsrsReviewForDailyQuizAnswer) —
+    // jamais via un bouton "Mémoriser" comme les autres rubriques.
+    comprendre: { icon: 'fa-link', label: 'Comprendre les liens' }
   };
   // "mesqcm" n'a pas de créneau à vérifier : toujours affiché, son propre
   // état vide gère le cas "rien encore" (cf. renderMesQcmEmpty).
@@ -1936,11 +2733,27 @@
     categorySwitcher.innerHTML = '';
     CATEGORY_ORDER.forEach(function (category) {
       var available = isCategoryAvailable(category);
-      var isLearningBack = category === 'mesqcm' && currentCategory === 'mesqcm' && !!currentSlot;
+      // Demande du 17/08/2026 : ce bouton "← Mes apprentissages" ne
+      // remplaçait "Découvrir" que lorsqu'on était DANS un QCM de Découvrir
+      // lui-même (currentCategory === 'mesqcm') — pendant un QCM d'Ancrer ou
+      // de Relier, l'onglet restait affiché "Découvrir" sans action de
+      // retour rapide. Généralisé à tout QCM en cours (currentSlot posé),
+      // quelle que soit la catégorie active : même bouton, même place, pour
+      // les trois onglets.
+      var isLearningBack = category === 'mesqcm' && !!currentSlot;
+      var isActiveTab = category === currentCategory && !isLearningBack;
+      // Doré + reflet (cf. .qcm-slot-btn-new, style ci-dessus) uniquement sur Ancrer/Relier
+      // (jamais Découvrir, toujours disponible) quand du nouveau contenu attend, et jamais sur
+      // l'onglet déjà ouvert.
+      var isNewHighlight = (category === 'renforcement' || category === 'comprendre') && available && !isActiveTab;
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'qcm-slot-btn' + (category === currentCategory && !isLearningBack ? ' active' : '') + (isLearningBack ? ' qcm-learning-back-btn' : '');
-      btn.textContent = isLearningBack ? '← Mes apprentissages' : CATEGORY_LABELS[category];
+      btn.className = 'qcm-slot-btn' + (isActiveTab ? ' active' : '') + (isLearningBack ? ' qcm-learning-back-btn' : '') + (isNewHighlight ? ' qcm-slot-btn-new' : '');
+      // "Découvrir" (demande du 17/08/2026), pas l'ancien "Mes apprentissages" :
+      // même nom que l'onglet lui-même (cf. CATEGORY_LABELS.mesqcm), ce bouton
+      // n'est qu'un raccourci pour y revenir depuis un QCM d'Ancrer/Relier/
+      // Découvrir en cours, jamais une destination différente.
+      btn.textContent = isLearningBack ? 'Découvrir' : CATEGORY_LABELS[category];
       if (!available) {
         btn.disabled = true;
       } else {
@@ -1956,6 +2769,7 @@
       }
       categorySwitcher.appendChild(btn);
     });
+    if (mesAcquisBtn) mesAcquisBtn.classList.toggle('active', currentCategory === 'mesacquis');
   }
 
   function escapeHtml(str) {
@@ -1996,6 +2810,18 @@
     if (btn) btn.classList.toggle('visible', visible);
   }
   document.getElementById('qcm-panel-close').onclick = function () {
+    // Sur la liste "Découvrir" elle-même (currentCategory === 'mesqcm' sans
+    // currentSlot précis, cf. loadMesQcm) : "revenir à Découvrir" n'aurait
+    // aucun sens, on y est déjà — ferme directement l'iframe (demande du
+    // 17/08/2026), comme le permet déjà le bouton du parent (cf.
+    // setParentIframeCloseVisible), mais depuis la croix du cadre lui-même.
+    if (currentCategory === 'mesqcm' && !currentSlot) {
+      if (window.self !== window.top) {
+        var parentCloseBtn = window.parent.document.getElementById('debate-iframe-modal-close');
+        if (parentCloseBtn) parentCloseBtn.click();
+      }
+      return;
+    }
     practiceMode = false;
     if (currentSlot) window.history.replaceState({}, '', window.location.pathname);
     loadMesQcm();
@@ -2089,6 +2915,23 @@
   };
   var FILL_BLANK_MARKER = '___';
 
+  // Indicateur de progression, en haut de chaque question (demande du
+  // 17/08/2026) : une barre qui se remplit progressivement sur Ancrer/Relier
+  // — le nombre exact de questions y est moins utile (des repasses/liens
+  // composés à la volée, pas un contenu qu'on parcourt pour l'apprendre par
+  // cœur dans l'ordre) — plutôt que le texte "Question X / Y" gardé tel
+  // quel sur Découvrir. Fonction partagée par les 4 rendus de question
+  // (qcm/texte_a_trous/association/qcm_multi/ordre) plutôt que dupliquée.
+  function renderProgressIndicatorHtml() {
+    if (currentCategory !== 'renforcement' && currentCategory !== 'comprendre') {
+      return '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    }
+    var pct = questions.length ? Math.round(((currentIndex + 1) / questions.length) * 100) : 0;
+    return '<div class="qcm-progress-bar" role="progressbar" aria-valuenow="' + (currentIndex + 1) + '" aria-valuemin="1" aria-valuemax="' + questions.length + '" aria-label="Progression du QCM">' +
+      '<div class="qcm-progress-bar-fill" style="width:' + pct + '%"></div>' +
+    '</div>';
+  }
+
   function renderTypeBadge(type) {
     var label = QUESTION_TYPE_BADGE_LABELS[type];
     return label ? '<span class="qcm-type-badge">' + escapeHtml(label) + '</span>' : '';
@@ -2118,7 +2961,16 @@
   // fetchCultureGeneraleReviewInjectionForToday, filtré sur cette table).
   function renderExcludeButtonHtml() {
     if (currentCategory === 'comprendre') return '';
-    return '<button type="button" class="qcm-exclude-btn" id="qcm-exclude-btn" title="Ne plus jamais me reposer cette question">Ne plus me la demander</button>';
+    // Première exposition ("Découvrir", currentCategory === 'mesqcm') : la question n'a encore
+    // aucun historique de repasse (cf. applyFsrsReviewForDailyQuizAnswer côté serveur, qui ne
+    // crée le memory_item qu'à la réponse) — "Ne plus me la demander" n'a alors aucun sens
+    // (rien à exclure de futures repasses qui n'existent pas encore). "Passer" reprend le même
+    // visuel (.qcm-exclude-btn) mais avance juste à la question suivante, sans exclusion
+    // définitive ni confirmation (demande du 17/08/2026).
+    if (currentCategory === 'mesqcm') {
+      return '<button type="button" class="qcm-exclude-btn" id="qcm-exclude-btn" title="Passer cette question">Passer</button>';
+    }
+    return '<button type="button" class="qcm-exclude-btn" id="qcm-exclude-btn" title="Ne plus jamais me reposer cette question">Ne plus me poser cette question</button>';
   }
   // Laisser réfléchir avant d'afficher les propositions (demande du
   // 12/08/2026) — seulement pour les formats où il y a vraiment une réponse
@@ -2145,8 +2997,24 @@
     if (answer || QCM_REVEAL_GATE_TYPES.indexOf(type) === -1) return false;
     return question.selfContained === true;
   }
-  function renderRevealGateHtml() {
-    return '<button type="button" class="qcm-next-btn visible" id="qcm-reveal-btn">Réfléchis à ta réponse, puis affiche les propositions</button>';
+  // Gradation de l'aide (audit pédagogique du 16/08/2026, "gradation de
+  // l'aide") : réutilise TEL QUEL le mécanisme de gate ci-dessus (même
+  // bouton, même comportement au clic, cf. wireRevealGate) — helpLevel ne
+  // décide JAMAIS si on gate (ça reste needsRevealGate/selfContained,
+  // inchangé), seulement le texte du bouton une fois qu'on gate. Calculé
+  // côté serveur (cf. server.js stripQuestionForClient, lecture seule de
+  // l'état FSRS — jamais recalculé ici) ; "guided" par repli si absent
+  // (question jamais encore revue, ou plus ancienne que ce champ).
+  // "guided" reprend mot pour mot le texte historique (comportement
+  // par défaut inchangé, "aucune friction supplémentaire").
+  var REVEAL_GATE_TEXT_BY_HELP_LEVEL = {
+    guided: 'Réfléchis à ta réponse, puis affiche les propositions',
+    intermediate: 'Essaie de répondre avant d’afficher les choix.',
+    strong_recall: 'Retrouve la réponse de mémoire.'
+  };
+  function renderRevealGateHtml(helpLevel) {
+    var text = REVEAL_GATE_TEXT_BY_HELP_LEVEL[helpLevel] || REVEAL_GATE_TEXT_BY_HELP_LEVEL.guided;
+    return '<button type="button" class="qcm-next-btn visible" id="qcm-reveal-btn">' + escapeHtml(text) + '</button>';
   }
   function wireRevealGate(hiddenElIds) {
     var revealBtn = document.getElementById('qcm-reveal-btn');
@@ -2175,13 +3043,19 @@
     // pour FSRS (cf. mapMnoriaReviewToFsrsRating). Un texte contextuel plutôt
     // qu'un intitulé de bouton ambigu du type "Difficile" seul.
     return '<div class="qcm-difficulty-wrap" id="' + idPrefix + '-difficulty"' + (hidden ? ' hidden' : '') + '>' +
-      '<p class="qcm-difficulty-label">Tu as retrouvé la réponse :</p>' +
+      '<p class="qcm-difficulty-label">Comment cela t’a semblé ?</p>' +
       '<div class="qcm-difficulty-buttons">' +
-      '<button type="button" class="qcm-difficulty-btn" data-difficulty="facile" disabled>Facilement</button>' +
-      '<button type="button" class="qcm-difficulty-btn qcm-difficulty-btn-moyen" data-difficulty="moyen" disabled>Normalement</button>' +
-      '<button type="button" class="qcm-difficulty-btn" data-difficulty="difficile" disabled>Difficilement</button>' +
+      '<button type="button" class="qcm-difficulty-btn" data-difficulty="difficile" disabled>Difficile</button>' +
+      '<button type="button" class="qcm-difficulty-btn qcm-difficulty-btn-moyen" data-difficulty="moyen" disabled>Moyen</button>' +
+      '<button type="button" class="qcm-difficulty-btn" data-difficulty="facile" disabled>Facile</button>' +
       '</div>' +
       '</div>';
+  }
+
+  function renderAnswerFeedbackHtml(answer) {
+    var explanation = escapeHtml(answer.explanation || '');
+    return '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Correct' : 'À revoir') + '</span>' +
+      (explanation ? '<span class="qcm-feedback-explanation"><span class="qcm-feedback-title">À retenir</span>' + explanation + '</span>' : '');
   }
   // `onSubmit(difficulty)` appelé au clic sur l'un des 3 boutons. Retourne
   // une fonction `setEnabled(bool)` à appeler quand la réponse devient
@@ -2199,7 +3073,14 @@
 
   function wireExcludeButton(question) {
     var btn = document.getElementById('qcm-exclude-btn');
-    if (!btn || !voterKey) return;
+    if (!btn) return;
+    // "Passer" (Découvrir, cf. renderExcludeButtonHtml) : simple avancée, jamais d'appel réseau
+    // ni de confirmation — contrairement à l'exclusion définitive ci-dessous.
+    if (currentCategory === 'mesqcm') {
+      btn.onclick = goToNextQuestion;
+      return;
+    }
+    if (!voterKey) return;
     btn.onclick = function () {
       // Confirmation avant retrait (demande du 13/08/2026) : contrairement au clic
       // "Mémoriser" ailleurs sur le site (optimiste, réversible), exclure une question
@@ -2208,7 +3089,7 @@
       // removeMesQcmItems plus bas, déjà chargée via script.min.js sur cette page).
       showDeleteConfirmModal({
         title: 'Ne plus jamais te reposer cette question ?',
-        text: 'Elle ne te sera désormais plus jamais posée pour être mémorisée. Utile si elle te semble trop facile ou inutile à mémoriser.',
+        text: 'Elle ne te sera plus jamais reposée. Utile si elle te semble trop facile ou non pertinente.',
         onConfirm: function () {
           btn.disabled = true;
           btn.textContent = 'Retirée';
@@ -2245,6 +3126,48 @@
     };
   }
 
+  // Image de fond pendant le QCM (demande du 18/08/2026, Découvrir/Ancrer/
+  // Relier) : posée sur <body> (jamais .qcm-panel, qui reste opaque et donc
+  // visuellement "par-dessus") avec un voile sombre superposé (linear-gradient
+  // en premier plan du background-image) pour garder le texte du cadre
+  // lisible quel que soit le cadrage/la luminosité de l'image. JSON.stringify
+  // plutôt qu'une concaténation de guillemets : échappe correctement l'URL
+  // pour un usage dans url(...) sans jamais casser la syntaxe CSS.
+  // Repli (demande du 18/08/2026) quand la question n'a pas d'image propre —
+  // ou quand la source trouvée est trop petite pour un fond plein écran sans
+  // paraître floue une fois étirée (cf. MIN_BACKGROUND_IMAGE_WIDTH ci-dessous) :
+  // la même texture que "Ma mémoire" (cf. MNORIA_TEXTURE_URL, public/mon-univers.js)
+  // plutôt qu'un fond uni — jamais rechargée/retuilée comme sur mon-univers.js
+  // (pas de caméra/zoom ici), juste l'asset statique en background-size:cover.
+  var QCM_FALLBACK_BACKGROUND_IMAGE_URL = '/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy';
+  // En-dessous de cette largeur réellement livrée (cf. lib/knowledge-image-search.js,
+  // `width` calculé côté serveur), une image Wikipedia/Commons reste tout à
+  // fait valable en petite illustration de fiche, mais deviendrait visiblement
+  // floue étirée en fond plein écran (demande du 18/08/2026, "pas de mauvaise
+  // qualité / trop zoomée") — repli sur la texture "Ma mémoire" dans ce cas
+  // plutôt que d'afficher une image dégradée.
+  // Largeur inconnue (anciens QCM générés avant ce champ) traitée comme
+  // insuffisante, jamais comme acceptable par défaut — repli sûr sur la
+  // texture plutôt qu'un pari sur une résolution qu'on ne connaît pas.
+  var MIN_BACKGROUND_IMAGE_WIDTH = 1000;
+  function applyQuestionBackgroundImage(question) {
+    var img = question && question.image;
+    var imageUrl = (img && img.url && img.width >= MIN_BACKGROUND_IMAGE_WIDTH)
+      ? img.url
+      : QCM_FALLBACK_BACKGROUND_IMAGE_URL;
+    document.body.style.backgroundImage =
+      'linear-gradient(rgba(16,24,32,0.72), rgba(16,24,32,0.72)), url(' + JSON.stringify(imageUrl) + ')';
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundPosition = 'center';
+    document.body.style.backgroundRepeat = 'no-repeat';
+  }
+  function clearQuestionBackgroundImage() {
+    document.body.style.backgroundImage = '';
+    document.body.style.backgroundSize = '';
+    document.body.style.backgroundPosition = '';
+    document.body.style.backgroundRepeat = '';
+  }
+
   // Point d'entrée unique : dispatché selon le format de la question
   // courante. "association"/"qcm_multi"/"ordre" ont chacun une interaction
   // fondamentalement différente d'un choix unique et un rendu dédié ; les
@@ -2253,6 +3176,7 @@
   function renderQuestion() {
     signalIframeReady();
     var question = questions[currentIndex];
+    applyQuestionBackgroundImage(question);
     var answer = (practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId)[question.id];
     var type = question.type || 'qcm';
     if (type === 'association') {
@@ -2272,6 +3196,13 @@
   // reste du parcours QCM qui avance toujours après une action sur la
   // question en cours).
   function goToNextQuestion() {
+    // Remonte en haut de la page à chaque changement de question (demande du
+    // 17/08/2026) : .qcm-panel n'a pas de scroll propre, c'est la page (donc
+    // window, y compris dans l'iframe d'accueil sur mobile) qui défile —
+    // sans ça, après avoir lu l'explication d'une réponse plus bas, la
+    // question suivante s'affichait déjà scrollée au lieu de repartir du
+    // titre.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     if (currentIndex === questions.length - 1) renderFinalScore();
     else { currentIndex += 1; renderQuestion(); }
   }
@@ -2289,11 +3220,11 @@
       : escapeHtml(question.question);
 
     var html = '';
-    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += renderProgressIndicatorHtml();
     html += renderOriginBadge(question) + renderTypeBadge(type);
     html += '<p class="qcm-question">' + questionHtml + '</p>';
     var gated = needsRevealGate(type, answer, question);
-    if (gated) html += renderRevealGateHtml();
+    if (gated) html += renderRevealGateHtml(question.helpLevel);
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
     html += renderDifficultyButtonsHtml('qcm-choice', gated);
     html += renderExcludeButtonHtml();
@@ -2351,9 +3282,7 @@
 
     var feedback = document.getElementById('qcm-feedback');
     feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
-    feedback.innerHTML =
-      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
-      escapeHtml(answer.explanation || '');
+    feedback.innerHTML = renderAnswerFeedbackHtml(answer);
 
     wireNextButton(document.getElementById('qcm-next-btn'));
   }
@@ -2388,7 +3317,7 @@
   // avec le reste du site (vanilla JS, sans framework). ─────────────────
   function renderAssociationQuestion(question, answer) {
     var html = '';
-    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += renderProgressIndicatorHtml();
     html += renderOriginBadge(question) + renderTypeBadge('association');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     html += '<div id="qcm-assoc-rows"></div>';
@@ -2507,9 +3436,7 @@
 
     var feedback = document.getElementById('qcm-feedback');
     feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
-    feedback.innerHTML =
-      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
-      escapeHtml(answer.explanation || '');
+    feedback.innerHTML = renderAnswerFeedbackHtml(answer);
 
     wireNextButton(document.getElementById('qcm-next-btn'));
   }
@@ -2520,11 +3447,11 @@
   // principe que le bouton de "association" ci-dessus. ───────────────────
   function renderMultiChoiceQuestion(question, answer) {
     var html = '';
-    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += renderProgressIndicatorHtml();
     html += renderOriginBadge(question) + renderTypeBadge('qcm_multi');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     var gated = needsRevealGate('qcm_multi', answer, question);
-    if (gated) html += renderRevealGateHtml();
+    if (gated) html += renderRevealGateHtml(question.helpLevel);
     html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
@@ -2603,9 +3530,7 @@
 
     var feedback = document.getElementById('qcm-feedback');
     feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
-    feedback.innerHTML =
-      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
-      escapeHtml(answer.explanation || '');
+    feedback.innerHTML = renderAnswerFeedbackHtml(answer);
 
     wireNextButton(document.getElementById('qcm-next-btn'));
   }
@@ -2617,7 +3542,7 @@
   // un élément déjà placé le retire (pour corriger sans tout recommencer). ─
   function renderOrderQuestion(question, answer) {
     var html = '';
-    html += '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
+    html += renderProgressIndicatorHtml();
     html += renderOriginBadge(question) + renderTypeBadge('ordre');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
@@ -2720,23 +3645,48 @@
 
     var feedback = document.getElementById('qcm-feedback');
     feedback.className = 'qcm-feedback visible ' + (answer.correct ? 'is-correct' : 'is-wrong');
-    feedback.innerHTML =
-      '<span class="qcm-feedback-verdict">' + (answer.correct ? 'Bonne réponse !' : 'Raté !') + '</span>' +
-      escapeHtml(answer.explanation || '');
+    feedback.innerHTML = renderAnswerFeedbackHtml(answer);
 
     wireNextButton(document.getElementById('qcm-next-btn'));
   }
 
   function renderFinalScore() {
     signalIframeReady();
+    // Écran de score final : plus une question précise à l'image dédiée,
+    // retour au fond uni (demande du 18/08/2026, même esprit que
+    // applyQuestionBackgroundImage sur renderQuestion).
+    clearQuestionBackgroundImage();
+    // Série Ancrer/Relier terminée (jamais en "Refaire" : practiceMode ne persiste aucune
+    // réponse, cf. POST /api/daily-quiz/practice-answer) : l'onglet doit perdre son doré +
+    // reflet et redevenir grisé/non cliquable tout de suite (cf. .qcm-slot-btn-new,
+    // renderCategorySwitcher). Demande du 17/08/2026 : NE PLUS dépendre uniquement d'un
+    // aller-retour serveur (refreshSlotsStatus) pour ça — deux raisons concrètes observées :
+    // 1) pour "Ancrer", la mise à jour FSRS de la toute dernière réponse tourne en tâche de
+    //    fond APRÈS l'envoi de la réponse HTTP (cf. applyFsrsReviewForDailyQuizAnswer, "jamais
+    //    sur le chemin critique") — un refreshSlotsStatus lancé immédiatement après pouvait
+    //    donc encore lire l'ancien due_at et renvoyer available:true à tort ;
+    // 2) pour "Relier", server.js ne vérifie même pas de file "due" mais seulement l'existence
+    //    d'AU MOINS UN lien (hasCultureGeneraleComprehensionLinks) — cet onglet ne redevient
+    //    donc jamais indisponible côté serveur une fois qu'un lien existe, peu importe qu'une
+    //    série vienne d'être terminée.
+    // On force donc ici, en local, available:false pour la catégorie qu'on vient de terminer
+    // (jamais mesqcm, toujours disponible) — fiable à 100%, sans dépendre du serveur. AUCUN
+    // refreshSlotsStatus derrière (retiré le 17/08/2026) : un premier essai en gardait un en
+    // tâche de fond "pour détecter du contenu nouveau", mais sa réponse arrivait presque
+    // toujours pendant que l'utilisateur lit encore son score — écrasant cet override local
+    // par la réponse serveur (encore available:true pour les deux raisons ci-dessus) avant
+    // même le clic sur "Terminé". Le prochain refreshSlotsStatus utile aura de toute façon
+    // lieu tout seul dès le prochain vrai chargement (loadMesQcm/loadSlot).
+    if (!practiceMode && slotsStatus && slotsStatus.slots && slotsStatus.slots[currentCategory]) {
+      slotsStatus.slots[currentCategory].available = false;
+      renderCategorySwitcher();
+    }
     var answers = practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId;
     var total = questions.length;
     var correct = 0;
-    var missedQuestions = [];
     questions.forEach(function (q) {
       var a = answers[q.id];
       if (a && a.correct) correct += 1;
-      else missedQuestions.push(q);
     });
     // Les repasses de "Renforcement" ne comptent jamais pour le score
     // Gnosis (cf. server.js DAILY_QUIZ_GNOSIS_EXCLUDED_QUESTION_ID_PREFIXES) :
@@ -2751,6 +3701,8 @@
         : (currentCategory === 'comprendre'
           ? 'Ce parcours ne compte pas pour ton score Gnosis ni pour l’ancrage — il vérifie uniquement ta compréhension des liens entre tes connaissances.'
           : 'Dans quelques instants, ton score Gnosis apparaîtra et te permettra de voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).'));
+    // Demande du 17/08/2026 : plus de "Refaire"/"Refaire les questions loupées" — un seul
+    // bouton "Terminé", qui ramène toujours sur Découvrir.
     body.innerHTML =
       '<div class="qcm-final-score">' +
       '<i class="fa-solid fa-trophy"></i>' +
@@ -2759,47 +3711,10 @@
       '</div>' +
       '<p class="qcm-final-score-hint">' + scoreHint + '</p>' +
       '<div class="qcm-final-actions">' +
-      '<button type="button" class="qcm-next-btn visible" id="qcm-review-btn">Refaire</button>' +
-      (missedQuestions.length ? '<button type="button" class="qcm-next-btn visible" id="qcm-review-missed-btn">Refaire les questions loupées (' + missedQuestions.length + ')</button>' : '') +
-      '<button type="button" class="qcm-next-btn visible" id="qcm-back-to-mesqcm-btn">Retour à mes apprentissages</button>' +
+      '<button type="button" class="qcm-next-btn visible" id="qcm-finish-btn">Terminé</button>' +
       '</div>';
 
-    // "Refaire" : vraies nouvelles réponses possibles (contrairement à
-    // l'ancien "Revoir"), mais jamais comptées pour l'ancrage — practiceMode
-    // bascule submitXAnswer sur POST /api/daily-quiz/practice-answer (jamais
-    // écrit en base) et le résultat dans practiceAnsweredByQuestionId, à
-    // part des vraies réponses du jour (cf. quizAnswerEndpoint/
-    // recordAnsweredQuestion). Repart toujours de l'ensemble COMPLET
-    // (originalQuestions, jamais `questions` qui peut déjà être un
-    // sous-ensemble des seules questions loupées d'un tour précédent).
-    document.getElementById('qcm-review-btn').onclick = function () {
-      showQuizOrderPicker(function (shuffled) {
-        practiceMode = true;
-        practiceAnsweredByQuestionId = {};
-        questions = shuffled ? shuffleArrayCopy(originalQuestions) : originalQuestions.slice();
-        currentIndex = 0;
-        setPanelCloseVisible(true);
-        renderQuestion();
-      });
-    };
-    // "Refaire les questions loupées" (demande du 13/08/2026) : ne reprend
-    // que celles ratées (ou non répondues) dans le passage qui vient de se
-    // terminer — enchaînable plusieurs fois de suite pour resserrer
-    // progressivement sur ce qui reste mal su, même logique practiceMode que
-    // "Refaire" (jamais compté pour l'ancrage).
-    if (missedQuestions.length) {
-      document.getElementById('qcm-review-missed-btn').onclick = function () {
-        showQuizOrderPicker(function (shuffled) {
-          practiceMode = true;
-          practiceAnsweredByQuestionId = {};
-          questions = shuffled ? shuffleArrayCopy(missedQuestions) : missedQuestions.slice();
-          currentIndex = 0;
-          setPanelCloseVisible(true);
-          renderQuestion();
-        });
-      };
-    }
-    document.getElementById('qcm-back-to-mesqcm-btn').onclick = function () {
+    document.getElementById('qcm-finish-btn').onclick = function () {
       practiceMode = false;
       if (currentSlot) window.history.replaceState({}, '', window.location.pathname);
       loadMesQcm();
@@ -2828,9 +3743,15 @@
       '<p class="qcm-fiche-name">' + escapeHtml(name) + '</p>' +
       renderThemeTags(themes);
     if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
+    if (/^https?:\/\//i.test(String(detail.sourceUrl || ''))) {
+      html += '<p class="qcm-fiche-meta"><a href="' + escapeHtml(detail.sourceUrl) + '" target="_blank" rel="noopener noreferrer">Voir la page source</a></p>';
+    }
+    if (detail.sourceAuthor) {
+      html += '<p class="qcm-fiche-meta">Chaîne : ' + escapeHtml(detail.sourceAuthor) + (detail.durationSeconds ? ' · ' + Math.ceil(Number(detail.durationSeconds) / 60) + ' min' : '') + '</p>';
+    }
     if (detail.image && detail.image.url) {
       var img = detail.image;
-      var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : 'Wikipedia'));
+      var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia')));
       html += '<figure class="qcm-fiche-image">' +
         '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(name) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
         (img.pageUrl
@@ -2898,14 +3819,14 @@
         ficheFadeResizeObserver.observe(ficheModalEl);
       }
     }
-    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
       overlay.remove();
       if (ficheFadeHint) ficheFadeHint.remove();
       document.removeEventListener('keydown', onKeydown);
       if (typeof updateFicheFadeHint === 'function') window.removeEventListener('resize', updateFicheFadeHint);
       if (ficheFadeResizeObserver) ficheFadeResizeObserver.disconnect();
-      try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+      try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     }
     function onKeydown(e) {
       if (e.key === 'Escape') close();
@@ -2967,8 +3888,8 @@
   }
 
   function getPendingNotionQuizGenerations() {
-    if (typeof window.agonGetPendingNotionQuizGenerations === 'function') {
-      return window.agonGetPendingNotionQuizGenerations();
+    if (typeof window.mnoriaGetPendingNotionQuizGenerations === 'function') {
+      return window.mnoriaGetPendingNotionQuizGenerations();
     }
     return [];
   }
@@ -2994,8 +3915,8 @@
     var availableSlots = {};
     (quizzes || []).forEach(function (quiz) { availableSlots[quiz.slot] = true; });
     pending.forEach(function (item) {
-      if (availableSlots[item.slot] && typeof window.agonFinishPendingNotionQuizGeneration === 'function') {
-        window.agonFinishPendingNotionQuizGeneration(item.slot);
+      if (availableSlots[item.slot] && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+        window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
       }
     });
     pending = getPendingNotionQuizGenerations();
@@ -3054,8 +3975,8 @@
           return;
         }
         ready.forEach(function (item) {
-          if (typeof window.agonFinishPendingNotionQuizGeneration === 'function') {
-            window.agonFinishPendingNotionQuizGeneration(item.slot);
+          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+            window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
           }
         });
         return fetchLatestMesQcmList();
@@ -3079,7 +4000,7 @@
   // localStorage et déclenche cet événement : relire immédiatement plutôt que d'attendre le
   // prochain tour de polling.
   window.addEventListener('storage', function (event) {
-    if (event.key !== 'agon_pending_notion_quizzes_v1') return;
+    if (event.key !== 'mnoria_pending_notion_quizzes_v1') return;
     if (currentCategory === 'mesqcm' && !currentSlot) refreshPendingNotionQuizList(true);
   });
 
@@ -3111,12 +4032,12 @@
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
-    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function close() {
       overlay.remove();
       document.removeEventListener('keydown', onKeydown);
-      try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+      try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     }
     function onKeydown(e) { if (e.key === 'Escape') close(); }
     overlay.addEventListener('click', function (e) {
@@ -3218,7 +4139,7 @@
     if (!mesQcmExploreModalEls) return;
     mesQcmExploreModalEls.overlay.remove();
     document.removeEventListener('keydown', mesQcmExploreModalEls.onKeydown);
-    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     mesQcmExploreModalEls = null;
   }
   function openMesQcmExploreModal() {
@@ -3238,7 +4159,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
-    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function onKeydown(e) { if (e.key === 'Escape') closeMesQcmExploreModal(); }
     overlay.addEventListener('click', function (e) {
@@ -3339,13 +4260,135 @@
     fetchAndRenderExplore('');
   }
   exploreBtn.addEventListener('click', openMesQcmExploreModal);
+  if (mesAcquisBtn) mesAcquisBtn.addEventListener('click', function () {
+    if (currentCategory === 'mesacquis') return;
+    loadMesAcquis();
+  });
+
+  // Jauge de charge d'apprentissage (demande du 17/08/2026, cf. server.js
+  // GET /api/users/learning-load + lib/spaced-repetition/learning-load.js
+  // pour tout le calcul — ce bloc ne fait que l'afficher). Visible
+  // uniquement sur "Découvrir" (appelée depuis loadMesQcm), jamais pendant
+  // un QCM en cours ni sur Ancrer/Relier (cf. hideLoadGauge dans loadSlot).
+  // "Charge de mémorisation" (demande du 17/08/2026), plus clair que le
+  // simple "Charge" — précise qu'il s'agit du rythme des repasses à venir,
+  // pas d'une charge générale de l'appli.
+  var LOAD_GAUGE_LEVEL_META = {
+    calm: { label: 'Charge de mémorisation calme', minRatio: 0, maxRatio: 0.5 },
+    moderate: { label: 'Charge de mémorisation modérée', minRatio: 0.5, maxRatio: 1.0 },
+    busy: { label: 'Charge de mémorisation élevée', minRatio: 1.0, maxRatio: 1.75 },
+    overloaded: { label: 'Surcharge de mémorisation', minRatio: 1.75, maxRatio: 2.75 }
+  };
+  var LOAD_GAUGE_LEVEL_ORDER = ['calm', 'moderate', 'busy', 'overloaded'];
+
+  // Repère "Idéal" sur le cadran (demande du 17/08/2026) : un rythme
+  // confortable de repasses/jour, pas un seuil d'alerte — 12 tombe dans la
+  // zone "modérée" (cf. LOAD_GAUGE_LEVEL_META), bien avant que le plafond
+  // quotidien (LOAD_GAUGE_DAILY_CAP, dupliqué de
+  // DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY côté serveur, même logique que les
+  // seuils déjà dupliqués ici) ne bascule la jauge en "élevée". Fixe : ne
+  // dépend jamais de la charge réelle affichée par l'aiguille.
+  var LOAD_GAUGE_DAILY_CAP = 20;
+  var LOAD_GAUGE_IDEAL_QUESTIONS = 12;
+
+  // Même calcul d'angle que l'aiguille (cf. renderLoadGauge), factorisé pour
+  // être réutilisable par le repère "Idéal" ci-dessous sans dupliquer la
+  // logique de zone/progress.
+  function ratioToGaugeAngleDeg(ratio) {
+    var level = LOAD_GAUGE_LEVEL_ORDER[0];
+    for (var i = LOAD_GAUGE_LEVEL_ORDER.length - 1; i >= 0; i--) {
+      if (ratio >= LOAD_GAUGE_LEVEL_META[LOAD_GAUGE_LEVEL_ORDER[i]].minRatio) {
+        level = LOAD_GAUGE_LEVEL_ORDER[i];
+        break;
+      }
+    }
+    var meta = LOAD_GAUGE_LEVEL_META[level];
+    var levelIndex = LOAD_GAUGE_LEVEL_ORDER.indexOf(level);
+    var span = meta.maxRatio - meta.minRatio;
+    var progress = span > 0 ? Math.max(0, Math.min(1, (ratio - meta.minRatio) / span)) : 1;
+    return -90 + levelIndex * 45 + progress * 45;
+  }
+
+  (function initLoadGaugeIdealMarker() {
+    var tick = document.getElementById('qcm-load-gauge-ideal-tick');
+    var label = document.getElementById('qcm-load-gauge-ideal-label');
+    if (!tick && !label) return;
+    var angleDeg = ratioToGaugeAngleDeg(LOAD_GAUGE_IDEAL_QUESTIONS / LOAD_GAUGE_DAILY_CAP);
+    if (tick) tick.setAttribute('transform', 'rotate(' + angleDeg + ' 100 100)');
+    if (label) {
+      var angleRad = angleDeg * Math.PI / 180;
+      var r = 96;
+      label.setAttribute('x', 100 + r * Math.sin(angleRad));
+      label.setAttribute('y', 100 - r * Math.cos(angleRad));
+    }
+  })();
+
+  function hideLoadGauge() {
+    loadGaugeToken++;
+    if (loadGaugeEl) {
+      loadGaugeEl.classList.remove('visible');
+      // .hidden ET la classe : une règle globale [hidden]{display:none !important}
+      // (cf. .mnoria-tribunes-btn[hidden] plus haut dans ce projet, même piège) bat
+      // toujours .qcm-load-gauge.visible{display:flex} tant que l'attribut reste
+      // posé — poser seulement la classe n'aurait aucun effet visuel à l'affichage.
+      loadGaugeEl.hidden = true;
+    }
+  }
+
+  function renderLoadGauge(gauge) {
+    if (!loadGaugeEl || !gauge) return;
+    loadGaugeEl.hidden = false;
+    var meta = LOAD_GAUGE_LEVEL_META[gauge.level] || LOAD_GAUGE_LEVEL_META.calm;
+    var levelIndex = LOAD_GAUGE_LEVEL_ORDER.indexOf(gauge.level);
+    if (levelIndex < 0) levelIndex = 0;
+    // Chaque palier occupe un quart égal du cadran (0-45-90-135-180°), quelle
+    // que soit la largeur réelle de sa plage de ratio — un cadran à 4 zones
+    // de tailles très inégales (cf. seuils) serait moins lisible qu'à
+    // tailles égales ; seule la position DANS le quart reflète le ratio réel.
+    var span = meta.maxRatio - meta.minRatio;
+    var progress = span > 0 ? Math.max(0, Math.min(1, (gauge.ratio - meta.minRatio) / span)) : 1;
+    var angleDeg = -90 + levelIndex * 45 + progress * 45;
+    if (loadGaugeNeedle) loadGaugeNeedle.style.transform = 'rotate(' + angleDeg + 'deg)';
+    if (loadGaugeLabel) loadGaugeLabel.textContent = meta.label;
+    if (loadGaugeCaption) {
+      if (gauge.peakLoad > 0 && gauge.peakDayIndex >= 0) {
+        var when = gauge.peakDayIndex === 0 ? "aujourd'hui" : (gauge.peakDayIndex === 1 ? 'demain' : 'dans ' + gauge.peakDayIndex + ' jours');
+        loadGaugeCaption.textContent = 'Pic estimé : ' + gauge.peakLoad + ' question' + (gauge.peakLoad > 1 ? 's' : '') + ' ' + when + '.';
+      } else {
+        loadGaugeCaption.textContent = 'Aucune repasse programmée pour l’instant.';
+      }
+    }
+    loadGaugeEl.classList.add('visible');
+  }
+
+  function fetchAndRenderLoadGauge() {
+    if (!voterKey) { hideLoadGauge(); return; }
+    var myToken = ++loadGaugeToken;
+    fetch('/api/users/learning-load?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (myToken !== loadGaugeToken) return;
+        if (!data || data.error) { hideLoadGauge(); return; }
+        renderLoadGauge(data);
+      })
+      .catch(function () {
+        if (myToken === loadGaugeToken) hideLoadGauge();
+      });
+  }
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
   // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
   function loadMesQcm() {
+    clearQuestionBackgroundImage();
     setParentIframeCloseVisible(true);
-    setPanelCloseVisible(false);
+    // Demande du 17/08/2026 : croix du cadre aussi sur la liste "Découvrir"
+    // elle-même (pas seulement une fois DANS un QCM précis), comme elle
+    // apparaît déjà sur "Ancrer"/"Relier" dès leur chargement (cf. loadSlot,
+    // setPanelCloseVisible(true) une fois les questions chargées). Son clic
+    // ferme directement l'iframe plutôt que de "revenir" à Découvrir — cf.
+    // le onclick de #qcm-panel-close plus haut, qui distingue ce cas.
+    setPanelCloseVisible(true);
     var myToken = ++loadToken;
     currentCategory = 'mesqcm';
     currentSlot = null;
@@ -3353,6 +4396,7 @@
     titleText.textContent = CATEGORY_LABELS.mesqcm;
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY.mesqcm;
     renderCategorySwitcher();
+    fetchAndRenderLoadGauge();
 
     if (!voterKey) {
       renderMesQcmEmpty();
@@ -3431,11 +4475,13 @@
       var badgeHtml = q.validated
         ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
         : '<span class="qcm-acquis-badge">' + progressPct + '%</span>';
+      var questionCount = Number(q.questionCount) || 0;
       var stateHtml = q.realized
         ? '<span class="qcm-mesqcm-state is-realized">Réalisé</span>'
-        : '<span class="qcm-mesqcm-state">En attente de réalisation</span>';
+        : (q.inProgress
+          ? '<span class="qcm-mesqcm-state is-inprogress">En cours (' + (Number(q.answeredCount) || 0) + '/' + questionCount + ')</span>'
+          : '<span class="qcm-mesqcm-state">En attente de réalisation</span>');
       html += '<tr>';
-      var questionCount = Number(q.questionCount) || 0;
       html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
       html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
       if (questionCount) html += '<span class="qcm-mesqcm-question-count">(' + questionCount + (questionCount > 1 ? ' questions' : ' question') + ')</span>';
@@ -3588,41 +4634,106 @@
   // computeCultureGeneraleStreaks côté serveur) et un accès à sa fiche
   // (détail de la notion + corrigé complet des questions, cf.
   // openMesQcmFiche).
+  // Câblage partagé entre renderMesQcmList (Découvrir, "En attente" seulement) et
+  // renderMesAcquisList ("Mes acquis", cf. loadMesAcquis) : mêmes tableaux paginés
+  // (renderMesQcmPaginatedTablesHtml), mêmes interactions (fiche, suppression, sélection
+  // groupée), juste une composition différente de sections.
+  function wireMesQcmListInteractions(quizzes) {
+    signalIframeReady();
+    initMesQcmPagination();
+    initMesQcmTableScrollHints();
+    initMesQcmThemeMenus();
+    initMesQcmBulkSelection(quizzes);
+
+    body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
+        openMesQcmActionMenu(btn, q, quizzes);
+      });
+    });
+    body.querySelectorAll('[data-mesqcm-delete-index]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-delete-index'))];
+        removeMesQcmItem(q, quizzes, btn);
+      });
+    });
+  }
+
+  var MESQCM_BULK_BAR_HTML = '<div class="qcm-mesqcm-bulk-bar" id="qcm-mesqcm-bulk-bar">' +
+    '<label class="qcm-mesqcm-bulk-selectall"><input type="checkbox" id="qcm-mesqcm-select-all"> Tout cocher</label>' +
+    '<button type="button" class="qcm-mesqcm-bulk-delete-btn" id="qcm-mesqcm-bulk-delete-btn" disabled>' +
+    '<i class="fa-solid fa-trash-can"></i> Supprimer la sélection</button>' +
+    '</div>';
+
+  // Découvrir (demande du 16/08/2026, complétée le 17/08/2026) : "Mes
+  // apprentissages en cours" (des questions déjà répondues, mais pas
+  // toutes — cf. q.inProgress côté serveur) au-dessus de "En attente de
+  // réalisation" (jamais commencés) — "Tous mes apprentissages" (classé par
+  // thématique) reste dans "Mes acquis", cf. renderMesAcquisList/loadMesAcquis.
   function renderMesQcmList(quizzes) {
     currentMesQcmQuizzes = quizzes;
     if (!quizzes.length) { renderMesQcmEmpty(); return; }
 
+    var pendingQuizzes = quizzes.filter(function (q) { return !q.realized; })
+      .slice()
+      .sort(compareMesQcmByStateThenName);
+    var inProgressQuizzes = pendingQuizzes.filter(function (q) { return q.inProgress; });
+    var notStartedQuizzes = pendingQuizzes.filter(function (q) { return !q.inProgress; });
+
+    var html = MESQCM_BULK_BAR_HTML;
+    html += '<div class="qcm-mesqcm-groups">';
+    if (inProgressQuizzes.length) {
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--inprogress">';
+      html += '<h2 class="qcm-mesqcm-group-title">Mes apprentissages en cours</h2>';
+      html += renderMesQcmPaginatedTablesHtml(inProgressQuizzes, quizzes);
+      html += '</section>';
+    }
+    if (notStartedQuizzes.length) {
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
+      html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
+      html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes);
+      html += '</section>';
+    }
+    if (!pendingQuizzes.length) {
+      html += '<p class="qcm-state-message">Rien en attente — retrouve tes apprentissages déjà réalisés dans « Mes acquis ».</p>';
+    }
+    html += '</div>';
+    body.innerHTML = html;
+    wireMesQcmListInteractions(quizzes);
+  }
+
+  function renderMesAcquisEmpty() {
+    renderMessage("Tu n'as encore rien réalisé — les apprentissages que tu termines apparaîtront ici, classés par thématique.");
+  }
+
+  // "Mes acquis" : tous les apprentissages (réalisés ou non), classés par thématique — même
+  // contenu que l'ancienne section "Tous mes apprentissages" de Découvrir, déplacé ici le
+  // 16/08/2026.
+  function renderMesAcquisList(quizzes) {
+    currentMesQcmQuizzes = quizzes;
+    if (!quizzes.length) { renderMesAcquisEmpty(); return; }
+
     var byTheme = {};
     var untagged = [];
     quizzes.forEach(function (q) {
-      var primaryTheme = Array.isArray(q.themes) ? q.themes.filter(Boolean)[0] : null;
+      // Rubrique dédiée plutôt que "Autres" : un lien "comprendre" n'a jamais de thématique
+      // résolue (getPrimaryNotionQuizTheme côté serveur, propre aux QCM issus d'un débat) —
+      // sans ce cas particulier, ces liens se retrouveraient noyés dans "Autres" au lieu
+      // d'apparaître sous leur propre rubrique (demande du 16/08/2026).
+      var primaryTheme = q.sourceType === 'comprendre'
+        ? ACQUIS_SOURCE_TYPE_META.comprendre.label
+        : (Array.isArray(q.themes) ? q.themes.filter(Boolean)[0] : null);
       if (!primaryTheme) { untagged.push(q); return; }
       (byTheme[primaryTheme] = byTheme[primaryTheme] || []).push(q);
     });
     var themeNames = Object.keys(byTheme).sort(function (a, b) { return a.localeCompare(b, 'fr', { sensitivity: 'base' }); });
     if (untagged.length) { byTheme['Autres'] = untagged; themeNames.push('Autres'); }
 
-    var pendingQuizzes = quizzes.filter(function (q) { return !q.realized; })
-      .slice()
-      .sort(compareMesQcmByStateThenName);
-
-    // Sélection groupée (demande du 12/08/2026) : une seule case "Tout
-    // cocher" pour toute la page, pas une par table — un même apprentissage
-    // pouvant apparaître à la fois dans "En attente" et dans une ou
-    // plusieurs rubriques thématiques (cf. getMesQcmRowKey), la sélection
-    // est tenue par clé plutôt que par ligne (cf. initMesQcmBulkSelection).
-    var html = '<div class="qcm-mesqcm-bulk-bar" id="qcm-mesqcm-bulk-bar">' +
-      '<label class="qcm-mesqcm-bulk-selectall"><input type="checkbox" id="qcm-mesqcm-select-all"> Tout cocher</label>' +
-      '<button type="button" class="qcm-mesqcm-bulk-delete-btn" id="qcm-mesqcm-bulk-delete-btn" disabled>' +
-      '<i class="fa-solid fa-trash-can"></i> Supprimer la sélection</button>' +
-      '</div>';
+    // Sélection groupée (demande du 12/08/2026) : une seule case "Tout cocher" pour toute la
+    // page, pas une par table — la sélection est tenue par clé plutôt que par ligne (cf.
+    // getMesQcmRowKey/initMesQcmBulkSelection).
+    var html = MESQCM_BULK_BAR_HTML;
     html += '<div class="qcm-mesqcm-groups">';
-    if (pendingQuizzes.length) {
-      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
-      html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
-      html += renderMesQcmPaginatedTablesHtml(pendingQuizzes, quizzes);
-      html += '</section>';
-    }
     html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all">';
     html += '<h2 class="qcm-mesqcm-group-title">Tous mes apprentissages</h2>';
     themeNames.forEach(function (theme) {
@@ -3643,24 +4754,39 @@
     html += '</section>';
     html += '</div>';
     body.innerHTML = html;
-    signalIframeReady();
-    initMesQcmPagination();
-    initMesQcmTableScrollHints();
-    initMesQcmThemeMenus();
-    initMesQcmBulkSelection(quizzes);
+    wireMesQcmListInteractions(quizzes);
+  }
 
-    body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
-        openMesQcmActionMenu(btn, q, quizzes);
+  // Même source de données que Découvrir (GET /api/users/notion-quizzes) : pas de nouvelle
+  // route côté serveur, juste une composition d'affichage différente (cf. renderMesAcquisList).
+  function loadMesAcquis() {
+    clearQuestionBackgroundImage();
+    setParentIframeCloseVisible(true);
+    setPanelCloseVisible(false);
+    hideLoadGauge();
+    var myToken = ++loadToken;
+    currentCategory = 'mesacquis';
+    currentSlot = null;
+    currentQuizDate = null;
+    titleText.textContent = 'Mes acquis';
+    if (subtitleText) subtitleText.textContent = 'Tout ce que tu as déjà appris, classé par thématique.';
+    renderCategorySwitcher();
+
+    if (!voterKey) {
+      renderMesAcquisEmpty();
+      return;
+    }
+    renderMessage('Chargement de tes acquis…');
+    fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (myToken !== loadToken) return;
+        var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+        renderMesAcquisList(quizzes);
+      })
+      .catch(function () {
+        if (myToken === loadToken) renderMessage('Impossible de charger tes acquis pour le moment.');
       });
-    });
-    body.querySelectorAll('[data-mesqcm-delete-index]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var q = quizzes[Number(btn.getAttribute('data-mesqcm-delete-index'))];
-        removeMesQcmItem(q, quizzes, btn);
-      });
-    });
   }
 
   // Retire un ou plusieurs apprentissages de la liste personnelle (jamais le
@@ -3819,13 +4945,13 @@
     if (!mesQcmActionModalEls) return;
     mesQcmActionModalEls.overlay.remove();
     document.removeEventListener('keydown', mesQcmActionModalEls.onKeydown);
-    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     mesQcmActionModalEls = null;
   }
   function openMesQcmActionMenu(btn, q, quizzes) {
     closeMesQcmActionModal();
     var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
-    var doLabel = q.realized ? 'Refaire le QCM' : 'Faire le QCM';
+    var doLabel = q.realized ? 'Refaire le QCM' : (q.inProgress ? 'Continuer le QCM' : 'Faire le QCM');
     var progressPct = Math.max(0, Math.min(100, Number(q.progressPct) || 0));
     var ancrageBadgeHtml = q.validated
       ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
@@ -3848,7 +4974,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
-    try { window.parent.postMessage({ type: 'agon:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionModal(); }
     overlay.addEventListener('click', function (e) {
@@ -3915,7 +5041,16 @@
   // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
   // la place de "Connaissances" générique.
   function loadSlot(slotKey, quizDate, label, shuffled) {
+    // Efface tout de suite l'image du QCM précédent (demande du 18/08/2026) :
+    // sinon elle resterait affichée en fond le temps du fetch ci-dessous,
+    // avant que renderQuestion() ne pose la bonne (ou aucune).
+    clearQuestionBackgroundImage();
     setParentIframeCloseVisible(false);
+    // La jauge n'a de sens que sur la liste "Découvrir" elle-même (cf.
+    // fetchAndRenderLoadGauge dans loadMesQcm) — jamais pendant un QCM en
+    // cours (Ancrer/Relier/un apprentissage précis), où subtitleText change
+    // de sens sans lien avec la charge à venir.
+    hideLoadGauge();
     var myToken = ++loadToken;
     currentSlot = slotKey;
     currentQuizDate = quizDate || null;
@@ -3925,13 +5060,19 @@
     currentIndex = 0;
     questions = [];
     answeredByQuestionId = {};
+    qcmCorrectStreakCount = 0;
     // Nouveau QCM chargé : jamais en mode "Refaire" hérité d'une session
     // précédente, sinon de vraies réponses cesseraient à tort d'être
     // enregistrées (cf. quizAnswerEndpoint).
     practiceMode = false;
     practiceAnsweredByQuestionId = {};
     setPanelCloseVisible(false);
-    titleText.textContent = label || 'Apprentissage';
+    // QCM_INITIAL_TITLE_BY_CATEGORY (Ancrer/Relier) plutôt que CATEGORY_LABELS (le nom de
+    // l'onglet) : évite le flash "Ancrer" -> "Renforcement des connaissances" une fois le
+    // fetch résolu plus bas (demande du 17/08/2026) — le vrai titre du QCM est déjà connu
+    // sans attendre la réponse serveur pour ces deux catégories. CATEGORY_LABELS reste le
+    // repli pour "mesqcm" (toujours accompagné d'un vrai `label` en pratique) et tout autre cas.
+    titleText.textContent = label || QCM_INITIAL_TITLE_BY_CATEGORY[currentCategory] || CATEGORY_LABELS[currentCategory] || 'Apprentissage';
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || '';
     renderCategorySwitcher();
     renderMessage('Chargement du QCM…');
@@ -3983,13 +5124,26 @@
       });
   }
 
-  function init() {
-    voterKey = typeof getKey === 'function' ? getKey() : null;
-
-    fetch('/api/daily-quiz/status' + (voterKey ? '?voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
+  // Extrait de init() (demande du 17/08/2026) : réutilisée après une série d'Ancrer/Relier
+  // terminée (cf. renderFinalScore) pour que le bouton perde son doré + reflet (cf.
+  // .qcm-slot-btn-new) et redevienne grisé/non cliquable dès que plus rien n'y est dû —
+  // slotsStatus était sinon figé sur son état d'avant la série pour le reste de la session
+  // (renderCategorySwitcher le relit tel quel, jamais de refetch après coup jusqu'ici).
+  function refreshSlotsStatus() {
+    return fetch('/api/daily-quiz/status' + (voterKey ? '?voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (statusData) {
         slotsStatus = statusData && statusData.slots ? statusData : { slots: {} };
+      })
+      .catch(function () {
+        slotsStatus = { slots: {} };
+      });
+  }
+
+  function init() {
+    voterKey = typeof getKey === 'function' ? getKey() : null;
+
+    refreshSlotsStatus().then(function () {
         // Lien direct depuis "Faire le QCM" (Éclairages/Ce jour dans
         // l'Histoire) juste après un clic sur "Mémoriser" : ouvre ce QCM de
         // notion précis plutôt que la liste "Mes QCM". Sans ce paramètre
@@ -4001,10 +5155,6 @@
           loadSlot(requestedSlot, params.get('date'), params.get('label'));
           return;
         }
-        loadMesQcm();
-      })
-      .catch(function () {
-        slotsStatus = { slots: {} };
         loadMesQcm();
       });
   }

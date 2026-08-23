@@ -7,7 +7,7 @@
 
 <title>__META_TITLE__</title>
 <meta name="description" content="__META_DESCRIPTION__">
-<meta property="og:site_name" content="agôn">
+<meta property="og:site_name" content="mnoria">
 <meta property="og:type" content="website">
 <meta property="og:title" content="__META_TITLE__">
 <meta property="og:description" content="__META_DESCRIPTION__">
@@ -28,12 +28,12 @@
 <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-<style id="agon-idle-home-guard-style">html.agon-idle-home-redirecting body{visibility:hidden!important;}</style>
-<script id="agon-idle-home-guard">
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+<style id="mnoria-idle-home-guard-style">html.mnoria-idle-home-redirecting body{visibility:hidden!important;}</style>
+<script id="mnoria-idle-home-guard">
 (function(){
   var THRESHOLD = 3 * 60 * 1000;
-  var KEY = "agon_idle_hidden_at";
+  var KEY = "mnoria_idle_hidden_at";
   var timer = null;
   var isStandalone = false;
   try {
@@ -41,7 +41,7 @@
   } catch (e) {}
   if (!isStandalone) return;
   // Cette page peut être chargée dans l'iframe-modal de l'accueil (clic "Entrer
-  // dans l'arène"). Dans ce cas, "agon_idle_hidden_at" est une clé sessionStorage
+  // dans l'arène"). Dans ce cas, "mnoria_idle_hidden_at" est une clé sessionStorage
   // partagée avec l'accueil/d'autres débats déjà visités : un ancien horodatage
   // obsolète y déclencherait une redirection immédiate vers "/" qui casse le
   // chargement (loader bloqué). Le garde n'a de sens que pour la page top-level.
@@ -52,7 +52,7 @@
   }
 
   function hideForRedirect() {
-    document.documentElement.classList.add("agon-idle-home-redirecting");
+    document.documentElement.classList.add("mnoria-idle-home-redirecting");
   }
 
   function goHomeIfStale() {
@@ -61,7 +61,7 @@
     sessionStorage.removeItem(KEY);
     if (!isHomePath()) {
       hideForRedirect();
-      try { sessionStorage.setItem("agon_last_reload_reason", JSON.stringify({ reason: "idle-home-guard (debate)", at: Date.now() })); } catch(e) {}
+      try { sessionStorage.setItem("mnoria_last_reload_reason", JSON.stringify({ reason: "idle-home-guard (debate)", at: Date.now() })); } catch(e) {}
       location.replace("/");
       return true;
     }
@@ -88,11 +88,11 @@
     clearIdleTimer();
     if (!goHomeIfStale()) {
       sessionStorage.removeItem(KEY);
-      document.documentElement.classList.remove("agon-idle-home-redirecting");
+      document.documentElement.classList.remove("mnoria-idle-home-redirecting");
     }
   }
 
-  window.__agonIdleHomeGuard = { check: goHomeIfStale, markHidden: markHidden, markVisible: markVisible };
+  window.__mnoriaIdleHomeGuard = { check: goHomeIfStale, markHidden: markHidden, markVisible: markVisible };
   window.addEventListener("pageshow", markVisible, true);
   document.addEventListener("visibilitychange", function(){
     if (document.hidden) markHidden();
@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1" />
+<link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -225,7 +225,7 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-debate">
 <script>
@@ -349,8 +349,8 @@ try {
       <i class="fa-solid fa-power-off"></i>
     </button>
 
-    <img src="/appagon-192.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
-    <img src="/appagonordi.png" alt="agôn app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
+    <img src="/appmnoria-192.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
+    <img src="/appmnoriaordi.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
 
     <div class="admin-controls-row" data-admin style="display:none;">
       <div class="admin-topbar-menu" id="admin-topbar-menu">
@@ -977,7 +977,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
    le temps que script.min.js soit parsé. */
 (function () {
   try {
-    var raw = sessionStorage.getItem("agonFloatingScrollBtnPos:" + location.pathname);
+    var raw = sessionStorage.getItem("mnoriaFloatingScrollBtnPos:" + location.pathname);
     if (!raw) return;
     var s = JSON.parse(raw);
     if (!s || s.w !== window.innerWidth) return;
@@ -1055,7 +1055,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+	<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -1108,7 +1108,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom"></script>
-<script src="/admin-debate-analysis.js?v=20260713-debate-no-top-bell-v29"></script>
+<script src="/admin-debate-analysis.js?v=20260820-hide-weak-scores"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.
@@ -1830,7 +1830,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
 
 <script>
 (function(){
-  var PAUSE_CLASS = 'agon-anim-paused';
+  var PAUSE_CLASS = 'mnoria-anim-paused';
   document.addEventListener('visibilitychange', function(){
     document.body.classList.toggle(PAUSE_CLASS, document.hidden);
   });
@@ -2002,7 +2002,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     b: { form: 'form-b', body: 'b-body', url: 'b-url', count: 'count-body-b' }
   };
 
-  var PREVIEW_CACHE_PREFIX = 'agon_idea_url_preview_';
+  var PREVIEW_CACHE_PREFIX = 'mnoria_idea_url_preview_';
   var previewMemoryCache = Object.create(null);
   var previewPendingCache = Object.create(null);
 
@@ -2636,8 +2636,8 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     });
   }
 
-  if(!window.__agonIdeaXMobileColumnInlineFitBound){
-    window.__agonIdeaXMobileColumnInlineFitBound = true;
+  if(!window.__mnoriaIdeaXMobileColumnInlineFitBound){
+    window.__mnoriaIdeaXMobileColumnInlineFitBound = true;
     window.addEventListener('resize', function(){ requestAnimationFrame(refitXEmbedsInMobileColumns); }, { passive: true });
     window.addEventListener('orientationchange', function(){ setTimeout(refitXEmbedsInMobileColumns, 250); }, { passive: true });
   }
@@ -2850,7 +2850,7 @@ window.updateDebateSourcePreviewVerticalOffset = function() {
     <p style="font-size:26px; text-align:center; margin:0 0 10px;">🔕</p>
     <p style="font-weight:700; color:#e8e8e8; font-size:15px; margin:0 0 10px; text-align:center;">Notifications bloquées</p>
     <p style="color:#a0b0bb; font-size:13px; line-height:1.6; margin:0 0 10px;">C'est bien dommage, tu loupes toutes les réactions à tes publications&nbsp;! Clique sur l'icône 🔒 dans la barre d'adresse de ton navigateur → Notifications → Autoriser.</p>
-    <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → agôn → Notifications → Autoriser</p>
+    <p style="color:#7a8a94; font-size:12px; margin:0 0 18px; line-height:1.5;">Sur iPhone : Réglages → Safari → mnoria → Notifications → Autoriser</p>
     <button onclick="closePushDeniedModal()" style="width:100%; padding:10px; border:none; border-radius:10px; background:#3a4a55; color:#e8e8e8; font-size:14px; font-weight:600; cursor:pointer;">Fermer</button>
   </div>
 </div>

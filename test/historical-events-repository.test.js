@@ -117,6 +117,66 @@ test("le filtre onlyValidated ne garde que review_status=validated", () => {
   assert.equal(events[0].review_status, "validated");
 });
 
+// onlyMemorizable (demande du 17/08/2026, audit du pipeline mnésique) : cf.
+// isHistoricalEventMemorizable dans server.js, seul consommateur réel — un
+// événement "draft" (jamais relu) ne doit jamais alimenter une nouvelle
+// question mémorisable, mais un repli transitoire admet aussi "reviewed" à
+// condition que date_certainty soit déjà "high" (le dataset réel ne compte
+// aucun "validated" au moment de ce correctif, cf. commentaire du repository).
+test("onlyMemorizable rejette un événement draft, même à date_certainty high", () => {
+  const repo = repoWithFixture([
+    baseEvent({ id: "evt-draft-high", review_status: "draft", date_certainty: "high" })
+  ]);
+  const all = repo.getAll({ onlyMemorizable: true });
+  assert.equal(all.length, 0);
+});
+
+test("onlyMemorizable accepte reviewed + date_certainty=high", () => {
+  const repo = repoWithFixture([
+    baseEvent({ id: "evt-reviewed-high", review_status: "reviewed", date_certainty: "high" })
+  ]);
+  const all = repo.getAll({ onlyMemorizable: true });
+  assert.equal(all.length, 1);
+  assert.equal(all[0].id, "evt-reviewed-high");
+});
+
+test("onlyMemorizable accepte validated + date_certainty=high", () => {
+  const repo = repoWithFixture([
+    baseEvent({ id: "evt-validated-high", review_status: "validated", date_certainty: "high", image_filename: "evt.jpg" })
+  ]);
+  const all = repo.getAll({ onlyMemorizable: true });
+  assert.equal(all.length, 1);
+  assert.equal(all[0].id, "evt-validated-high");
+});
+
+test("onlyMemorizable rejette reviewed sans date_certainty=high (jamais un simple statut reviewed)", () => {
+  const repo = repoWithFixture([
+    baseEvent({ id: "evt-reviewed-medium", date_key: "05-01", month: 5, day: 1, review_status: "reviewed", date_certainty: "medium" }),
+    baseEvent({ id: "evt-reviewed-null", date_key: "05-02", month: 5, day: 2, review_status: "reviewed", date_certainty: null })
+  ]);
+  const all = repo.getAll({ onlyMemorizable: true });
+  assert.equal(all.length, 0);
+});
+
+test("onlyMemorizable : sans l'option (ou à false), le comportement getAll() historique est inchangé (draft inclus)", () => {
+  const repo = repoWithFixture([
+    baseEvent({ id: "evt-draft", review_status: "draft", date_certainty: "high" })
+  ]);
+  assert.equal(repo.getAll().length, 1);
+  assert.equal(repo.getAll({ onlyMemorizable: false }).length, 1);
+});
+
+// onlyValidated (getByDateKey/getByMonthDay/getTodayEvents, route publique
+// /api/historical-events) reste STRICT et inchangé par ce correctif : jamais
+// mélangé avec le repli onlyMemorizable ci-dessus, propre à getAll() seul.
+test("onlyValidated (getByDateKey) reste strict : reviewed+high n'est PAS traité comme validated", () => {
+  const repo = repoWithFixture([
+    baseEvent({ id: "evt-reviewed-high-2", review_status: "reviewed", date_certainty: "high" })
+  ]);
+  const events = repo.getByDateKey("03-12", { onlyValidated: true });
+  assert.equal(events.length, 0);
+});
+
 test("les événements rejected sont toujours exclus, même sans filtre", () => {
   const repo = repoWithFixture();
   assert.deepEqual(repo.getByDateKey("07-15"), []);

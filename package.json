@@ -19,15 +19,20 @@
   },
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1116.0",
+    "@mozilla/readability": "^0.6.0",
     "@supabase/supabase-js": "^2.101.1",
     "canvas": "^3.2.1",
     "compression": "^1.8.1",
     "dotenv": "^17.3.1",
     "express": "^4.21.2",
+    "jsdom": "^26.1.0",
+    "pdfjs-dist": "^5.4.149",
     "resend": "^6.12.3",
     "sharp": "^0.35.3",
     "ts-fsrs": "5.4.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",

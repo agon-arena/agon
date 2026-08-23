@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <script src="/no-zoom.js?v=20260603" defer></script>
 
-<title>Ma mémoire | agôn</title>
+<title>Ma mémoire | mnoria</title>
 <link rel="icon" type="image/png" href="/mnoria-icon-64.png">
 <link rel="manifest" href="/manifest.webmanifest?v=20260815-mnoria-app-icon-v1">
 <link rel="apple-touch-icon" href="/mnoria-icon-192.png">
 <meta name="theme-color" content="#243038">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Agôn">
-<link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.png?v=20260815-original" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260816-harmonize-sort-btn-gaps-v1" />
+<meta name="apple-mobile-web-app-title" content="Mnoria">
+<link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
+<link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -463,7 +463,7 @@
       opacity: 0.7;
     }
     .contributions-score-card-locked .contributions-score-card-title i,
-    .contributions-score-card-locked .contributions-score-card-title .agon-logos-icon {
+    .contributions-score-card-locked .contributions-score-card-title .mnoria-logos-icon {
       color: #7a8a94;
     }
     .contributions-score-card-value-locked {
@@ -515,14 +515,14 @@
       justify-content: center;
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260816-counter-3px-lower" defer></script>
+  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
 </head>
 <body class="page-mon-univers page-notifications page-notifications-mobile page-contributions">
 <script>
   (function() {
     var contributionsOnly = location.pathname === "/contributions";
     document.body.classList.add(contributionsOnly ? "page-contributions-only" : "page-memory-only");
-    if (contributionsOnly) document.title = "Scores et contributions | agôn";
+    if (contributionsOnly) document.title = "Scores et contributions | mnoria";
   })();
 </script>
 <header class="topbar topbar--mnoria-uniform">
@@ -566,7 +566,7 @@
 
     <details class="contributions-accordion">
       <summary>
-        <span class="contributions-accordion-label"><span class="agon-arena-icon" aria-hidden="true"></span> Mes arènes <span class="contributions-count" id="contributions-debates-count"></span></span>
+        <span class="contributions-accordion-label"><span class="mnoria-arena-icon" aria-hidden="true"></span> Mes arènes <span class="contributions-count" id="contributions-debates-count"></span></span>
         <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
       </summary>
       <div class="contributions-accordion-body" id="contributions-debates"><div class="empty-state">Chargement…</div></div>
@@ -582,7 +582,7 @@
 
     <details class="contributions-accordion">
       <summary>
-        <span class="contributions-accordion-label"><i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i> Mes notes <span class="contributions-count" id="contributions-notes-count"></span></span>
+        <span class="contributions-accordion-label"><i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i> Mes notes <span class="contributions-count" id="contributions-notes-count"></span></span>
         <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
       </summary>
       <div class="contributions-accordion-body">
@@ -620,7 +620,7 @@
 
   <nav id="universe-breadcrumb" class="universe-breadcrumb" aria-label="Fil d'Ariane de l'univers"></nav>
 
-  <div id="agon-universe-cloud" class="agon-tag-trends-cloud"></div>
+  <div id="mnoria-universe-cloud" class="mnoria-tag-trends-cloud"></div>
 
   <button type="button" id="universe-back-btn" class="universe-back-btn" aria-label="Revenir au niveau précédent">
     <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Retour
@@ -661,8 +661,8 @@
 (function() {
   if (location.pathname !== "/contributions") return;
   // Icône spirale (volute grecque) du score Logos — même SVG que la constante
-  // AGON_LOGOS_ICON de script.js.
-  const AGON_LOGOS_ICON = '<i class="agon-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
+  // MNORIA_LOGOS_ICON de script.js.
+  const MNORIA_LOGOS_ICON = '<i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
 
   function esc(value) {
     return String(value == null ? "" : value)
@@ -747,7 +747,7 @@
     return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(d.id) + '">' +
       '<p class="contribution-title">' + esc(d.question) + '</p>' +
       '<div class="contribution-meta">' +
-        '<span class="contribution-badge"><span class="agon-arena-icon" aria-hidden="true"></span> ' + (d.type === "open" ? "Arène libre" : "Pour / Contre") + '</span>' +
+        '<span class="contribution-badge"><span class="mnoria-arena-icon" aria-hidden="true"></span> ' + (d.type === "open" ? "Arène libre" : "Pour / Contre") + '</span>' +
         (d.category ? '<span>' + esc(d.category) + '</span>' : '') +
         '<span>' + esc(formatDate(d.created_at)) + '</span>' +
       '</div>' +
@@ -771,7 +771,7 @@
     return '<a class="contribution-item" href="/debate?id=' + encodeURIComponent(a.debate_id) + '">' +
       '<p class="contribution-title">' + esc(a.title || "(sans titre)") + '</p>' +
       '<div class="contribution-meta">' +
-        '<span class="contribution-badge">' + AGON_LOGOS_ICON + ' ' + (Number(a.ai_score) || 0) + '/100</span>' +
+        '<span class="contribution-badge">' + MNORIA_LOGOS_ICON + ' ' + (Number(a.ai_score) || 0) + '/100</span>' +
         (a.ai_category ? '<span>' + esc(a.ai_category) + '</span>' : '') +
         (a.debate_question ? '<span>dans « ' + esc(a.debate_question) + ' »</span>' : '') +
         '<span>' + esc(formatDate(a.created_at)) + '</span>' +
@@ -967,21 +967,10 @@
     var container = document.getElementById("contributions-scores");
     if (!container) return;
 
-    var modalArgs = null; // rempli une fois les données connues, lu au clic
-    container.style.cursor = "pointer";
-    container.setAttribute("role", "button");
-    container.setAttribute("aria-label", "Voir le détail de mes scores");
-    container.addEventListener("click", function(event) {
-      if (!modalArgs || typeof window.showUserScoreModal !== "function") return;
-      var card = event.target.closest(".contributions-score-card");
-      var initialTab = (card && card.getAttribute("data-score-tab")) || "rhetor";
-      window.showUserScoreModal(
-        modalArgs.votesScore, modalArgs.notesScore, modalArgs.gnosisScore,
-        modalArgs.tierLabel, modalArgs.stats, modalArgs.tier, modalArgs.tierCount,
-        modalArgs.gnosisTierLabel, modalArgs.gnosisTier, modalArgs.gnosisTierCount,
-        initialTab
-      );
-    });
+    // Detail au clic ré-activé le 20/08/2026 (cf. plus bas, fin de renderCards)
+    // — réutilise la même modale que le badge de la topbar (showUserScoreModal),
+    // désormais avec un onglet Noesis qui n'existait pas lors du retrait du
+    // 17/08/2026.
 
     // Une carte par axe systématiquement, verrouillée (fond grisé, valeur
     // "—") tant que le score n'existe pas encore, plutôt que de la faire
@@ -1013,43 +1002,108 @@
       var notesScore = notesScoreRaw === null ? null : Math.round(notesScoreRaw * 10) / 10;
       var gnosisScore = gnosisScoreRaw === null ? null : Math.round(gnosisScoreRaw * 10) / 10;
       var votesValue = numOrNull(d.votesValue);
+      var votesAveragePerIdea = numOrNull(d.votesAveragePerIdea);
       var notesValue = numOrNull(d.notesValue);
+      var notesIdeaCount = numOrNull(d.notesIdeaCount);
       var gnosisAnswered = numOrNull(d.gnosisAnswered);
       var gnosisCorrect = numOrNull(d.gnosisCorrect);
+      var noesisScoreRaw = numOrNull(d.noesisScore);
+      var noesisScore = noesisScoreRaw === null ? null : Math.round(noesisScoreRaw * 10) / 10;
+      var relierAnswered = numOrNull(d.relierAnswered);
+      var relierCorrect = numOrNull(d.relierCorrect);
 
       container.classList.remove("contributions-scores-empty");
       container.innerHTML =
+        // Demande du 17/08/2026 : moyenne de voix reçues PAR IDÉE, en plus du
+        // score sur 100 (votesScore, inchangé) et du total brut déjà affiché.
         scoreCardHtml(
           '<i class="fa-solid fa-bolt"></i>', 'Rhetor', votesScore,
-          votesValue !== null ? esc(votesValue.toLocaleString("fr-FR") + (votesValue > 1 ? " voix reçues" : " voix reçue")) : "Voix récoltées sur tes idées",
+          (votesValue !== null && votesAveragePerIdea !== null)
+            ? esc(votesAveragePerIdea.toLocaleString("fr-FR") + " voix/idée en moyenne (" + votesValue.toLocaleString("fr-FR") + " au total)")
+            : "Voix récoltées sur tes idées",
           "Pas encore évalué : poste une idée pour débloquer ce score.",
           "rhetor"
         ) +
+        // Demande du 17/08/2026 : nombre d'idées notées à côté de la moyenne
+        // (notesValue, déjà affichée) et du score sur 100 (notesScore,
+        // inchangé) — même principe que votesAveragePerIdea/votesIdeaCount
+        // pour Rhetor juste au-dessus.
         scoreCardHtml(
-          AGON_LOGOS_ICON, 'Logos', notesScore,
-          notesValue !== null ? esc("Moyenne de " + notesValue.toLocaleString("fr-FR") + "/100") : "Qualité de tes idées, notée par l'IA",
+          MNORIA_LOGOS_ICON, 'Logos', notesScore,
+          (notesValue !== null && notesIdeaCount !== null)
+            ? esc("Moyenne de " + notesValue.toLocaleString("fr-FR") + "/100 sur " + notesIdeaCount.toLocaleString("fr-FR") + (notesIdeaCount > 1 ? " idées notées" : " idée notée"))
+            : "Qualité de tes idées, notée par l'IA",
           "Pas encore évalué : poste une idée pour débloquer ce score.",
           "logos"
         ) +
+        // Gnosis (redéfini le 17/08/2026 : ex-"Ancrage", justesse aux repasses
+        // "Ancrer" — plus l'ancienne justesse sur contenu frais, cf. server.js
+        // computeUserScores) — même format que les autres : "Top X%" et le
+        // compte brut en dessous.
         scoreCardHtml(
           '<i class="fa-solid fa-brain"></i>', 'Gnosis', gnosisScore,
-          (gnosisAnswered !== null && gnosisCorrect !== null) ? esc(gnosisCorrect + "/" + gnosisAnswered + " bonnes réponses au QCM") : "Justesse au QCM",
-          "Pas encore évalué : réponds dans Apprentissage pour débloquer ce score.",
+          (gnosisAnswered !== null && gnosisCorrect !== null && gnosisAnswered > 0)
+            ? esc(Math.round(gnosisCorrect / gnosisAnswered * 100) + "% de réussite en Ancrer")
+            : "Justesse aux repasses",
+          "Pas encore évalué : réponds à des repasses dans Ancrer pour débloquer ce score.",
           "gnosis"
+        ) +
+        // Noesis (demande du 17/08/2026) : compréhension des liens, QCM "Relier" — même
+        // format que Gnosis ("Top X%", un classement percentile). A désormais son propre
+        // onglet dans la modale détaillée aussi (cf. plus bas, ajouté le 20/08/2026).
+        scoreCardHtml(
+          '<i class="fa-solid fa-link"></i>', 'Noesis', noesisScore,
+          (relierAnswered !== null && relierCorrect !== null && relierAnswered > 0)
+            ? esc(Math.round(relierCorrect / relierAnswered * 100) + "% de réussite en Relier")
+            : "Compréhension des liens entre connaissances",
+          "Pas encore évalué : réponds dans Relier pour débloquer ce score.",
+          "noesis"
         );
 
-      modalArgs = {
-        votesScore: votesScore,
-        notesScore: notesScore,
-        gnosisScore: gnosisScore,
-        tierLabel: d.tierLabel || "",
-        stats: d,
-        tier: d.tier,
-        tierCount: d.tierCount,
-        gnosisTierLabel: d.gnosisTierLabel || "",
-        gnosisTier: d.gnosisTier,
-        gnosisTierCount: d.gnosisTierCount
-      };
+      // Réactive le détail au clic sur une carte (demande du 20/08/2026, revient
+      // sur la suppression du 17/08/2026 — cette fois avec un onglet Noesis en
+      // plus, absent de la modale à l'époque) : réutilise la même modale que le
+      // badge de la topbar (showUserScoreModal, script.js), jamais reconstruite
+      // ici en double.
+      if (typeof showUserScoreModal === "function") {
+        var tierLabelValue = String(d.tierLabel || "").trim();
+        var tierValue = numOrNull(d.tier);
+        var tierCountValue = numOrNull(d.tierCount);
+        var gnosisTierLabelValue = String(d.gnosisTierLabel || "").trim();
+        var gnosisTierValue = numOrNull(d.gnosisTier);
+        var gnosisTierCountValue = numOrNull(d.gnosisTierCount);
+        var noesisTierLabelValue = String(d.noesisTierLabel || "").trim();
+        var noesisTierValue = numOrNull(d.noesisTier);
+        var noesisTierCountValue = numOrNull(d.noesisTierCount);
+        var modalStats = {
+          votesTotalUsers: numOrNull(d.votesTotalUsers),
+          notesTotalUsers: numOrNull(d.notesTotalUsers),
+          gnosisTotalUsers: numOrNull(d.gnosisTotalUsers),
+          noesisTotalUsers: numOrNull(d.noesisTotalUsers),
+          votesTierUsers: numOrNull(d.votesTierUsers),
+          notesTierUsers: numOrNull(d.notesTierUsers),
+          gnosisTierUsers: numOrNull(d.gnosisTierUsers),
+          noesisTierUsers: numOrNull(d.noesisTierUsers),
+          votesValue: votesValue,
+          notesValue: notesValue,
+          gnosisAnswered: gnosisAnswered,
+          gnosisCorrect: gnosisCorrect,
+          relierAnswered: relierAnswered,
+          relierCorrect: relierCorrect
+        };
+        container.querySelectorAll(".contributions-score-card[data-score-tab]").forEach(function(card) {
+          card.style.cursor = "pointer";
+          card.addEventListener("click", function() {
+            showUserScoreModal(
+              votesScore, notesScore, gnosisScore, noesisScore,
+              tierLabelValue, modalStats, tierValue, tierCountValue,
+              gnosisTierLabelValue, gnosisTierValue, gnosisTierCountValue,
+              noesisTierLabelValue, noesisTierValue, noesisTierCountValue,
+              card.dataset.scoreTab
+            );
+          });
+        });
+      }
     }
 
     if (!key) {
@@ -1070,7 +1124,6 @@
             '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Rhetor, Logos &amp; Gnosis</p>' +
             '<p class="contributions-score-card-hint">Impossible de charger tes scores pour l\'instant.</p>' +
           '</div>';
-        modalArgs = null;
       });
   }
 
@@ -1137,17 +1190,17 @@
   if (window.self === window.top) return;
   function notifyMonUniversIframeReady() {
     var isContributions = location.pathname === "/contributions";
-    window.__agonPageArrivalReady = true;
+    window.__mnoriaPageArrivalReady = true;
     try {
       window.parent.postMessage({
-        type: "agon:debate-iframe-ready",
+        type: "mnoria:debate-iframe-ready",
         pathname: String(location.pathname || (isContributions ? "/contributions" : "/mon-univers")),
         href: String(location.href || "")
       }, "*");
     } catch (error) {}
     try {
       window.parent.postMessage({
-        type: "agon:iframe-page-context",
+        type: "mnoria:iframe-page-context",
         page: isContributions ? "contributions" : "mon-univers",
         pathname: String(location.pathname || (isContributions ? "/contributions" : "/mon-univers")),
         href: String(location.href || "")
@@ -1160,10 +1213,10 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260816-harmonize-sort-btn-gaps-v1" defer></script>
+<script src="/script.min.js?v=20260820-noesis-tab" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260816-breadcrumb-root-hidden");
+    import("/mon-univers.js?v=20260817-moon-closer2");
   }
 </script>
 </body>

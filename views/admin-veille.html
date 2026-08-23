@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <script src="/no-zoom.js?v=20260603" defer></script>
-  <title>Veille → Agôn</title>
+  <title>Veille → Mnoria</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 16px; background: #f7f7f7; color: #111; }
@@ -77,7 +77,7 @@
   <a href="/" onclick="if(history.length>1){history.back();return false;}" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:16px;color:#555;text-decoration:none;font-size:0.88rem;font-weight:600;">
     ← Accueil
   </a>
-  <h1>Veille → Agôn</h1>
+  <h1>Veille → Mnoria</h1>
   <p class="intro">Arènes envoyées depuis la veille, en attente de publication.</p>
 
   <div style="background:white;border:1px solid #e5e7eb;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -541,7 +541,7 @@ function renderItem(item) {
     renderKeywordEditor(item) +
     '<label>Thématique</label>' +
     '<select class="f-theme">' + catOptions + '</select>' +
-    '<label>Nuage Agôn</label>' +
+    '<label>Nuage Mnoria</label>' +
     '<select class="f-political-group">' +
       '<option value="mixed"' + (item.politicalGroup === 'mixed' || !item.politicalGroup ? ' selected' : '') + '>Mixte (nuage général)</option>' +
       '<option value="left"' + (item.politicalGroup === 'left' ? ' selected' : '') + '>Gauche</option>' +
@@ -569,7 +569,7 @@ function renderItem(item) {
       '<button type="button" class="btn-proofread">Corriger les fautes</button>' +
     '</div>' +
     '<div class="actions">' +
-    '<button class="btn-publish">Publier sur Agôn</button>' +
+    '<button class="btn-publish">Publier sur Mnoria</button>' +
     '<button class="btn-delete">Supprimer</button>' +
     '</div>' +
     '</div>';
@@ -916,7 +916,7 @@ async function publish(btn) {
   }).filter(function(l) { return l.url; });
 
   if (!links.length) {
-    toast('Attention : sélectionne au moins une source avant de publier sur Agôn.');
+    toast('Attention : sélectionne au moins une source avant de publier sur Mnoria.');
     return;
   }
 
@@ -971,7 +971,7 @@ async function publish(btn) {
     removePendingItem(item);
   } catch(e) {
     btn.disabled = false;
-    btn.textContent = 'Publier sur Agôn';
+    btn.textContent = 'Publier sur Mnoria';
     toast('Erreur : ' + e.message);
   }
 }
@@ -1151,7 +1151,7 @@ function buildAdminActions(debateId, pendingItem) {
   const html = '<div class="actions" id="actions-' + debateId + '" style="flex-wrap:wrap;">' +
     '<button class="btn-save-merge">Modifier et sauvegarder</button>' +
     '<button class="btn-republish-merge" style="background:none;border:1px solid #111;color:#111;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Republier en haut</button>' +
-    '<button class="btn-publish-agon-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (publié par agôn)</button>' +
+    '<button class="btn-publish-mnoria-merge" style="background:#27ae60;color:white;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer;">Sauvegarder et publier (publié par mnoria)</button>' +
     '<button class="btn-delete">Annuler</button>' +
     '</div>';
   return html;
@@ -1161,13 +1161,13 @@ function wireAdminActions(debateId, pendingItem) {
   const actions = document.getElementById('actions-' + debateId);
   if (!actions) return;
   actions.querySelector('.btn-save-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, false); });
-  actions.querySelector('.btn-publish-agon-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, true); });
+  actions.querySelector('.btn-publish-mnoria-merge').addEventListener('click', function() { saveMerge(debateId, pendingItem, true); });
   actions.querySelector('.btn-republish-merge').addEventListener('click', function() { republishMerge(debateId, pendingItem); });
   actions.querySelector('.btn-delete').addEventListener('click', function() { pendingItem.remove(); });
 }
 
-async function saveMerge(debateId, pendingItem, agonGenerated) {
-  const btn = agonGenerated ? pendingItem.querySelector('.btn-publish-agon-merge') : pendingItem.querySelector('.btn-save-merge');
+async function saveMerge(debateId, pendingItem, mnoriaGenerated) {
+  const btn = mnoriaGenerated ? pendingItem.querySelector('.btn-publish-mnoria-merge') : pendingItem.querySelector('.btn-save-merge');
   btn.disabled = true;
   btn.textContent = 'Sauvegarde…';
   try {
@@ -1180,16 +1180,16 @@ async function saveMerge(debateId, pendingItem, agonGenerated) {
         option_b: pendingItem.querySelector('.f-pos-b').value.trim(),
         category: pendingItem.querySelector('.f-theme').value,
         content: getResumeFieldValue(pendingItem.querySelector('.f-resume')),
-        ...(agonGenerated ? { mark_as_agon_generated: true } : {})
+        ...(mnoriaGenerated ? { mark_as_mnoria_generated: true } : {})
       })
     });
     if (!r.ok) throw new Error('Erreur serveur (vérifiez la connexion admin)');
-    if (agonGenerated) await fetch('/api/admin/debate/' + debateId + '/bump', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ preserve_agon_generated: true }) });
-    toast(agonGenerated ? 'Publié (publié par agôn) ✓' : 'Sauvegardé ✓');
+    if (mnoriaGenerated) await fetch('/api/admin/debate/' + debateId + '/bump', { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ preserve_mnoria_generated: true }) });
+    toast(mnoriaGenerated ? 'Publié (publié par mnoria) ✓' : 'Sauvegardé ✓');
     pendingItem.remove();
   } catch(e) {
     btn.disabled = false;
-    btn.textContent = agonGenerated ? 'Sauvegarder et publier (publié par agôn)' : 'Sauvegarder';
+    btn.textContent = mnoriaGenerated ? 'Sauvegarder et publier (publié par mnoria)' : 'Sauvegarder';
     toast('Erreur : ' + e.message);
   }
 }
@@ -1246,7 +1246,7 @@ function addEmptyForm() {
     '<div class="article-format-preview f-resume" contenteditable="true" spellcheck="true" data-placeholder="Contexte de l’arène…"></div>' +
     '<div class="field-counter resume-counter" style="margin-top:4px;font-size:0.78rem;color:#6b7280;text-align:right;">0 / 1800</div>' +
     '<div class="actions">' +
-    '<button class="btn-publish">Publier sur Agôn</button>' +
+    '<button class="btn-publish">Publier sur Mnoria</button>' +
     '<button class="btn-check-similar" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:999px;padding:10px 18px;font:inherit;cursor:pointer;">Vérifier doublons</button>' +
     '<button class="btn-delete">Supprimer</button>' +
     '</div>' +

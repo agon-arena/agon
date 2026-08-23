@@ -1,5 +1,5 @@
 const SW_VERSION = "20260815-radial-star-layout-v180";
-const STATIC_CACHE = `agon-static-${SW_VERSION}`;
+const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
 // Assets statiques versionnés (?v=... bumpé à chaque build) : sûrs à mettre en
@@ -22,7 +22,7 @@ function buildRecoveryResponse(targetUrl) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-store">
-  <title>Agôn se reconnecte</title>
+  <title>Mnoria se reconnecte</title>
   <style>
     html,body{margin:0;background:#243038;color:#f3f6f4;font-family:Arial,Helvetica,sans-serif}
     body{display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:24px;box-sizing:border-box}
@@ -38,7 +38,7 @@ function buildRecoveryResponse(targetUrl) {
   <main>
     <img src="/sablier-96.png" alt="">
     <h1>Reconnexion en cours</h1>
-    <p>Agôn redémarre ou met à jour ses données. Cette page se recharge automatiquement dès que le serveur répond.</p>
+    <p>Mnoria redémarre ou met à jour ses données. Cette page se recharge automatiquement dès que le serveur répond.</p>
     <button type="button" onclick="retry()">Réessayer</button>
   </main>
   <script>
@@ -47,7 +47,7 @@ function buildRecoveryResponse(targetUrl) {
       fetch('/ping?sw-recover=' + Date.now(), { cache: 'no-store' })
         .then(function(r){
           if (r.ok) {
-            try { sessionStorage.setItem("agon_last_reload_reason", JSON.stringify({ reason: "sw-recovery-page (serveur indisponible puis revenu)", at: Date.now() })); } catch(e) {}
+            try { sessionStorage.setItem("mnoria_last_reload_reason", JSON.stringify({ reason: "sw-recovery-page (serveur indisponible puis revenu)", at: Date.now() })); } catch(e) {}
             location.replace(target);
           }
         })
@@ -86,7 +86,7 @@ self.addEventListener("activate", (event) => {
 function notifyClientsOfStalePage(url) {
   return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
     for (const client of clients) {
-      if (client.url === url) client.postMessage({ type: "agon:page-stale" });
+      if (client.url === url) client.postMessage({ type: "mnoria:page-stale" });
     }
   });
 }
@@ -230,7 +230,7 @@ self.addEventListener("push", (event) => {
   const rawTitle = String(payload.title || "").trim();
   const title = rawTitle.replace(/^from\s+ag[oô]n\s*:?\s*/i, "").trim() || "L'arène des idées";
   const options = {
-    body: payload.body || "Nouvelle activité sur agôn.",
+    body: payload.body || "Nouvelle activité sur mnoria.",
     icon: payload.icon || "/mnoria-icon-192.png",
     badge: payload.badge || "/mnoria-icon-192.png",
     data: {

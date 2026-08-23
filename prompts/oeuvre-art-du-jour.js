@@ -81,9 +81,9 @@ function buildOeuvreArtDuJourPrompt(topics, recentTitles) {
   }
 
   return [
-    "Tu es un rédacteur cultivé et rigoureux qui prépare la rubrique \"Œuvre d'art du jour\" du site Agôn : elle présente une œuvre d'art réelle (peinture, sculpture, photographie, etc.), du passé ou contemporaine, choisie en écho à l'actualité du jour, avec une brève présentation de l'œuvre et de son artiste.",
+    "Tu es un rédacteur cultivé et rigoureux qui prépare la rubrique \"Œuvre d'art du jour\" du site Mnoria : elle présente une œuvre d'art réelle (peinture, sculpture, photographie, etc.), du passé ou contemporaine, choisie en écho à l'actualité du jour, avec une brève présentation de l'œuvre et de son artiste.",
     "",
-    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
+    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Mnoria :",
     "",
     formatTopicsForPrompt(topics),
     formatRecentTitlesForPrompt(recentTitles),

@@ -81,9 +81,9 @@ function buildCitationDuJourPrompt(topics, recentAuthors) {
   }
 
   return [
-    "Tu es un rédacteur cultivé et rigoureux qui prépare la rubrique \"Citation du jour\" du site Agôn : elle présente une citation authentique d'un auteur célèbre (écrivain, philosophe, scientifique, homme ou femme politique, etc.), du passé ou contemporain, choisie en écho à l'actualité du jour, avec une brève présentation de l'auteur et de son œuvre.",
+    "Tu es un rédacteur cultivé et rigoureux qui prépare la rubrique \"Citation du jour\" du site Mnoria : elle présente une citation authentique d'un auteur célèbre (écrivain, philosophe, scientifique, homme ou femme politique, etc.), du passé ou contemporain, choisie en écho à l'actualité du jour, avec une brève présentation de l'auteur et de son œuvre.",
     "",
-    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
+    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Mnoria :",
     "",
     formatTopicsForPrompt(topics),
     formatRecentAuthorsForPrompt(recentAuthors),

@@ -13,8 +13,12 @@ const {
   isAssociationAnswerFullyCorrect,
   isQcmMultiAnswerFullyCorrect,
   isOrderAnswerFullyCorrect,
-  gradeQuizSubmissionOptionIndex
+  gradeQuizSubmissionOptionIndex,
+  validateKnowledgeCandidates,
+  filterQuestionsToAdmittedKnowledge,
+  filterVariantsByKnowledgeConstraints
 } = require("../lib/question-formats");
+const { resolveActiveQuestionVariant } = require("../lib/spaced-repetition/question-variant");
 
 // ── QCM simple ──────────────────────────────────────────────────────────
 
@@ -153,12 +157,47 @@ test("altVariant valide (type autonome différent) : conservé avec sa propre co
   const item = {
     type: "qcm",
     question: "Quelle est la capitale du Sénégal ?", options: ["Dakar", "Harare", "Tripoli", "Tunis"], correctIndex: 0, explanation: "...",
-    altVariant: { type: "vrai_faux", question: "Dakar est la capitale du Sénégal.", options: ["Faux", "Vrai"], correctIndex: 1, explanation: "..." }
+    altVariant: { type: "texte_a_trous", question: "Dakar est la capitale du ___.", options: ["Sénégal", "Mali", "Niger", "Tchad"], correctIndex: 0, explanation: "..." }
   };
   const result = validateQuestionItemCore(item);
   assert.ok(result.altVariant);
-  assert.equal(result.altVariant.type, "vrai_faux");
-  assert.equal(result.altVariant.options[result.altVariant.correctIndex], "Vrai");
+  assert.equal(result.altVariant.type, "texte_a_trous");
+  assert.equal(result.altVariant.options[result.altVariant.correctIndex], "Sénégal");
+});
+
+// ── interdiction absolue du vrai/faux (audit pédagogique du 16/08/2026, section 5) ──
+
+test("vrai_faux : une question de ce type est rejetée (jamais acceptée, même bien formée)", () => {
+  const item = { type: "vrai_faux", question: "Dakar est la capitale du Sénégal.", options: ["Vrai", "Faux"], correctIndex: 0, explanation: "..." };
+  assert.equal(validateQuestionItemCore(item), null, "coercée en qcm, qui exige 4 options — jamais 2");
+});
+
+test("vrai_faux : un altVariant de ce type est rejeté, pas la question principale", () => {
+  const item = {
+    type: "qcm",
+    question: "Quelle est la capitale du Sénégal ?", options: ["Dakar", "Harare", "Tripoli", "Tunis"], correctIndex: 0, explanation: "...",
+    altVariant: { type: "vrai_faux", question: "Dakar est la capitale du Sénégal.", options: ["Faux", "Vrai"], correctIndex: 1, explanation: "..." }
+  };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result);
+  assert.equal(result.altVariant, undefined);
+});
+
+test("vrai_faux : une variante de ce type est rejetée, pas le reste du tableau", () => {
+  const item = {
+    variants: [
+      qcmVariant("Direct ?", 0),
+      { type: "vrai_faux", question: "Inverse ?", options: ["Faux", "Vrai"], correctIndex: 1, explanation: "..." }
+    ]
+  };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result);
+  assert.equal(result.variants.length, 1);
+});
+
+test("vrai_faux : un qcm à seulement 2 options (contournement déguisé) est rejeté", () => {
+  const item = { type: "qcm", question: "Le Sénégal est-il en Afrique ?", options: ["Oui", "Non"], correctIndex: 0, explanation: "..." };
+  assert.equal(validateQuestionItemCore(item), null);
 });
 
 // ── génération invalide : fallback maîtrisé, rien de corrompu inséré ──────
@@ -209,7 +248,7 @@ test("variants : 1 seul variant est accepté (3 n'est jamais une obligation)", (
 });
 
 test("variants : 2 variants sont acceptés", () => {
-  const item = { variants: [qcmVariant("Direct ?", 0), { type: "vrai_faux", question: "Inverse ?", options: ["Faux", "Vrai"], correctIndex: 1, explanation: "..." }] };
+  const item = { variants: [qcmVariant("Direct ?", 0), { type: "texte_a_trous", question: "Inverse ___ ?", options: ["A", "B", "C", "D"], correctIndex: 1, explanation: "..." }] };
   const result = validateQuestionItemCore(item);
   assert.ok(result);
   assert.equal(result.variants.length, 2);
@@ -220,7 +259,7 @@ test("variants : 3 variants pertinents sont acceptés", () => {
     variants: [
       qcmVariant("Direct ?", 0, { retrievalMode: "direct" }),
       { type: "texte_a_trous", question: "Inverse ___ ?", options: ["A", "B", "C", "D"], correctIndex: 1, explanation: "...", retrievalMode: "inverse" },
-      { type: "vrai_faux", question: "Contexte ?", options: ["Faux", "Vrai"], correctIndex: 1, explanation: "...", retrievalMode: "contextual" }
+      qcmVariant("Contexte ?", 2, { retrievalMode: "contextual" })
     ]
   };
   const result = validateQuestionItemCore(item);
@@ -325,4 +364,281 @@ test("variants : forme historique (question à plat, sans `variants`) reste acce
   const result = validateQuestionItemCore(item);
   assert.ok(result);
   assert.equal(result.variants, undefined, "pas de tableau variants pour la forme historique, cf. getQuestionVariants côté lecture");
+});
+
+// ── Admission des connaissances (demande du 17/08/2026, audit du pipeline
+// mnésique, cf. lib/knowledge-admission.js pour les prompts correspondants) ──
+
+function candidate(overrides = {}) {
+  return { fact: "Fait par défaut.", importance: "high", certainty: "high", ...overrides };
+}
+
+test("validateKnowledgeCandidates : quota cible > connaissances réelles — seules les valides passent, jamais de remplissage (3 sur 5 proposées → 3)", () => {
+  const raw = [
+    candidate({ fact: "Fait solide 1." }),
+    candidate({ fact: "Fait solide 2." }),
+    candidate({ fact: "Fait solide 3." }),
+    candidate({ fact: "Détail secondaire.", importance: "low" }),
+    candidate({ fact: "Anecdote.", importance: "low", certainty: "low" })
+  ];
+  const result = validateKnowledgeCandidates(raw, { max: 5 });
+  assert.equal(result.length, 3);
+  assert.deepEqual(result.map((k) => k.fact), ["Fait solide 1.", "Fait solide 2.", "Fait solide 3."]);
+});
+
+test("validateKnowledgeCandidates : 1 seule connaissance valide passe (jamais rejetée pour être seule)", () => {
+  const result = validateKnowledgeCandidates([candidate({ fact: "Unique fait solide." })], { max: 20 });
+  assert.equal(result.length, 1);
+});
+
+test("validateKnowledgeCandidates : Expert (max=22) avec seulement 8 connaissances solides n'en fabrique pas 15 — le plafond n'est jamais un plancher", () => {
+  const raw = Array.from({ length: 8 }, (_, i) => candidate({ fact: `Fait ${i + 1}.` }));
+  const result = validateKnowledgeCandidates(raw, { max: 22 });
+  assert.equal(result.length, 8);
+});
+
+test("validateKnowledgeCandidates : importance=low rejetée même si certainty=high", () => {
+  assert.deepEqual(validateKnowledgeCandidates([candidate({ importance: "low" })], { max: 20 }), []);
+});
+
+test("validateKnowledgeCandidates : certainty=low rejetée même si importance=high (formulation incertaine transformée en certitude)", () => {
+  assert.deepEqual(validateKnowledgeCandidates([candidate({ certainty: "low" })], { max: 20 }), []);
+});
+
+test("validateKnowledgeCandidates : importance/certainty manquantes ou hors énumération sont rejetées", () => {
+  const result = validateKnowledgeCandidates([
+    candidate({ importance: undefined }),
+    candidate({ certainty: "inconnu" }),
+    { fact: "Sans champs du tout." }
+  ], { max: 20 });
+  assert.deepEqual(result, []);
+});
+
+test("validateKnowledgeCandidates : un fait vide ou non-string est rejeté", () => {
+  const result = validateKnowledgeCandidates([
+    candidate({ fact: "" }),
+    candidate({ fact: "   " }),
+    candidate({ fact: null }),
+    candidate({ fact: 42 })
+  ], { max: 20 });
+  assert.deepEqual(result, []);
+});
+
+test("validateKnowledgeCandidates : dédoublonne par texte normalisé (casse/espaces), garde la première occurrence", () => {
+  const result = validateKnowledgeCandidates([
+    candidate({ fact: "La chute du mur de Berlin a lieu en 1989." }),
+    candidate({ fact: "la chute du   mur de berlin a lieu en 1989." })
+  ], { max: 20 });
+  assert.equal(result.length, 1);
+});
+
+test("validateKnowledgeCandidates : entrée non-tableau ou vide renvoie [] sans planter (cas 0 connaissance)", () => {
+  assert.deepEqual(validateKnowledgeCandidates(null, { max: 20 }), []);
+  assert.deepEqual(validateKnowledgeCandidates(undefined, { max: 20 }), []);
+  assert.deepEqual(validateKnowledgeCandidates([], { max: 20 }), []);
+  assert.deepEqual(validateKnowledgeCandidates("pas un tableau", { max: 20 }), []);
+});
+
+test("validateKnowledgeCandidates : sequential/clearBoundary sont conservés en booléens stricts (jamais une valeur truthy admise par erreur)", () => {
+  const result = validateKnowledgeCandidates([
+    candidate({ fact: "Fait A.", sequential: true, clearBoundary: false }),
+    candidate({ fact: "Fait B.", sequential: "true", clearBoundary: 1 })
+  ], { max: 20 });
+  assert.equal(result[0].sequential, true);
+  assert.equal(result[1].sequential, false);
+  assert.equal(result[1].clearBoundary, false);
+});
+
+// ── Traçabilité question ↔ connaissance admise (filterQuestionsToAdmittedKnowledge) ──
+
+test("filterQuestionsToAdmittedKnowledge : une question dont le knowledgeTarget correspond à une connaissance admise est conservée", () => {
+  const admitted = [candidate({ fact: "Paris est la capitale de la France." })];
+  const questions = [{ knowledgeTarget: "Paris est la capitale de la France.", type: "qcm" }];
+  assert.equal(filterQuestionsToAdmittedKnowledge(questions, admitted).length, 1);
+});
+
+test("filterQuestionsToAdmittedKnowledge : aucun nouveau knowledgeTarget n'apparaît spontanément — un fait absent de la liste admise est retiré", () => {
+  const admitted = [candidate({ fact: "Paris est la capitale de la France." })];
+  const questions = [
+    { knowledgeTarget: "Paris est la capitale de la France.", type: "qcm" },
+    { knowledgeTarget: "Fait totalement inventé, jamais admis.", type: "qcm" }
+  ];
+  const result = filterQuestionsToAdmittedKnowledge(questions, admitted);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].knowledgeTarget, "Paris est la capitale de la France.");
+});
+
+test("filterQuestionsToAdmittedKnowledge : une question sans knowledgeTarget du tout est retirée (traçabilité obligatoire)", () => {
+  const admitted = [candidate({ fact: "Fait admis." })];
+  assert.deepEqual(filterQuestionsToAdmittedKnowledge([{ type: "qcm" }], admitted), []);
+});
+
+test("filterQuestionsToAdmittedKnowledge : comparaison insensible à la casse et aux espaces multiples", () => {
+  const admitted = [candidate({ fact: "Fait   avec   espaces." })];
+  const questions = [{ knowledgeTarget: "FAIT AVEC ESPACES.", type: "qcm" }];
+  assert.equal(filterQuestionsToAdmittedKnowledge(questions, admitted).length, 1);
+});
+
+test("filterQuestionsToAdmittedKnowledge : les variantes restent groupées sous le même knowledgeTarget que la connaissance admise", () => {
+  const admitted = [candidate({ fact: "La chute du mur de Berlin a lieu en 1989." })];
+  const questionWithVariants = {
+    knowledgeTarget: "La chute du mur de Berlin a lieu en 1989.",
+    type: "qcm",
+    variants: [{ type: "qcm", question: "Direct ?" }, { type: "qcm", question: "Inverse ?" }]
+  };
+  const result = filterQuestionsToAdmittedKnowledge([questionWithVariants], admitted);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].variants.length, 2);
+});
+
+test("filterQuestionsToAdmittedKnowledge : 0 connaissance admise → 0 question conservée, sans crash", () => {
+  assert.deepEqual(filterQuestionsToAdmittedKnowledge([{ knowledgeTarget: "Peu importe.", type: "qcm" }], []), []);
+});
+
+// ── Variantes de même format autorisées si l'angle de récupération diffère
+// (demande du 17/08/2026, second mini-patch) ────────────────────────────
+
+test("validateVariantsArray : deux variantes du même type mais de contenu différent sont TOUTES DEUX conservées (jamais dédoublonnées sur le seul type)", () => {
+  const variants = [
+    { type: "qcm", question: "À quelle date le mur de Berlin tombe-t-il ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "...", retrievalMode: "direct" },
+    { type: "qcm", question: "Quel événement de la fin de la guerre froide se produit le 9 novembre 1989 ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "...", retrievalMode: "contextual" }
+  ];
+  const result = validateVariantsArray(variants);
+  assert.equal(result.length, 2);
+  assert.equal(result[0].type, "qcm");
+  assert.equal(result[1].type, "qcm");
+});
+
+test("validateVariantsArray : deux variantes textuellement identiques (même normalisation type+question, casse/espaces de bord près) restent dédoublonnées comme avant", () => {
+  // Normalisation existante = trim() + toLowerCase() (cf. dedupeKey dans
+  // validateVariantsArray) — ne collapse pas les espaces internes multiples,
+  // contrairement à normalizeFactText utilisée ailleurs dans ce fichier :
+  // comportement préexistant, non modifié par ce patch, donc testé tel quel.
+  const variants = [
+    { type: "qcm", question: "  Quand le mur de Berlin tombe-t-il ? ", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "..." },
+    { type: "qcm", question: "quand le mur de berlin tombe-t-il ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "..." }
+  ];
+  const result = validateVariantsArray(variants);
+  assert.equal(result.length, 1);
+});
+
+// ── filterVariantsByKnowledgeConstraints : garde-fou déterministe ordre/
+// intrus (demande du 17/08/2026, second mini-patch) ──────────────────────
+
+function knowledgeFor(fact, overrides = {}) {
+  return { fact, importance: "high", certainty: "high", sequential: false, clearBoundary: false, ...overrides };
+}
+
+function questionWithVariants(knowledgeTarget, variantTypes) {
+  const variants = variantTypes.map((type, i) => ({
+    type,
+    question: `Question ${type} n°${i}`,
+    ...(type === "association" ? { pairs: [{ left: "A", right: "1" }, { left: "B", right: "2" }, { left: "C", right: "3" }] }
+      : type === "ordre" ? { items: ["1", "2", "3"] }
+      : type === "qcm_multi" ? { options: ["A", "B", "C", "D"], correctIndexes: [0, 1] }
+      : { options: ["A", "B", "C", "D"], correctIndex: 0 }),
+    explanation: "..."
+  }));
+  return { id: "q1", knowledgeTarget, variants, ...variants[0] };
+}
+
+test("filterVariantsByKnowledgeConstraints : sequential=false retire la variante ordre, garde le reste", () => {
+  const admitted = [knowledgeFor("Fait test.", { sequential: false })];
+  const question = questionWithVariants("Fait test.", ["ordre", "qcm"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.equal(result.variants.length, 1);
+  assert.equal(result.variants[0].type, "qcm");
+  assert.equal(result.type, "qcm", "variants[0] doit être reflaté à la racine");
+});
+
+test("filterVariantsByKnowledgeConstraints : sequential=true conserve la variante ordre", () => {
+  const admitted = [knowledgeFor("Fait séquentiel.", { sequential: true })];
+  const question = questionWithVariants("Fait séquentiel.", ["ordre", "qcm"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.equal(result.variants.length, 2);
+  assert.equal(result.variants[0].type, "ordre");
+});
+
+test("filterVariantsByKnowledgeConstraints : clearBoundary=false retire la variante intrus, garde le reste", () => {
+  const admitted = [knowledgeFor("Fait test.", { clearBoundary: false })];
+  const question = questionWithVariants("Fait test.", ["intrus", "texte_a_trous"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.equal(result.variants.length, 1);
+  assert.equal(result.variants[0].type, "texte_a_trous");
+});
+
+test("filterVariantsByKnowledgeConstraints : clearBoundary=true conserve la variante intrus", () => {
+  const admitted = [knowledgeFor("Fait net.", { clearBoundary: true })];
+  const question = questionWithVariants("Fait net.", ["intrus", "qcm"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.equal(result.variants.length, 2);
+});
+
+test("filterVariantsByKnowledgeConstraints : mix ordre+qcm+texte_a_trous avec sequential=false → qcm+texte_a_trous, sans régénération ni trou dans le tableau", () => {
+  const admitted = [knowledgeFor("Fait test.", { sequential: false, clearBoundary: true })];
+  const question = questionWithVariants("Fait test.", ["ordre", "qcm", "texte_a_trous"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.deepEqual(result.variants.map((v) => v.type), ["qcm", "texte_a_trous"]);
+  assert.equal(result.type, "qcm");
+});
+
+test("filterVariantsByKnowledgeConstraints : une question dont TOUTES les variantes sont rejetées est retirée du résultat, sans crash", () => {
+  const admitted = [knowledgeFor("Fait non séquentiel.", { sequential: false })];
+  const question = questionWithVariants("Fait non séquentiel.", ["ordre"]);
+  const result = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.deepEqual(result, []);
+});
+
+test("filterVariantsByKnowledgeConstraints : régression Habermas — sequential=false ET clearBoundary=false retire ordre ET intrus, garde qcm+texte_a_trous", () => {
+  const fact = "Selon Habermas, l'espace public est un espace de formation de l'opinion par le débat rationnel.";
+  const admitted = [knowledgeFor(fact, { sequential: false, clearBoundary: false })];
+  const question = questionWithVariants(fact, ["ordre", "intrus", "qcm", "texte_a_trous"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.deepEqual(result.variants.map((v) => v.type), ["qcm", "texte_a_trous"]);
+});
+
+test("filterVariantsByKnowledgeConstraints : question flat sans variants[] — type ordre + sequential:false rejette toute la question", () => {
+  const admitted = [knowledgeFor("Fait flat.", { sequential: false })];
+  const flatQuestion = { id: "q1", knowledgeTarget: "Fait flat.", type: "ordre", question: "Q ?", items: ["1", "2", "3"], explanation: "..." };
+  const result = filterVariantsByKnowledgeConstraints([flatQuestion], admitted);
+  assert.deepEqual(result, []);
+});
+
+test("filterVariantsByKnowledgeConstraints : question flat de type qcm reste inchangée (aucune clé variants ajoutée)", () => {
+  const admitted = [knowledgeFor("Fait flat qcm.")];
+  const flatQuestion = { id: "q1", knowledgeTarget: "Fait flat qcm.", type: "qcm", question: "Q ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "..." };
+  const [result] = filterVariantsByKnowledgeConstraints([flatQuestion], admitted);
+  assert.equal(result, flatQuestion);
+  assert.equal(result.variants, undefined);
+});
+
+test("filterVariantsByKnowledgeConstraints : ancien format vrai_faux non affecté (ni ordre ni intrus, hors périmètre de ce filtre)", () => {
+  const admitted = [knowledgeFor("Fait ancien.")];
+  const flatQuestion = { id: "q1", knowledgeTarget: "Fait ancien.", type: "vrai_faux", question: "Q ?", options: ["Vrai", "Faux"], correctIndex: 0, explanation: "..." };
+  const [result] = filterVariantsByKnowledgeConstraints([flatQuestion], admitted);
+  assert.equal(result.type, "vrai_faux");
+});
+
+test("filterVariantsByKnowledgeConstraints : aucune connaissance correspondante trouvée → question laissée inchangée (défensif)", () => {
+  const admitted = [knowledgeFor("Un tout autre fait.")];
+  const question = questionWithVariants("Fait sans correspondance.", ["ordre", "qcm"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.equal(result.variants.length, 2, "hors périmètre de ce filtre, laissé tel quel");
+});
+
+test("filterVariantsByKnowledgeConstraints : après filtrage, resolveActiveQuestionVariant alterne toujours normalement sur les variantes restantes", () => {
+  const admitted = [knowledgeFor("Fait test.", { sequential: false })];
+  const question = questionWithVariants("Fait test.", ["ordre", "qcm", "texte_a_trous"]);
+  const [result] = filterVariantsByKnowledgeConstraints([question], admitted);
+  assert.equal(result.variants.length, 2);
+  // reps<=0 -> toujours variants[0]
+  assert.equal(resolveActiveQuestionVariant(result, 0).type, "qcm");
+  // alternance stricte à 2 variantes (garantie structurelle, cf. question-variant.js)
+  const seenTypes = new Set();
+  for (let reps = 1; reps <= 6; reps++) seenTypes.add(resolveActiveQuestionVariant(result, reps).type);
+  assert.deepEqual([...seenTypes].sort(), ["qcm", "texte_a_trous"]);
+});
+
+test("filterVariantsByKnowledgeConstraints : 0 question en entrée → 0 en sortie, sans crash", () => {
+  assert.deepEqual(filterVariantsByKnowledgeConstraints([], [knowledgeFor("Peu importe.")]), []);
 });

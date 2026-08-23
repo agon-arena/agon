@@ -114,9 +114,9 @@ function buildLatinDuJourPrompt(topics, recentPhrases) {
   }
 
   return [
-    "Tu es un rédacteur cultivé et rigoureux qui prépare la rubrique \"Mot latin du jour\" du site Agôn : elle présente un mot ou une courte expression en latin, avec sa traduction et une brève explication de son sens et de son usage.",
+    "Tu es un rédacteur cultivé et rigoureux qui prépare la rubrique \"Mot latin du jour\" du site Mnoria : elle présente un mot ou une courte expression en latin, avec sa traduction et une brève explication de son sens et de son usage.",
     "",
-    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Agôn :",
+    "Voici jusqu'à 10 sujets d'actualité publiés aujourd'hui sur Mnoria :",
     "",
     formatTopicsForPrompt(topics),
     formatRecentPhrasesForPrompt(recentPhrases),
