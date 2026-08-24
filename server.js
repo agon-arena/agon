@@ -48,6 +48,7 @@ const {
   applyKnowledgeVerificationDecisions,
   sanitizeImageSearchQuery
 } = require("./lib/knowledge-admission");
+const { findEquivalentCustomTopic, parseCustomTopicSlotLevel } = require("./lib/topic-dedup");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
 const {
   ACCEPTED_PHOTO_MIME_TYPES,
@@ -14438,6 +14439,39 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   return { questions };
 }
 
+// Niveau 2 de déduplication des recherches "sujet libre" (audit du
+// 24/08/2026, cf. lib/topic-dedup.js) : appelé uniquement quand le niveau 1
+// (slot exact) n'a rien trouvé. Ne fait jamais d'appel IA — relit seulement
+// ce qui existe déjà, au même niveau pédagogique, et applique le gate mots
+// structurants + quasi-inclusion des tokens avant de proposer une
+// réutilisation. Une seule ligne par slot (la plus récente), même principe
+// que GET /explore ci-dessous ; volume actuel très faible (quelques
+// dizaines de sujets libres), donc pas de pagination nécessaire ici non
+// plus — à revoir si le volume grossit significativement.
+async function findEquivalentGeneratedCustomTopic(topic, level) {
+  const { data: rows, error } = await supabase
+    .from("daily_quiz")
+    .select("slot, quiz_date, questions")
+    .like("slot", "notion:custom:%");
+  if (error) throw new Error(error.message);
+
+  const latestBySlot = new Map();
+  for (const row of rows || []) {
+    const existing = latestBySlot.get(row.slot);
+    if (!existing || row.quiz_date > existing.quiz_date) latestBySlot.set(row.slot, row);
+  }
+
+  const candidates = [];
+  for (const row of latestBySlot.values()) {
+    if (parseCustomTopicSlotLevel(row.slot) !== level) continue;
+    const topicText = row.questions?.[0]?.searchTopic || row.questions?.[0]?.sourceName || null;
+    if (!topicText) continue;
+    candidates.push({ slot: row.slot, quizDate: row.quiz_date, questions: row.questions, topicText });
+  }
+
+  return findEquivalentCustomTopic(topic, candidates);
+}
+
 /* ================================================================= */
 /*   Notions à retenir en fin d'arène — extraites une seule fois par   */
 /*   débat (cache sur debates.topic_notions*), affichées avant toute   */
@@ -16280,6 +16314,11 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
 
     let questions;
     let reused = false;
+    // Slot effectivement utilisé pour le rattachement utilisateur et la
+    // réponse — égal à `slot` sauf en cas de réutilisation niveau 2 (cf.
+    // plus bas), où on pointe alors vers le slot déjà existant plutôt que
+    // celui, jamais inséré, dérivé de la formulation de CETTE recherche.
+    let effectiveSlot = slot;
     // Le slot porte à la fois la clé normalisée du sujet ET le niveau choisi
     // (donc sa plage de nombre de questions). La recherche doit couvrir tout
     // l'historique : auparavant elle était limitée à `quizDate`, si bien que
@@ -16301,36 +16340,52 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
       quizDate = existingQuiz.quiz_date;
       reused = true;
     } else {
-      const result = await buildCustomTopicQuiz(topic, id, level, user.id);
-      if (result.error) {
-        const status = result.error === "rejected" ? 422 : 502;
-        return res.status(status).json({ ok: false, error: result.reason || "Génération de la fiche impossible pour le moment." });
-      }
-      // searchTopic : l'intitulé exact tapé par le créateur dans la barre de
-      // recherche, distinct de sourceName (repris/reformulé par l'IA, cf.
-      // buildLeveledFicheAndQuizPrompt) — affiché sous le titre dans
-      // "Explorer les apprentissages disponibles" (demande du 13/08/2026),
-      // pas de colonne dédiée sur daily_quiz : porté par chaque question,
-      // même principe que sourceName/sourceType déjà dupliqués ainsi.
-      questions = result.questions.map((q) => ({ ...q, searchTopic: topic }));
+      // Niveau 2 (dedup locale sans IA, audit du 24/08/2026, cf.
+      // lib/topic-dedup.js) : le slot exact n'existe pas, mais un sujet déjà
+      // généré au même niveau peut être une reformulation manifestement
+      // équivalente (articles, pluriel, tournure interrogative...). Le gate
+      // mots structurants + quasi-inclusion des tokens ne matche jamais deux
+      // intentions pédagogiques différentes ; en cas de doute, pas de match
+      // — on régénère normalement plutôt que de risquer de servir le
+      // mauvais QCM (cf. principe de sécurité du chantier).
+      const equivalent = await findEquivalentGeneratedCustomTopic(topic, level);
+      if (equivalent) {
+        questions = equivalent.questions || [];
+        quizDate = equivalent.quizDate;
+        effectiveSlot = equivalent.slot;
+        reused = true;
+      } else {
+        const result = await buildCustomTopicQuiz(topic, id, level, user.id);
+        if (result.error) {
+          const status = result.error === "rejected" ? 422 : 502;
+          return res.status(status).json({ ok: false, error: result.reason || "Génération de la fiche impossible pour le moment." });
+        }
+        // searchTopic : l'intitulé exact tapé par le créateur dans la barre de
+        // recherche, distinct de sourceName (repris/reformulé par l'IA, cf.
+        // buildLeveledFicheAndQuizPrompt) — affiché sous le titre dans
+        // "Explorer les apprentissages disponibles" (demande du 13/08/2026),
+        // pas de colonne dédiée sur daily_quiz : porté par chaque question,
+        // même principe que sourceName/sourceType déjà dupliqués ainsi.
+        questions = result.questions.map((q) => ({ ...q, searchTopic: topic }));
 
-      const { error: insertError } = await supabase.from("daily_quiz").insert({
-        quiz_date: quizDate,
-        slot,
-        questions,
-        source_debate_ids: []
-      });
-      if (insertError) {
-        // Course avec un autre visiteur ayant tapé le même sujet entre-temps
-        // (cf. POST /api/users/notion-quizzes, même règle) : on relit sa
-        // génération plutôt que la nôtre.
-        if (insertError.code === "23505") {
-          const { data: raceRow, error: raceError } = await supabase
-            .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
-          if (raceError) throw new Error(raceError.message);
-          questions = raceRow?.questions || questions;
-        } else {
-          throw new Error(insertError.message);
+        const { error: insertError } = await supabase.from("daily_quiz").insert({
+          quiz_date: quizDate,
+          slot,
+          questions,
+          source_debate_ids: []
+        });
+        if (insertError) {
+          // Course avec un autre visiteur ayant tapé le même sujet entre-temps
+          // (cf. POST /api/users/notion-quizzes, même règle) : on relit sa
+          // génération plutôt que la nôtre.
+          if (insertError.code === "23505") {
+            const { data: raceRow, error: raceError } = await supabase
+              .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+            if (raceError) throw new Error(raceError.message);
+            questions = raceRow?.questions || questions;
+          } else {
+            throw new Error(insertError.message);
+          }
         }
       }
     }
@@ -16338,12 +16393,12 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
       .upsert(
-        { user_id: user.id, quiz_date: quizDate, slot },
+        { user_id: user.id, quiz_date: quizDate, slot: effectiveSlot },
         { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
       );
     if (linkError) throw new Error(linkError.message);
 
-    res.json({ ok: true, slot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length, reused });
+    res.json({ ok: true, slot: effectiveSlot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length, reused });
   } catch (error) {
     console.error("[notion-quizzes] création (recherche libre) :", error.message);
     res.status(500).json({ ok: false, error: error.message });
