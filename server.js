@@ -34,6 +34,7 @@ const {
   validateKnowledgeCandidates,
   filterQuestionsToAdmittedKnowledge,
   filterVariantsByKnowledgeConstraints,
+  reconcileKnowledgeBatchResults,
   isAssociationAnswerFullyCorrect,
   isQcmMultiAnswerFullyCorrect,
   isOrderAnswerFullyCorrect,
@@ -12698,15 +12699,18 @@ async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnow
     let sharedSourceDetail = null;
     const results = [];
 
-    // Traitement séquentiel volontaire : une photo peut proposer jusqu'à 20
-    // faits ; ne pas lancer autant de générations/classifications IA en rafale.
+    // ── PASSE 1 : quel QCM existe déjà, lequel reste à générer ─────────────
+    // Détachée de la génération (contrairement à l'ancien flux tout-en-un)
+    // pour pouvoir batcher la génération des seules connaissances qui en ont
+    // réellement besoin (audit coût import photo, 24/08/2026) — un fait déjà
+    // persisté ne doit jamais entrer dans un lot de génération.
+    const existingBySlot = new Map(); // item.id -> { slot, quizDate, questions }
+    const erroredResults = new Map(); // item.id -> résultat d'erreur déjà prêt pour `results`
+    const pendingItems = []; // items sans QCM existant, à générer
+
     for (const item of normalizedItems) {
       const slot = `notion:${sourceType}:${documentImportId}:${item.id}`;
       try {
-        let quizDate = parisDateKey();
-        let questions;
-        let reused = false;
-
         const { data: existingQuizRows, error: existingQuizError } = await supabase
           .from("daily_quiz")
           .select("quiz_date, questions")
@@ -12717,8 +12721,8 @@ async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnow
         const existingQuiz = existingQuizRows?.[0] || null;
 
         if (existingQuiz) {
-          quizDate = existingQuiz.quiz_date;
-          questions = existingQuiz.questions || [];
+          const questions = existingQuiz.questions || [];
+          existingBySlot.set(item.id, { slot, quizDate: existingQuiz.quiz_date, questions });
           // Reprise après un import partiellement abouti : la première
           // connaissance déjà persistée devient la source de vérité de la
           // fiche commune pour les QCM manquants, sans nouvel appel IA.
@@ -12726,27 +12730,103 @@ async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnow
           if (!sharedSourceDetail && existingDetail?.documentImportId === documentImportId) {
             sharedSourceDetail = existingDetail;
           }
+        } else {
+          pendingItems.push({ item, slot });
+        }
+      } catch (error) {
+        console.error(`[${logLabel}:add:${item.id}]`, error.message);
+        erroredResults.set(item.id, { index: item.index, knowledge: item.fact, status: "error", error: "Ajout impossible pour cette connaissance." });
+      }
+    }
+
+    // ── PASSE 2 : génération, batchée par lots de NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE ──
+    // Un seul appel IA pour tout un lot au lieu d'un appel par connaissance —
+    // le gros bloc fixe décrivant les formats de question n'est ainsi payé
+    // qu'une fois par lot. Plafond de lot identique et pour la même raison
+    // que generateEnumerableQuizQuestions (au-delà, un seul appel IA ne tient
+    // pas de façon fiable). Fiche documentaire commune générée paresseusement
+    // ici, une seule fois pour tout l'import — inchangé par rapport à avant.
+    const generatedQuestionsById = new Map(); // item.id -> [question] (même forme qu'avant)
+
+    if (pendingItems.length) {
+      if (!sharedSourceDetail) {
+        const sheetResult = await generatePhotoKnowledgeSheet({
+          sourceTitle,
+          knowledge: finalKnowledge,
+          sourceType,
+          sourceUrl,
+          sourceMeta,
+          callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+        });
+        sharedSourceDetail = sheetResult.sourceDetail;
+        if (sheetResult.usedFallback && sheetResult.error) {
+          console.warn(`[${logLabel}:${documentImportId}] fiche enrichie indisponible, fallback minimal :`, sheetResult.error.message);
+        }
+      }
+
+      const batchResultsById = new Map();
+      const missingIds = [];
+      for (let start = 0; start < pendingItems.length; start += NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) {
+        const chunk = pendingItems.slice(start, start + NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE);
+        const chunkResult = await buildImportedKnowledgeQuestionsBatch(chunk.map((p) => p.item), documentImportId);
+        for (const [id, question] of chunkResult.resultsById) batchResultsById.set(id, question);
+        missingIds.push(...chunkResult.missingIds);
+      }
+
+      // Chemin succès du lot : classification + mise en forme, connaissance
+      // par connaissance (jamais batchée, cf. buildImportedKnowledgeQuestionsBatch).
+      for (const { item } of pendingItems) {
+        const question = batchResultsById.get(item.id);
+        if (!question) continue; // repris ci-dessous par le repli ciblé
+        try {
+          const finalized = await finalizeImportedKnowledgeQuestion(question, item.fact, item.id, user.id, sharedSourceDetail, documentImportId, sourceType);
+          generatedQuestionsById.set(item.id, [finalized]);
+        } catch (error) {
+          console.warn(`[${logLabel}:${documentImportId}] finalisation du lot échouée pour ${item.id}, repli individuel :`, error.message);
+          missingIds.push(item.id);
+        }
+      }
+
+      // Repli ciblé (jamais tout le lot) : uniquement les connaissances
+      // manquantes ou invalides du batch, une par une, via le chemin
+      // individuel historique (génération + classification + mise en forme).
+      for (const id of missingIds) {
+        const pending = pendingItems.find((p) => p.item.id === id);
+        if (!pending) continue;
+        try {
+          const questions = await buildImportedKnowledgeQuestions(pending.item.fact, pending.item.id, user.id, sharedSourceDetail, documentImportId, sourceType);
+          if (questions.length) generatedQuestionsById.set(id, questions);
+        } catch (error) {
+          console.warn(`[${logLabel}:${documentImportId}] repli individuel échoué pour ${id} :`, error.message);
+        }
+      }
+    }
+
+    // ── PASSE 3 : persistance + liaison, connaissance par connaissance ─────
+    // Comportement strictement identique à l'ancien flux tout-en-un (même
+    // gestion de la course à l'insertion, même contenu de `results`) — seule
+    // la provenance de `questions` change (déjà généré en passe 2, jamais un
+    // nouvel appel IA ici).
+    for (const item of normalizedItems) {
+      if (erroredResults.has(item.id)) {
+        results.push(erroredResults.get(item.id));
+        continue;
+      }
+      const slot = `notion:${sourceType}:${documentImportId}:${item.id}`;
+      try {
+        let quizDate;
+        let questions;
+        let reused = false;
+
+        const existing = existingBySlot.get(item.id);
+        if (existing) {
+          quizDate = existing.quizDate;
+          questions = existing.questions;
           reused = true;
         } else {
-          // Une seule génération documentaire pour tout l'import, déclenchée
-          // paresseusement seulement si au moins un des QCM n'existe pas déjà.
-          // Son échec retourne une fiche minimale et ne bloque jamais les faits.
-          if (!sharedSourceDetail) {
-            const sheetResult = await generatePhotoKnowledgeSheet({
-              sourceTitle,
-              knowledge: finalKnowledge,
-              sourceType,
-              sourceUrl,
-              sourceMeta,
-              callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
-            });
-            sharedSourceDetail = sheetResult.sourceDetail;
-            if (sheetResult.usedFallback && sheetResult.error) {
-              console.warn(`[${logLabel}:${documentImportId}] fiche enrichie indisponible, fallback minimal :`, sheetResult.error.message);
-            }
-          }
-          questions = await buildImportedKnowledgeQuestions(item.fact, item.id, user.id, sharedSourceDetail, documentImportId, sourceType);
-          if (!questions.length) throw new Error("Génération de la question impossible.");
+          questions = generatedQuestionsById.get(item.id);
+          if (!questions || !questions.length) throw new Error("Génération de la question impossible.");
+          quizDate = parisDateKey();
 
           const { error: insertError } = await supabase.from("daily_quiz").insert({
             quiz_date: quizDate,
@@ -13901,6 +13981,44 @@ function normalizeCustomTopicKey(topic) {
 // mêmes validateurs et variantes que les autres QCM de notion restent ensuite
 // appliqués, et le MemoryItem/FSRS sera créé par le chemin canonique à la
 // première réponse (applyFsrsReviewForDailyQuizAnswer).
+// Classification + mise en forme finale d'UNE connaissance importée dont la
+// question a déjà été générée et validée — factorisé (24/08/2026) entre
+// buildImportedKnowledgeQuestions (génération individuelle, aussi utilisée
+// comme repli ciblé du batch) et buildImportedKnowledgeQuestionsBatch
+// (génération groupée) pour ne jamais dupliquer cette logique. Toujours un
+// appel IA de classification PAR connaissance dans les deux cas, jamais
+// batché : cf. le commentaire de buildImportedKnowledgeQuestionsBatch pour
+// la raison (dépendance aux Solars déjà créés pour CET utilisateur, y
+// compris par une connaissance précédente du même import).
+async function finalizeImportedKnowledgeQuestion(question, fact, id, userId, sharedSourceDetail, documentImportId, sourceType) {
+  const sourceName = fact.slice(0, 120);
+  // Le placement reste propre à CETTE connaissance : la fiche documentaire
+  // globale peut couvrir plusieurs domaines et ne doit pas fusionner leur
+  // classification. Seul le sourceDetail stocké/affiché est partagé.
+  const classificationDetail = {
+    meta: "Connaissance issue d'un document importé",
+    sections: [{ label: null, text: fact }],
+    image: null
+  };
+  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(
+    sourceType, sourceName, classificationDetail, userId, id
+  );
+  const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
+  return {
+    id: `notion:${sourceType}:${documentImportId}:${id}-q1`,
+    ...question,
+    sourceType,
+    sourceScope: null,
+    sourceName,
+    sourceDetail: sharedSourceDetail,
+    sourceThemes,
+    sourcePlacement,
+    level: null,
+    documentImportId,
+    sourceDebateId: id
+  };
+}
+
 async function buildImportedKnowledgeQuestions(knowledge, id, userId, sharedSourceDetail, documentImportId, sourceType) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
@@ -13944,33 +14062,87 @@ async function buildImportedKnowledgeQuestions(knowledge, id, userId, sharedSour
   );
   if (validated.length !== 1) return [];
 
-  const sourceName = fact.slice(0, 120);
-  // Le placement reste propre à CETTE connaissance : la fiche documentaire
-  // globale peut couvrir plusieurs domaines et ne doit pas fusionner leur
-  // classification. Seul le sourceDetail stocké/affiché est partagé.
-  const classificationDetail = {
-    meta: "Connaissance issue d'un document importé",
-    sections: [{ label: null, text: fact }],
-    image: null
-  };
-  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(
-    sourceType, sourceName, classificationDetail, userId, id
-  );
-  const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
+  const finalized = await finalizeImportedKnowledgeQuestion(validated[0], fact, id, userId, sharedSourceDetail, documentImportId, sourceType);
+  return [finalized];
+}
 
-  return validated.map((question, index) => ({
-    id: `notion:${sourceType}:${documentImportId}:${id}-q${index + 1}`,
-    ...question,
-    sourceType,
-    sourceScope: null,
-    sourceName,
-    sourceDetail: sharedSourceDetail,
-    sourceThemes,
-    sourcePlacement,
-    level: null,
-    documentImportId,
-    sourceDebateId: id
+// Génère en UN SEUL appel IA les questions de plusieurs connaissances d'un
+// même import (audit coût import photo, 24/08/2026) — au lieu d'un appel par
+// connaissance. `items` : jusqu'à NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE à la
+// fois (même plafond que generateEnumerableQuizQuestions, et pour la même
+// raison documentée là-bas : au-delà, un seul appel IA ne tient pas de façon
+// fiable — troncature, qualité qui se dégrade). L'appelant (addValidatedKnowledgeImport)
+// est responsable de découper en lots de cette taille.
+//
+// Chaque connaissance porte ici son propre id, jamais un id partagé (cf.
+// buildQuestionsFromKnowledgePrompt, mode "un id par connaissance") — le
+// modèle doit recopier CET id précis dans "sourceId" pour la question qui la
+// teste. Mapping vérifié en DEUX temps, jamais sur le seul ordre du tableau
+// ni sur le seul id renvoyé : (1) validateNarrativeQuizQuestions rejette tout
+// id inconnu et plafonne à 1 question par id (donc aussi les doublons) ; (2)
+// ci-dessous, le "knowledgeTarget" de la question doit en plus correspondre
+// EXACTEMENT au fait de CETTE connaissance précise (pas seulement à une
+// connaissance quelconque du lot, déjà garanti par filterQuestionsToAdmittedKnowledge) —
+// une connaissance/id désynchronisés est ignorée ici plutôt que risquer
+// d'associer une question au mauvais fait ; elle retombe alors sur le repli
+// individuel de l'appelant, comme une connaissance manquante.
+//
+// Ne fait QUE générer : la classification et la mise en forme finale restent
+// hors de cette fonction (cf. finalizeImportedKnowledgeQuestion), volontairement
+// pas batchées — une classification compare le placement de CETTE connaissance
+// aux Solars déjà créés pour l'utilisateur, y compris ceux qu'une connaissance
+// précédente du MÊME lot vient tout juste de créer : un appel groupé figerait
+// cette liste au moment du prompt et risquerait un Solar dupliqué pour deux
+// connaissances proches d'un même import.
+async function buildImportedKnowledgeQuestionsBatch(items, documentImportId) {
+  const allIds = items.map((it) => it.id);
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !items.length) return { resultsById: new Map(), missingIds: allIds };
+
+  const admittedKnowledge = items.map((item) => ({
+    id: item.id,
+    fact: item.fact,
+    importance: "high",
+    certainty: "high",
+    sequential: false,
+    clearBoundary: false
   }));
+
+  try {
+    const formatBlock = buildQuestionFormatsPromptBlock("sourceId", items.length, true);
+    const content = await _callOpenAI(apiKey, [{
+      role: "user",
+      content: buildQuestionsFromKnowledgePrompt("sourceId", null, admittedKnowledge, null, formatBlock)
+    }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" },
+      timeoutMs: Math.min(120_000, 45_000 + items.length * 3_000),
+      feature: "question_generation"
+    });
+    const parsed = JSON.parse(content);
+    const validated = filterVariantsByKnowledgeConstraints(
+      filterQuestionsToAdmittedKnowledge(
+        validateNarrativeQuizQuestions(parsed?.questions, allIds, items.length, 1),
+        admittedKnowledge
+      ),
+      admittedKnowledge
+    );
+    // reconcileKnowledgeBatchResults (lib/question-formats.js) : dernière
+    // vérification id<->knowledgeTarget + dédoublonnage, cf. son commentaire.
+    const { resultsById, missingIds } = reconcileKnowledgeBatchResults(validated, admittedKnowledge);
+    if (missingIds.length) {
+      console.warn(`[photo-knowledge:batch:${documentImportId}] ${missingIds.length}/${items.length} connaissance(s) sans question exploitable dans le lot, repli individuel prévu.`);
+    }
+    return { resultsById, missingIds };
+  } catch (error) {
+    console.error(`[photo-knowledge:batch:${documentImportId}] génération groupée des questions :`, error.message);
+    // Échec total de l'appel groupé : toutes les connaissances du lot
+    // retombent sur le repli individuel de l'appelant (buildImportedKnowledgeQuestions),
+    // jamais une erreur remontée ici — même philosophie conservatrice que
+    // buildImportedKnowledgeQuestions lui-même.
+    return { resultsById: new Map(), missingIds: allIds };
+  }
 }
 
 // Détermine, avant toute génération, si un sujet libre en niveau Expert

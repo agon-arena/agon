@@ -87,7 +87,7 @@ test("le câblage serveur partage la fiche mais conserve un slot et une question
   assert.match(source, /const documentImportId = buildPhotoDocumentImportId\(sourceTitle, finalKnowledge, sourceUrl\)/);
   assert.match(source, /const slot = `notion:\$\{sourceType\}:\$\{documentImportId\}:\$\{item\.id\}`/);
   assert.match(source, /sourceDetail: sharedSourceDetail/);
-  assert.match(source, /id: `notion:\$\{sourceType\}:\$\{documentImportId\}:\$\{id\}-q\$\{index \+ 1\}`/);
+  assert.match(source, /id: `notion:\$\{sourceType\}:\$\{documentImportId\}:\$\{id\}-q1`/);
   assert.match(source, /sourceDebateId: id/);
 });
 
