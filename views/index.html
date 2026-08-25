@@ -128,6 +128,25 @@
       height: auto;
       display: block;
     }
+    /* Au lancement sur mobile (PWA standalone ou simple onglet navigateur), le viewport
+       visuel peut grandir/rétrécir pendant les toutes premières frames (barre
+       d'adresse/outils qui se stabilise) : un centrage flex dans ce position:fixed le
+       suit en direct, donc le logo apparaît d'abord décalé puis saute à sa place
+       définitive. Même parade que .mnoria-startup-loader-inner plus bas : ancré sur le
+       grand viewport (lvh, stable dès le premier rendu) au lieu du viewport courant.
+       50vh reste le repli pour les anciens WebKit sans unité lvh. */
+    @media (max-width: 768px) {
+      html.mnoria-conn-retry-cover #mnoria-conn-retry-cover {
+        display: block;
+      }
+      html.mnoria-conn-retry-cover #mnoria-conn-retry-cover img {
+        position: absolute;
+        left: 50%;
+        top: 50vh;
+        top: 50lvh;
+        transform: translate(-50%, -50%);
+      }
+    }
     /* Filet de fond indépendant du loader : WebKit peut tronquer par intermittence
        une couche position:fixed dans les derniers pixels du viewport standalone
        pendant un refresh. Ce calque absolu, volontairement plus haut que le grand
@@ -1630,7 +1649,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260825-connection-error-page5" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page6" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

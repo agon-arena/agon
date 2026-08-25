@@ -22687,7 +22687,8 @@ function showIndexLoadErrorState() {
   }
   overlay.innerHTML =
     '<div style="width:min(100%,340px);">' +
-      '<img src="/mnoria-logo.png" alt="Mnoria" style="width:150px;max-width:60vw;height:auto;display:block;margin:0 auto 28px;">' +
+      '<img src="/mnoria-logo.png" alt="Mnoria" style="width:84px;max-width:40vw;height:auto;display:block;margin:0 auto 16px;">' +
+      '<img src="/mnoria-error-robot.png" alt="" style="width:120px;max-width:45vw;height:auto;display:block;margin:0 auto 20px;">' +
       '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Le site n\'est pas accessible pour le moment</p>' +
       '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.</p>' +
       '<button type="button" class="button button-small" onclick="retryIndexAfterConnectionError()">Réessayer</button>' +
