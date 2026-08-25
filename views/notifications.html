@@ -348,7 +348,7 @@
 <button
   type="button"
   class="app-floating-refresh-btn"
-  onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload()"
+  onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(this) : window.location.reload()"
   title="Actualiser"
   aria-label="Actualiser la page"
 >
@@ -450,7 +450,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-	<script src="/script.min.js?v=20260825-connection-error-page18" defer></script>
+	<script src="/script.min.js?v=20260825-connection-error-page21" defer></script>
   <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom" defer></script>
 <script>
 (function() {

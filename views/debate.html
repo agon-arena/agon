@@ -1000,7 +1000,7 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
     <span>Ouvrir</span>
   </a>
 
-  <button type="button" class="home-bottom-nav-item debate-bottom-refresh-btn" aria-label="Actualiser la page" onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload()">
+  <button type="button" class="home-bottom-nav-item debate-bottom-refresh-btn" aria-label="Actualiser la page" onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(this) : window.location.reload()">
     <i class="fa-solid fa-rotate-right"></i>
     <span>Actualiser</span>
   </button>
@@ -1055,7 +1055,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260825-connection-error-page18" defer></script>
+	<script src="/script.min.js?v=20260825-connection-error-page21" defer></script>
 <script>
 (function () {
   function isInteractive(target) {

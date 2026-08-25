@@ -726,7 +726,7 @@
 <button
   type="button"
   class="app-floating-refresh-btn"
-  onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload()"
+  onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(this) : window.location.reload()"
   title="Actualiser"
   aria-label="Actualiser la page"
 >
@@ -828,7 +828,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260825-connection-error-page18" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page21" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

@@ -81,11 +81,20 @@ function buildRecoveryResponse(targetUrl) {
     <img src="/sablier-96.png" alt="">
     <h1>Reconnexion en cours</h1>
     <p>Mnoria redémarre ou met à jour ses données. Cette page se recharge automatiquement dès que le serveur répond.</p>
-    <button type="button" onclick="retry()">Réessayer</button>
+    <button type="button" onclick="retry(this)">Réessayer</button>
   </main>
   <script>
     var target = ${JSON.stringify(safeUrl)};
-    function retry(){
+    function retry(buttonEl){
+      // Grisé le temps de cette tentative précise, quel que soit son issue (succès =
+      // navigation, échec = la relance automatique ci-dessous reprendra de toute
+      // façon) : évite un double-clic sans jamais rester bloqué grisé si ce fetch
+      // particulier reste en attente sans jamais aboutir (pas de timeout explicite).
+      if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.style.opacity = '0.5';
+        setTimeout(function(){ buttonEl.disabled = false; buttonEl.style.opacity = ''; }, 2500);
+      }
       fetch('/ping?sw-recover=' + Date.now(), { cache: 'no-store' })
         .then(function(r){
           if (r.ok) {

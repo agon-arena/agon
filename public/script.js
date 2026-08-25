@@ -566,11 +566,32 @@ function showMnoriaStartupBeforeRefresh() {
 // marge, elle le couperait net après quelques dizaines de ms.
 const MNORIA_STARTUP_GONG_SOUND_URL = "/mnoria-startup-gong.wav";
 const MNORIA_STARTUP_GONG_SOUND_DURATION_MS = 4650;
+// Préchargé dès le chargement de la page (au lieu de "new Audio(...)" au moment du
+// clic) : ce fichier pèse ~400 Ko non compressé (cf. choix du WAV pour éviter le
+// pre-echo MP3 sur l'attaque du gong) — le récupérer seulement au clic laissait un
+// temps de latence réseau perceptible avant que le son ne démarre.
+const mnoriaStartupGongAudio = new Audio(MNORIA_STARTUP_GONG_SOUND_URL);
+mnoriaStartupGongAudio.preload = "auto";
+mnoriaStartupGongAudio.volume = 0.85;
+try { mnoriaStartupGongAudio.load(); } catch (error) {}
+
 function playMnoriaStartupGongSound() {
   try {
-    const audio = new Audio(MNORIA_STARTUP_GONG_SOUND_URL);
-    audio.volume = 0.85;
-    audio.play().catch(() => {});
+    mnoriaStartupGongAudio.currentTime = 0;
+    mnoriaStartupGongAudio.play().catch(() => {});
+  } catch (error) {}
+}
+
+// Grise le bouton cliqué le temps que la navigation se lance réellement (retardée
+// pour laisser jouer le gong, cf. plus haut) : évite un double-clic et signale que
+// l'action est bien prise en compte. Jamais réactivé explicitement — la page se
+// recharge de toute façon avant que ça n'ait d'importance.
+function disableMnoriaRefreshButton(buttonEl) {
+  if (!buttonEl) return;
+  try {
+    buttonEl.disabled = true;
+    buttonEl.style.opacity = "0.5";
+    buttonEl.style.pointerEvents = "none";
   } catch (error) {}
 }
 
@@ -583,7 +604,8 @@ function playMnoriaStartupGongSound() {
 // contourner cette règle côté navigateur (confirmé le 25/08/2026, ne pas retenter
 // une détection via PerformanceNavigationTiming ou équivalent).
 
-function forceFullPageRefresh() {
+function forceFullPageRefresh(buttonEl) {
+  disableMnoriaRefreshButton(buttonEl);
   playMnoriaStartupGongSound();
   const startupShown = showMnoriaStartupBeforeRefresh();
   const navigate = function() {
@@ -22704,7 +22726,8 @@ async function initIndex() {
 // un cache plein écran statique, sans transition d'opacité, présent dès la toute
 // première image de la page suivante — retiré dès que ce nouveau chargement
 // aboutit, succès ou nouvel échec.
-function retryIndexAfterConnectionError() {
+function retryIndexAfterConnectionError(buttonEl) {
+  disableMnoriaRefreshButton(buttonEl);
   playMnoriaStartupGongSound();
   window.setTimeout(function() {
     try {
@@ -22788,9 +22811,9 @@ function showIndexLoadErrorState() {
       'width:min(88vw,340px);box-sizing:border-box;text-align:center;">' +
       '<img src="/mnoria-logo.png" alt="Mnoria" style="width:140px;max-width:55vw;height:auto;display:block;margin:0 auto 20px;">' +
       '<img src="/mnoria-error-robot.png" alt="" style="width:110px;max-width:42vw;height:auto;display:block;margin:0 auto 20px;">' +
-      '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Le site n\'est pas accessible pour le moment</p>' +
+      '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Mnoria n\'est pas accessible pour le moment</p>' +
       '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.</p>' +
-      '<button type="button" class="mnoria-tech-btn" onclick="retryIndexAfterConnectionError()">Réessayer</button>' +
+      '<button type="button" class="mnoria-tech-btn" onclick="retryIndexAfterConnectionError(this)">Réessayer</button>' +
     '</div>';
 }
 

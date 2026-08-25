@@ -1783,7 +1783,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260825-connection-error-page18" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page21" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -4468,7 +4468,7 @@ window.addEventListener("pageshow", function() {
     var o = document.createElement('div');
     o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;';
     document.body.appendChild(o);
-    setTimeout(function() { typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh() : window.location.reload(); }, 60);
+    setTimeout(function() { typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(refreshBtn) : window.location.reload(); }, 60);
   });
 
   loadArticles();
