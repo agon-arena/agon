@@ -22652,6 +22652,20 @@ async function initIndex() {
 // pas juste ce contenu. Deux rechargements auto max (compteur sessionStorage,
 // remis à zéro dès qu'un chargement réussit) ; au-delà, il reste le bouton
 // Réessayer.
+// Recharge sans rejouer l'animation de démarrage (logo + "Cultive ton esprit") : on est déjà
+// sur la page d'erreur plein écran, la rejouer donnerait l'impression que tout redémarre depuis
+// zéro. Même paramètre ?skipStartup=1 que closeDebateIframeModal (script.js) pour couper l'intro.
+function reloadIndexSkippingStartup() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("skipStartup", "1");
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
+}
+window.reloadIndexSkippingStartup = reloadIndexSkippingStartup;
+
 function showIndexLoadErrorState() {
   let autoRetries = 0;
   try { autoRetries = Number(sessionStorage.getItem("mnoriaIndexLoadRetries") || 0); } catch {}
@@ -22672,12 +22686,12 @@ function showIndexLoadErrorState() {
       '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Le site n\'est pas accessible pour le moment</p>' +
       '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.' +
       (willAutoRetry ? '<br>Nouvelle tentative automatique dans quelques secondes…' : '') + '</p>' +
-      '<button type="button" class="button button-small" onclick="try{sessionStorage.removeItem(\'mnoriaIndexLoadRetries\')}catch(e){};location.reload()">Réessayer</button>' +
+      '<button type="button" class="button button-small" onclick="try{sessionStorage.removeItem(\'mnoriaIndexLoadRetries\')}catch(e){};reloadIndexSkippingStartup()">Réessayer</button>' +
     '</div>';
 
   if (willAutoRetry) {
     try { sessionStorage.setItem("mnoriaIndexLoadRetries", String(autoRetries + 1)); } catch {}
-    setTimeout(() => location.reload(), 6000);
+    setTimeout(reloadIndexSkippingStartup, 6000);
   }
 }
 
