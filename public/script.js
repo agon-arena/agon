@@ -557,25 +557,25 @@ function showMnoriaStartupBeforeRefresh() {
   return true;
 }
 
-// Son de corde pincée, grave, joué au clic sur "Actualiser"/"Réessayer" : c'est le seul
+// Son de gong très grave, joué au clic sur "Actualiser"/"Réessayer" : c'est le seul
 // moment où un son est garanti audible (un vrai geste utilisateur vient d'avoir lieu) —
 // à l'entrée normale sur le site ou au lancement de la PWA, aucun clic ne précède
 // l'animation, donc les navigateurs bloquent l'autoplay (silencieux, sans erreur, pas un
 // bug). La navigation qui suit ce clic est volontairement retardée de la durée du son
 // (cf. forceFullPageRefresh et retryIndexAfterConnectionError plus bas) : sans cette
 // marge, elle le couperait net après quelques dizaines de ms.
-const MNORIA_STARTUP_PLUCK_SOUND_URL = "/mnoria-startup-pluck.mp3";
-const MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS = 2600;
-function playMnoriaStartupPluckSound() {
+const MNORIA_STARTUP_GONG_SOUND_URL = "/mnoria-startup-gong.mp3";
+const MNORIA_STARTUP_GONG_SOUND_DURATION_MS = 3400;
+function playMnoriaStartupGongSound() {
   try {
-    const audio = new Audio(MNORIA_STARTUP_PLUCK_SOUND_URL);
+    const audio = new Audio(MNORIA_STARTUP_GONG_SOUND_URL);
     audio.volume = 0.7;
     audio.play().catch(() => {});
   } catch (error) {}
 }
 
 function forceFullPageRefresh() {
-  playMnoriaStartupPluckSound();
+  playMnoriaStartupGongSound();
   const startupShown = showMnoriaStartupBeforeRefresh();
   const navigate = function() {
     try {
@@ -588,7 +588,7 @@ function forceFullPageRefresh() {
   };
 
   if (!startupShown) {
-    window.setTimeout(navigate, MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS);
+    window.setTimeout(navigate, MNORIA_STARTUP_GONG_SOUND_DURATION_MS);
     return;
   }
 
@@ -597,7 +597,7 @@ function forceFullPageRefresh() {
   // masquée avant la navigation, et laisse le son de corde pincée se jouer.
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
-      window.setTimeout(navigate, MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS);
+      window.setTimeout(navigate, MNORIA_STARTUP_GONG_SOUND_DURATION_MS);
     });
   });
 }
@@ -22682,7 +22682,7 @@ async function initIndex() {
 // première image de la page suivante — retiré dès que ce nouveau chargement
 // aboutit, succès ou nouvel échec.
 function retryIndexAfterConnectionError() {
-  playMnoriaStartupPluckSound();
+  playMnoriaStartupGongSound();
   window.setTimeout(function() {
     try {
       const url = new URL(window.location.href);
@@ -22692,7 +22692,7 @@ function retryIndexAfterConnectionError() {
     } catch {
       window.location.reload();
     }
-  }, MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS);
+  }, MNORIA_STARTUP_GONG_SOUND_DURATION_MS);
 }
 window.retryIndexAfterConnectionError = retryIndexAfterConnectionError;
 
