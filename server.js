@@ -460,7 +460,7 @@ function replaceMetaPlaceholders(template, meta) {
 function buildIndexMeta(req) {
   return {
     title: "Mnoria | L’arène des idées",
-    description: "Mnoria est un outil d’intelligence collective augmenté par l’IA : il met les idées à l’épreuve pour faire émerger les positions les plus robustes.",
+    description: "Mnoria est un réseau social d’intelligence collective augmenté par l’IA. Il permet d’explorer des idées, d’enrichir sa culture, de confronter les points de vue et de mémoriser durablement ce qui compte.",
     url: buildAbsoluteUrl(req, "/"),
     image: buildAbsoluteUrl(req, "/mnoria-icon-512.png"),
     imageAlt: "Mnoria — l'arène des idées"
