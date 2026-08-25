@@ -569,7 +569,7 @@ const MNORIA_STARTUP_GONG_SOUND_DURATION_MS = 4650;
 function playMnoriaStartupGongSound() {
   try {
     const audio = new Audio(MNORIA_STARTUP_GONG_SOUND_URL);
-    audio.volume = 0.7;
+    audio.volume = 0.85;
     audio.play().catch(() => {});
   } catch (error) {}
 }
@@ -748,9 +748,23 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   let contentReady = false;
   let fontsReady = false;
   let hidden = false;
+  const loaderShownAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+  // Plancher de durée d'affichage garanti, quelle que soit la raison pour laquelle
+  // les trois conditions ci-dessus sont devenues vraies plus vite que prévu (cache
+  // session déjà chaud, polices déjà en cache navigateur, etc.) — sans lui, l'intro
+  // ne s'affichait alors que très furtivement au lieu de son minimum habituel
+  // d'environ 2s (400ms de pause + 1.6s de maintien après le texte, cf.
+  // runIntroSequence plus bas).
+  const MNORIA_STARTUP_MIN_DISPLAY_MS = 2200;
 
   function tryHide() {
     if (hidden || !introSequenceDone || !contentReady || !fontsReady) return;
+    const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
+    const elapsedSinceShown = now - loaderShownAt;
+    if (elapsedSinceShown < MNORIA_STARTUP_MIN_DISPLAY_MS) {
+      setTimeout(tryHide, MNORIA_STARTUP_MIN_DISPLAY_MS - elapsedSinceShown);
+      return;
+    }
     hidden = true;
     try { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch (_) {}
     loader.classList.add('is-hiding');
