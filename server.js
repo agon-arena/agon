@@ -8021,6 +8021,15 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
       }
       return res.status(500).json({ error: "Erreur création débat." });
     }
+    recordNewlyPublishedDebateInSimilarityCache({
+      id: data.id,
+      question,
+      option_a,
+      option_b,
+      type: type || "debate",
+      content: normalizedContent,
+      created_at: new Date().toISOString()
+    }, "api/debates");
 
     if (image_upload) {
       try {
@@ -9336,9 +9345,11 @@ app.delete("/api/comments/:id", async (req, res) => {
 /* ========================= VEILLE PENDING ========================= */
 
 async function loadVeillePending() {
+  // Colonnes explicites (audit egress PostgREST du 25/08/2026) : la seule consommatrice
+  // du résultat est le .map() juste en dessous, qui ne lit que ces champs.
   const { data, error } = await supabase
     .from("veille_pending")
-    .select("*")
+    .select("id, question, position_a, position_b, theme, resume, sources, links, pending_keywords, added_at, pending_linked_debate_id, pending_story_selection, political_group")
     .order("added_at", { ascending: false });
   if (error) { console.error("loadVeillePending:", error.message); return []; }
   return (data || []).map(r => ({
@@ -10884,6 +10895,60 @@ app.delete("/api/veille/stories/:storyId", requireAdmin, async (req, res) => {
   }
 });
 
+// Cache court des 300 débats récents utilisés par check-similar : pendant un lot
+// d'auto-publication (bot veille / Certamen), cet endpoint est appelé une fois PAR SUJET
+// en attente (jusqu'à plusieurs dizaines de fois en quelques minutes), mais la requête
+// Supabase sous-jacente (300 lignes, colonne `content` incluse) renvoie quasiment toujours
+// les mêmes données d'un appel à l'autre : la table `debates` ne change pas en quelques
+// secondes. TTL court (90s) + mise à jour explicite dès qu'un nouveau débat est inséré
+// (cf. recordNewlyPublishedDebateInSimilarityCache) : le cache reste sûr contre les
+// doublons intra-lot tout en évitant l'essentiel des rechargements identiques (audit
+// egress PostgREST du 25/08/2026).
+let recentDebatesForSimilarityCache = null;
+let recentDebatesForSimilarityCacheAt = 0;
+const RECENT_DEBATES_FOR_SIMILARITY_CACHE_TTL_MS = 90 * 1000;
+
+async function getRecentDebatesForSimilarity() {
+  const now = Date.now();
+  if (recentDebatesForSimilarityCache && (now - recentDebatesForSimilarityCacheAt) < RECENT_DEBATES_FOR_SIMILARITY_CACHE_TTL_MS) {
+    console.log("[check-similar] recent debates cache HIT");
+    return recentDebatesForSimilarityCache;
+  }
+
+  const { data: debates, error } = await supabase
+    .from("debates")
+    .select("id, question, option_a, option_b, type, content, created_at")
+    .order("created_at", { ascending: false })
+    .limit(300);
+
+  if (error) throw new Error(error.message);
+  recentDebatesForSimilarityCache = debates || [];
+  recentDebatesForSimilarityCacheAt = now;
+  console.log("[check-similar] recent debates cache MISS");
+  return recentDebatesForSimilarityCache;
+}
+
+// Appelée après l'insertion réussie d'un nouveau débat (/api/admin/veille/publish et
+// /api/debates). Une invalidation totale (cache remis à null) serait correcte mais
+// quasi inutile en pratique : dans un lot d'auto-publication, la quasi-totalité des
+// sujets passés à check-similar finissent effectivement publiés, donc vider tout le
+// cache à CHAQUE publication ferait recharger les 300 lignes à chaque candidat suivant
+// — presque comme si le cache n'existait pas. On ajoute donc directement la ligne du
+// débat qui vient d'être inséré (déjà en main, aucune requête Supabase nécessaire) : le
+// prochain check-similar de la même passe le voit immédiatement (protection anti-doublon
+// intra-lot intacte) sans jamais recharger le reste depuis Supabase.
+function recordNewlyPublishedDebateInSimilarityCache(row, reason = "") {
+  if (!row || row.id === undefined || row.id === null) return;
+  if (recentDebatesForSimilarityCache === null) {
+    // Rien en cache actuellement : le prochain appel rechargera de toute façon une
+    // liste à jour depuis Supabase, qui inclura ce débat.
+    return;
+  }
+  // Borné à 300 lignes pour rester fidèle à la requête d'origine (.limit(300)).
+  recentDebatesForSimilarityCache = [row, ...recentDebatesForSimilarityCache].slice(0, 300);
+  console.log(`[check-similar] recent debates cache updated${reason ? " (" + reason + ")" : ""} — débat ${row.id} ajouté sans requête Supabase`);
+}
+
 // Bucket dédié : pendant un lot d'auto-publication, le bot enchaîne check-similar +
 // merge + publish pour chaque sujet. Sur le bucket partagé "admin-ai" (10/min), les
 // check-similar se faisaient limiter en silence → fusions sautées → doublons.
@@ -10892,13 +10957,7 @@ app.post("/api/admin/veille/check-similar", requireAdmin, rateLimit("veille-simi
   if (!String(question || "").trim()) return res.status(400).json({ similar: [] });
 
   try {
-    const { data: debates, error } = await supabase
-      .from("debates")
-      .select("id, question, option_a, option_b, type, content, created_at")
-      .order("created_at", { ascending: false })
-      .limit(300);
-
-    if (error) throw new Error(error.message);
+    const debates = await getRecentDebatesForSimilarity();
     if (!debates || !debates.length) return res.json({ similar: [] });
 
     const candidates = getVeilleSimilarityCandidates({ question, positionA, positionB, resume }, debates);
@@ -11548,6 +11607,15 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       });
       throw new Error(error.message);
     }
+    recordNewlyPublishedDebateInSimilarityCache({
+      id: data.id,
+      question: newDebateRow.question,
+      option_a: newDebateRow.option_a,
+      option_b: newDebateRow.option_b,
+      type: newDebateRow.type,
+      content: newDebateRow.content,
+      created_at: newDebateRow.created_at
+    }, "veille publish");
 
     if (allExtras.length) {
       await supabase.from("debates").update({ media_extras: allExtras }).eq("id", data.id);
