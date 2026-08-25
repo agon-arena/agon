@@ -564,7 +564,7 @@ function showMnoriaStartupBeforeRefresh() {
 // bug). La navigation qui suit ce clic est volontairement retardée de la durée du son
 // (cf. forceFullPageRefresh et retryIndexAfterConnectionError plus bas) : sans cette
 // marge, elle le couperait net après quelques dizaines de ms.
-const MNORIA_STARTUP_GONG_SOUND_URL = "/mnoria-startup-gong.mp3";
+const MNORIA_STARTUP_GONG_SOUND_URL = "/mnoria-startup-gong.wav";
 const MNORIA_STARTUP_GONG_SOUND_DURATION_MS = 4650;
 function playMnoriaStartupGongSound() {
   try {
