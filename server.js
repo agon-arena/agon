@@ -2881,6 +2881,45 @@ function clearDebateDetailResponseCache(debateId = null) {
   debateDetailResponseCache.delete(key);
 }
 
+// Univers intellectuel ("Ma mémoire") : réponse coûteuse à reconstruire (relit tout
+// l'historique QCM culture générale de l'utilisateur, cf.
+// fetchUserCultureGeneraleAnswerEvents), désormais rechargée à chaque arrivée sur
+// l'accueil depuis que "Ma mémoire" y est la vue par défaut (10/08/2026) — cf. audit
+// egress PostgREST du 25/08/2026. Cache mémoire par utilisateur (legacyKey), même
+// pattern que debateDetailResponseCache ci-dessus. cache:"no-store" côté client ne
+// concerne que le cache HTTP du navigateur pour des données personnelles ; ce cache
+// serveur est indépendant et sûr (isolation garantie par la clé legacyKey).
+const intellectualUniverseResponseCache = new Map();
+const INTELLECTUAL_UNIVERSE_CACHE_TTL_MS = 4 * 60 * 1000;
+const INTELLECTUAL_UNIVERSE_CACHE_MAX = 1000;
+
+function getCachedIntellectualUniverseResponse(legacyKey) {
+  const key = String(legacyKey || "").trim();
+  if (!key) return null;
+  const entry = intellectualUniverseResponseCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    intellectualUniverseResponseCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedIntellectualUniverseResponse(legacyKey, value) {
+  const key = String(legacyKey || "").trim();
+  if (!key) return;
+  _cacheSet(intellectualUniverseResponseCache, key, { value, expiresAt: Date.now() + INTELLECTUAL_UNIVERSE_CACHE_TTL_MS }, INTELLECTUAL_UNIVERSE_CACHE_MAX);
+}
+
+// Invalidation ciblée sur le seul utilisateur concerné, appelée après les mutations qui
+// changent le contenu de "Ma mémoire" (acquisition d'une notion, lien "compris" validé,
+// nouvelle réponse QCM) — cf. POST /api/daily-quiz/answer.
+function invalidateIntellectualUniverseCache(legacyKey) {
+  const key = String(legacyKey || "").trim();
+  if (!key) return;
+  intellectualUniverseResponseCache.delete(key);
+}
+
 const ogImageCache = new Map();
 const OG_IMAGE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min (les votes évoluent)
 const OG_IMAGE_CACHE_MAX = 200;                // ~200 × ~150 KB ≈ 30 MB max
@@ -5832,6 +5871,9 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
     const validation = validateLegacyKey(req.query?.legacyKey);
     if (validation.error) return res.status(400).json({ error: validation.error });
 
+    const cachedResponse = getCachedIntellectualUniverseResponse(validation.legacyKey);
+    if (cachedResponse) return res.json(cachedResponse);
+
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
     const emptyResponse = {
@@ -5850,6 +5892,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
     if (acquisitionsError) throw new Error(acquisitionsError.message);
     if (!acquisitions || !acquisitions.length) {
       console.log(`[intellectual universe] user=${user.id} articles=0 solarSystems=0 galaxies=0 unclassified=0`);
+      setCachedIntellectualUniverseResponse(validation.legacyKey, emptyResponse);
       return res.json(emptyResponse);
     }
 
@@ -6085,7 +6128,9 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
 
     console.log(`[intellectual universe] user=${user.id} articles=${totals.articles} solarSystems=${totals.solarSystems} galaxies=${totals.galaxies} unclassified=${totals.unclassifiedArticles}`);
 
-    res.json({ userId: user.id, totals, galaxies, unclassified: sortedUnclassified, knowledgeLinks });
+    const responsePayload = { userId: user.id, totals, galaxies, unclassified: sortedUnclassified, knowledgeLinks };
+    setCachedIntellectualUniverseResponse(validation.legacyKey, responsePayload);
+    res.json(responsePayload);
   } catch (error) {
     console.error("[intellectual universe]", error.message);
     return sendServerError(res, "Erreur chargement univers intellectuel.");
@@ -7591,14 +7636,18 @@ app.get("/api/debates", async (req, res) => {
     }
 
     // Votes récents (7 jours max) pour le score d'activité des Bulles Mnoria :
-    // la fenêtre temporelle limite la requête à un petit volume de lignes.
+    // la fenêtre temporelle limite la requête à un petit volume de lignes. Filtrage
+    // supplémentaire par argumentIds (audit egress du 25/08/2026) : sans lui, cette requête
+    // relisait TOUS les votes du site sur 7 jours à chaque reconstruction de cache, pas
+    // seulement ceux des idées concernées par cette page.
     const vote48hCountByDebate = new Map();
     const vote7dCountByDebate = new Map();
     if (argumentIds.length) {
-      const { data: recentVotes, error: recentVotesError } = await fetchAllSupabaseRows(() =>
+      const { data: recentVotes, error: recentVotesError } = await fetchAllSupabaseRowsIn(argumentIds, (idsChunk) =>
         supabase
           .from("votes")
           .select("argument_id,vote_count,created_at")
+          .in("argument_id", idsChunk)
           .gte("created_at", new Date(cutoff7d).toISOString())
           .order("id", { ascending: true }));
       if (recentVotesError) {
@@ -8940,83 +8989,95 @@ async function _applyAutoVoteWave(argument, wave) {
   const statusField = wave === 1 ? "auto_vote_wave1_status" : "auto_vote_wave2_status";
   const newVotes = Number(argument.votes || 0) + amount;
 
-  const { error } = await supabase
+  // .eq(statusField, "pending") en plus de .eq("id", ...) (audit egress du 25/08/2026) :
+  // garde-fou anti-double-application si un passage venait à recouper un précédent (gros
+  // rattrapage après coupure prolongée, redémarrage en cours de traitement) — la mise à jour
+  // n'affecte alors aucune ligne (déjà "done") plutôt que de créditer les votes une seconde fois.
+  // .select("id") sert uniquement à savoir si la ligne a bien été affectée.
+  const { data, error } = await supabase
     .from("arguments")
     .update({ votes: newVotes, [statusField]: "done" })
-    .eq("id", argument.id);
+    .eq("id", argument.id)
+    .eq(statusField, "pending")
+    .select("id");
 
   if (error) {
     console.error(`[auto-vote wave${wave}]`, error.message);
-    return;
+    return false;
   }
+  if (!data || !data.length) return false; // déjà traitée entre-temps : rien à faire
 
-  console.log(`[auto-vote wave${wave}] argument ${argument.id} +${amount} votes (total ${newVotes})`);
-  if (amount === 0) return;
+  if (amount > 0) {
+    invalidateSharedDebateCaches(argument.debate_id || null, { clearList: false });
 
-  invalidateSharedDebateCaches(argument.debate_id || null, { clearList: false });
-
-  if (argument.author_key) {
-    try {
-      await createOrMergeVoteNotification({
-        user_key: argument.author_key,
-        debate_id: argument.debate_id,
-        argument_id: argument.id,
-        argument_title: argument.title,
-        vote_count_increment: amount,
-        push_on_merge: true
-      });
-    } catch (notificationError) {
-      console.error(`[auto-vote wave${wave}] notification`, notificationError.message);
+    if (argument.author_key) {
+      try {
+        await createOrMergeVoteNotification({
+          user_key: argument.author_key,
+          debate_id: argument.debate_id,
+          argument_id: argument.id,
+          argument_title: argument.title,
+          vote_count_increment: amount,
+          push_on_merge: true
+        });
+      } catch (notificationError) {
+        console.error(`[auto-vote wave${wave}] notification`, notificationError.message);
+      }
     }
+  }
+  return true;
+}
+
+// Interrupteur d'urgence : identifié comme cause probable de l'épuisement du budget Disk IO
+// Supabase du 20/06/2026 (balayage de arguments toutes les 30s / 15 min, 24h/24, indépendamment
+// du trafic). Mettre AUTO_VOTE_SCHEDULERS_ENABLED=false dans l'environnement pour couper les
+// deux schedulers, remettre à true (ou retirer la variable) une fois la situation stabilisée.
+const AUTO_VOTE_SCHEDULERS_ENABLED = process.env.AUTO_VOTE_SCHEDULERS_ENABLED !== "false";
+
+// Fréquences allégées le 25/08/2026 (30s→2h, 15min→6h) : la requête ne cible déjà que les
+// idées échues et non traitées (auto_vote_waveN_status='pending' AND auto_vote_waveN_at<=now),
+// donc aucune idée éligible n'est jamais perdue en espaçant les passages — seulement rattrapée
+// plus tard, au prochain passage (jusqu'à ~2h/~6h de délai supplémentaire par rapport à
+// l'échéance elle-même déjà randomisée sur 35min-16h/24h-48h, cf. POST /api/arguments).
+const AUTO_VOTE_WAVE1_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const AUTO_VOTE_WAVE2_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// Lot maximal par passage : borne le coût d'un rattrapage après une coupure prolongée (ex.
+// AUTO_VOTE_SCHEDULERS_ENABLED=false pendant plusieurs jours) — les idées non prises dans ce lot
+// restent "pending" et sont reprises automatiquement au(x) passage(s) suivant(s), sans perte.
+const AUTO_VOTE_BATCH_LIMIT = 100;
+
+async function _runAutoVoteWavePass(wave) {
+  const statusField = wave === 1 ? "auto_vote_wave1_status" : "auto_vote_wave2_status";
+  const dueField = wave === 1 ? "auto_vote_wave1_at" : "auto_vote_wave2_at";
+  try {
+    const now = new Date().toISOString();
+    const { data: pending, error } = await supabase
+      .from("arguments")
+      .select("id, votes, debate_id, author_key, title")
+      .eq(statusField, "pending")
+      .lte(dueField, now)
+      .order(dueField, { ascending: true })
+      .limit(AUTO_VOTE_BATCH_LIMIT);
+    if (error) throw error;
+
+    let processed = 0;
+    for (const row of (pending || [])) {
+      if (await _applyAutoVoteWave(row, wave)) processed++;
+    }
+    console.log(`[auto-vote wave${wave}] ${processed} arguments processed`);
+  } catch (err) {
+    console.error(`[auto-vote wave${wave} scheduler]`, err.message);
   }
 }
 
-// Interrupteur d'urgence : ces deux schedulers font un balayage complet de la
-// table arguments (pas d'index sur auto_vote_wave*_status, cf.
-// data/migration-auto-vote-waves-index.sql) toutes les 30s / 15 min, 24h/24,
-// indépendamment du trafic — identifié comme cause probable de l'épuisement
-// du budget Disk IO Supabase du 20/06/2026. Mettre AUTO_VOTE_SCHEDULERS_ENABLED=false
-// dans l'environnement pour les couper temporairement (ex. le temps de poser
-// l'index ci-dessus sur une base déjà à court de marge), puis remettre à true
-// (ou retirer la variable) une fois la situation stabilisée.
-const AUTO_VOTE_SCHEDULERS_ENABLED = process.env.AUTO_VOTE_SCHEDULERS_ENABLED !== "false";
-
 if (AUTO_VOTE_SCHEDULERS_ENABLED) {
-  // Vague 1 : vérifie toutes les 30s les idées dont les +2min sont écoulées
-  setInterval(async () => {
-    try {
-      const now = new Date().toISOString();
-      const { data: pending } = await supabase
-        .from("arguments")
-        .select("id, votes, debate_id, author_key, title")
-        .eq("auto_vote_wave1_status", "pending")
-        .lte("auto_vote_wave1_at", now);
-
-      for (const row of (pending || [])) {
-        await _applyAutoVoteWave(row, 1);
-      }
-    } catch (err) {
-      console.error("[auto-vote wave1 scheduler]", err.message);
-    }
-  }, 30 * 1000).unref();
-
-  // Vague 2 : vérifie toutes les 15 min les idées dont les +24h sont écoulées
-  setInterval(async () => {
-    try {
-      const now = new Date().toISOString();
-      const { data: pending } = await supabase
-        .from("arguments")
-        .select("id, votes, debate_id, author_key, title")
-        .eq("auto_vote_wave2_status", "pending")
-        .lte("auto_vote_wave2_at", now);
-
-      for (const row of (pending || [])) {
-        await _applyAutoVoteWave(row, 2);
-      }
-    } catch (err) {
-      console.error("[auto-vote wave2 scheduler]", err.message);
-    }
-  }, 15 * 60 * 1000).unref();
+  // Un passage immédiat au démarrage (en plus du rythme normal ci-dessous) rattrape tout
+  // backlog accumulé pendant un redéploiement/une coupure sans attendre jusqu'à 2h/6h — sûr ici
+  // car la requête est déjà filtrée (statut + échéance) et bornée (limit ci-dessus).
+  _runAutoVoteWavePass(1);
+  _runAutoVoteWavePass(2);
+  setInterval(() => _runAutoVoteWavePass(1), AUTO_VOTE_WAVE1_INTERVAL_MS).unref();
+  setInterval(() => _runAutoVoteWavePass(2), AUTO_VOTE_WAVE2_INTERVAL_MS).unref();
 } else {
   console.log("[auto-vote schedulers] désactivés via AUTO_VOTE_SCHEDULERS_ENABLED=false");
 }
@@ -9333,7 +9394,13 @@ app.delete("/api/comments/:id", async (req, res) => {
       return res.status(500).json({ error: "Erreur suppression commentaire." });
     }
 
-    invalidateDebateCaches();
+    // Invalidation ciblée sur le seul débat concerné, même principe que POST /api/comments
+    // ci-dessus (clearList:false) plutôt que de vider tout le cache /api/debates pour toutes
+    // les catégories/tris/offsets à chaque suppression — le nombre de commentaires affiché
+    // dans la liste tolère déjà ce même délai de rafraîchissement à la création d'un
+    // commentaire (audit egress du 25/08/2026).
+    const argumentRow = await getArgumentById(commentRow.argument_id);
+    invalidateSharedDebateCaches(argumentRow?.debate_id || null, { clearList: false });
     clearNotificationsApiResponseCache();
     res.json({ success: true });
   } catch (error) {
@@ -18829,6 +18896,9 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       } else {
         _dailyQuizStatsCache.delete(`${todayKey}:${questionId}`);
         isNewAnswer = true;
+        // Nouvelle réponse : "Ma mémoire" (fiche/quizDate/slot affichés pour les notions déjà
+        // acquises) peut en dépendre, cf. fetchUserCultureGeneraleAnswerEvents.
+        invalidateIntellectualUniverseCache(voterKey);
       }
     }
 
@@ -18855,6 +18925,7 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     // deux types de questions partagent le même slot "daily".
     if (correct && isCultureGeneraleQuestionId(question.id) && question.sourceDebateId) {
       recordDailyQuizEclairageAcquisition(voterKey, question)
+        .then(() => invalidateIntellectualUniverseCache(voterKey))
         .catch((error) => console.warn("[daily quiz eclairage acquisitions] failed :", error.message));
     }
 
@@ -18866,6 +18937,7 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     // le chemin critique — la réponse HTTP est déjà partie.
     if (isNewAnswer) {
       applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate: todayKey, questionId, isCorrect: correct, difficulty })
+        .then(() => invalidateIntellectualUniverseCache(voterKey))
         .catch((error) => console.warn("[fsrs review] failed :", error.message));
     }
   } catch (error) {

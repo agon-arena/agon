@@ -22645,23 +22645,36 @@ async function initIndex() {
   }
 }
 
-// Échec du chargement initial du feed (blip Supabase, cf. 19/07/2026) : au
-// lieu d'une page vide sans issue, affiche un sablier + relance automatique.
-// Deux rechargements auto max (compteur sessionStorage, remis à zéro dès
-// qu'un chargement réussit) ; au-delà, il reste le bouton Réessayer.
+// Échec du chargement initial du feed (blip Supabase, cf. 19/07/2026) : au lieu
+// d'un encart perdu dans la liste, on couvre tout l'écran par une page dédiée
+// (fond bleu pétrole uni de l'accueil, logo Mnoria, message sobre) pour que
+// l'utilisateur comprenne immédiatement que c'est le site qui est inaccessible,
+// pas juste ce contenu. Deux rechargements auto max (compteur sessionStorage,
+// remis à zéro dès qu'un chargement réussit) ; au-delà, il reste le bouton
+// Réessayer.
 function showIndexLoadErrorState() {
-  const list = document.getElementById("debates-list");
-  if (!list) return;
   let autoRetries = 0;
   try { autoRetries = Number(sessionStorage.getItem("mnoriaIndexLoadRetries") || 0); } catch {}
   const willAutoRetry = autoRetries < 2;
-  list.innerHTML =
-    '<div class="empty-state index-load-error">' +
-      '<img src="/sablier2-64.png" alt="" style="width:36px;height:36px;object-fit:contain;display:block;margin:0 auto 10px;">' +
-      '<p style="margin:0 0 12px;">Connexion instable — le contenu n\'a pas pu être chargé.' +
+
+  let overlay = document.getElementById("mnoria-connection-error-page");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "mnoria-connection-error-page";
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:99997;display:flex;align-items:center;justify-content:center;" +
+      "padding:24px;box-sizing:border-box;background:#243038;text-align:center;";
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML =
+    '<div style="width:min(100%,340px);">' +
+      '<img src="/mnoria-logo.png" alt="Mnoria" style="width:150px;max-width:60vw;height:auto;display:block;margin:0 auto 28px;">' +
+      '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Le site n\'est pas accessible pour le moment</p>' +
+      '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.' +
       (willAutoRetry ? '<br>Nouvelle tentative automatique dans quelques secondes…' : '') + '</p>' +
       '<button type="button" class="button button-small" onclick="try{sessionStorage.removeItem(\'mnoriaIndexLoadRetries\')}catch(e){};location.reload()">Réessayer</button>' +
     '</div>';
+
   if (willAutoRetry) {
     try { sessionStorage.setItem("mnoriaIndexLoadRetries", String(autoRetries + 1)); } catch {}
     setTimeout(() => location.reload(), 6000);
