@@ -23,14 +23,56 @@ function buildRecoveryResponse(targetUrl) {
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-store">
   <title>Mnoria se reconnecte</title>
+  <!-- Oswald : même police que le titre/bouton de la page "site inaccessible"
+       (cf. showIndexLoadErrorState, script.js) — identité Mnoria pour ces deux
+       écrans techniques. Requête best-effort : ce document doit rester utilisable
+       même si elle échoue (ex. coupure réseau totale), auquel cas le navigateur
+       retombe silencieusement sur le repli Impact/Arial Narrow/sans-serif ci-dessous. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&display=swap">
   <style>
     html,body{margin:0;background:#243038;color:#f3f6f4;font-family:Arial,Helvetica,sans-serif}
-    body{display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:24px;box-sizing:border-box}
-    main{max-width:360px;text-align:center}
-    img{width:96px;height:96px;display:block;margin:0 auto 18px;animation:spin 1.1s linear infinite}
-    h1{margin:0 0 10px;font-size:22px;line-height:1.2}
+    body{
+      display:flex;align-items:center;justify-content:center;
+      min-height:100vh;min-height:100dvh;
+      padding:24px;
+      padding-top:max(24px, env(safe-area-inset-top, 0px));
+      padding-right:max(24px, env(safe-area-inset-right, 0px));
+      padding-bottom:max(24px, env(safe-area-inset-bottom, 0px));
+      padding-left:max(24px, env(safe-area-inset-left, 0px));
+      box-sizing:border-box;
+    }
+    /* Même largeur de bloc que la page "site inaccessible" (showIndexLoadErrorState,
+       script.js) : min(88vw,340px) plutôt qu'un max-width fixe, pour un comportement
+       identique sur petit écran. */
+    main{width:min(88vw,340px);box-sizing:border-box;text-align:center}
+    img{width:96px;height:96px;display:block;margin:0 auto 20px;animation:spin 1.1s linear infinite}
+    /* Même langage typographique que le titre de l'autre écran technique : Oswald,
+       graisse 600, taille/interligne identiques — plus la grosse police sans-serif
+       générique héritée du <h1> par défaut. */
+    h1{margin:0 0 10px;font-family:'Oswald', Impact, 'Arial Narrow', sans-serif;font-size:19px;font-weight:600;line-height:1.3;color:#fff}
     p{margin:0;color:rgba(243,246,244,.74);font-size:14px;line-height:1.55}
-    button{margin-top:20px;border:1px solid rgba(243,246,244,.35);background:rgba(255,255,255,.08);color:#f3f6f4;border-radius:999px;padding:10px 16px;font-weight:700}
+    /* Bouton harmonisé avec .mnoria-tech-btn (script.js, showIndexLoadErrorState) :
+       même rendu rempli/Oswald plutôt que le contour en pilule précédent — à faire
+       évoluer en parallèle si ces valeurs changent, ce document n'a pas accès à ce
+       <style> partagé (page HTML autonome générée par le service worker). */
+    button{
+      margin-top:22px;
+      display:inline-block;
+      font-family:'Oswald', Impact, 'Arial Narrow', sans-serif;
+      font-weight:600;
+      font-size:14px;
+      letter-spacing:0.04em;
+      color:#fff;
+      background:#2c3e50;
+      border:none;
+      border-radius:8px;
+      padding:8px 12px;
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    button:hover{background:#1f2d3d}
+    button:active{background:#16212c}
+    button:focus-visible{outline:2px solid rgba(255,255,255,.5);outline-offset:2px}
     @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>

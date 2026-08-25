@@ -22719,7 +22719,41 @@ function retryIndexAfterConnectionError() {
 }
 window.retryIndexAfterConnectionError = retryIndexAfterConnectionError;
 
+// Bouton "Réessayer" partagé par les deux écrans techniques Mnoria (cette page
+// d'erreur ET la page de récupération générée par le service worker, cf.
+// buildRecoveryResponse dans service-worker.js — dupliqué là-bas car ce document est
+// un fichier HTML totalement autonome sans accès à ce <style>, donc à faire évoluer
+// en parallèle si ces valeurs changent). Volontairement scopé à sa propre classe
+// plutôt que d'utiliser .button/.button-small (style.css) : ces classes sont
+// utilisées partout ailleurs sur le site, les changer aurait un effet site entier.
+function ensureMnoriaTechButtonStyles() {
+  if (document.getElementById("mnoria-tech-btn-style")) return;
+  const style = document.createElement("style");
+  style.id = "mnoria-tech-btn-style";
+  style.textContent = `
+    .mnoria-tech-btn {
+      display: inline-block;
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      color: #fff;
+      background: #2c3e50;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mnoria-tech-btn:hover { background: #1f2d3d; }
+    .mnoria-tech-btn:active { background: #16212c; }
+    .mnoria-tech-btn:focus-visible { outline: 2px solid rgba(255,255,255,.5); outline-offset: 2px; }
+  `;
+  document.head.appendChild(style);
+}
+
 function showIndexLoadErrorState() {
+  ensureMnoriaTechButtonStyles();
   let overlay = document.getElementById("mnoria-connection-error-page");
   if (!overlay) {
     overlay = document.createElement("div");
@@ -22756,7 +22790,7 @@ function showIndexLoadErrorState() {
       '<img src="/mnoria-error-robot.png" alt="" style="width:110px;max-width:42vw;height:auto;display:block;margin:0 auto 20px;">' +
       '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Le site n\'est pas accessible pour le moment</p>' +
       '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.</p>' +
-      '<button type="button" class="button button-small" onclick="retryIndexAfterConnectionError()">Réessayer</button>' +
+      '<button type="button" class="mnoria-tech-btn" onclick="retryIndexAfterConnectionError()">Réessayer</button>' +
     '</div>';
 }
 
