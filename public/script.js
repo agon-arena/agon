@@ -574,23 +574,14 @@ function playMnoriaStartupGongSound() {
   } catch (error) {}
 }
 
-// Rafraîchissement natif (bouton recharger du navigateur, pull-to-refresh, Cmd+R/F5) :
-// aucun clic ne passe par forceFullPageRefresh/retryIndexAfterConnectionError dans ce
-// cas, donc le son n'a pas encore été joué à ce stade. PerformanceNavigationTiming
-// distingue ce type de navigation ("reload") d'un chargement classique ("navigate") —
-// nos propres rechargements via location.replace(...) (boutons Actualiser/Réessayer)
-// sont eux classés "navigate", donc pas de double lecture pour ces cas déjà couverts
-// au clic. Tentative best-effort : sans clic sur CETTE page, le navigateur peut bloquer
-// l'autoplay (silencieux, sans erreur) tant qu'il n'a pas encore accordé cette
-// permission au site (heuristique d'engagement propre à chaque navigateur).
-(function playGongOnNativeReload() {
-  try {
-    const navEntry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
-    if (navEntry && navEntry.type === "reload") {
-      playMnoriaStartupGongSound();
-    }
-  } catch (error) {}
-})();
+// Rafraîchissement natif du navigateur (bouton recharger, pull-to-refresh, Cmd+R/F5) :
+// volontairement SANS tentative de son ici. Contrairement à Chrome (qui autorise
+// l'autoplay après suffisamment d'engagement sur le site), Safari bloque
+// systématiquement tout son non déclenché par un clic sur LA PAGE COURANTE — un
+// rechargement démarre toujours une page neuve sans aucun clic à ses yeux, même
+// quand il vient d'un vrai tap sur le bouton recharger. Aucun code JS ne peut
+// contourner cette règle côté navigateur (confirmé le 25/08/2026, ne pas retenter
+// une détection via PerformanceNavigationTiming ou équivalent).
 
 function forceFullPageRefresh() {
   playMnoriaStartupGongSound();
