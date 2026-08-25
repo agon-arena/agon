@@ -588,8 +588,11 @@ window.forceFullPageRefresh = forceFullPageRefresh;
 (function stripSwRefreshMarkerFromUrl() {
   try {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has("_swrefresh")) return;
+    const hadSwRefresh = url.searchParams.has("_swrefresh");
+    const hadConnRetry = url.searchParams.has("connRetry");
+    if (!hadSwRefresh && !hadConnRetry) return;
     url.searchParams.delete("_swrefresh");
+    url.searchParams.delete("connRetry");
     window.history.replaceState({}, "", url.pathname + url.search + url.hash);
   } catch (error) {}
 })();
@@ -22555,7 +22558,6 @@ async function initIndex() {
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
       window.dispatchEvent(new Event("mnoria:feed-ready"));
-      try { sessionStorage.removeItem("mnoriaIndexLoadRetries"); } catch {}
 
       // Rafraîchissement silencieux en arrière-plan
       fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" }).then((fresh) => {
@@ -22595,7 +22597,6 @@ async function initIndex() {
     } else {
       // Première visite — comportement normal
       const debates = await fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0));
-      try { sessionStorage.removeItem("mnoriaIndexLoadRetries"); } catch {}
       debatesCache = Array.isArray(debates) ? debates : [];
       resetIndexDebatesPaginationState(
         debatesCache.length,
@@ -22649,35 +22650,32 @@ async function initIndex() {
 // d'un encart perdu dans la liste, on couvre tout l'écran par une page dédiée
 // (fond bleu pétrole uni de l'accueil, logo Mnoria, message sobre) pour que
 // l'utilisateur comprenne immédiatement que c'est le site qui est inaccessible,
-// pas juste ce contenu. Deux rechargements auto max (compteur sessionStorage,
-// remis à zéro dès qu'un chargement réussit) ; au-delà, il reste le bouton
-// Réessayer.
-// Recharge en réutilisant forceFullPageRefresh (bouton "Actualiser", plus haut dans ce fichier) :
-// ?skipStartup=1 retirait complètement le loader de démarrage, ce qui laissait voir furtivement
-// la vraie page (header, feed) avant que l'échec ne redéclenche cette page d'erreur. _swrefresh
-// garde au contraire le loader affiché en continu pendant tout le rechargement (aucun flash) et,
-// via mnoria-user-refresh-startup, affiche le logo directement à son état final sans rejouer
-// l'animation du texte "Cultive ton esprit" (même logique que le bouton Actualiser normal).
-function reloadIndexSkippingStartup() {
-  if (typeof window.forceFullPageRefresh === "function") {
-    window.forceFullPageRefresh();
-    return;
-  }
+// pas juste ce contenu. Pas de relance automatique (demande du 25/08/2026) : seul
+// un clic sur "Réessayer" déclenche un nouveau chargement.
+//
+// Le rechargement passe par _swrefresh (même mécanisme que forceFullPageRefresh
+// plus haut dans ce fichier) pour garder le loader de démarrage affiché en continu
+// pendant tout le rechargement et éviter de rejouer l'animation du texte d'intro.
+// En PWA standalone, ce loader reste transparent le temps de quelques frames avant
+// de se révéler (contournement WebKit existant, cf. index.html) : cet intervalle,
+// même très court, suffisait à laisser furtivement apparaître la vraie page
+// derrière. Le marqueur connRetry pose par-dessus tout le reste (cf. index.html)
+// un cache plein écran statique, sans transition d'opacité, présent dès la toute
+// première image de la page suivante — retiré dès que ce nouveau chargement
+// aboutit, succès ou nouvel échec.
+function retryIndexAfterConnectionError() {
   try {
     const url = new URL(window.location.href);
     url.searchParams.set("_swrefresh", "1");
+    url.searchParams.set("connRetry", "1");
     window.location.replace(url.toString());
   } catch {
     window.location.reload();
   }
 }
-window.reloadIndexSkippingStartup = reloadIndexSkippingStartup;
+window.retryIndexAfterConnectionError = retryIndexAfterConnectionError;
 
 function showIndexLoadErrorState() {
-  let autoRetries = 0;
-  try { autoRetries = Number(sessionStorage.getItem("mnoriaIndexLoadRetries") || 0); } catch {}
-  const willAutoRetry = autoRetries < 2;
-
   let overlay = document.getElementById("mnoria-connection-error-page");
   if (!overlay) {
     overlay = document.createElement("div");
@@ -22691,15 +22689,9 @@ function showIndexLoadErrorState() {
     '<div style="width:min(100%,340px);">' +
       '<img src="/mnoria-logo.png" alt="Mnoria" style="width:150px;max-width:60vw;height:auto;display:block;margin:0 auto 28px;">' +
       '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Le site n\'est pas accessible pour le moment</p>' +
-      '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.' +
-      (willAutoRetry ? '<br>Nouvelle tentative automatique dans quelques secondes…' : '') + '</p>' +
-      '<button type="button" class="button button-small" onclick="try{sessionStorage.removeItem(\'mnoriaIndexLoadRetries\')}catch(e){};reloadIndexSkippingStartup()">Réessayer</button>' +
+      '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.</p>' +
+      '<button type="button" class="button button-small" onclick="retryIndexAfterConnectionError()">Réessayer</button>' +
     '</div>';
-
-  if (willAutoRetry) {
-    try { sessionStorage.setItem("mnoriaIndexLoadRetries", String(autoRetries + 1)); } catch {}
-    setTimeout(reloadIndexSkippingStartup, 6000);
-  }
 }
 
 /* =========================

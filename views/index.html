@@ -13,6 +13,16 @@
         document.documentElement.classList.add('mnoria-user-refresh-startup');
       }
     } catch (_) {}
+    // Retour depuis la page "site inaccessible" (cf. retryIndexAfterConnectionError,
+    // script.js) : même le loader de démarrage reste transparent quelques frames en
+    // standalone (protection ci-dessus) — trop long dans ce cas précis, ça laissait
+    // furtivement voir la vraie page derrière. Ce marqueur pose un cache plein écran
+    // statique, sans aucune transition d'opacité, dès cette toute première image.
+    try {
+      if (new URLSearchParams(window.location.search).has('connRetry')) {
+        document.documentElement.classList.add('mnoria-conn-retry-cover');
+      }
+    } catch (_) {}
   </script>
   <script src="/no-zoom.js?v=20260603" defer></script>
 
@@ -93,6 +103,30 @@
     html,
     body {
       background: #243038;
+    }
+    /* Cache plein écran statique posé pendant le rechargement déclenché par le bouton
+       "Réessayer" de la page "site inaccessible" (cf. retryIndexAfterConnectionError,
+       script.js) : contrairement au loader de démarrage (qui reste transparent
+       quelques frames en standalone avant de se révéler, cf. règles plus bas), celui-ci
+       n'a aucune transition d'opacité — il est soit affiché, soit absent, dès le tout
+       premier paint. Retiré par JS (cf. plus bas) dès que le nouveau chargement aboutit. */
+    #mnoria-conn-retry-cover {
+      display: none;
+    }
+    html.mnoria-conn-retry-cover #mnoria-conn-retry-cover {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      align-items: center;
+      justify-content: center;
+      background: #243038;
+    }
+    #mnoria-conn-retry-cover img {
+      width: 150px;
+      max-width: 60vw;
+      height: auto;
+      display: block;
     }
     /* Filet de fond indépendant du loader : WebKit peut tronquer par intermittence
        une couche position:fixed dans les derniers pixels du viewport standalone
@@ -436,6 +470,29 @@
   } else {
     document.documentElement.classList.add('mnoria-startup-active');
   }
+})();
+</script>
+
+<div id="mnoria-conn-retry-cover">
+  <img src="/mnoria-logo.png" alt="Mnoria">
+</div>
+<script>
+(function(){
+  var cover = document.getElementById('mnoria-conn-retry-cover');
+  if (!cover || !document.documentElement.classList.contains('mnoria-conn-retry-cover')) return;
+  var removed = false;
+  function removeCover() {
+    if (removed) return;
+    removed = true;
+    if (cover.parentNode) cover.parentNode.removeChild(cover);
+  }
+  // mnoria:feed-ready est déclenché par initIndex (script.js) que le chargement
+  // réussisse ou échoue à nouveau — dans les deux cas, la suite (feed réel ou
+  // page d'erreur) est déjà dans le DOM au moment de l'événement, donc rien à
+  // attendre de plus avant de retirer ce cache.
+  window.addEventListener('mnoria:feed-ready', removeCover, { once: true });
+  // Filet de sécurité si cet événement ne survient jamais.
+  setTimeout(removeCover, 10000);
 })();
 </script>
 
@@ -1573,7 +1630,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260825-connection-error-page4" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page5" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
