@@ -5073,9 +5073,11 @@ function ensureDebateIframeParentLoadingStyles() {
 
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-title {
       color: #ffffff;
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
       font-size: 15px;
-      font-weight: 700;
-      line-height: 1.4;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1.3;
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
     }
 
@@ -5093,35 +5095,56 @@ function ensureDebateIframeParentLoadingStyles() {
       margin-top: 4px;
     }
 
+    /* Même langage que .mnoria-tech-btn/.mnoria-tech-btn-secondary (plus bas dans ce
+       fichier, cf. showIndexLoadErrorState) : Oswald, rayon 8px, remplissage plein
+       pour l'action principale, contour translucide pour l'action secondaire —
+       repris ici avec les noms de classes existants (hooks JS) plutôt que dupliqués
+       dans le balisage. */
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-actions button {
       appearance: none;
       -webkit-appearance: none;
-      border-radius: 999px;
-      padding: 9px 18px;
-      font-size: 13px;
-      font-weight: 700;
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+      letter-spacing: 0.04em;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
       transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
 
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-retry {
-      border: 1.5px solid #ffffff;
-      background: #ffffff;
-      color: #1a272f;
+      border: none;
+      background: #2c3e50;
+      color: #ffffff;
     }
 
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-retry:hover {
-      background: rgba(255, 255, 255, 0.85);
+      background: #1f2d3d;
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-retry:active {
+      background: #16212c;
     }
 
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-dismiss {
-      border: 1.5px solid rgba(255, 255, 255, 0.7);
-      background: rgba(26, 39, 47, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.08);
       color: #ffffff;
     }
 
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-dismiss:hover {
-      background: rgba(26, 39, 47, 0.8);
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-dismiss:active {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-actions button:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.5);
+      outline-offset: 2px;
     }
   `;
 
@@ -19772,7 +19795,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260817-moon-closer2').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260825-ta-memoire').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -22771,12 +22794,38 @@ function ensureMnoriaTechButtonStyles() {
     .mnoria-tech-btn:hover { background: #1f2d3d; }
     .mnoria-tech-btn:active { background: #16212c; }
     .mnoria-tech-btn:focus-visible { outline: 2px solid rgba(255,255,255,.5); outline-offset: 2px; }
+    /* Variante secondaire (action de repli type "Fermer" à côté d'un "Réessayer"
+       principal) : même police/rayon/taille, contour translucide au lieu du
+       remplissage — couleurs déjà utilisées ailleurs sur fond sombre Mnoria
+       (ex. l'ancien bouton de la page de reconnexion), pas de teinte nouvelle. */
+    .mnoria-tech-btn-secondary {
+      display: inline-block;
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      color: #fff;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mnoria-tech-btn-secondary:hover { background: rgba(255,255,255,.16); }
+    .mnoria-tech-btn-secondary:active { background: rgba(255,255,255,.22); }
+    .mnoria-tech-btn-secondary:focus-visible { outline: 2px solid rgba(255,255,255,.5); outline-offset: 2px; }
   `;
   document.head.appendChild(style);
 }
+// Appelé une fois au chargement de la page : ces classes sont désormais réutilisées
+// par plusieurs écrans techniques (cf. showDebateIframeParentLoadingOverlay plus
+// haut dans ce fichier, mon-univers.js), pas seulement par showIndexLoadErrorState
+// ci-dessous — inutile d'attendre une erreur de connexion pour les rendre
+// disponibles. Idempotent (vérifie l'ID avant d'injecter).
+ensureMnoriaTechButtonStyles();
 
 function showIndexLoadErrorState() {
-  ensureMnoriaTechButtonStyles();
   let overlay = document.getElementById("mnoria-connection-error-page");
   if (!overlay) {
     overlay = document.createElement("div");

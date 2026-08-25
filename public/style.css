@@ -26812,19 +26812,31 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
 .universe-status[hidden] {
   display: none;
 }
+/* Même langage que .mnoria-tech-btn (script.js, showIndexLoadErrorState) : Oswald,
+   remplissage plein #2c3e50, rayon 8px — plutôt qu'une pilule claire isolée du
+   reste des écrans techniques Mnoria. */
 .universe-status__retry {
   margin-top: 14px;
-  background: #eef2f6;
-  color: #1a2535;
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  background: #2c3e50;
+  color: #fff;
   border: none;
-  border-radius: 999px;
-  padding: 9px 18px;
-  font: inherit;
+  border-radius: 8px;
+  padding: 8px 12px;
   font-weight: 600;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.universe-status__retry:hover {
+  background: #1f2d3d;
+}
+.universe-status__retry:active {
+  background: #16212c;
 }
 .universe-status__retry:focus-visible {
-  outline: 2px solid #7db3ff;
+  outline: 2px solid rgba(255, 255, 255, 0.5);
   outline-offset: 2px;
 }
 

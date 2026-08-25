@@ -2213,7 +2213,12 @@ function showStatus(kind) {
     cloudEl.appendChild(message);
   } else if (kind === "error") {
     const p = document.createElement("p");
-    p.textContent = "Impossible de charger ton univers pour le moment.";
+    // Même langage typographique que le titre de l'état "vide" juste au-dessus
+    // (Oswald 600) — cohérent avec les autres écrans techniques Mnoria harmonisés
+    // (showIndexLoadErrorState, script.js) plutôt que le texte générique hérité de
+    // .universe-status.
+    p.style.cssText = "font-family:Oswald,Impact,'Arial Narrow',sans-serif;font-weight:600;letter-spacing:.01em;";
+    p.textContent = "Impossible de charger ta mémoire pour le moment.";
     const retry = document.createElement("button");
     retry.type = "button";
     retry.className = "universe-status__retry";

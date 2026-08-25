@@ -77,7 +77,7 @@
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260820-hide-weak-scores">
+  <link rel="stylesheet" href="/style.min.css?v=20260825-mnoria-status-harmonize">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link id="mnoria-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -330,17 +330,34 @@
        (location.reload) ne dépend d'aucun fichier externe. Invisible sur un
        lancement normal (l'intro se termine bien avant). Symbole en texte brut :
        Font Awesome peut ne pas être chargé dans ce scénario de panne réseau. */
+    /* Même langage que .mnoria-tech-btn (script.js, showIndexLoadErrorState) : Oswald,
+       remplissage plein, rayon 8px — au lieu d'une pilule contour isolée du reste
+       des écrans techniques Mnoria. Oswald est déjà chargée en synchrone plus haut
+       dans ce <head>, donc disponible même dans ce scénario de panne réseau. */
     .mnoria-startup-retry-btn {
       display: none;
       margin: 26px auto 0;
-      padding: 10px 24px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      background: rgba(255, 255, 255, 0.08);
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+      letter-spacing: 0.04em;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      background: #2c3e50;
       color: #ffffff;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mnoria-startup-retry-btn:hover {
+      background: #1f2d3d;
+    }
+    .mnoria-startup-retry-btn:active {
+      background: #16212c;
+    }
+    .mnoria-startup-retry-btn:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.5);
+      outline-offset: 2px;
     }
     html.mnoria-startup-stuck .mnoria-startup-retry-btn {
       display: inline-block;
@@ -1675,7 +1692,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260825-connection-error-page21" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page23" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
