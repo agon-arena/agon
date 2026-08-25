@@ -122,11 +122,18 @@
        son bord HAUT (position:absolute + top:50dvh), repère indépendant de ce
        débordement — au lieu d'un centrage flex qui, lui, suivrait la hauteur
        (volontairement excessive) de la boîte.
-       dvh (et non lvh) : sur un simple onglet Safari, tant que l'utilisateur n'a pas
-       scrollé, la barre d'outils reste dépliée en permanence (pas juste le temps de
-       quelques frames) — ancrer sur le GRAND viewport (lvh) plaçait alors le logo
-       durablement trop bas par rapport à la zone réellement visible. dvh suit en
-       continu la zone visible actuelle, replié en 50vh pour les anciens WebKit. */
+       dvh (et non lvh) par défaut : sur un simple onglet Safari, tant que
+       l'utilisateur n'a pas scrollé, la barre d'outils reste dépliée en permanence
+       (pas juste le temps de quelques frames) — ancrer sur le GRAND viewport (lvh)
+       plaçait alors le logo durablement trop bas par rapport à la zone réellement
+       visible. dvh suit en continu la zone visible actuelle, replié en 50vh pour
+       les anciens WebKit.
+       En PWA standalone en revanche (règle plus bas), c'est l'inverse : le viewport
+       grandit réellement pendant les toutes premières frames après le lancement (cf.
+       .mnoria-startup-loader-inner plus bas), et dvh suit ce changement en direct —
+       le logo apparaît alors seul un instant puis remonte légèrement pendant que le
+       viewport se stabilise. lvh (figé dès la première frame sur la valeur finale,
+       grande) évite ce petit saut, spécifiquement dans ce contexte-là. */
     html.mnoria-conn-retry-cover #mnoria-conn-retry-cover {
       display: block;
       position: fixed;
@@ -149,6 +156,12 @@
       max-width: 60vw;
       height: auto;
       display: block;
+    }
+    @media (display-mode: standalone) {
+      html.mnoria-conn-retry-cover #mnoria-conn-retry-cover img {
+        top: 50vh;
+        top: 50lvh;
+      }
     }
     /* Filet de fond indépendant du loader : WebKit peut tronquer par intermittence
        une couche position:fixed dans les derniers pixels du viewport standalone
@@ -1652,7 +1665,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260825-connection-error-page11" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page13" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

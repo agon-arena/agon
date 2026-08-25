@@ -565,7 +565,7 @@ function showMnoriaStartupBeforeRefresh() {
 // (cf. forceFullPageRefresh et retryIndexAfterConnectionError plus bas) : sans cette
 // marge, elle le couperait net après quelques dizaines de ms.
 const MNORIA_STARTUP_GONG_SOUND_URL = "/mnoria-startup-gong.mp3";
-const MNORIA_STARTUP_GONG_SOUND_DURATION_MS = 3400;
+const MNORIA_STARTUP_GONG_SOUND_DURATION_MS = 4650;
 function playMnoriaStartupGongSound() {
   try {
     const audio = new Audio(MNORIA_STARTUP_GONG_SOUND_URL);
@@ -573,6 +573,24 @@ function playMnoriaStartupGongSound() {
     audio.play().catch(() => {});
   } catch (error) {}
 }
+
+// Rafraîchissement natif (bouton recharger du navigateur, pull-to-refresh, Cmd+R/F5) :
+// aucun clic ne passe par forceFullPageRefresh/retryIndexAfterConnectionError dans ce
+// cas, donc le son n'a pas encore été joué à ce stade. PerformanceNavigationTiming
+// distingue ce type de navigation ("reload") d'un chargement classique ("navigate") —
+// nos propres rechargements via location.replace(...) (boutons Actualiser/Réessayer)
+// sont eux classés "navigate", donc pas de double lecture pour ces cas déjà couverts
+// au clic. Tentative best-effort : sans clic sur CETTE page, le navigateur peut bloquer
+// l'autoplay (silencieux, sans erreur) tant qu'il n'a pas encore accordé cette
+// permission au site (heuristique d'engagement propre à chaque navigateur).
+(function playGongOnNativeReload() {
+  try {
+    const navEntry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+    if (navEntry && navEntry.type === "reload") {
+      playMnoriaStartupGongSound();
+    }
+  } catch (error) {}
+})();
 
 function forceFullPageRefresh() {
   playMnoriaStartupGongSound();
@@ -22708,11 +22726,16 @@ function showIndexLoadErrorState() {
     // navigation "Ma mémoire/Actualités/Communauté" normalement dessous. Le contenu
     // est donc centré via son propre bloc (position:absolute + top:50dvh, ancré
     // depuis le bord haut réel), pas via un centrage flex de cette boîte qui, lui,
-    // suivrait sa hauteur volontairement excessive. dvh et non lvh : sur un simple
-    // onglet Safari, tant que l'utilisateur n'a pas scrollé, la barre d'outils reste
-    // dépliée en permanence — ancrer sur le grand viewport (lvh) plaçait alors le
-    // contenu durablement trop bas par rapport à la zone réellement visible. dvh
-    // suit en continu la zone visible actuelle.
+    // suivrait sa hauteur volontairement excessive. dvh et non lvh par défaut : sur
+    // un simple onglet Safari, tant que l'utilisateur n'a pas scrollé, la barre
+    // d'outils reste dépliée en permanence — ancrer sur le grand viewport (lvh)
+    // plaçait alors le contenu durablement trop bas par rapport à la zone réellement
+    // visible. dvh suit en continu la zone visible actuelle. En PWA standalone c'est
+    // l'inverse (cf. mnoriaViewportCenterUnit plus bas) : le viewport grandit
+    // réellement pendant les toutes premières frames après le lancement, et dvh
+    // suivrait ce changement en direct — logo affiché seul un instant, qui remonte
+    // légèrement pendant que le viewport se stabilise. lvh (figé dès la première
+    // frame) évite ce petit saut dans ce contexte-là.
     overlay.style.cssText =
       "position:fixed;top:0;left:0;right:0;" +
       "bottom:calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));" +
@@ -22720,8 +22743,9 @@ function showIndexLoadErrorState() {
       "box-sizing:border-box;z-index:99997;background:#243038;";
     document.body.appendChild(overlay);
   }
+  const mnoriaViewportCenterUnit = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ? "lvh" : "dvh";
   overlay.innerHTML =
-    '<div style="position:absolute;left:50%;top:50vh;top:50dvh;transform:translate(-50%,-50%);' +
+    '<div style="position:absolute;left:50%;top:50vh;top:50' + mnoriaViewportCenterUnit + ';transform:translate(-50%,-50%);' +
       'width:min(88vw,340px);box-sizing:border-box;text-align:center;">' +
       '<img src="/mnoria-logo.png" alt="Mnoria" style="width:140px;max-width:55vw;height:auto;display:block;margin:0 auto 20px;">' +
       '<img src="/mnoria-error-robot.png" alt="" style="width:110px;max-width:42vw;height:auto;display:block;margin:0 auto 20px;">' +
