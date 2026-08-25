@@ -557,7 +557,25 @@ function showMnoriaStartupBeforeRefresh() {
   return true;
 }
 
+// Son de corde pincée, grave, joué au clic sur "Actualiser"/"Réessayer" : c'est le seul
+// moment où un son est garanti audible (un vrai geste utilisateur vient d'avoir lieu) —
+// à l'entrée normale sur le site ou au lancement de la PWA, aucun clic ne précède
+// l'animation, donc les navigateurs bloquent l'autoplay (silencieux, sans erreur, pas un
+// bug). La navigation qui suit ce clic est volontairement retardée de la durée du son
+// (cf. forceFullPageRefresh et retryIndexAfterConnectionError plus bas) : sans cette
+// marge, elle le couperait net après quelques dizaines de ms.
+const MNORIA_STARTUP_PLUCK_SOUND_URL = "/mnoria-startup-pluck.mp3";
+const MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS = 2600;
+function playMnoriaStartupPluckSound() {
+  try {
+    const audio = new Audio(MNORIA_STARTUP_PLUCK_SOUND_URL);
+    audio.volume = 0.7;
+    audio.play().catch(() => {});
+  } catch (error) {}
+}
+
 function forceFullPageRefresh() {
+  playMnoriaStartupPluckSound();
   const startupShown = showMnoriaStartupBeforeRefresh();
   const navigate = function() {
     try {
@@ -570,16 +588,16 @@ function forceFullPageRefresh() {
   };
 
   if (!startupShown) {
-    navigate();
+    window.setTimeout(navigate, MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS);
     return;
   }
 
   // Le loader est ajouté synchroniquement au clic. Deux frames garantissent
-  // sa composition par WebKit ; la courte marge suivante conserve la bande
-  // basse masquée avant la navigation, sans afficher un écran bleu séparé.
+  // sa composition par WebKit ; la marge suivante conserve la bande basse
+  // masquée avant la navigation, et laisse le son de corde pincée se jouer.
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
-      window.setTimeout(navigate, 80);
+      window.setTimeout(navigate, MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS);
     });
   });
 }
@@ -22664,14 +22682,17 @@ async function initIndex() {
 // première image de la page suivante — retiré dès que ce nouveau chargement
 // aboutit, succès ou nouvel échec.
 function retryIndexAfterConnectionError() {
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.set("_swrefresh", "1");
-    url.searchParams.set("connRetry", "1");
-    window.location.replace(url.toString());
-  } catch {
-    window.location.reload();
-  }
+  playMnoriaStartupPluckSound();
+  window.setTimeout(function() {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("_swrefresh", "1");
+      url.searchParams.set("connRetry", "1");
+      window.location.replace(url.toString());
+    } catch {
+      window.location.reload();
+    }
+  }, MNORIA_STARTUP_PLUCK_SOUND_DURATION_MS);
 }
 window.retryIndexAfterConnectionError = retryIndexAfterConnectionError;
 
@@ -22685,9 +22706,13 @@ function showIndexLoadErrorState() {
     // débordement, WebKit peut ne pas peindre par intermittence les tout derniers
     // pixels du bas de cette couche fixed en standalone, laissant passer la barre de
     // navigation "Ma mémoire/Actualités/Communauté" normalement dessous. Le contenu
-    // est donc centré via son propre bloc (position:absolute + top:50lvh, repère
-    // stable depuis le bord haut réel), pas via un centrage flex de cette boîte qui,
-    // lui, suivrait sa hauteur volontairement excessive.
+    // est donc centré via son propre bloc (position:absolute + top:50dvh, ancré
+    // depuis le bord haut réel), pas via un centrage flex de cette boîte qui, lui,
+    // suivrait sa hauteur volontairement excessive. dvh et non lvh : sur un simple
+    // onglet Safari, tant que l'utilisateur n'a pas scrollé, la barre d'outils reste
+    // dépliée en permanence — ancrer sur le grand viewport (lvh) plaçait alors le
+    // contenu durablement trop bas par rapport à la zone réellement visible. dvh
+    // suit en continu la zone visible actuelle.
     overlay.style.cssText =
       "position:fixed;top:0;left:0;right:0;" +
       "bottom:calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));" +
@@ -22696,7 +22721,7 @@ function showIndexLoadErrorState() {
     document.body.appendChild(overlay);
   }
   overlay.innerHTML =
-    '<div style="position:absolute;left:50%;top:50vh;top:50lvh;transform:translate(-50%,-50%);' +
+    '<div style="position:absolute;left:50%;top:50vh;top:50dvh;transform:translate(-50%,-50%);' +
       'width:min(88vw,340px);box-sizing:border-box;text-align:center;">' +
       '<img src="/mnoria-logo.png" alt="Mnoria" style="width:140px;max-width:55vw;height:auto;display:block;margin:0 auto 20px;">' +
       '<img src="/mnoria-error-robot.png" alt="" style="width:110px;max-width:42vw;height:auto;display:block;margin:0 auto 20px;">' +

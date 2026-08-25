@@ -113,18 +113,20 @@
     #mnoria-conn-retry-cover {
       display: none;
     }
-    /* Même construction que .mnoria-startup-loader/-inner plus bas, pour les deux mêmes
-       raisons : 1) position:fixed + inset:0/hauteur=100% se dimensionne sur le PETIT
-       viewport (barre d'outils dépliée) alors que lvh désigne le GRAND viewport — un
-       centrage flex dans une boîte ainsi dimensionnée plaçait le logo trop bas tant que
-       la barre n'était pas stabilisée ; 2) WebKit peut ne pas peindre par intermittence
-       une couche position:fixed dans les tout derniers pixels du bas en standalone,
-       laissant passer la barre de navigation "Ma mémoire/Actualités/Communauté"
-       normalement dessous. On fait donc déborder volontairement la boîte sous le bas
-       réel de l'écran (bottom négatif + padding-bottom compensé), et on ancre le logo
-       depuis son bord HAUT (position:absolute + top:50lvh), repère stable et
-       indépendant de ce débordement — au lieu d'un centrage flex qui, lui, suivrait la
-       hauteur (volontairement excessive) de la boîte. */
+    /* Même construction que .mnoria-startup-loader/-inner plus bas, pour la même
+       raison de fond : WebKit peut ne pas peindre par intermittence une couche
+       position:fixed dans les tout derniers pixels du bas en standalone, laissant
+       passer la barre de navigation "Ma mémoire/Actualités/Communauté" normalement
+       dessous. On fait donc déborder volontairement la boîte sous le bas réel de
+       l'écran (bottom négatif + padding-bottom compensé), et on ancre le logo depuis
+       son bord HAUT (position:absolute + top:50dvh), repère indépendant de ce
+       débordement — au lieu d'un centrage flex qui, lui, suivrait la hauteur
+       (volontairement excessive) de la boîte.
+       dvh (et non lvh) : sur un simple onglet Safari, tant que l'utilisateur n'a pas
+       scrollé, la barre d'outils reste dépliée en permanence (pas juste le temps de
+       quelques frames) — ancrer sur le GRAND viewport (lvh) plaçait alors le logo
+       durablement trop bas par rapport à la zone réellement visible. dvh suit en
+       continu la zone visible actuelle, replié en 50vh pour les anciens WebKit. */
     html.mnoria-conn-retry-cover #mnoria-conn-retry-cover {
       display: block;
       position: fixed;
@@ -141,7 +143,7 @@
       position: absolute;
       left: 50%;
       top: 50vh;
-      top: 50lvh;
+      top: 50dvh;
       transform: translate(-50%, -50%);
       width: 150px;
       max-width: 60vw;
@@ -1650,7 +1652,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260825-connection-error-page8" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page10" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
