@@ -113,39 +113,40 @@
     #mnoria-conn-retry-cover {
       display: none;
     }
+    /* Même construction que .mnoria-startup-loader/-inner plus bas, pour les deux mêmes
+       raisons : 1) position:fixed + inset:0/hauteur=100% se dimensionne sur le PETIT
+       viewport (barre d'outils dépliée) alors que lvh désigne le GRAND viewport — un
+       centrage flex dans une boîte ainsi dimensionnée plaçait le logo trop bas tant que
+       la barre n'était pas stabilisée ; 2) WebKit peut ne pas peindre par intermittence
+       une couche position:fixed dans les tout derniers pixels du bas en standalone,
+       laissant passer la barre de navigation "Ma mémoire/Actualités/Communauté"
+       normalement dessous. On fait donc déborder volontairement la boîte sous le bas
+       réel de l'écran (bottom négatif + padding-bottom compensé), et on ancre le logo
+       depuis son bord HAUT (position:absolute + top:50lvh), repère stable et
+       indépendant de ce débordement — au lieu d'un centrage flex qui, lui, suivrait la
+       hauteur (volontairement excessive) de la boîte. */
     html.mnoria-conn-retry-cover #mnoria-conn-retry-cover {
-      display: flex;
+      display: block;
       position: fixed;
-      inset: 0;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
+      padding-bottom: calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
+      box-sizing: border-box;
       z-index: 100000;
-      align-items: center;
-      justify-content: center;
       background: #243038;
     }
-    #mnoria-conn-retry-cover img {
+    html.mnoria-conn-retry-cover #mnoria-conn-retry-cover img {
+      position: absolute;
+      left: 50%;
+      top: 50vh;
+      top: 50lvh;
+      transform: translate(-50%, -50%);
       width: 150px;
       max-width: 60vw;
       height: auto;
       display: block;
-    }
-    /* Au lancement sur mobile (PWA standalone ou simple onglet navigateur), le viewport
-       visuel peut grandir/rétrécir pendant les toutes premières frames (barre
-       d'adresse/outils qui se stabilise) : un centrage flex dans ce position:fixed le
-       suit en direct, donc le logo apparaît d'abord décalé puis saute à sa place
-       définitive. Même parade que .mnoria-startup-loader-inner plus bas : ancré sur le
-       grand viewport (lvh, stable dès le premier rendu) au lieu du viewport courant.
-       50vh reste le repli pour les anciens WebKit sans unité lvh. */
-    @media (max-width: 768px) {
-      html.mnoria-conn-retry-cover #mnoria-conn-retry-cover {
-        display: block;
-      }
-      html.mnoria-conn-retry-cover #mnoria-conn-retry-cover img {
-        position: absolute;
-        left: 50%;
-        top: 50vh;
-        top: 50lvh;
-        transform: translate(-50%, -50%);
-      }
     }
     /* Filet de fond indépendant du loader : WebKit peut tronquer par intermittence
        une couche position:fixed dans les derniers pixels du viewport standalone
@@ -1649,7 +1650,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260825-connection-error-page6" defer></script>
+<script src="/script.min.js?v=20260825-connection-error-page8" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

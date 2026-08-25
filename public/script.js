@@ -22680,15 +22680,26 @@ function showIndexLoadErrorState() {
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.id = "mnoria-connection-error-page";
+    // Boîte volontairement plus haute que l'écran (bottom négatif + padding-bottom
+    // compensé, même construction que .mnoria-startup-loader, index.html) : sans ce
+    // débordement, WebKit peut ne pas peindre par intermittence les tout derniers
+    // pixels du bas de cette couche fixed en standalone, laissant passer la barre de
+    // navigation "Ma mémoire/Actualités/Communauté" normalement dessous. Le contenu
+    // est donc centré via son propre bloc (position:absolute + top:50lvh, repère
+    // stable depuis le bord haut réel), pas via un centrage flex de cette boîte qui,
+    // lui, suivrait sa hauteur volontairement excessive.
     overlay.style.cssText =
-      "position:fixed;inset:0;z-index:99997;display:flex;align-items:center;justify-content:center;" +
-      "padding:24px;box-sizing:border-box;background:#243038;text-align:center;";
+      "position:fixed;top:0;left:0;right:0;" +
+      "bottom:calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));" +
+      "padding-bottom:calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);" +
+      "box-sizing:border-box;z-index:99997;background:#243038;";
     document.body.appendChild(overlay);
   }
   overlay.innerHTML =
-    '<div style="width:min(100%,340px);">' +
-      '<img src="/mnoria-logo.png" alt="Mnoria" style="width:84px;max-width:40vw;height:auto;display:block;margin:0 auto 16px;">' +
-      '<img src="/mnoria-error-robot.png" alt="" style="width:120px;max-width:45vw;height:auto;display:block;margin:0 auto 20px;">' +
+    '<div style="position:absolute;left:50%;top:50vh;top:50lvh;transform:translate(-50%,-50%);' +
+      'width:min(88vw,340px);box-sizing:border-box;text-align:center;">' +
+      '<img src="/mnoria-logo.png" alt="Mnoria" style="width:140px;max-width:55vw;height:auto;display:block;margin:0 auto 20px;">' +
+      '<img src="/mnoria-error-robot.png" alt="" style="width:110px;max-width:42vw;height:auto;display:block;margin:0 auto 20px;">' +
       '<p style="margin:0 0 10px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:19px;font-weight:600;color:#fff;line-height:1.3;">Le site n\'est pas accessible pour le moment</p>' +
       '<p style="margin:0 0 22px;font-size:14px;color:rgba(255,255,255,.68);line-height:1.5;">Le contenu n\'a pas pu être chargé. Réessaie dans un instant.</p>' +
       '<button type="button" class="button button-small" onclick="retryIndexAfterConnectionError()">Réessayer</button>' +
