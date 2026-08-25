@@ -22652,13 +22652,20 @@ async function initIndex() {
 // pas juste ce contenu. Deux rechargements auto max (compteur sessionStorage,
 // remis à zéro dès qu'un chargement réussit) ; au-delà, il reste le bouton
 // Réessayer.
-// Recharge sans rejouer l'animation de démarrage (logo + "Cultive ton esprit") : on est déjà
-// sur la page d'erreur plein écran, la rejouer donnerait l'impression que tout redémarre depuis
-// zéro. Même paramètre ?skipStartup=1 que closeDebateIframeModal (script.js) pour couper l'intro.
+// Recharge en réutilisant forceFullPageRefresh (bouton "Actualiser", plus haut dans ce fichier) :
+// ?skipStartup=1 retirait complètement le loader de démarrage, ce qui laissait voir furtivement
+// la vraie page (header, feed) avant que l'échec ne redéclenche cette page d'erreur. _swrefresh
+// garde au contraire le loader affiché en continu pendant tout le rechargement (aucun flash) et,
+// via mnoria-user-refresh-startup, affiche le logo directement à son état final sans rejouer
+// l'animation du texte "Cultive ton esprit" (même logique que le bouton Actualiser normal).
 function reloadIndexSkippingStartup() {
+  if (typeof window.forceFullPageRefresh === "function") {
+    window.forceFullPageRefresh();
+    return;
+  }
   try {
     const url = new URL(window.location.href);
-    url.searchParams.set("skipStartup", "1");
+    url.searchParams.set("_swrefresh", "1");
     window.location.replace(url.toString());
   } catch {
     window.location.reload();
