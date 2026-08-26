@@ -15514,7 +15514,39 @@ const ECLAIRAGES_TABLES = [
   "oeuvre_art_du_jour"
 ];
 
+// Mémoïsée par dateKey (audit egress du 26/08/2026) : les 7 rubriques Éclairages
+// (citation/concept/mécanisme/œuvre d'art/parallèle/pensée/latin) appellent chacune
+// getPublishedTopicsForDate → cette fonction indépendamment pendant la même passe du
+// scheduler (certaines même deux fois, cf. leurs propres retry internes) — jusqu'à
+// 7 lectures ×7 tables (6 rubriques + debates) = 49 requêtes Supabase répétant très
+// exactement le même calcul pour le même dateKey. Constaté en prod le 26/08/2026 :
+// une rafale de 25+ requêtes quasi identiques en ~1 s. Vu depuis l'extérieur, c'est
+// le même anti-dogpile que debatesApiInFlight/latestDebatesMetaInFlight plus haut
+// dans ce fichier : une seule lecture réelle partagée par dateKey, TTL court (les
+// rubriques d'une même passe se succèdent en quelques secondes/minutes, jamais 5 min).
+const eclairagesRecentTopicKeysCache = new Map();
+const eclairagesRecentTopicKeysInFlight = new Map();
+const ECLAIRAGES_RECENT_TOPIC_KEYS_CACHE_TTL_MS = 5 * 60 * 1000;
+
 async function getRecentlyCoveredEclairagesTopicKeys(dateKey) {
+  const cached = eclairagesRecentTopicKeysCache.get(dateKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  if (!eclairagesRecentTopicKeysInFlight.has(dateKey)) {
+    eclairagesRecentTopicKeysInFlight.set(
+      dateKey,
+      getRecentlyCoveredEclairagesTopicKeysUncached(dateKey)
+        .then((value) => {
+          eclairagesRecentTopicKeysCache.set(dateKey, { value, expiresAt: Date.now() + ECLAIRAGES_RECENT_TOPIC_KEYS_CACHE_TTL_MS });
+          return value;
+        })
+        .finally(() => eclairagesRecentTopicKeysInFlight.delete(dateKey))
+    );
+  }
+  return eclairagesRecentTopicKeysInFlight.get(dateKey);
+}
+
+async function getRecentlyCoveredEclairagesTopicKeysUncached(dateKey) {
   const startDateKey = shiftDateKeyDays(dateKey, -ECLAIRAGES_LOOKBACK_DAYS);
   const recentIds = new Set();
   for (const table of ECLAIRAGES_TABLES) {
