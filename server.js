@@ -18115,6 +18115,21 @@ const CULTURE_GENERALE_DOMAIN_GALAXIES = {
 // solars de départ (ex. "Préhistoire", "Philosophie politique") encore
 // 'unknown' malgré leur pré-création.
 async function ensureCultureGeneraleSeedSolarSystems() {
+  // Court-circuit egress (audit du 26/08/2026) : cette fonction tournait en entier — ~250
+  // lectures (une par nom, cf. resolveOrCreateSolarSystem) + ~20 UPDATE (un par galaxie) —
+  // à CHAQUE démarrage du process, sans aucune garde, alors qu'elle est censée être un
+  // one-shot. Une fois tous les solars de départ créés en taxonomy_scope='knowledge', un
+  // simple COUNT suffit à savoir qu'il n'y a plus rien à faire ; on ne retombe dans la
+  // double boucle complète que si ce compte est encore insuffisant (première exécution,
+  // ou nouveaux noms ajoutés à CULTURE_GENERALE_SEED_SOLAR_SYSTEMS depuis).
+  const totalExpected = Object.values(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)
+    .reduce((sum, names) => sum + names.length, 0);
+  const { count, error: countError } = await supabase
+    .from("solar_systems")
+    .select("id", { count: "exact", head: true })
+    .eq("taxonomy_scope", "knowledge");
+  if (!countError && (count || 0) >= totalExpected) return;
+
   for (const [galaxy, names] of Object.entries(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)) {
     for (const name of names) {
       await resolveOrCreateSolarSystem(galaxy, name, normalizeSolarSystemName(name), { taxonomyScope: "knowledge" });
