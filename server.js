@@ -15607,7 +15607,36 @@ function extractDebateContentLatinMotto(content) {
   return motto;
 }
 
+// Mémoïsée par dateKey (audit egress du 26/08/2026, suite du correctif sur
+// getRecentlyCoveredEclairagesTopicKeys) : ce correctif-là ne couvrait que la moitié du
+// problème — la requête "pool d'arènes admin du jour" ci-dessous (limit 80, colonnes
+// complètes dont content/media_extras) est elle aussi rejouée à l'identique par chacune
+// des 7 rubriques Éclairages pendant la même passe du scheduler. Constaté en prod : 6
+// requêtes debates identiques à la même seconde (12:59:30). Même pattern anti-dogpile
+// que juste au-dessus.
+const publishedTopicsForDateCache = new Map();
+const publishedTopicsForDateInFlight = new Map();
+const PUBLISHED_TOPICS_FOR_DATE_CACHE_TTL_MS = 5 * 60 * 1000;
+
 async function getPublishedTopicsForDate(dateKey) {
+  const cached = publishedTopicsForDateCache.get(dateKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  if (!publishedTopicsForDateInFlight.has(dateKey)) {
+    publishedTopicsForDateInFlight.set(
+      dateKey,
+      getPublishedTopicsForDateUncached(dateKey)
+        .then((value) => {
+          publishedTopicsForDateCache.set(dateKey, { value, expiresAt: Date.now() + PUBLISHED_TOPICS_FOR_DATE_CACHE_TTL_MS });
+          return value;
+        })
+        .finally(() => publishedTopicsForDateInFlight.delete(dateKey))
+    );
+  }
+  return publishedTopicsForDateInFlight.get(dateKey);
+}
+
+async function getPublishedTopicsForDateUncached(dateKey) {
   const cutoff = parisStartOfDayIso(new Date(`${dateKey}T12:00:00Z`));
   const nextDayCutoff = new Date(new Date(cutoff).getTime() + 24 * 60 * 60 * 1000).toISOString();
 
