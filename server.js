@@ -16121,19 +16121,49 @@ async function ensureDailyEclairagesPublished(date = new Date()) {
   return { date: dateKey, published };
 }
 
+// Mémoïsé par dateKey (audit egress du 26/08/2026) : /api/eclairages/status est pollée
+// toutes les 60s par CHAQUE visiteur qui laisse l'accueil ouvert (cf. refreshEclairagesAvailability
+// dans index.html), sans jamais s'arrêter tant que les 7 rubriques ne sont pas publiées — donc
+// potentiellement toute une journée entière si le bot de veille n'a rien publié. Sans cache,
+// chaque poll relisait les 7 tables à chaque appel, pour chaque visiteur. Même pattern
+// anti-dogpile que les autres caches de ce fichier, TTL aligné sur l'intervalle de poll (60s) :
+// un poll sur deux au pire tombe sur un cache chaud, jamais plus d'une lecture réelle par minute
+// au total quel que soit le nombre de visiteurs simultanés.
+const eclairagesStatusCache = new Map();
+const eclairagesStatusInFlight = new Map();
+const ECLAIRAGES_STATUS_CACHE_TTL_MS = 60 * 1000;
+
 async function getDailyEclairagesPublicationStatus(date = new Date()) {
   const dateKey = parisDateKey(date);
-  const results = await Promise.all(
-    DAILY_ECLAIRAGES_PUBLICATION_SERVICES.map(async ([name, service]) => {
-      const result = await service.getByDate(dateKey);
-      return { name, status: result?.status || "not_found" };
-    })
-  );
-  return {
-    date: dateKey,
-    available: results.every((item) => item.status === "published"),
-    sections: results
-  };
+
+  const cached = eclairagesStatusCache.get(dateKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  if (!eclairagesStatusInFlight.has(dateKey)) {
+    eclairagesStatusInFlight.set(
+      dateKey,
+      (async () => {
+        const results = await Promise.all(
+          DAILY_ECLAIRAGES_PUBLICATION_SERVICES.map(async ([name, service]) => {
+            const result = await service.getByDate(dateKey);
+            return { name, status: result?.status || "not_found" };
+          })
+        );
+        const value = {
+          date: dateKey,
+          available: results.every((item) => item.status === "published"),
+          sections: results
+        };
+        // Une fois "available", le statut ne peut plus redevenir faux avant demain (les
+        // rubriques publiées ne sont jamais dépubliées) : cache plus long pour ne plus jamais
+        // relire une fois le résultat définitif atteint pour la journée.
+        const ttl = value.available ? 30 * 60 * 1000 : ECLAIRAGES_STATUS_CACHE_TTL_MS;
+        eclairagesStatusCache.set(dateKey, { value, expiresAt: Date.now() + ttl });
+        return value;
+      })().finally(() => eclairagesStatusInFlight.delete(dateKey))
+    );
+  }
+  return eclairagesStatusInFlight.get(dateKey);
 }
 
 // Interrupteur indépendant (mêmes règles que ci-dessus) pour le parallèle
