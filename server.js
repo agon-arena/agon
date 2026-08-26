@@ -146,17 +146,63 @@ function isTransientSupabaseNetworkError(error) {
   const text = `${cause?.code || ""} ${cause?.message || ""} ${error?.message || ""}`;
   return /ECONNRESET|ECONNREFUSED|EPIPE|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|socket hang up|other side closed/i.test(text);
 }
+// Traqueur d'egress Supabase (audit du 26/08/2026) : seul point de passage de TOUS les
+// appels REST + Storage du serveur vers Supabase (le client est configuré avec ce fetch
+// custom, cf. plus bas), donc l'endroit le plus fiable pour mesurer les octets réels — bien
+// plus fiable qu'auditer le code route par route à la main comme on l'a fait ce jour-là.
+// En mémoire seule (repart à zéro à chaque redémarrage) : c'est volontaire, l'usage visé est
+// "est-ce que le correctif que je viens de déployer a fait baisser le trafic depuis", pas un
+// cumul mensuel (pour ça, cf. Dashboard Supabase → Organisation → Usage).
+const supabaseEgressStats = {
+  since: Date.now(),
+  totalRequests: 0,
+  totalBytes: 0,
+  byKey: new Map() // `${method} ${table}` -> { requests, bytes }
+};
+function extractSupabaseEgressStatsKey(url, method) {
+  try {
+    const pathname = new URL(url).pathname;
+    const restMatch = pathname.match(/^\/rest\/v1\/([^/?]+)/);
+    if (restMatch) return `${method} rest:${restMatch[1]}`;
+    if (pathname.startsWith("/storage/")) return `${method} storage`;
+    if (pathname.startsWith("/auth/")) return `${method} auth`;
+    if (pathname.startsWith("/rest-admin/") || pathname.startsWith("/admin/")) return `${method} mgmt`;
+    return `${method} ${pathname}`;
+  } catch {
+    return `${method} unknown`;
+  }
+}
+function recordSupabaseEgress(url, method, response) {
+  // .clone() : lit une copie du flux, sans jamais toucher au corps que supabase-js va lire
+  // juste après — c'est le seul moyen d'obtenir la taille RÉELLE (le header Content-Length
+  // est souvent absent en réponse chunked). Volontairement non-awaité : ne doit jamais
+  // ralentir la requête réelle, seule la mesure peut arriver après coup.
+  try {
+    response.clone().arrayBuffer().then((buf) => {
+      const key = extractSupabaseEgressStatsKey(url, method);
+      supabaseEgressStats.totalRequests += 1;
+      supabaseEgressStats.totalBytes += buf.byteLength;
+      const entry = supabaseEgressStats.byKey.get(key) || { requests: 0, bytes: 0 };
+      entry.requests += 1;
+      entry.bytes += buf.byteLength;
+      supabaseEgressStats.byKey.set(key, entry);
+    }).catch(() => {});
+  } catch {}
+}
+
 async function supabaseFetchWithTimeout(input, init = {}) {
   const url = typeof input === "string" ? input : String(input?.url || "");
   const timeoutMs = url.includes("/storage/v1/") ? SUPABASE_STORAGE_TIMEOUT_MS : SUPABASE_DB_TIMEOUT_MS;
   const method = String(init.method || input?.method || "GET").toUpperCase();
-  const doFetch = () => {
+  const doFetch = async () => {
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     // AbortSignal.any : Node ≥ 20.3. À défaut, on préserve le signal appelant.
     const signal = init.signal
       ? (typeof AbortSignal.any === "function" ? AbortSignal.any([init.signal, timeoutSignal]) : init.signal)
       : timeoutSignal;
-    return fetch(input, { ...init, signal });
+    const response = await fetch(input, { ...init, signal });
+    recordSupabaseEgress(url, method, response);
+    return response;
   };
   try {
     return await doFetch();
@@ -175,6 +221,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
   global: { fetch: supabaseFetchWithTimeout }
 });
+
+// Résumé periodique dans les logs (visibles sans auth admin, ex. `pm2 logs` / Render logs) :
+// top des tables par octets transférés depuis le dernier redémarrage. Complète
+// /api/admin/egress-stats pour un suivi passif sans avoir à interroger l'API.
+setInterval(() => {
+  if (supabaseEgressStats.totalRequests === 0) return;
+  const top = [...supabaseEgressStats.byKey.entries()]
+    .sort((a, b) => b[1].bytes - a[1].bytes)
+    .slice(0, 5)
+    .map(([key, v]) => `${key}=${(v.bytes / 1024 / 1024).toFixed(2)}Mo/${v.requests}req`)
+    .join(", ");
+  console.log(`[egress-stats] total=${(supabaseEgressStats.totalBytes / 1024 / 1024).toFixed(2)}Mo (${supabaseEgressStats.totalRequests} req) depuis ${new Date(supabaseEgressStats.since).toISOString()} — top: ${top}`);
+}, 15 * 60 * 1000).unref();
 
 // Filet de sécurité : une coupure réseau/DNS ponctuelle vers Supabase (ex. getaddrinfo
 // ENOTFOUND) qui échappe à un try/catch dans une route async fait planter tout le
@@ -6316,6 +6375,34 @@ function buildAdminTagOccurrenceStats(debates = [], cloudData = { bubbles: [] })
     tags
   };
 }
+
+// Traqueur d'egress (cf. supabaseEgressStats plus haut) : donne, table par table, le
+// nombre de requêtes et les octets réellement transférés depuis le dernier redémarrage
+// (ou le dernier reset manuel) — sert à vérifier concrètement qu'un correctif fait bien
+// baisser le trafic, plutôt que de le supposer après lecture du code.
+app.get("/api/admin/egress-stats", requireAdmin, (req, res) => {
+  const byKey = [...supabaseEgressStats.byKey.entries()]
+    .map(([key, v]) => ({ key, requests: v.requests, bytes: v.bytes, mb: +(v.bytes / 1024 / 1024).toFixed(3) }))
+    .sort((a, b) => b.bytes - a.bytes);
+  const elapsedMinutes = Math.max(1, Math.round((Date.now() - supabaseEgressStats.since) / 60000));
+  res.json({
+    since: new Date(supabaseEgressStats.since).toISOString(),
+    elapsedMinutes,
+    totalRequests: supabaseEgressStats.totalRequests,
+    totalBytes: supabaseEgressStats.totalBytes,
+    totalMB: +(supabaseEgressStats.totalBytes / 1024 / 1024).toFixed(3),
+    mbPerHour: +((supabaseEgressStats.totalBytes / 1024 / 1024) / (elapsedMinutes / 60)).toFixed(3),
+    byKey
+  });
+});
+
+app.post("/api/admin/egress-stats/reset", requireAdmin, (req, res) => {
+  supabaseEgressStats.since = Date.now();
+  supabaseEgressStats.totalRequests = 0;
+  supabaseEgressStats.totalBytes = 0;
+  supabaseEgressStats.byKey.clear();
+  res.json({ ok: true });
+});
 
 app.get("/api/admin/tag-occurrences", requireAdmin, async (req, res) => {
   try {
