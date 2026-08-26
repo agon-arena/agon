@@ -16219,8 +16219,40 @@ if (
   // jour, œuvre d'art du jour et mot latin du jour, chacun gardé par son
   // propre interrupteur — pas de scheduler dupliqué. Le QCM n'a plus de
   // génération planifiée (cf. buildNotionQuestions, généré à la demande).
-  const tryRunDailySchedulers = () => {
+  // Garde-fou (demande du 26/08/2026, suite à l'audit egress) : les 7 rubriques Éclairages
+  // partagent toutes le même pool de sujets (getPublishedTopicsForDate, filtré sur les
+  // arènes créées AUJOURD'HUI par le bot de veille) — tant que celui-ci n'a rien publié,
+  // ce pool est vide pour les 7 à la fois. Sans cette vérification, chacune tentait quand
+  // même son cycle complet (claim + fetch + reste bloquée en "generating" faute de sujet +
+  // reclaim 20 min plus tard, en boucle jusqu'à la première publication du jour) — constaté
+  // en prod le 26/08/2026 : ~30 requêtes Supabase par tick de scheduler pour rien tant
+  // qu'aucun article n'est publié. Une seule lecture légère (limit 1) évite de lancer les
+  // 7 tentatives dans ce cas. Fail-open sur erreur : en cas de souci sur CETTE vérification,
+  // on laisse les rubriques tenter normalement plutôt que de les bloquer à tort.
+  async function hasAdminPublishedDebateToday(dateKey) {
+    const cutoff = parisStartOfDayIso(new Date(`${dateKey}T12:00:00Z`));
+    const nextDayCutoff = new Date(new Date(cutoff).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("debates")
+      .select("id")
+      .eq("creator_key", MNORIA_ADMIN_CREATOR_KEY)
+      .gte("created_at", cutoff)
+      .lt("created_at", nextDayCutoff)
+      .limit(1);
+    if (error) throw new Error(error.message);
+    return (data || []).length > 0;
+  }
+
+  const tryRunDailySchedulers = async () => {
     const hour = parisHour();
+    const hasContent = await hasAdminPublishedDebateToday(parisDateKey()).catch((err) => {
+      console.error("[eclairages] vérification présence d'articles admin du jour :", err.message);
+      return true;
+    });
+    if (!hasContent) {
+      console.log(`[eclairages] aucun article publié aujourd'hui (${parisDateKey()}), génération Éclairages reportée.`);
+      return;
+    }
     if (PARALLELE_HISTORIQUE_SCHEDULER_ENABLED && hour >= PARALLELE_HISTORIQUE_TRIGGER_HOUR) {
       paralleleHistoriqueService.generateIfNeeded(new Date())
         .catch((err) => console.error("[parallele-historique scheduler]", err.message));
