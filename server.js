@@ -2695,6 +2695,15 @@ const debatesApiInFlight = new Map();
 let latestDebatesMetaCache = null;
 let latestDebatesMetaInFlight = null;
 const LATEST_DEBATES_META_CACHE_TTL_MS = 60 * 1000;
+// /api/debates/analysis-statuses n'avait aucun cache (seule route "chaude" du fichier
+// dans ce cas) : appelée par index-ai-badge.js sur CHAQUE affichage de l'accueil, elle
+// scanne toute la table debates (aucune limite, aucune pagination) — identifiée comme
+// gros contributeur egress lors du pic du 26/08/2026. Même principe anti-dogpile que
+// latestDebatesMetaInFlight ci-dessus : une seule lecture Supabase partagée par fenêtre
+// de 60 s, quel que soit le nombre de visiteurs simultanés.
+let analysisStatusesCache = null;
+let analysisStatusesInFlight = null;
+const ANALYSIS_STATUSES_CACHE_TTL_MS = 60 * 1000;
 const DEBATES_LIST_SELECT_COLUMNS = [
   "id",
   "question",
@@ -8498,26 +8507,44 @@ app.post("/api/admin/analysis-queue/:id/cancel", requireAdmin, async (req, res) 
 });
 
 app.get("/api/debates/analysis-statuses", rateLimit("analysis-read", 240), async (req, res) => {
-  const { data, error } = await supabase
-    .from("debates")
-    .select("id, ai_analysis_status, ai_analysis_scheduled_at")
-    .in("ai_analysis_status", ["scheduled", "generating", "ready"]);
-  if (error) return res.json({});
-  const map = {};
-  for (const row of data || []) {
-    const entry = {
-      status:      row.ai_analysis_status,
-      scheduledAt: row.ai_analysis_scheduled_at || null
-    };
-    // Arènes fusionnées : l'état n'est stocké que sur l'arène canonique — on le
-    // reflète aussi sur les arènes fusionnées avec elle pour que leurs cartes
-    // affichent le même badge sur la page d'accueil.
-    const groupIds = getDebateIdsInSharedSpace(row.id);
-    for (const id of (groupIds.length > 1 ? groupIds : [row.id])) {
-      map[id] = entry;
-    }
+  if (analysisStatusesCache && analysisStatusesCache.expiresAt > Date.now()) {
+    return res.json(analysisStatusesCache.value);
   }
-  return res.json(map);
+
+  if (!analysisStatusesInFlight) {
+    analysisStatusesInFlight = (async () => {
+      const { data, error } = await supabase
+        .from("debates")
+        .select("id, ai_analysis_status, ai_analysis_scheduled_at")
+        .in("ai_analysis_status", ["scheduled", "generating", "ready"]);
+      if (error) throw error;
+
+      const map = {};
+      for (const row of data || []) {
+        const entry = {
+          status:      row.ai_analysis_status,
+          scheduledAt: row.ai_analysis_scheduled_at || null
+        };
+        // Arènes fusionnées : l'état n'est stocké que sur l'arène canonique — on le
+        // reflète aussi sur les arènes fusionnées avec elle pour que leurs cartes
+        // affichent le même badge sur la page d'accueil.
+        const groupIds = getDebateIdsInSharedSpace(row.id);
+        for (const id of (groupIds.length > 1 ? groupIds : [row.id])) {
+          map[id] = entry;
+        }
+      }
+      analysisStatusesCache = { value: map, expiresAt: Date.now() + ANALYSIS_STATUSES_CACHE_TTL_MS };
+      return map;
+    })().finally(() => {
+      analysisStatusesInFlight = null;
+    });
+  }
+
+  try {
+    return res.json(await analysisStatusesInFlight);
+  } catch (error) {
+    return res.json({});
+  }
 });
 
 app.get("/api/debates/:id", async (req, res) => {
