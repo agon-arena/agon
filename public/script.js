@@ -923,13 +923,6 @@ const PUSH_INVITE_DISMISSED_KEY = "pushInviteDismissed";
 const PUSH_SUBSCRIBED_KEY = "pushSubscribed";
 const PUSH_VAPID_PUBLIC_KEY_STORAGE_KEY = "pushVapidPublicKey";
 const PUSH_INVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-// Empêche la fenêtre "Ton score a évolué" (showScoreChangeNotification) et
-// l'invite aux notifications push (showPushInvite) de s'afficher coup sur
-// coup (pénible pour l'utilisateur) : chacune enregistre son horodatage,
-// l'autre vérifie qu'aucune des deux n'est apparue dans les 5 dernières
-// minutes avant de s'afficher à son tour.
-const SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY = "mnoria_score_change_notif_last_shown_at";
-const SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS = 5 * 60 * 1000;
 let pushInviteToastEl = null;
 let pushInviteEnablePending = false;
 let pushSubscriptionSyncPromise = null;
@@ -1377,136 +1370,6 @@ function formatPct(n) {
 // existants qui ciblent les balises i (couleur, font-size → taille 1em).
 const MNORIA_LOGOS_ICON = '<i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
 
-function renderUserScoreWidget(data) {
-  const votesScoreRaw = numOrNull(data?.votesScore);
-  const notesScoreRaw = numOrNull(data?.notesScore);
-  const gnosisScoreRaw = numOrNull(data?.gnosisScore);
-  const noesisScoreRaw = numOrNull(data?.noesisScore);
-  // 1 décimale (pas Math.round entier) : préserve les bornes 0,1 / 99,9 posées
-  // côté serveur pour les extrêmes, sinon Math.round(0.1) = 0 les efface.
-  const votesScore = votesScoreRaw === null ? null : Math.round(votesScoreRaw * 10) / 10;
-  const notesScore = notesScoreRaw === null ? null : Math.round(notesScoreRaw * 10) / 10;
-  const gnosisScore = gnosisScoreRaw === null ? null : Math.round(gnosisScoreRaw * 10) / 10;
-  const noesisScore = noesisScoreRaw === null ? null : Math.round(noesisScoreRaw * 10) / 10;
-  const tierLabel = String(data?.tierLabel || "").trim();
-  const tier = numOrNull(data?.tier);
-  const tierCount = numOrNull(data?.tierCount);
-  const gnosisTierLabel = String(data?.gnosisTierLabel || "").trim();
-  const gnosisTier = numOrNull(data?.gnosisTier);
-  const gnosisTierCount = numOrNull(data?.gnosisTierCount);
-  const noesisTierLabel = String(data?.noesisTierLabel || "").trim();
-  const noesisTier = numOrNull(data?.noesisTier);
-  const noesisTierCount = numOrNull(data?.noesisTierCount);
-  const stats = {
-    votesTotalUsers: numOrNull(data?.votesTotalUsers),
-    notesTotalUsers: numOrNull(data?.notesTotalUsers),
-    gnosisTotalUsers: numOrNull(data?.gnosisTotalUsers),
-    noesisTotalUsers: numOrNull(data?.noesisTotalUsers),
-    votesTierUsers: numOrNull(data?.votesTierUsers),
-    notesTierUsers: numOrNull(data?.notesTierUsers),
-    gnosisTierUsers: numOrNull(data?.gnosisTierUsers),
-    noesisTierUsers: numOrNull(data?.noesisTierUsers),
-    votesValue: numOrNull(data?.votesValue),
-    notesValue: numOrNull(data?.notesValue),
-    gnosisAnswered: numOrNull(data?.gnosisAnswered),
-    gnosisCorrect: numOrNull(data?.gnosisCorrect),
-    relierAnswered: numOrNull(data?.relierAnswered),
-    relierCorrect: numOrNull(data?.relierCorrect)
-  };
-
-  maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, () =>
-    showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount, noesisTierLabel, noesisTier, noesisTierCount)
-  );
-}
-
-// Fenêtre visible dès qu'un des 3 scores a changé depuis la dernière visite
-// (comparaison à une valeur mémorisée en localStorage) — pas seulement le
-// badge discret du bandeau, qu'on peut facilement ne pas remarquer.
-// Aucune notification au tout premier chargement connu (pas de valeur de
-// référence à comparer) : seulement à partir de la 2e visite, quand une
-// évolution est réellement détectable.
-const MNORIA_SCORE_CHANGE_BASELINE_KEY = "mnoria_last_known_scores";
-function maybeNotifyScoreChange(votesScore, notesScore, gnosisScore, openDetail) {
-  // Pas de valeur mémorisée (tout premier chargement connu) : traité comme
-  // une base à null/null/null plutôt qu'un "rien à comparer, on ignore" —
-  // un score qui apparaît pour la première fois (null -> une vraie valeur)
-  // doit lui aussi déclencher la notification, pas seulement une évolution
-  // entre deux valeurs déjà connues.
-  let previous = { votesScore: null, notesScore: null, gnosisScore: null };
-  try {
-    const stored = JSON.parse(localStorage.getItem(MNORIA_SCORE_CHANGE_BASELINE_KEY) || "null");
-    if (stored) previous = stored;
-  } catch (e) {}
-  try {
-    localStorage.setItem(MNORIA_SCORE_CHANGE_BASELINE_KEY, JSON.stringify({ votesScore, notesScore, gnosisScore }));
-  } catch (e) {}
-
-  // Aucune notification quand les 3 scores sont déjà à 100% : il n'y a plus
-  // de progression à évoquer, seulement un plafond (demande du 12/08/2026).
-  if (votesScore === 100 && notesScore === 100 && gnosisScore === 100) return;
-
-  const changes = [];
-  if (votesScore !== null && previous.votesScore !== votesScore) {
-    changes.push({ icon: '<i class="fa-solid fa-bolt"></i>', label: "Rhetor", value: votesScore });
-  }
-  if (notesScore !== null && previous.notesScore !== notesScore) {
-    changes.push({ icon: MNORIA_LOGOS_ICON, label: "Logos", value: notesScore });
-  }
-  if (gnosisScore !== null && previous.gnosisScore !== gnosisScore) {
-    changes.push({ icon: '<i class="fa-solid fa-brain"></i>', label: "Gnosis", value: gnosisScore });
-  }
-  if (!changes.length) return;
-  // Arrivée depuis une notification "ton idée a été notée par l'IA" (cf.
-  // isAiScorePopupOverlayContext) : sa propre fenêtre détaillée va s'ouvrir
-  // pour expliquer CETTE note précise — inutile d'empiler par-dessus la
-  // notification générique du widget pour le même événement (le score global
-  // vient justement de changer à cause de cette même note).
-  if (typeof isAiScorePopupOverlayContext === "function" && isAiScorePopupOverlayContext()) return;
-  showScoreChangeNotification(changes, openDetail);
-}
-
-function showScoreChangeNotification(changes, openDetail) {
-  // Ne jamais s'afficher coup sur coup avec l'invite aux notifications push
-  // (showPushInvite) — cf. SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS.
-  const pushInviteShownAt = Number(lsGet(PUSH_INVITE_LAST_SHOWN_KEY) || 0);
-  if (pushInviteShownAt && Date.now() - pushInviteShownAt < SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS) return;
-  lsSet(SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY, String(Date.now()));
-
-  // Le widget de score s'initialise à la fois sur la page hôte et dans
-  // l'iframe /debate (cf. initUserScoreWidget, isDebateIframe) : sans ça,
-  // chaque contexte crée sa propre fenêtre dans son propre document quand les
-  // deux s'initialisent au même moment (ex. rechargement avec une arène
-  // restaurée automatiquement dans l'iframe), et on voit 2 fenêtres empilées.
-  // On pose toujours l'overlay dans le document le plus haut (même origine) :
-  // les deux contextes convergent alors vers le même élément, le retrait de
-  // l'"existing" ci-dessous garantit qu'il n'y en a jamais qu'un affiché.
-  let topDoc = document;
-  try { if (window.top && window.top.document) topDoc = window.top.document; } catch (e) {}
-
-  const existing = topDoc.getElementById("mnoria-score-change-overlay");
-  if (existing) existing.remove();
-
-  const overlay = topDoc.createElement("div");
-  overlay.id = "mnoria-score-change-overlay";
-  overlay.className = "install-modal-overlay";
-  overlay.style.display = "flex";
-  const lines = changes
-    .map((c) => '<p class="install-modal-text">' + c.icon + ' <strong>' + c.label + '</strong> — désormais Top ' + formatPct(c.value) + '%</p>')
-    .join("");
-  overlay.innerHTML =
-    '<div class="install-modal" onclick="event.stopPropagation()">' +
-    '<button class="install-modal-close" type="button" aria-label="Fermer" id="mnoria-score-change-close-btn"><i class="fa-solid fa-xmark"></i></button>' +
-    '<h3 class="install-modal-title">Ton score a évolué</h3>' +
-    lines +
-    '<button class="install-modal-secondary-btn" type="button" id="mnoria-score-change-close-btn-bottom">Fermer</button>' +
-    '</div>';
-  const close = () => overlay.remove();
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  overlay.querySelector("#mnoria-score-change-close-btn").addEventListener("click", close);
-  overlay.querySelector("#mnoria-score-change-close-btn-bottom").addEventListener("click", close);
-  topDoc.body.appendChild(overlay);
-}
-
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
 // classique (Mnoria = joute oratoire) : Rhetor pour les voix récoltées, Logos
 // pour la qualité argumentative notée par l'IA.
@@ -1515,10 +1378,8 @@ function formatUserCount(n) {
 }
 
 function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount, noesisTierLabel, noesisTier, noesisTierCount, initialTab) {
-  // Même raisonnement que showScoreChangeNotification : le badge (et donc ce
-  // clic) peut venir de l'iframe /debate, mais le détail doit toujours
-  // s'afficher dans le document le plus haut pour rester cohérent avec la
-  // notification qui a pu ouvrir ce détail (openDetail).
+  // Le clic (carte de score sur "Scores et contributions") peut venir de l'iframe /debate, mais
+  // le détail doit toujours s'afficher dans le document le plus haut pour rester cohérent.
   let topDoc = document;
   try { if (window.top && window.top.document) topDoc = window.top.document; } catch (e) {}
 
@@ -1649,14 +1510,12 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
     }
   ];
 
-  const activeTabKey = tabs.some((t) => t.key === initialTab) ? initialTab : tabs[0].key;
-  const tabButtons = tabs.map((t) =>
-    '<button type="button" class="mnoria-score-tab' + (t.key === activeTabKey ? ' active' : '') + '" data-score-tab="' + t.key + '">' + t.icon + '<span>' + t.label + '</span></button>'
-  ).join('');
-  const tabPanels = tabs.map((t) =>
-    '<div class="mnoria-score-tab-panel install-modal-section" data-score-tab="' + t.key + '"' + (t.key === activeTabKey ? '' : ' hidden') + '>' + t.content + '</div>'
-  ).join('');
-  const bodyHtml = '<div class="mnoria-score-tabs" role="tablist">' + tabButtons + '</div>' + tabPanels;
+  // N'affiche que le détail du score cliqué (initialTab, ex. une carte de "Scores et
+  // contributions") — demande du 26/08/2026. Seul appelant restant depuis la suppression de la
+  // notification "Ton score a évolué" (qui ouvrait ce détail sans savoir lequel intéressait
+  // l'utilisateur, d'où les 4 onglets à l'époque) : initialTab est donc toujours fourni.
+  const activeTab = tabs.find((t) => t.key === initialTab) || tabs[0];
+  const bodyHtml = '<div class="install-modal-section">' + activeTab.content + '</div>';
 
   overlay.innerHTML =
     '<div class="install-modal" onclick="event.stopPropagation()">' +
@@ -1665,16 +1524,6 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
       bodyHtml +
       '<button class="install-modal-android-btn" type="button" style="display:flex">Compris</button>' +
     '</div>';
-
-  overlay.querySelectorAll(".mnoria-score-tab").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const key = btn.dataset.scoreTab;
-      overlay.querySelectorAll(".mnoria-score-tab").forEach((b) => b.classList.toggle("active", b === btn));
-      overlay.querySelectorAll(".mnoria-score-tab-panel").forEach((panel) => {
-        panel.hidden = panel.dataset.scoreTab !== key;
-      });
-    });
-  });
 
   const close = () => {
     overlay.style.display = "none";
@@ -1688,20 +1537,16 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
   topDoc.body.style.overflow = "hidden";
 }
 
-(function initUserScoreWidget() {
-  // Toute page qui affiche le bandeau blanc Mnoria doit afficher les scores,
-  // y compris lorsqu'elle est ouverte dans l'iframe de navigation interne.
-  // Les iframes techniques sans bandeau restent exclues.
+(function initMnoriaTimeWidgetFallback() {
+  // Toute page qui affiche le bandeau blanc Mnoria doit afficher le compteur de temps (repli —
+  // header-score-widget.js pose la version universelle en premier, cf. son renderUniversalTimeWidget ;
+  // renderMnoriaTimeWidget se no-op si elle est déjà là), y compris ouverte dans l'iframe de
+  // navigation interne. Les iframes techniques sans bandeau restent exclues.
   const isDebateIframe = location.pathname === "/debate" && window.self !== window.top;
   const hasUniformMnoriaHeader = !!document.querySelector(".topbar.topbar--mnoria-uniform");
   if (window !== window.top && !isDebateIframe && !hasUniformMnoriaHeader) return;
-  const key = getKey();
-  if (!key) return;
-  fetch(API + "/my-score?key=" + encodeURIComponent(key))
-    .then((r) => (r.ok ? r.json() : null))
-    .then((data) => { if (data) renderUserScoreWidget(data); })
-    .then(renderMnoriaTimeWidget)
-    .catch(() => {});
+  if (!getKey()) return;
+  renderMnoriaTimeWidget();
 })();
 
 // Compte à rebours de 60 min de bonne santé numérique, sous le badge de
@@ -2000,9 +1845,6 @@ function ensurePushDeniedModal() {
 function shouldShowPushInvite({ ignoreCooldown = false, ignoreDismissed = false } = {}) {
   if (!isMobilePushInviteSurface()) return false;
   if (!ignoreDismissed && lsGet(PUSH_INVITE_DISMISSED_KEY) === "1") return false;
-
-  const scoreChangeShownAt = Number(lsGet(SCORE_CHANGE_NOTIFICATION_LAST_SHOWN_KEY) || 0);
-  if (scoreChangeShownAt && Date.now() - scoreChangeShownAt < SCORE_CHANGE_PUSH_INVITE_QUIET_WINDOW_MS) return false;
 
   const lastShownAt = Number(lsGet(PUSH_INVITE_LAST_SHOWN_KEY) || 0);
 
@@ -6940,6 +6782,13 @@ function _showEpisodeNavNotFound() {
 }
 
 function openDebateIframeModal(url, options = {}) {
+  // Les liens du bandeau bas (Apprentissages, Alertes…) font event.preventDefault() puis
+  // appellent cette fonction au lieu de naviguer réellement — sans vraie navigation, le lien
+  // tapé garde le focus indéfiniment (:focus-visible, cf. .home-bottom-nav-item:hover/-active
+  // dans style.css), visible en surbrillance légèrement grisée tant qu'on ne scrolle pas ou ne
+  // tape pas un autre bouton (demande du 26/08/2026, "Alertes devient légèrement grisé"). On
+  // retire le focus dès l'ouverture de la modale : plus rien à rester focus derrière elle.
+  try { document.activeElement?.blur?.(); } catch (e) {}
   try {
     const parsedModalUrl = new URL(String(url || ""), window.location.origin);
     if (parsedModalUrl.origin === window.location.origin && parsedModalUrl.pathname === "/autres-sources") {
@@ -19795,7 +19644,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260825-ta-memoire').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260826-early-frame-resync').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -19979,9 +19828,13 @@ function setPoliticalCloudGroup(group) {
     // filtre "mnoria" pour rester cohérent avec le mode Bulles Actu, comme le fait déjà
     // toggleMnoriaCloud() pour Bulles Mnoria.
     setTypeFilter("mnoria");
+    // sizeScale 1.12 (demande du 26/08/2026, "agrandir un peu les bulles Actualités") : au-delà de
+    // 1 (taille "pleine" historique), computeAutoScale (tagTrendCloud.js) continue de rétrécir
+    // l'ensemble si besoin pour tenir dans le cadre — jamais de débordement, juste plus grand
+    // quand la place le permet.
     window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
       finishMnoriaCloudSwitchLoading(token, container);
-    });
+    }, undefined, undefined, 0, 1.12);
     showBubbleCloudLoadingSpinner({ switchMode: true });
   });
 }
@@ -20124,11 +19977,11 @@ function toggleMnoriaCloud(targetMnoriaMode = !_mnoriaCloudMode) {
     // La légende passe de 2 lignes (Actu) à 1 ligne (Mnoria) : resynchronise la hauteur
     // de la section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
     syncCloudSectionHeight();
-    // Bulles plus petites (0.85, agrandies depuis 0.6 le 09/08/2026) et espacées
-    // (bubbleGap 14, cf. renderTagTrendCloud/applyCompactBubbleLayout dans tagTrendCloud.js)
-    // qu'en mode Bulles Actu (bulles serrées au contact par défaut) : laisse la place aux
-    // satellites "atome" sans qu'ils se retrouvent systématiquement plafonnés par une bulle
-    // voisine.
+    // Bulles plus petites (0.95, agrandies depuis 0.85 le 26/08/2026, elles-mêmes agrandies
+    // depuis 0.6 le 09/08/2026) et espacées (bubbleGap 14, cf. renderTagTrendCloud/
+    // applyCompactBubbleLayout dans tagTrendCloud.js) qu'en mode Bulles Actu (bulles serrées au
+    // contact par défaut) : laisse la place aux satellites "atome" sans qu'ils se retrouvent
+    // systématiquement plafonnés par une bulle voisine.
     // bubbleGap 14 (pas plus) : un gap trop généreux (essayé 34px) rend le placement de 10
     // bulles infaisable sur le petit cadre mobile — applyCompactBubbleLayout n'a que 8
     // tentatives pour réduire l'échelle et retombe sinon sur son repli qui ignore bubbleGap et
@@ -20139,7 +19992,7 @@ function toggleMnoriaCloud(targetMnoriaMode = !_mnoriaCloudMode) {
     // éprouvée par "Mon univers" (mon-univers.js) pour un nombre similaire de bulles.
     window._tagTrendCloudModule.renderTagTrendCloud(container, trends, () => {
       finishMnoriaCloudSwitchLoading(token, container);
-    }, undefined, undefined, 14, 0.85);
+    }, undefined, undefined, 14, 0.95);
     showBubbleCloudLoadingSpinner({ switchMode: true });
   });
 }
@@ -21933,6 +21786,7 @@ function updateIndexTagTrends(items) {
 
       syncIndexBubbleTrendBadges();
       if (cloudContainer?.querySelector(".mnoria-tag-bubble")) return;
+      // sizeScale 1.12 : même valeur que setPoliticalCloudGroup (demande du 26/08/2026).
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => {
         window.setTimeout(() => {
           // Le callback de rendu Actu est volontairement différé. Entre-temps, l'utilisateur
@@ -21942,7 +21796,7 @@ function updateIndexTagTrends(items) {
               _memoireCloudMode || _mnoriaCloudMode || _mnoriaCloudSwitchLoading) return;
           hideBubbleCloudLoadingSpinner();
         }, 150);
-      });
+      }, undefined, undefined, 0, 1.12);
       requestAnimationFrame(() => {
         requestAnimationFrame(syncBubbleFrameTop);
         if (currentBubbleTag) {
@@ -35241,6 +35095,83 @@ function setMnoriaMobileViewportBottomFill(viewportOffset, safeOffset = viewport
   document.documentElement.style.setProperty('--mnoria-legacy-standalone-bottom-fill', `${legacyValue}px`);
 }
 
+// TEMPORAIRE : diagnostic du 26/08/2026 (coins de carte "À la une"/communauté qui n'apparaissent
+// pas noirs malgré 2 tentatives de correctif CSS). Identifie directement, via elementFromPoint,
+// QUEL élément peint réellement le pixel du coin — plus fiable que deviner depuis la cascade CSS.
+// Poste une seule fois, sans garde is-standalone (reproduit en navigateur normal). À retirer une
+// fois la cause confirmée.
+(function debugCardCornerDiag() {
+  let posted = false;
+  function tryDiag() {
+    if (posted) return;
+    const card = document.querySelector('.theme-horizontal-inner > .debate-card.has-title-banner');
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    // N'échantillonne (elementFromPoint) que si le coin est réellement dans le viewport visible —
+    // sinon elementFromPoint renvoie systématiquement null (constaté le 26/08/2026, carte hors
+    // écran au moment de la mesure).
+    if (rect.top < 0 || rect.top > window.innerHeight - 10) return;
+    posted = true;
+    const probeInset = 4;
+    const points = {
+      topLeft: [rect.left + probeInset, rect.top + probeInset],
+      topRight: [rect.right - probeInset, rect.top + probeInset]
+    };
+    const probes = {};
+    Object.keys(points).forEach((key) => {
+      const [x, y] = points[key];
+      const el = document.elementFromPoint(x, y);
+      probes[key] = el ? {
+        tag: el.tagName,
+        cls: String(el.className || '').slice(0, 200),
+        bg: getComputedStyle(el).backgroundColor,
+        zIndex: getComputedStyle(el).zIndex,
+        position: getComputedStyle(el).position,
+        rect: (() => { const r = el.getBoundingClientRect(); return { top: Math.round(r.top), left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom) }; })()
+      } : null;
+    });
+    const cardCs = getComputedStyle(card);
+    const before = getComputedStyle(card, '::before');
+    const mediaEl = card.querySelector('.index-card-media-with-title');
+    const mediaCs = mediaEl ? getComputedStyle(mediaEl) : null;
+    const mediaRect = mediaEl ? mediaEl.getBoundingClientRect() : null;
+    try {
+      fetch('/api/debug/scroll-jump-sample', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: 'card-corner-diag',
+          ts: Date.now(),
+          href: String(location.pathname || ''),
+          cardRect: { top: Math.round(rect.top), left: Math.round(rect.left), right: Math.round(rect.right), bottom: Math.round(rect.bottom), width: Math.round(rect.width) },
+          cardBorderRadius: cardCs.borderRadius,
+          cardBorder: cardCs.border,
+          cardOverflow: cardCs.overflow,
+          cardPadding: cardCs.padding,
+          cardPosition: cardCs.position,
+          beforeBorder: before.border,
+          beforeBorderRadius: before.borderRadius,
+          beforeZIndex: before.zIndex,
+          beforeContent: before.content,
+          mediaBorderRadius: mediaCs ? mediaCs.borderRadius : null,
+          mediaMargin: mediaCs ? mediaCs.margin : null,
+          mediaOverflow: mediaCs ? mediaCs.overflow : null,
+          mediaRect: mediaRect ? { top: Math.round(mediaRect.top), left: Math.round(mediaRect.left), right: Math.round(mediaRect.right), bottom: Math.round(mediaRect.bottom) } : null,
+          probes
+        }),
+        keepalive: true
+      }).catch(() => {});
+    } catch (e) {}
+  }
+  let tries = 0;
+  const interval = setInterval(() => {
+    tries += 1;
+    tryDiag();
+    if (posted || tries > 30) clearInterval(interval);
+  }, 500);
+})();
+
 // Légende "Les tendances…" (standalone mobile) : cachée juste sous le bord
 // haut du bandeau bas. L'ancrage CSS de secours (100% de la section, basé sur
 // 100dvh) tombe trop bas sur les vieux iPhones PWA au viewport tronqué
@@ -36547,12 +36478,24 @@ var MNORIA_MOBILE_FRAME_BOTTOM_INSET = 78;
 // verrouillé : les appels suivants (resize, changement de mode Actu/Mnoria/Ma mémoire) ne
 // recalculent plus rien — demande du 16/08/2026, "il bouge plus" après ce premier calage.
 var _mobileCloudFrameLocked = false;
+// Hauteur "de confiance" : celle du tout premier calage réussi avec scrollY proche de 0 (barre
+// d'adresse Safari garantie dépliée, donc window.innerHeight/visualViewport.height représentent
+// la vraie hauteur "au repos", pas une valeur agrandie par un scroll en cours). Un changement de
+// mode qui redéclenche ce calage (cf. mon-univers.js loadUniverse) peut retomber sur un instant où
+// la barre d'adresse est repliée (scrollY non nul malgré l'attente de stabilité de
+// waitForMobileViewportHeightStable, cf. son commentaire) : boxHeight ressort alors plus grand que
+// la normale et RESTE ainsi, verrouillé, même une fois la barre d'adresse redépliée (demande du
+// 26/08/2026, "cadre devenu trop long verticalement"). Plafonner sur cette première mesure de
+// confiance élimine la dérive sans réintroduire de recalcul continu.
+var _mobileCloudFrameTrustedHeight = null;
 // Sentinelle distincte du timestamp numérique que requestAnimationFrame passe à cette
 // fonction quand elle lui est donnée directement en callback (cf. syncCloudSectionHeight) :
 // une comparaison stricte évite qu'un appel rAF normal soit pris pour la revérification.
 var MOBILE_CLOUD_FRAME_RECHECK = 'recheck';
 function syncMobileCloudFrameHeight(recheckToken) {
-  if (_mobileCloudFrameLocked) return;
+  if (_mobileCloudFrameLocked) {
+    return;
+  }
   if (!document.body.classList.contains('page-home-mobile')) return;
   var isStandalone = document.body.classList.contains('is-standalone');
   var section = document.getElementById('mnoria-tag-trends-section');
@@ -36580,7 +36523,17 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // Neutralise la marge le temps de mesurer la position naturelle (sans elle) du bloc,
   // comme alignStandaloneBubbleFrameToActiveFilter le fait pour le standalone.
   section.style.marginTop = '0px';
-  var naturalTop = section.getBoundingClientRect().top;
+  // + scrollY (demande du 26/08/2026, "marge qui grandit à chaque changement de mode") :
+  // getBoundingClientRect().top est relatif au VIEWPORT, pas au document — si cette fonction
+  // s'exécute pendant que la page est scrollée (ex. juste après un tap sur le sélecteur de mode,
+  // situé sous la ligne de flottaison), naturalTop ressort plus petit qu'il ne l'est réellement,
+  // et boxTop/desiredFrameTop restent eux des cibles de VIEWPORT à scrollY=0 (dérivées de
+  // headerBottom/bottomBarTop, tous deux insensibles au scroll) — la marge calculée sous-corrige
+  // alors d'exactement le scrollY courant, laissant le cadre plus bas que prévu une fois la page
+  // remontée en haut. Convertir naturalTop en position DOCUMENT (indépendante du scroll) aligne
+  // les deux mesures sur la même référence.
+  var scrollYAtMeasure = window.scrollY || document.documentElement.scrollTop || 0;
+  var naturalTop = section.getBoundingClientRect().top + scrollYAtMeasure;
   var boxTop = desiredFrameTop - MNORIA_MOBILE_FRAME_TOP_INSET;
   if (isStandalone) {
     // body.is-standalone .mnoria-tag-trends-section pose margin-top:0 et un min-height calc()
@@ -36596,6 +36549,14 @@ function syncMobileCloudFrameHeight(recheckToken) {
   }
 
   var boxHeight = Math.max(200, (desiredFrameBottom + MNORIA_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
+  if (scrollYAtMeasure <= 4) {
+    // Mesure fiable (barre d'adresse garantie dépliée) : devient/confirme la référence de confiance.
+    _mobileCloudFrameTrustedHeight = boxHeight;
+  } else if (_mobileCloudFrameTrustedHeight !== null) {
+    // Mesure prise pendant/juste après un scroll : ne jamais dépasser la référence de confiance
+    // (la barre d'adresse repliée en ce moment redonne de la hauteur qui n'est pas garantie stable).
+    boxHeight = Math.min(boxHeight, _mobileCloudFrameTrustedHeight);
+  }
   cloud.style.height = boxHeight + 'px';
   cloud.style.minHeight = boxHeight + 'px';
   if (isStandalone) {
@@ -36614,8 +36575,15 @@ function syncMobileCloudFrameHeight(recheckToken) {
     // 16/08/2026). Même technique que pour la section : neutraliser puis mesurer sa vraie
     // position naturelle, plutôt que de la déduire d'un autre élément.
     switchRow.style.setProperty('margin-top', '0px', 'important');
-    var switchNaturalTop = switchRow.getBoundingClientRect().top;
-    var desiredSwitchTop = desiredFrameBottom + 35;
+    // + scrollYAtMeasure : même correctif que naturalTop plus haut (getBoundingClientRect().top
+    // est relatif au viewport, desiredSwitchTop une cible à scrollY=0).
+    var switchNaturalTop = switchRow.getBoundingClientRect().top + scrollYAtMeasure;
+    // Dérivé de boxHeight (potentiellement plafonné ci-dessus par _mobileCloudFrameTrustedHeight),
+    // pas du desiredFrameBottom brut : sinon le sélecteur de mode restait calé sur le bas NON
+    // plafonné du cadre, laissant un vide entre le bas du cadre (plafonné, donc plus court) et les
+    // boutons — "boutons trop bas" (demande du 26/08/2026).
+    var effectiveDesiredFrameBottom = boxTop + boxHeight - MNORIA_MOBILE_FRAME_BOTTOM_INSET;
+    var desiredSwitchTop = effectiveDesiredFrameBottom + 35;
     // setProperty(...,'important') : la règle CSS dédiée à "Ma mémoire"
     // (.mnoria-tag-trends-cloud.mnoria-memoire-frame ~ #mnoria-cloud-mode-switch, mobile) est elle-même
     // en !important — un simple .style.marginTop= perdait face à elle.
@@ -36649,6 +36617,35 @@ function syncMobileCloudFrameHeight(recheckToken) {
   }
 }
 
+// window.innerHeight/visualViewport.height fluctuent pendant qu'un scroll est en cours sur
+// mobile (barre d'adresse Safari qui se réduit/réapparaît) : appeler syncMobileCloudFrameHeight
+// pendant cette fenêtre fige le cadre sur une hauteur transitoire (mesurée en plein scroll), qui
+// ne revient jamais toute seule à sa taille normale ensuite — cf. mesures réelles du 26/08/2026
+// (cadre devenu trop long après un switch Ma mémoire→Communauté→Ma mémoire, scrollY non nul au
+// moment exact du calcul). Même principe que waitForContainerSizeStable (mon-univers.js) :
+// n'accepte une mesure qu'après 2 frames consécutives identiques, jamais la toute première lue.
+function waitForMobileViewportHeightStable(maxWaitMs) {
+  maxWaitMs = maxWaitMs || 350;
+  return new Promise(function(resolve) {
+    var startedAt = performance.now();
+    var lastH = -1;
+    var stableFrames = 0;
+    function check() {
+      var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      if (h === lastH) {
+        stableFrames += 1;
+        if (stableFrames >= 2) { resolve(); return; }
+      } else {
+        stableFrames = 0;
+        lastH = h;
+      }
+      if (performance.now() - startedAt >= maxWaitMs) { resolve(); return; }
+      requestAnimationFrame(check);
+    }
+    requestAnimationFrame(check);
+  });
+}
+
 function syncCloudSectionHeight(recomputeBase) {
   if (isMnoriaMobileCloudViewport()) {
     var mobileSection = document.getElementById('mnoria-tag-trends-section');
@@ -36657,7 +36654,7 @@ function syncCloudSectionHeight(recomputeBase) {
     if (mobileCloud) {
       mobileCloud.style.flex = '';
     }
-    requestAnimationFrame(syncMobileCloudFrameHeight);
+    waitForMobileViewportHeightStable().then(function() { syncMobileCloudFrameHeight(); });
     return;
   }
   if (window.innerWidth <= 768) return;

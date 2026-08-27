@@ -12,10 +12,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
-  <link rel="stylesheet" href="/style.min.css?v=20260825-mnoria-status-harmonize">
+  <link rel="stylesheet" href="/style.min.css?v=20260827-card-corner-fix5">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <script>
     if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
@@ -132,7 +132,7 @@
     }
     @media (min-width: 769px) {
       .qcm-page-shell {
-        width: min(100% - 64px, 1200px);
+        width: min(100% - 64px, 780px);
       }
     }
     .qcm-panel,
@@ -142,16 +142,25 @@
     .qcm-panel {
       position: relative;
       width: 100%;
-      /* Légèrement translucide (demande du 18/08/2026) plutôt qu'un blanc
-         opaque plein : laisse deviner le fond de la question (cf.
-         applyQuestionBackgroundImage) sans jamais nuire à la lisibilité du
-         texte, toujours en pleine opacité. */
-      background: rgba(255, 255, 255, 0.94);
+      /* Opaque par défaut (liste Découvrir, Mes acquis...) : pas d'image de
+         fond à deviner derrière en dehors d'une question (demande du
+         27/08/2026). */
+      background: #ffffff;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       padding: 24px;
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
+    }
+    /* Légèrement translucide uniquement pendant une question en cours (posé
+       par applyQuestionBackgroundImage/clearQuestionBackgroundImage, demande
+       du 18/08/2026, ajustée plusieurs fois le 27/08/2026, puis restreinte à
+       ce seul état le 27/08/2026) : laisse deviner le fond de la question
+       sans jamais nuire à la lisibilité du texte. Un seul et même cadre pour
+       Découvrir/Ancrer/Relier : cette valeur s'applique identiquement aux 3
+       catégories dès qu'une question est affichée. */
+    body.qcm-in-session .qcm-panel {
+      background: rgba(255, 255, 255, 0.75);
     }
     /* Croix de fermeture du cadre — visible sur Découvrir/Ancrer/Relier (cf.
        setPanelCloseVisible). Demande du 17/08/2026 : rester APPARENTE même
@@ -204,199 +213,309 @@
       font-size: 14px;
       text-align: center;
     }
-    /* Jauge de charge d'apprentissage (demande du 17/08/2026) : compteur à
-       aiguille en 4 zones (calme -> surchargé), cf. renderLoadGauge. Le
-       needle est une <line> tournée par transform:rotate autour du centre
-       (100,100) plutôt que recalculée en JS à chaque fois — beaucoup plus
-       simple qu'une régénération de path. */
+    /* Charge de mémorisation (demande du 17/08/2026, remplacée le 27/08/2026
+       par une barre de progression horizontale — l'ancien cadran à aiguille
+       jugé trop massif). chargePercent = min(gauge.ratio*100, 100), cf.
+       renderLoadGauge ; gauge.ratio/niveau/seuils viennent du serveur
+       (lib/spaced-repetition/learning-load.js), non modifiés ici. */
     .qcm-load-gauge {
       display: none;
       flex-direction: column;
-      align-items: center;
       margin: 0 auto 18px;
-      max-width: 260px;
+      width: 100%;
+      max-width: 620px;
     }
     .qcm-load-gauge.visible {
       display: flex;
     }
-    .qcm-load-gauge-svg {
-      width: 100%;
-      max-width: 220px;
-      height: auto;
-      overflow: visible;
+    .qcm-load-gauge-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
     }
-    .qcm-load-gauge-arc {
-      fill: none;
-      stroke-width: 16;
-      stroke-linecap: butt;
-    }
-    .qcm-load-gauge-arc-calm { stroke: #16a34a; }
-    .qcm-load-gauge-arc-moderate { stroke: #f59e0b; }
-    .qcm-load-gauge-arc-busy { stroke: #ea580c; }
-    .qcm-load-gauge-arc-overloaded { stroke: #dc2626; }
-    .qcm-load-gauge-needle {
-      stroke: #243038;
-      stroke-width: 4;
-      stroke-linecap: round;
-      transform-origin: 100px 100px;
-      transform: rotate(-90deg);
-      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-    .qcm-load-gauge-hub {
-      fill: #243038;
-    }
-    /* Repère "Idéal" (demande du 17/08/2026) : petit tiret fixe sur le
-       cadran, à la position correspondant à LOAD_GAUGE_IDEAL_QUESTIONS —
-       indépendant de la charge réelle affichée par l'aiguille, jamais
-       animé/tourné en CSS (transform posé une seule fois en JS via
-       initLoadGaugeIdealMarker, cf. plus bas). */
-    .qcm-load-gauge-ideal-tick {
-      stroke: #111827;
-      stroke-width: 2;
-      stroke-linecap: round;
-    }
-    .qcm-load-gauge-ideal-label {
-      fill: #111827;
+    .qcm-load-gauge-title {
       font-family: "Barlow Condensed", Arial, sans-serif;
-      font-size: 9px;
+      font-size: 15px;
       font-weight: 700;
-      text-anchor: middle;
+      color: #111827;
     }
-    .qcm-load-gauge-label {
-      margin: 2px 0 0;
+    .qcm-load-gauge-percent {
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
-      text-align: center;
+      white-space: nowrap;
     }
-    .qcm-load-gauge-caption {
-      margin: 2px 0 0;
+    .qcm-load-gauge-label {
+      margin: 1px 0 9px;
       color: #6b7280;
       font-size: 12.5px;
-      text-align: center;
+      text-align: left;
+    }
+    .qcm-load-gauge-bar-track {
+      position: relative;
+      width: 100%;
+      height: 16px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.14);
+      overflow: visible;
+    }
+    .qcm-load-gauge-bar-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.5s ease;
+    }
+    /* Mêmes 4 couleurs que l'ancien cadran (.qcm-load-gauge-arc-*), reprises
+       telles quelles (un léger dégradé clair->couleur de base et un halo
+       assorti, demande du 27/08/2026 "plus visuelle" — jamais de teinte
+       nouvelle, juste une variation de luminosité de la même couleur). */
+    .qcm-load-gauge-bar-fill-calm { background: linear-gradient(90deg, #4ade80, #16a34a); box-shadow: 0 0 8px rgba(22, 163, 74, 0.45); }
+    .qcm-load-gauge-bar-fill-moderate { background: linear-gradient(90deg, #fcd34d, #f59e0b); box-shadow: 0 0 8px rgba(245, 158, 11, 0.45); }
+    .qcm-load-gauge-bar-fill-busy { background: linear-gradient(90deg, #fb923c, #ea580c); box-shadow: 0 0 8px rgba(234, 88, 12, 0.45); }
+    .qcm-load-gauge-bar-fill-overloaded { background: linear-gradient(90deg, #f87171, #dc2626); box-shadow: 0 0 8px rgba(220, 38, 38, 0.45); }
+    /* Repère "Idéal" (demande du 17/08/2026, repositionné en barre le
+       27/08/2026) : position fixe à gauche = LOAD_GAUGE_IDEAL_QUESTIONS /
+       LOAD_GAUGE_DAILY_CAP (60 %), posée une seule fois en JS
+       (initLoadGaugeIdealMarker) — indépendante de la charge réelle. Trait
+       sombre et court, chevauchant la barre pour rester lisible quelle que
+       soit la couleur du remplissage dessous. */
+    .qcm-load-gauge-ideal-marker {
+      position: absolute;
+      top: -3px;
+      left: 60%;
+      width: 2px;
+      height: 22px;
+      background: #111827;
+      border-radius: 999px;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+    .qcm-load-gauge-ideal-label {
+      display: block;
+      width: 0;
+      margin: 5px 0 0;
+      left: 60%;
+      position: relative;
+      transform: translateX(-50%);
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #111827;
+      white-space: nowrap;
+    }
+    .qcm-load-gauge-caption {
+      margin: 9px 0 0;
+      color: #6b7280;
+      font-size: 12.5px;
+      text-align: left;
+    }
+    @media (max-width: 480px) {
+      .qcm-load-gauge-title {
+        font-size: 14px;
+      }
+      .qcm-load-gauge-percent {
+        font-size: 18px;
+      }
+    }
+    /* Navigation par onglets texte, intégrée à la page (demande du 27/08/2026,
+       refonte complète : plus de carte blanche/pilules, "doit sembler
+       appartenir naturellement à la page"). Découvrir/Ancrer/Relier sont de
+       la navigation (texte + trait actif), pas des boutons d'action — à
+       dessein très différents de Générer/Plus d'options plus bas. */
+    .qcm-category-group {
+      display: none;
+      margin: 0 0 4px;
+    }
+    .qcm-category-group:has(#qcm-category-switcher.visible) {
+      display: block;
     }
     .qcm-slot-switcher {
       display: none;
       justify-content: center;
-      gap: 8px;
-      margin: 0 0 20px;
+      align-items: baseline;
+      flex-wrap: nowrap;
+      gap: 28px;
+      margin: 0 0 6px;
     }
     .qcm-slot-switcher.visible {
       display: flex;
     }
     .qcm-slot-btn {
-      padding: 6px 14px;
-      border: 1px solid #d1d5db;
-      border-radius: 999px;
-      background: #f9fafb;
-      color: #4b5563;
-      font-size: 13px;
-      font-weight: 700;
+      position: relative;
+      flex: 0 0 auto;
+      padding: 4px 2px 8px;
+      border: none;
+      background: none;
+      /* Noir dès que cliquable (comme .active juste en dessous) — le gris reste réservé au seul
+         état :disabled, plus bas (demande du 26/08/2026). */
+      color: #111827;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      white-space: nowrap;
       cursor: pointer;
     }
+    /* Trait actif : court (proche de la largeur du mot, pas toute la
+       largeur du segment) et dans l'orange déjà utilisé ailleurs sur Mnoria
+       pour les actions de mémorisation (cf. .het-rubric-memorize-btn.is-active,
+       style.css) — pas une nouvelle couleur. */
     .qcm-slot-btn.active {
-      border-color: #243038;
-      background: #243038;
-      color: #ffffff;
+      color: #111827;
+      font-weight: 700;
     }
+    .qcm-slot-btn.active::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 3px;
+      border-radius: 999px;
+      background: #f5b642;
+    }
+    /* "← Découvrir" (retour rapide depuis un QCM en cours, cf.
+       renderCategorySwitcher) : même famille texte, juste assez marqué pour
+       rester identifiable comme cliquable, sans le trait actif (ce n'est pas
+       réellement l'onglet ouvert). */
     .qcm-slot-btn.qcm-learning-back-btn {
-      border-color: #516776;
-      background: #ffffff;
       color: #243038;
+      font-weight: 700;
     }
     /* Catégorie sans créneau prêt (ex. QCM actu/Culture générale pas encore
        généré) : visible pour montrer la mise en page normale plutôt que de
        la faire disparaître ou de rediriger automatiquement ailleurs, mais
        non cliquable. */
     .qcm-slot-btn:disabled {
-      border-color: #e5e7eb;
-      background: #f3f4f6;
+      /* #c7ced3 était quasi invisible sur le fond clair de .qcm-panel, sans
+         fond propre pour le faire ressortir comme avant (demande du
+         27/08/2026, "je ne vois plus les boutons Ancrer et Relier"). */
       color: #9ca3af;
       cursor: not-allowed;
     }
-    /* "Ancrer"/"Relier" dorés avec reflet quand de nouveaux éléments les attendent
-       (isCategoryAvailable, cf. renderCategorySwitcher) — même dégradé que le bouton
-       "Ma mémoire" du sélecteur de l'accueil (#mnoria-cloud-mode-memoire-btn, style.css), pour
-       une mise en avant cohérente sur tout le site. Retombe sur le style neutre habituel dès
-       que la série est faite (available forcé à false en local dans renderFinalScore, jamais
-       via un refetch serveur — cf. ce commentaire là-bas pour le pourquoi) — demande du
-       17/08/2026. Jamais posé sur l'onglet actif : .active a
-       une spécificité plus forte (2 classes) et l'emporterait de toute façon sur le fond, mais
-       le reflet animé resterait visible en trop sur un onglet déjà ouvert sans ce garde-fou
-       (cf. renderCategorySwitcher, qui n'ajoute cette classe que si !active).
-       overflow:hidden : contient le reflet (::after) dans la forme arrondie de la pastille. */
+    /* "Ancrer"/"Relier" mis en avant quand du nouveau contenu attend
+       (isCategoryAvailable, cf. renderCategorySwitcher) : simple recoloration
+       dans le même orange que le trait actif (cf. ci-dessus), jamais de fond —
+       reste un onglet de navigation, pas un badge. Jamais posé sur l'onglet
+       actif (cf. renderCategorySwitcher, qui n'ajoute cette classe que si
+       !active). */
     .qcm-slot-btn-new {
-      position: relative;
-      overflow: hidden;
-      border-color: transparent;
-      background: linear-gradient(135deg, #ffd166, #e99a2e);
-      color: #1A1F24;
-      box-shadow: inset 0 0 0 1px rgba(122, 72, 10, 0.28);
-    }
-    .qcm-slot-btn-new::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(120deg, transparent 18%, rgba(255, 255, 255, 0.55) 50%, transparent 82%);
-      transform: translateX(-130%);
-      animation: qcm-slot-btn-new-shine 2.8s ease-in-out infinite;
-    }
-    @keyframes qcm-slot-btn-new-shine {
-      0%, 55%, 100% { transform: translateX(-130%); }
-      75% { transform: translateX(130%); }
+      color: #e99a2e;
     }
     @media (max-width: 480px) {
-      .qcm-slot-switcher { gap: 4px; }
+      .qcm-slot-switcher {
+        gap: 18px;
+      }
       .qcm-slot-btn {
-        padding: 6px 8px;
-        font-size: 12px;
+        font-size: 14px;
       }
     }
     /* "Mes acquis" (demande du 16/08/2026) : accueille désormais "Tous mes apprentissages"
        (classé par thématique, y compris la rubrique "Comprendre les liens") — retiré de
        Découvrir, qui ne garde que "En attente de réalisation" (cf. loadMesAcquis,
-       renderMesAcquisList). */
+       renderMesAcquisList). Repositionné le 27/08/2026 : lien secondaire discret sous les
+       onglets Découvrir/Ancrer/Relier, plus un 4e onglet de même niveau — Découvrir/Ancrer/
+       Relier sont les modes de mémorisation, Mes acquis est l'accès au bilan. */
     .qcm-mes-acquis-row {
       display: none;
       justify-content: center;
-      margin: -10px 0 20px;
     }
-    /* Même règle de visibilité que le switcher juste au-dessus (#qcm-category-switcher.visible,
-       posée/retirée par renderCategorySwitcher) : masqué pendant le chargement initial, jamais
-       affiché seul sans ses boutons Découvrir/Ancrer/Relier. Margin-top négatif : rapproche le
-       bouton du switcher (demande du 16/08/2026), qui garde par ailleurs ses 20px de marge
-       basse habituels pour les autres pages n'ayant pas ce bouton. */
+    /* Même règle de visibilité que le switcher juste au-dessus
+       (#qcm-category-switcher.visible, posée/retirée par renderCategorySwitcher) :
+       masqué pendant le chargement initial, jamais affiché seul sans ses
+       onglets Découvrir/Ancrer/Relier. */
     #qcm-category-switcher.visible + .qcm-mes-acquis-row {
       display: flex;
+      /* Liseret discret (demande du 26/08/2026) : marque la séparation entre la navigation
+         Découvrir/Ancrer/Relier/Mes acquis et le contenu qui suit, sans cadre ni fond — même
+         gris clair que les séparateurs déjà utilisés ailleurs sur cette page (#eef1f3). */
+      margin: 0 0 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #eef1f3;
     }
     .qcm-mes-acquis-btn {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 7px 16px;
-      border: 1.5px solid #243038;
-      border-radius: 999px;
-      background: #ffffff;
-      color: #243038;
-      font-size: 13px;
-      font-weight: 700;
+      /* Même padding que .qcm-slot-btn (dont le padding-bottom:8px laisse la place au liseret actif
+         ::after ci-dessous, demande du 26/08/2026) plutôt que 2px 4px. */
+      padding: 4px 2px 8px;
+      position: relative;
+      border: none;
+      background: none;
+      /* Noir : ce bouton n'a pas d'état non cliquable, le gris (réservé au non cliquable,
+         demande du 26/08/2026) ne s'y applique donc jamais. */
+      color: #111827;
+      /* Même police ET même taille que Découvrir/Ancrer/Relier voisins (.qcm-slot-btn) — le
+         font-family seul seul (26/08/2026) ne suffisait pas à rendre un aspect identique tant
+         que la taille restait très inférieure (12.5px contre 16px). */
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      /* Majuscules, comme les onglets Découvrir/Ancrer/Relier voisins (.qcm-slot-btn) —
+         demande du 26/08/2026. */
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
       cursor: pointer;
     }
     .qcm-mes-acquis-btn i {
-      font-size: 12px;
+      font-size: 11px;
     }
     .qcm-mes-acquis-btn:hover:not(.active) {
-      background: #eef2f5;
+      color: #516776;
     }
     .qcm-mes-acquis-btn.active {
-      border-color: #243038;
+      color: #111827;
+      font-weight: 700;
+    }
+    /* Même liseret actif que Découvrir/Ancrer/Relier (.qcm-slot-btn.active::after) — demande du
+       26/08/2026. */
+    .qcm-mes-acquis-btn.active::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 3px;
+      border-radius: 999px;
+      background: #f5b642;
+    }
+    /* Bouton unique "Mémoriser" (demande du 27/08/2026) : même langage visuel
+       que l'ancien "Générer" (bouton d'action plein, pas de la navigation) —
+       remplace le champ + Générer + Plus d'options tant que non déplié. */
+    .qcm-memorize-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 8px;
+      width: fit-content;
+      max-width: min(100%, 320px);
+      margin: 0 auto 20px;
+      padding: 10px 22px;
+      border: none;
+      border-radius: 999px;
       background: #243038;
       color: #ffffff;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+      cursor: pointer;
+    }
+    .qcm-memorize-toggle:hover {
+      background: #384852;
     }
     .qcm-custom-search {
       display: none;
       flex-wrap: wrap;
+      align-items: center;
       gap: 8px;
       margin: 0 0 20px;
     }
@@ -421,8 +540,8 @@
          bouton "Générer" s'étirait aussi en énorme cercle à côté, cf.
          align-items:stretch par défaut sur .qcm-custom-search). */
       height: auto;
-      min-height: 44px;
-      padding: 10px 14px;
+      min-height: 26px;
+      padding: 4px 14px;
       border: 1px solid #d1d5db;
       border-radius: 18px;
       background: #f9fafb;
@@ -439,7 +558,7 @@
     }
     .qcm-custom-search-btn {
       flex-shrink: 0;
-      padding: 10px 16px;
+      padding: 6px 16px;
       border: none;
       border-radius: 999px;
       background: #243038;
@@ -453,42 +572,25 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+    /* Conteneur du bouton "Mémoriser" + son menu déroulant (demande du
+       27/08/2026) : autonome, placé avant le <form> qu'il révèle — plus
+       imbriqué dans .qcm-custom-search comme l'ancien "Plus d'options". */
     .qcm-knowledge-add {
       position: relative;
-      flex: 0 0 100%;
       display: flex;
-      justify-content: flex-start;
-    }
-    .qcm-knowledge-add-toggle {
-      display: inline-flex;
-      align-items: center;
       justify-content: center;
-      gap: 6px;
-      padding: 7px 2px;
-      border: 0;
-      background: transparent;
-      color: #516776;
-      font: inherit;
-      font-size: 13px;
-      font-weight: 700;
-      line-height: 1.2;
-      cursor: pointer;
-    }
-    .qcm-knowledge-add-toggle:hover,
-    .qcm-knowledge-add-toggle:focus-visible,
-    .qcm-knowledge-add-toggle[aria-expanded="true"] {
-      color: #243038;
-    }
-    .qcm-knowledge-add-toggle:focus-visible {
-      outline: 2px solid #516776;
-      outline-offset: 3px;
-      border-radius: 4px;
+      margin: 0 0 20px;
     }
     .qcm-knowledge-add-menu {
       position: absolute;
       z-index: 20;
       top: calc(100% + 4px);
-      left: 0;
+      /* Centré sous le bouton "Mémoriser", lui-même centré (.qcm-knowledge-add,
+         demande du 27/08/2026) — auparavant ancré à gauche (left:0), cohérent
+         avec l'ancien bouton "Plus d'options" qui était lui aussi aligné à
+         gauche. */
+      left: 50%;
+      transform: translateX(-50%);
       width: min(390px, calc(100vw - 48px));
       padding: 6px;
       border: 1px solid #d9dfe3;
@@ -554,31 +656,25 @@
       background: conic-gradient(#243038 0deg, #e2e6ea 0deg);
       box-shadow: inset 0 0 0 1px #d1d5db;
     }
-    /* Bouton "Explorer les apprentissages disponibles" (demande du 13/08/2026) :
-       adopter un sujet déjà généré par un autre visiteur plutôt que de
-       relancer une génération IA pour un sujet proche. Style secondaire
-       (contour, pas fond plein) : moins prioritaire que "Générer". */
-    .qcm-explore-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
+    /* "Explorer" (demande du 13/08/2026, regroupé le 27/08/2026 avec "Ajouter
+       des connaissances" dans un seul menu "Plus d'options" — cf.
+       #qcm-knowledge-add-menu) : adopter un sujet déjà généré par un autre
+       visiteur plutôt que de relancer une génération IA pour un sujet proche.
+       Reprend le style .qcm-knowledge-add-option (bouton plutôt que lien) et
+       ajoute un séparateur pour le distinguer des options d'import qui suivent. */
+    .qcm-knowledge-add-option-btn {
       width: 100%;
-      margin: 0 0 20px;
-      padding: 10px 16px;
-      border: 1px solid #d1d5db;
-      border-radius: 999px;
-      background: #f9fafb;
-      color: #243038;
+      border: 0;
+      background: none;
       font: inherit;
-      font-size: 13px;
-      font-weight: 700;
+      text-align: left;
       cursor: pointer;
     }
-    .qcm-explore-btn:hover,
-    .qcm-explore-btn:focus-visible {
-      background: #eef3f6;
-      border-color: #516776;
+    .qcm-knowledge-add-option-explore {
+      margin-bottom: 4px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #eef1f3;
+      border-radius: 9px 9px 0 0;
     }
     .qcm-explore-search-input {
       width: 100%;
@@ -710,40 +806,45 @@
       white-space: nowrap;
     }
     @media (max-width: 480px) {
+      /* "Générer" repasse sous la barre de recherche, en toute lettre avec son
+         icône (demande du 27/08/2026 — le bouton icône seule à droite n'allait
+         pas). */
       .qcm-custom-search {
         flex-direction: column;
+        gap: 2px;
+        margin-bottom: 10px;
       }
       .qcm-custom-search-btn {
-        width: 100%;
-      }
-      .qcm-knowledge-add {
-        justify-content: center;
+        width: fit-content;
+        padding: 8px 20px;
       }
       .qcm-knowledge-add-menu {
-        left: 50%;
         width: min(100%, 390px);
         box-sizing: border-box;
-        transform: translateX(-50%);
       }
       .qcm-custom-search-input {
-        min-height: 56px;
+        /* flex-basis:280px (règle de base, pensée pour la ligne desktop) devient
+           une HAUTEUR préférée de 280px une fois le conteneur en colonne ici
+           (flex-basis suit l'axe principal, vertical en column) — c'est la
+           vraie cause du cadre démesuré en mobile (bug trouvé le 27/08/2026,
+           indépendant du souci Supabase du même jour). On la remet à auto. */
+        flex-basis: auto;
+        /* Assez haut pour laisser le placeholder ("Tape un sujet à mémoriser
+           (ex. la photosynthèse)") s'afficher sur ses 2 lignes complètes en
+           mobile, sans les couper (demande du 27/08/2026). */
+        min-height: 44px;
+        padding: 3px 12px;
+        font-size: 13px;
       }
     }
-    .qcm-progress {
-      margin: 0 0 16px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #516776;
-    }
-    /* Barre de progression Ancrer/Relier (demande du 17/08/2026, cf.
-       renderProgressIndicatorHtml) — remplace le texte "Question X / Y" sur
-       ces deux catégories uniquement, centrée au-dessus de la question. */
+    /* Barre de progression Découvrir/Ancrer/Relier (demande du 17/08/2026,
+       étendue à Découvrir et élargie/embellie le 27/08/2026, cf.
+       renderProgressIndicatorHtml) — centrée au-dessus de la question, sur
+       les 3 catégories. */
     .qcm-progress-bar {
       position: relative;
       width: 100%;
-      max-width: 320px;
+      max-width: 440px;
       height: 10px;
       margin: 0 auto 22px;
       border-radius: 999px;
@@ -754,7 +855,7 @@
     .qcm-progress-bar-fill {
       height: 100%;
       border-radius: 999px;
-      background: linear-gradient(90deg, #2f6fed, #243038);
+      background: linear-gradient(90deg, #2f6fed, #1e3a8a);
       box-shadow: 0 0 8px rgba(47, 111, 237, 0.45);
       transition: width 0.35s ease;
       overflow: hidden;
@@ -1410,6 +1511,42 @@
     .qcm-mesqcm-action-menu-item-danger:focus-visible {
       background: #fef2f2;
     }
+    /* Noès (intégration du 26/08/2026) : corps injecté via extraHtml dans
+       buildFicheModalHtml (cf. openMesQcmNoesModal) — état "génération en
+       cours" puis lecteur vidéo natif, même gabarit de fiche que
+       "Consulter la fiche". */
+    .qcm-noes-body {
+      margin-top: 12px;
+    }
+    .qcm-noes-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      padding: 14px 12px;
+      border-radius: 10px;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .qcm-noes-status i {
+      color: #516776;
+    }
+    .qcm-noes-status-error {
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+    .qcm-noes-status-error i {
+      color: #dc2626;
+    }
+    .qcm-noes-video {
+      display: block;
+      width: 100%;
+      max-height: 70vh;
+      border-radius: 10px;
+      background: #000;
+    }
     /* Retrait d'un apprentissage (cf. server.js POST
        /api/users/notion-quizzes/remove) — ne supprime que la ligne
        personnelle du visiteur, jamais le QCM partagé. Confirmation native
@@ -1495,6 +1632,66 @@
       font-size: 14px;
       font-weight: 700;
       color: #1f2d33;
+    }
+    /* "À apprendre ensuite" (mission du 26/08/2026, cf. server.js GET
+       /api/users/recommendations/learn-next), ouverte depuis l'option
+       "Préconisations" du menu "Commencer un nouvel apprentissage" (demande
+       du 27/08/2026) — même famille visuelle que la fenêtre "Explorer"
+       juste au-dessus (.qcm-explore-list/.qcm-explore-item), pour rester
+       cohérent avec l'unique autre liste de suggestions déjà présente sur
+       cette page. */
+    .qcm-learn-next-list-wrap {
+      position: relative;
+    }
+    .qcm-learn-next-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    .qcm-learn-next-card {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-learn-next-card:hover,
+    .qcm-learn-next-card:focus-visible {
+      border-color: #516776;
+      background: #f9fafb;
+    }
+    .qcm-learn-next-card-badge {
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #dde8ee;
+      color: #34505f;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .qcm-learn-next-card-badge.is-bridge { background: #e6dcf5; color: #5b3a91; }
+    .qcm-learn-next-card-badge.is-discovery { background: #dcefe0; color: #2f6b3f; }
+    .qcm-learn-next-card-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.3;
+    }
+    .qcm-learn-next-card-reason {
+      font-size: 12px;
+      color: #6b7280;
+      line-height: 1.35;
     }
     /* Corrigé des questions dans la fiche "Mes QCM" (cf.
        renderFicheQuestionCorrige) — lecture seule, jamais interactif : la
@@ -1678,6 +1875,22 @@
       font-size: 14px;
       cursor: pointer;
       box-shadow: 0 4px 14px rgba(17, 24, 39, 0.18);
+    }
+    /* Fenêtre d'import (Manuellement/Photo/PDF/Texte/Lien/YouTube, demande du
+       27/08/2026, "toujours la même présentation") : leur page existante
+       (views/photo-knowledge.html, déjà autonome et sans bandeau propre)
+       chargée en iframe dans le même gabarit .qcm-fiche-modal que
+       Générer/Explorer — juste un peu plus large pour lui laisser sa mise en
+       page respirer. */
+    .qcm-knowledge-route-modal {
+      max-width: 560px;
+    }
+    .qcm-knowledge-route-frame {
+      display: block;
+      width: 100%;
+      height: min(70vh, 640px);
+      border: none;
+      border-radius: 8px;
     }
     .qcm-fiche-name {
       margin: 0 0 4px;
@@ -2036,27 +2249,6 @@
       max-width: 720px;
       margin-inline: auto;
     }
-    .qcm-progress {
-      margin-bottom: 18px;
-      color: #8a97a3;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-align: center;
-    }
-    .qcm-progress-bar {
-      max-width: 280px;
-      height: 4px;
-      margin-bottom: 24px;
-      background: #e8ecef;
-      box-shadow: none;
-      overflow: hidden;
-    }
-    .qcm-progress-bar-fill {
-      background: #516776;
-      box-shadow: none;
-      transition-duration: 180ms;
-    }
     .qcm-origin-badge,
     .qcm-type-badge {
       margin-bottom: 12px;
@@ -2186,17 +2378,28 @@
       flex: 0 1 132px;
       min-height: 42px;
       padding: 9px 12px;
-      border: 1px solid #d7dde2;
-      background: #ffffff;
-      color: #516776;
       font-family: Arial, sans-serif;
       font-size: 13px;
       letter-spacing: 0;
       text-transform: none;
     }
+    /* Facile/Difficile : nettement plus opaques (demande du 27/08/2026, revenue
+       sur la translucidité initiale — quasi pleins désormais). */
+    .qcm-difficulty-btn {
+      border: 1px solid #d7dde2;
+      background: rgba(255, 255, 255, 0.97);
+      color: #516776;
+    }
+    /* Moyen : bouton par défaut, rendu "noir et blanc" pour se distinguer
+       visuellement de Facile/Difficile — quasi plein lui aussi (demande du
+       27/08/2026). */
+    .qcm-difficulty-btn-moyen {
+      border: none;
+      background: rgba(36, 48, 56, 0.97);
+      color: #ffffff;
+    }
     .qcm-difficulty-btn-moyen:hover:not(:disabled) {
-      background: #eef3f6;
-      color: #243038;
+      background: rgba(56, 72, 82, 0.99);
     }
     .qcm-difficulty-btn:disabled {
       opacity: 0.38;
@@ -2205,7 +2408,7 @@
       margin: 6px auto 20px;
       padding: 9px 14px;
       border: 1px solid #d7dde2;
-      background: transparent;
+      background: rgba(255, 255, 255, 0.97);
       color: #516776;
       font-size: 13px;
       font-weight: 600;
@@ -2213,7 +2416,7 @@
     }
     #qcm-reveal-btn:hover {
       border-color: #aeb9c1;
-      background: #f7f9fa;
+      background: #ffffff;
       color: #243038;
     }
     .qcm-next-btn:not(#qcm-reveal-btn) {
@@ -2368,56 +2571,84 @@
          différent flashait furtivement avant d'être remplacé (demande du 16/08/2026). -->
     <h1><span id="qcm-title-text">Découvrir</span></h1>
     <p class="qcm-subtitle" id="qcm-subtitle-text"></p>
-    <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
-    <div class="qcm-mes-acquis-row">
-      <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><i class="fa-solid fa-award" aria-hidden="true"></i> Mes acquis</button>
+    <div class="qcm-category-group">
+      <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
+      <div class="qcm-mes-acquis-row">
+        <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><i class="fa-solid fa-award" aria-hidden="true"></i> Mes acquis</button>
+      </div>
     </div>
     <!-- Jauge de charge d'apprentissage (demande du 17/08/2026, repositionnée
          le 17/08/2026 sous Découvrir/Ancrer/Relier + Mes acquis, avant la
-         barre de recherche) : visible uniquement sur "Découvrir" (cf.
-         renderLoadGauge, appelée depuis loadMesQcm) — hidden par défaut pour
-         ne jamais apparaître un instant sur Ancrer/Relier ni avant la
-         première résolution des données. -->
+         barre de recherche ; remplacée le 27/08/2026 par une barre de
+         progression horizontale, cadran à aiguille jugé trop massif) :
+         visible uniquement sur "Découvrir" (cf. renderLoadGauge, appelée
+         depuis loadMesQcm) — hidden par défaut pour ne jamais apparaître un
+         instant sur Ancrer/Relier ni avant la première résolution des
+         données. -->
     <div class="qcm-load-gauge" id="qcm-load-gauge" hidden>
-      <svg class="qcm-load-gauge-svg" viewBox="0 0 200 112" aria-hidden="true">
-        <path d="M 20,100 A 80,80 0 0 1 43.43,43.43" class="qcm-load-gauge-arc qcm-load-gauge-arc-calm"></path>
-        <path d="M 43.43,43.43 A 80,80 0 0 1 100,20" class="qcm-load-gauge-arc qcm-load-gauge-arc-moderate"></path>
-        <path d="M 100,20 A 80,80 0 0 1 156.57,43.43" class="qcm-load-gauge-arc qcm-load-gauge-arc-busy"></path>
-        <path d="M 156.57,43.43 A 80,80 0 0 1 180,100" class="qcm-load-gauge-arc qcm-load-gauge-arc-overloaded"></path>
-        <line id="qcm-load-gauge-ideal-tick" class="qcm-load-gauge-ideal-tick" x1="100" y1="28" x2="100" y2="12"></line>
-        <text id="qcm-load-gauge-ideal-label" class="qcm-load-gauge-ideal-label" x="100" y="6">Idéal</text>
-        <line id="qcm-load-gauge-needle" class="qcm-load-gauge-needle" x1="100" y1="100" x2="100" y2="26"></line>
-        <circle cx="100" cy="100" r="6" class="qcm-load-gauge-hub"></circle>
-      </svg>
+      <div class="qcm-load-gauge-header">
+        <span class="qcm-load-gauge-title">Charge de mémorisation</span>
+        <span class="qcm-load-gauge-percent" id="qcm-load-gauge-percent"></span>
+      </div>
       <p class="qcm-load-gauge-label" id="qcm-load-gauge-label"></p>
+      <div class="qcm-load-gauge-bar-track">
+        <div class="qcm-load-gauge-bar-fill" id="qcm-load-gauge-bar-fill"></div>
+        <div class="qcm-load-gauge-ideal-marker" id="qcm-load-gauge-ideal-marker"></div>
+      </div>
+      <span class="qcm-load-gauge-ideal-label" id="qcm-load-gauge-ideal-label">Idéal</span>
       <p class="qcm-load-gauge-caption" id="qcm-load-gauge-caption"></p>
     </div>
-    <form class="qcm-custom-search" id="qcm-custom-search" hidden>
-      <textarea id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150" rows="1"
-        placeholder="Tape un sujet à mémoriser (ex. la photosynthèse)"></textarea>
-      <button type="submit" class="qcm-custom-search-btn" id="qcm-custom-search-btn">
-        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Générer
+    <!-- Un seul bouton "Mémoriser" (demande du 27/08/2026, "alléger la page", puis
+         "un menu déroulant") : ouvre un menu qui regroupe désormais la génération IA
+         ET les anciennes options "Plus d'options" (Explorer/import) — plus rien
+         d'affiché par défaut à part ce bouton. Reprend telle quelle la mécanique de
+         menu déjà en place (ouverture/fermeture/clic extérieur/Échap, cf.
+         closeKnowledgeAddMenu plus bas), seul le bouton déclencheur change. -->
+    <div class="qcm-knowledge-add" id="qcm-knowledge-add">
+      <button type="button" class="qcm-memorize-toggle" id="qcm-memorize-toggle"
+        aria-expanded="false" aria-controls="qcm-knowledge-add-menu" hidden>
+        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Commencer un nouvel apprentissage
       </button>
-      <div class="qcm-knowledge-add" id="qcm-knowledge-add">
-        <button class="qcm-knowledge-add-toggle" id="qcm-knowledge-add-toggle" type="button"
-          aria-expanded="false" aria-controls="qcm-knowledge-add-menu">
-          <i class="fa-solid fa-plus" aria-hidden="true"></i> Ajouter des connaissances
-        </button>
-        <div class="qcm-knowledge-add-menu" id="qcm-knowledge-add-menu" hidden>
-          <a class="qcm-knowledge-add-option" href="/manual-knowledge"><i class="fa-solid fa-pen" aria-hidden="true"></i><strong>Manuellement</strong><span>Saisir directement ce que je veux mémoriser</span></a>
-          <a class="qcm-knowledge-add-option" href="/photo-knowledge"><i class="fa-solid fa-camera" aria-hidden="true"></i><strong>Photo</strong><span>Photographier une page ou un cours</span></a>
-          <a class="qcm-knowledge-add-option" href="/pdf-knowledge"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i><strong>PDF</strong><span>Importer un document</span></a>
-          <a class="qcm-knowledge-add-option" href="/text-knowledge"><i class="fa-solid fa-align-left" aria-hidden="true"></i><strong>Texte</strong><span>Coller un texte</span></a>
-          <a class="qcm-knowledge-add-option" href="/url-knowledge"><i class="fa-solid fa-link" aria-hidden="true"></i><strong>Lien</strong><span>Importer une page web</span></a>
-          <a class="qcm-knowledge-add-option" href="/youtube-knowledge"><i class="fa-brands fa-youtube" aria-hidden="true"></i><strong>YouTube</strong><span>Importer une vidéo</span></a>
-        </div>
+      <div class="qcm-knowledge-add-menu" id="qcm-knowledge-add-menu" hidden>
+        <!-- Chaque option ouvre désormais une fenêtre fermable, toujours la même
+             présentation (.qcm-fiche-overlay/.qcm-fiche-modal — demande du
+             27/08/2026) : "Générer avec l'IA" y réutilise le vrai formulaire
+             (cf. openAiGenerateModal, déplacé dans la modale puis ramené à sa
+             place à la fermeture) ; les 6 imports y chargent
+             leur page existante en iframe (cf. openKnowledgeRouteModal) au lieu
+             de naviguer en dehors du QCM comme avant (data-title/-icon/-url). -->
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" id="qcm-ai-generate-toggle"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><strong>Générer avec l'IA</strong><span>Utiliser l'IA pour générer un sujet à mémoriser à partir d'un thème que tu tapes</span></button>
+        <!-- "Préconisations" (demande du 27/08/2026) : moteur de recommandation
+             personnalisé (cf. server.js GET /api/users/recommendations/learn-next,
+             lib/learn-next/ pour l'algorithme) — zone proximale de développement,
+             ponts entre connaissances déjà acquises, découverte contrôlée. Même
+             visibilité qu'Explorer juste en dessous (uniquement sur "Découvrir",
+             hors d'un QCM précis, cf. updateCustomSearchVisibility). -->
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" id="qcm-learn-next-btn" hidden><i class="fa-solid fa-route" aria-hidden="true"></i><strong>Préconisations</strong><span>Suggestions personnalisées à partir de ce que tu maîtrises déjà</span></button>
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn qcm-knowledge-add-option-explore" id="qcm-explore-btn" hidden><i class="fa-solid fa-compass" aria-hidden="true"></i><strong>Explorer</strong><span>Apprentissages déjà générés par d'autres visiteurs</span></button>
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="Manuellement" data-icon="fa-solid fa-pen" data-url="/manual-knowledge"><i class="fa-solid fa-pen" aria-hidden="true"></i><strong>Manuellement</strong><span>Saisir directement ce que je veux mémoriser</span></button>
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="Photo" data-icon="fa-solid fa-camera" data-url="/photo-knowledge"><i class="fa-solid fa-camera" aria-hidden="true"></i><strong>Photo</strong><span>Photographier une page ou un cours</span></button>
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="PDF" data-icon="fa-solid fa-file-pdf" data-url="/pdf-knowledge"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i><strong>PDF</strong><span>Importer un document</span></button>
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="Texte" data-icon="fa-solid fa-align-left" data-url="/text-knowledge"><i class="fa-solid fa-align-left" aria-hidden="true"></i><strong>Texte</strong><span>Coller un texte</span></button>
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="Lien" data-icon="fa-solid fa-link" data-url="/url-knowledge"><i class="fa-solid fa-link" aria-hidden="true"></i><strong>Lien</strong><span>Importer une page web</span></button>
+        <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="YouTube" data-icon="fa-brands fa-youtube" data-url="/youtube-knowledge"><i class="fa-brands fa-youtube" aria-hidden="true"></i><strong>YouTube</strong><span>Importer une vidéo</span></button>
       </div>
-    </form>
-    <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
-    <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
-    <button type="button" class="qcm-explore-btn" id="qcm-explore-btn" hidden>
-      <i class="fa-solid fa-compass" aria-hidden="true"></i> Explorer les apprentissages disponibles
-    </button>
+    </div>
+    <!-- Emplacement d'origine du formulaire IA (cf. openAiGenerateModal) : le
+         <form> y revient (reparenté) à la fermeture de la modale, jamais recréé
+         ni redétruit, pour ne toucher à aucun des écouteurs déjà branchés
+         dessus (submitCustomTopic, spinner, statut...). -->
+    <div id="qcm-ai-generate-anchor">
+      <form class="qcm-custom-search" id="qcm-custom-search" hidden>
+        <textarea id="qcm-custom-search-input" class="qcm-custom-search-input" maxlength="150" rows="1"
+          placeholder="Tape un sujet à mémoriser (ex. la photosynthèse)"></textarea>
+        <button type="submit" class="qcm-custom-search-btn" id="qcm-custom-search-btn">
+          <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span class="qcm-custom-search-btn-label">Générer</span>
+        </button>
+      </form>
+      <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
+      <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
+    </div>
     <!-- Contenu par défaut statique (pas posé par JS) : le cadre .qcm-panel est
          stylé (fond blanc, ombre, coins arrondis) dès le parsing du HTML, avant
          toute exécution de script — sans ce sablier déjà présent dans le HTML
@@ -2430,7 +2661,7 @@
     <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
   </section>
 </main>
-<script src="/script.min.js?v=20260825-connection-error-page23" defer></script>
+<script src="/script.min.js?v=20260826-blur-bottom-nav" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -2442,15 +2673,22 @@
   var customSearchBtn = document.getElementById('qcm-custom-search-btn');
   var customSearchStatus = document.getElementById('qcm-custom-search-status');
   var knowledgeAdd = document.getElementById('qcm-knowledge-add');
-  var knowledgeAddToggle = document.getElementById('qcm-knowledge-add-toggle');
+  // "Mémoriser" (demande du 27/08/2026) : déclenche désormais le menu déroulant
+  // qui contenait "Plus d'options" — reprend la variable historique
+  // knowledgeAddToggle/toute sa mécanique d'ouverture (cf. plus bas), seul
+  // l'élément HTML pointé change.
+  var knowledgeAddToggle = document.getElementById('qcm-memorize-toggle');
   var knowledgeAddMenu = document.getElementById('qcm-knowledge-add-menu');
+  var aiGenerateToggle = document.getElementById('qcm-ai-generate-toggle');
   var exploreBtn = document.getElementById('qcm-explore-btn');
   var mesAcquisBtn = document.getElementById('qcm-mes-acquis-btn');
   var loadGaugeEl = document.getElementById('qcm-load-gauge');
-  var loadGaugeNeedle = document.getElementById('qcm-load-gauge-needle');
+  var loadGaugePercent = document.getElementById('qcm-load-gauge-percent');
+  var loadGaugeBarFill = document.getElementById('qcm-load-gauge-bar-fill');
   var loadGaugeLabel = document.getElementById('qcm-load-gauge-label');
   var loadGaugeCaption = document.getElementById('qcm-load-gauge-caption');
   var loadGaugeToken = 0;
+  var learnNextBtn = document.getElementById('qcm-learn-next-btn');
 
   function closeKnowledgeAddMenu(options) {
     if (!knowledgeAddMenu || knowledgeAddMenu.hidden) return;
@@ -2469,7 +2707,7 @@
       event.preventDefault();
       knowledgeAddMenu.hidden = false;
       knowledgeAddToggle.setAttribute('aria-expanded', 'true');
-      knowledgeAddMenu.querySelector('a')?.focus();
+      knowledgeAddMenu.querySelector('a, button')?.focus();
     });
     document.addEventListener('click', function (event) {
       if (!knowledgeAdd.contains(event.target)) closeKnowledgeAddMenu();
@@ -2709,22 +2947,19 @@
   // currentCategory/currentSlot changent.
   function updateCustomSearchVisibility() {
     var visible = currentCategory === 'mesqcm' && !currentSlot;
-    // .hidden (propriété DOM, retire vraiment l'attribut) en plus de la classe : depuis
-    // l'ajout de [hidden]{display:none !important} (garde-fou du 13/08/2026 plus haut dans ce
-    // fichier), l'attribut hidden posé sur ce <form> dans le HTML l'emportait sur
-    // .qcm-custom-search.visible{display:flex} (non !important) — la barre restait invisible
-    // en permanence malgré la classe correctement posée, seul l'attribut compte désormais.
-    customSearchForm.hidden = !visible;
-    customSearchForm.classList.toggle('visible', visible);
+    // Le champ IA + Générer vit désormais dans sa propre fenêtre fermable
+    // (demande du 27/08/2026, cf. openAiGenerateModal/closeAiGenerateModal) :
+    // en sortir de force si la catégorie change pendant qu'elle est ouverte,
+    // plutôt que de la laisser affichée hors contexte. Idem pour le menu
+    // "Mémoriser" et la fenêtre d'import (openKnowledgeRouteModal).
     if (!visible) {
-      customSearchStatus.hidden = true;
-      if (!customSearchGenerationActive) stopPieSpinner();
-      if (pendingNotionQuizPollId) {
-        clearTimeout(pendingNotionQuizPollId);
-        pendingNotionQuizPollId = null;
-      }
+      closeKnowledgeAddMenu();
+      closeAiGenerateModal();
+      closeKnowledgeRouteModal();
     }
+    if (knowledgeAddToggle) knowledgeAddToggle.hidden = !visible;
     exploreBtn.hidden = !visible;
+    if (learnNextBtn) learnNextBtn.hidden = !visible;
   }
 
   function renderCategorySwitcher() {
@@ -2916,16 +3151,12 @@
   var FILL_BLANK_MARKER = '___';
 
   // Indicateur de progression, en haut de chaque question (demande du
-  // 17/08/2026) : une barre qui se remplit progressivement sur Ancrer/Relier
-  // — le nombre exact de questions y est moins utile (des repasses/liens
-  // composés à la volée, pas un contenu qu'on parcourt pour l'apprendre par
-  // cœur dans l'ordre) — plutôt que le texte "Question X / Y" gardé tel
-  // quel sur Découvrir. Fonction partagée par les 4 rendus de question
-  // (qcm/texte_a_trous/association/qcm_multi/ordre) plutôt que dupliquée.
+  // 17/08/2026, étendue à Découvrir le 27/08/2026) : une barre qui se remplit
+  // progressivement, sur les 3 catégories (Découvrir/Ancrer/Relier) — remplace
+  // l'ancien texte "Question X / Y" gardé jusqu'ici sur Découvrir. Fonction
+  // partagée par les 4 rendus de question (qcm/texte_a_trous/association/
+  // qcm_multi/ordre) plutôt que dupliquée.
   function renderProgressIndicatorHtml() {
-    if (currentCategory !== 'renforcement' && currentCategory !== 'comprendre') {
-      return '<p class="qcm-progress">Question ' + (currentIndex + 1) + ' / ' + questions.length + '</p>';
-    }
     var pct = questions.length ? Math.round(((currentIndex + 1) / questions.length) * 100) : 0;
     return '<div class="qcm-progress-bar" role="progressbar" aria-valuenow="' + (currentIndex + 1) + '" aria-valuemin="1" aria-valuemax="' + questions.length + '" aria-label="Progression du QCM">' +
       '<div class="qcm-progress-bar-fill" style="width:' + pct + '%"></div>' +
@@ -3008,7 +3239,7 @@
   // "guided" reprend mot pour mot le texte historique (comportement
   // par défaut inchangé, "aucune friction supplémentaire").
   var REVEAL_GATE_TEXT_BY_HELP_LEVEL = {
-    guided: 'Réfléchis à ta réponse, puis affiche les propositions',
+    guided: 'Réfléchis à ta réponse. Clique ici pour afficher les propositions.',
     intermediate: 'Essaie de répondre avant d’afficher les choix.',
     strong_recall: 'Retrouve la réponse de mémoire.'
   };
@@ -3160,12 +3391,17 @@
     document.body.style.backgroundSize = 'cover';
     document.body.style.backgroundPosition = 'center';
     document.body.style.backgroundRepeat = 'no-repeat';
+    // Cadre translucide seulement pendant une question en cours (demande du
+    // 27/08/2026) : opacité pleine sur la liste Découvrir/Mes acquis, où il
+    // n'y a pas d'image de fond à deviner derrière (cf. .qcm-panel plus haut).
+    document.body.classList.add('qcm-in-session');
   }
   function clearQuestionBackgroundImage() {
     document.body.style.backgroundImage = '';
     document.body.style.backgroundSize = '';
     document.body.style.backgroundPosition = '';
     document.body.style.backgroundRepeat = '';
+    document.body.classList.remove('qcm-in-session');
   }
 
   // Point d'entrée unique : dispatché selon le format de la question
@@ -3197,14 +3433,20 @@
   // question en cours).
   function goToNextQuestion() {
     // Remonte en haut de la page à chaque changement de question (demande du
-    // 17/08/2026) : .qcm-panel n'a pas de scroll propre, c'est la page (donc
-    // window, y compris dans l'iframe d'accueil sur mobile) qui défile —
-    // sans ça, après avoir lu l'explication d'une réponse plus bas, la
-    // question suivante s'affichait déjà scrollée au lieu de repartir du
-    // titre.
+    // 17/08/2026, fiabilisée le 27/08/2026 sur les 3 catégories) : .qcm-panel
+    // n'a pas de scroll propre, c'est la page (donc window, y compris dans
+    // l'iframe d'accueil sur mobile) qui défile — sans ça, après avoir lu
+    // l'explication d'une réponse plus bas, la question suivante s'affichait
+    // déjà scrollée au lieu de repartir du titre. Le remplacement du contenu
+    // (body.innerHTML) juste après pouvait interrompre un scroll "smooth"
+    // lancé avant lui (constaté sur certains parcours) : on force donc aussi
+    // un scroll instantané une fois la nouvelle question déjà rendue, pour
+    // que ça arrive systématiquement en haut quel que soit le cas.
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (currentIndex === questions.length - 1) renderFinalScore();
     else { currentIndex += 1; renderQuestion(); }
+    window.scrollTo(0, 0);
+    requestAnimationFrame(function () { window.scrollTo(0, 0); });
   }
   function wireNextButton(nextBtn) {
     var isLast = currentIndex === questions.length - 1;
@@ -4260,6 +4502,120 @@
     fetchAndRenderExplore('');
   }
   exploreBtn.addEventListener('click', openMesQcmExploreModal);
+
+  // "Générer avec l'IA" (demande du 27/08/2026, "toujours la même présentation") :
+  // ouvre le vrai <form> qcm-custom-search dans une fenêtre .qcm-fiche-modal, comme
+  // Explorer ci-dessus, au lieu de le déplier en place dans la page. Le formulaire est
+  // RÉUTILISÉ tel quel (déplacé dans la modale puis ramené à sa place à la fermeture,
+  // cf. qcm-ai-generate-anchor dans le HTML) — aucun écouteur existant
+  // (submitCustomTopic, spinner, statut) n'est retouché ni recréé.
+  var aiGenerateAnchor = document.getElementById('qcm-ai-generate-anchor');
+  var aiGenerateModalEls = null;
+  function closeAiGenerateModal() {
+    if (!aiGenerateModalEls) return;
+    aiGenerateAnchor.appendChild(customSearchForm);
+    aiGenerateAnchor.appendChild(customSearchStatus);
+    var spinnerEl = document.getElementById('qcm-pie-spinner');
+    if (spinnerEl) aiGenerateAnchor.appendChild(spinnerEl);
+    customSearchForm.hidden = true;
+    customSearchForm.classList.remove('visible');
+    customSearchStatus.hidden = true;
+    if (!customSearchGenerationActive) stopPieSpinner();
+    if (pendingNotionQuizPollId) {
+      clearTimeout(pendingNotionQuizPollId);
+      pendingNotionQuizPollId = null;
+    }
+    aiGenerateModalEls.overlay.remove();
+    document.removeEventListener('keydown', aiGenerateModalEls.onKeydown);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    aiGenerateModalEls = null;
+  }
+  function openAiGenerateModal() {
+    closeMesQcmActionModal();
+    closeMesQcmExploreModal();
+    closeKnowledgeRouteModal();
+    closeAiGenerateModal();
+    var modalHtml =
+      '<div class="qcm-fiche-modal">' +
+        '<div class="qcm-fiche-head">' +
+          '<p class="qcm-fiche-rubric"><i class="fa-solid fa-wand-magic-sparkles"></i> Générer avec l’IA</p>' +
+          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>' +
+        '<div class="qcm-ai-generate-slot" id="qcm-ai-generate-slot"></div>' +
+      '</div>';
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
+    document.body.appendChild(overlay);
+    var slot = overlay.querySelector('#qcm-ai-generate-slot');
+    slot.appendChild(customSearchForm);
+    slot.appendChild(customSearchStatus);
+    var spinnerEl = document.getElementById('qcm-pie-spinner');
+    if (spinnerEl) slot.appendChild(spinnerEl);
+    customSearchForm.hidden = false;
+    customSearchForm.classList.add('visible');
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+    function onKeydown(e) { if (e.key === 'Escape') closeAiGenerateModal(); }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) closeAiGenerateModal();
+    });
+    document.addEventListener('keydown', onKeydown);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeAiGenerateModal);
+    aiGenerateModalEls = { overlay: overlay, onKeydown: onKeydown };
+    if (customSearchInput) customSearchInput.focus();
+  }
+  if (aiGenerateToggle) aiGenerateToggle.addEventListener('click', function () {
+    closeKnowledgeAddMenu();
+    openAiGenerateModal();
+  });
+
+  // Manuellement/Photo/PDF/Texte/Lien/YouTube (demande du 27/08/2026, "toujours la
+  // même présentation") : chargées en iframe dans la même fenêtre .qcm-fiche-modal
+  // que Générer/Explorer, au lieu de quitter le QCM en cours (c'étaient des <a href>
+  // avant). data-title/-icon/-url posés directement dans le HTML (cf. plus haut).
+  var knowledgeRouteModalEls = null;
+  function closeKnowledgeRouteModal() {
+    if (!knowledgeRouteModalEls) return;
+    knowledgeRouteModalEls.overlay.remove();
+    document.removeEventListener('keydown', knowledgeRouteModalEls.onKeydown);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    knowledgeRouteModalEls = null;
+  }
+  function openKnowledgeRouteModal(title, iconClass, url) {
+    closeMesQcmActionModal();
+    closeMesQcmExploreModal();
+    closeAiGenerateModal();
+    closeKnowledgeRouteModal();
+    var modalHtml =
+      '<div class="qcm-fiche-modal qcm-knowledge-route-modal">' +
+        '<div class="qcm-fiche-head">' +
+          '<p class="qcm-fiche-rubric"><i class="' + iconClass + '"></i> ' + escapeHtml(title) + '</p>' +
+          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>' +
+        '<iframe class="qcm-knowledge-route-frame" src="' + url + '" title="' + escapeHtml(title) + '"></iframe>' +
+      '</div>';
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
+    document.body.appendChild(overlay);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+    function onKeydown(e) { if (e.key === 'Escape') closeKnowledgeRouteModal(); }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) closeKnowledgeRouteModal();
+    });
+    document.addEventListener('keydown', onKeydown);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeKnowledgeRouteModal);
+    knowledgeRouteModalEls = { overlay: overlay, onKeydown: onKeydown };
+  }
+  knowledgeAddMenu.querySelectorAll('[data-url]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      closeKnowledgeAddMenu();
+      openKnowledgeRouteModal(btn.getAttribute('data-title'), btn.getAttribute('data-icon'), btn.getAttribute('data-url'));
+    });
+  });
+
   if (mesAcquisBtn) mesAcquisBtn.addEventListener('click', function () {
     if (currentCategory === 'mesacquis') return;
     loadMesAcquis();
@@ -4273,11 +4629,15 @@
   // "Charge de mémorisation" (demande du 17/08/2026), plus clair que le
   // simple "Charge" — précise qu'il s'agit du rythme des repasses à venir,
   // pas d'une charge générale de l'appli.
+  // shortLabel (demande du 27/08/2026, nouveau composant barre) : juste le
+  // qualificatif, affiché séparément du titre "Charge de mémorisation" dans
+  // le nouveau design compact — même 4 niveaux, mêmes seuils (minRatio/
+  // maxRatio) et même label complet qu'avant, rien de métier n'a changé ici.
   var LOAD_GAUGE_LEVEL_META = {
-    calm: { label: 'Charge de mémorisation calme', minRatio: 0, maxRatio: 0.5 },
-    moderate: { label: 'Charge de mémorisation modérée', minRatio: 0.5, maxRatio: 1.0 },
-    busy: { label: 'Charge de mémorisation élevée', minRatio: 1.0, maxRatio: 1.75 },
-    overloaded: { label: 'Surcharge de mémorisation', minRatio: 1.75, maxRatio: 2.75 }
+    calm: { label: 'Charge de mémorisation calme', shortLabel: 'Calme', minRatio: 0, maxRatio: 0.5 },
+    moderate: { label: 'Charge de mémorisation modérée', shortLabel: 'Modérée', minRatio: 0.5, maxRatio: 1.0 },
+    busy: { label: 'Charge de mémorisation élevée', shortLabel: 'Élevée', minRatio: 1.0, maxRatio: 1.75 },
+    overloaded: { label: 'Surcharge de mémorisation', shortLabel: 'Surchargée', minRatio: 1.75, maxRatio: 2.75 }
   };
   var LOAD_GAUGE_LEVEL_ORDER = ['calm', 'moderate', 'busy', 'overloaded'];
 
@@ -4291,36 +4651,19 @@
   var LOAD_GAUGE_DAILY_CAP = 20;
   var LOAD_GAUGE_IDEAL_QUESTIONS = 12;
 
-  // Même calcul d'angle que l'aiguille (cf. renderLoadGauge), factorisé pour
-  // être réutilisable par le repère "Idéal" ci-dessous sans dupliquer la
-  // logique de zone/progress.
-  function ratioToGaugeAngleDeg(ratio) {
-    var level = LOAD_GAUGE_LEVEL_ORDER[0];
-    for (var i = LOAD_GAUGE_LEVEL_ORDER.length - 1; i >= 0; i--) {
-      if (ratio >= LOAD_GAUGE_LEVEL_META[LOAD_GAUGE_LEVEL_ORDER[i]].minRatio) {
-        level = LOAD_GAUGE_LEVEL_ORDER[i];
-        break;
-      }
-    }
-    var meta = LOAD_GAUGE_LEVEL_META[level];
-    var levelIndex = LOAD_GAUGE_LEVEL_ORDER.indexOf(level);
-    var span = meta.maxRatio - meta.minRatio;
-    var progress = span > 0 ? Math.max(0, Math.min(1, (ratio - meta.minRatio) / span)) : 1;
-    return -90 + levelIndex * 45 + progress * 45;
-  }
-
+  // Repère "Idéal" (demande du 27/08/2026, nouvelle barre horizontale) :
+  // position fixe en % de la largeur = LOAD_GAUGE_IDEAL_QUESTIONS /
+  // LOAD_GAUGE_DAILY_CAP, indépendante de la charge réelle affichée par la
+  // barre — remplace l'ancien calcul d'angle (ratioToGaugeAngleDeg), le
+  // cadran à aiguille n'existe plus. Posée une seule fois, jamais recalculée
+  // au fil des rendus (12/20 = 60 %, ne dépend d'aucune donnée serveur).
   (function initLoadGaugeIdealMarker() {
-    var tick = document.getElementById('qcm-load-gauge-ideal-tick');
+    var marker = document.getElementById('qcm-load-gauge-ideal-marker');
     var label = document.getElementById('qcm-load-gauge-ideal-label');
-    if (!tick && !label) return;
-    var angleDeg = ratioToGaugeAngleDeg(LOAD_GAUGE_IDEAL_QUESTIONS / LOAD_GAUGE_DAILY_CAP);
-    if (tick) tick.setAttribute('transform', 'rotate(' + angleDeg + ' 100 100)');
-    if (label) {
-      var angleRad = angleDeg * Math.PI / 180;
-      var r = 96;
-      label.setAttribute('x', 100 + r * Math.sin(angleRad));
-      label.setAttribute('y', 100 - r * Math.cos(angleRad));
-    }
+    if (!marker && !label) return;
+    var idealPercent = Math.min((LOAD_GAUGE_IDEAL_QUESTIONS / LOAD_GAUGE_DAILY_CAP) * 100, 100);
+    if (marker) marker.style.left = idealPercent + '%';
+    if (label) label.style.left = idealPercent + '%';
   })();
 
   function hideLoadGauge() {
@@ -4339,17 +4682,19 @@
     if (!loadGaugeEl || !gauge) return;
     loadGaugeEl.hidden = false;
     var meta = LOAD_GAUGE_LEVEL_META[gauge.level] || LOAD_GAUGE_LEVEL_META.calm;
-    var levelIndex = LOAD_GAUGE_LEVEL_ORDER.indexOf(gauge.level);
-    if (levelIndex < 0) levelIndex = 0;
-    // Chaque palier occupe un quart égal du cadran (0-45-90-135-180°), quelle
-    // que soit la largeur réelle de sa plage de ratio — un cadran à 4 zones
-    // de tailles très inégales (cf. seuils) serait moins lisible qu'à
-    // tailles égales ; seule la position DANS le quart reflète le ratio réel.
-    var span = meta.maxRatio - meta.minRatio;
-    var progress = span > 0 ? Math.max(0, Math.min(1, (gauge.ratio - meta.minRatio) / span)) : 1;
-    var angleDeg = -90 + levelIndex * 45 + progress * 45;
-    if (loadGaugeNeedle) loadGaugeNeedle.style.transform = 'rotate(' + angleDeg + 'deg)';
-    if (loadGaugeLabel) loadGaugeLabel.textContent = meta.label;
+    // Pourcentage affiché (demande du 27/08/2026) : gauge.ratio est déjà le
+    // nombre de questions prévues rapporté à LOAD_GAUGE_DAILY_CAP (20) — cf.
+    // le repère "Idéal" ci-dessus, LOAD_GAUGE_IDEAL_QUESTIONS/LOAD_GAUGE_DAILY_CAP,
+    // qui utilise le même rapport. Simple mise en pourcentage arrondi et
+    // plafonné à 100, sans toucher au calcul de gauge.ratio lui-même (fait
+    // côté serveur, lib/spaced-repetition/learning-load.js).
+    var chargePercent = Math.round(Math.min(gauge.ratio * 100, 100));
+    if (loadGaugePercent) loadGaugePercent.textContent = chargePercent + ' %';
+    if (loadGaugeBarFill) {
+      loadGaugeBarFill.style.width = chargePercent + '%';
+      loadGaugeBarFill.className = 'qcm-load-gauge-bar-fill qcm-load-gauge-bar-fill-' + gauge.level;
+    }
+    if (loadGaugeLabel) loadGaugeLabel.textContent = meta.shortLabel || meta.label;
     if (loadGaugeCaption) {
       if (gauge.peakLoad > 0 && gauge.peakDayIndex >= 0) {
         var when = gauge.peakDayIndex === 0 ? "aujourd'hui" : (gauge.peakDayIndex === 1 ? 'demain' : 'dans ' + gauge.peakDayIndex + ' jours');
@@ -4375,6 +4720,123 @@
         if (myToken === loadGaugeToken) hideLoadGauge();
       });
   }
+
+  // "Préconisations" (demande du 27/08/2026) : moteur de recommandation
+  // personnalisé (cf. server.js GET /api/users/recommendations/learn-next,
+  // lib/learn-next/ pour l'algorithme) — zone proximale de développement,
+  // ponts entre connaissances déjà acquises, découverte contrôlée. Ouvre une
+  // fenêtre fermable dans la même famille visuelle qu'"Explorer" juste au-
+  // dessus (.qcm-fiche-overlay/.qcm-fiche-modal, liste façon
+  // .qcm-explore-list) plutôt qu'une section permanente sur la page.
+  var LEARN_NEXT_TYPE_META = {
+    bridge: { label: 'Pont', badgeClass: 'is-bridge' },
+    discovery: { label: 'Découverte', badgeClass: 'is-discovery' },
+    continuity: { label: 'Suite logique', badgeClass: '' }
+  };
+  function sendLearnNextEvent(item, eventType) {
+    if (!voterKey) return;
+    fetch('/api/users/recommendations/learn-next/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        legacyKey: voterKey,
+        events: [{
+          eventType: eventType,
+          subjectType: item.subjectType,
+          subjectSourceId: item.subjectSourceId,
+          solarSystemId: item.solarSystemId || null,
+          recommendationType: item.recommendationType,
+          score: item.score
+        }]
+      })
+    }).catch(function () {});
+  }
+  var mesQcmLearnNextModalEls = null;
+  function closeMesQcmLearnNextModal() {
+    if (!mesQcmLearnNextModalEls) return;
+    mesQcmLearnNextModalEls.overlay.remove();
+    document.removeEventListener('keydown', mesQcmLearnNextModalEls.onKeydown);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    mesQcmLearnNextModalEls = null;
+  }
+  function renderLearnNextModalList(listEl, items) {
+    if (!items.length) {
+      listEl.innerHTML = '<p class="qcm-state-message">Pas encore de préconisation personnalisée — continue à apprendre pour en débloquer.</p>';
+      return;
+    }
+    listEl.innerHTML = items.map(function (item, i) {
+      var meta = LEARN_NEXT_TYPE_META[item.recommendationType] || LEARN_NEXT_TYPE_META.continuity;
+      var badge = meta.label ? '<span class="qcm-learn-next-card-badge ' + meta.badgeClass + '">' + escapeHtml(meta.label) + '</span>' : '';
+      return '<button type="button" class="qcm-learn-next-card" data-index="' + i + '">' +
+        badge +
+        '<span class="qcm-learn-next-card-name">' + escapeHtml(item.name || 'Connaissance') + '</span>' +
+        '<span class="qcm-learn-next-card-reason">' + escapeHtml(item.reasonText || '') + '</span>' +
+      '</button>';
+    }).join('');
+    listEl.querySelectorAll('.qcm-learn-next-card').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var item = items[parseInt(btn.getAttribute('data-index'), 10)];
+        if (!item) return;
+        sendLearnNextEvent(item, 'opened');
+        closeMesQcmLearnNextModal();
+        openMesQcmFicheByLink(item.subjectType, item.subjectSourceId, item.name);
+      });
+    });
+  }
+  function openMesQcmLearnNextModal() {
+    closeMesQcmActionModal();
+    closeMesQcmExploreModal();
+    closeMesQcmLearnNextModal();
+    var modalHtml =
+      '<div class="qcm-fiche-modal qcm-learn-next-modal">' +
+        '<div class="qcm-fiche-head">' +
+          '<p class="qcm-fiche-rubric"><i class="fa-solid fa-route"></i> Préconisations</p>' +
+          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>' +
+        '<div class="qcm-learn-next-list-wrap"><div class="qcm-learn-next-list" id="qcm-learn-next-modal-list"></div></div>' +
+      '</div>';
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
+    document.body.appendChild(overlay);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+    function onKeydown(e) { if (e.key === 'Escape') closeMesQcmLearnNextModal(); }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) closeMesQcmLearnNextModal();
+    });
+    document.addEventListener('keydown', onKeydown);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeMesQcmLearnNextModal);
+    mesQcmLearnNextModalEls = { overlay: overlay, onKeydown: onKeydown };
+
+    var listEl = overlay.querySelector('#qcm-learn-next-modal-list');
+    if (!voterKey) {
+      listEl.innerHTML = '<p class="qcm-state-message">Identifiant introuvable, recharge la page et réessaie.</p>';
+      return;
+    }
+    listEl.innerHTML = '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement…</p>';
+    fetch('/api/users/recommendations/learn-next?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) {
+        // Une réponse non-200 (ex. clé invalide) ne doit jamais être confondue
+        // avec "aucune préconisation pour l'instant" (vérification du 27/08/2026) :
+        // sans ce contrôle, res.json() sur un corps d'erreur ({error:"..."})
+        // n'a pas de champ recommendations -> tombe silencieusement dans le
+        // même état vide qu'un utilisateur cold-start légitime.
+        if (!res.ok) throw new Error('http ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        var items = Array.isArray(data && data.recommendations) ? data.recommendations : [];
+        renderLearnNextModalList(listEl, items);
+      })
+      .catch(function () {
+        listEl.innerHTML = '<p class="qcm-state-message">Impossible de charger les préconisations pour le moment.</p>';
+      });
+  }
+  if (learnNextBtn) learnNextBtn.addEventListener('click', function () {
+    closeKnowledgeAddMenu();
+    openMesQcmLearnNextModal();
+  });
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
@@ -4463,11 +4925,11 @@
     return q.slot + '|' + q.quizDate;
   }
 
-  function renderMesQcmTableHtml(list, allQuizzes) {
+  function renderMesQcmTableHtml(list, allQuizzes, showCheckbox) {
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
     html += '<table class="qcm-mesqcm-table">';
-    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th><th></th></tr></thead><tbody>';
+    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th>' + (showCheckbox ? '<th></th>' : '') + '</tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
@@ -4489,7 +4951,9 @@
       html += '<td>' + stateHtml + '</td>';
       html += '<td>' + badgeHtml + '</td>';
       html += '<td><button type="button" class="qcm-mesqcm-delete-btn" data-mesqcm-delete-index="' + index + '" aria-label="Supprimer cet apprentissage" title="Supprimer"><i class="fa-solid fa-trash-can"></i></button></td>';
-      html += '<td class="qcm-mesqcm-td-check"><input type="checkbox" class="qcm-mesqcm-row-checkbox" data-mesqcm-key="' + escapeHtml(getMesQcmRowKey(q)) + '" aria-label="Sélectionner ' + escapeHtml(q.label || meta.label) + '"></td>';
+      if (showCheckbox) {
+        html += '<td class="qcm-mesqcm-td-check"><input type="checkbox" class="qcm-mesqcm-row-checkbox" data-mesqcm-key="' + escapeHtml(getMesQcmRowKey(q)) + '" aria-label="Sélectionner ' + escapeHtml(q.label || meta.label) + '"></td>';
+      }
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -4502,13 +4966,13 @@
   // Dix connaissances maximum à la fois dans chaque liste. Les autres
   // restent accessibles par les flèches et le numéro de page placés sous le
   // tableau, sans recharger la page ni perdre l'accordéon ouvert.
-  function renderMesQcmPaginatedTablesHtml(list, allQuizzes) {
+  function renderMesQcmPaginatedTablesHtml(list, allQuizzes, showCheckbox) {
     var pageCount = Math.max(1, Math.ceil(list.length / MES_QCM_PAGE_SIZE));
     var html = '<div class="qcm-mesqcm-paged-list" data-page-count="' + pageCount + '" data-current-page="0">';
     for (var pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
       var pageItems = list.slice(pageIndex * MES_QCM_PAGE_SIZE, (pageIndex + 1) * MES_QCM_PAGE_SIZE);
       html += '<div class="qcm-mesqcm-page" data-page-index="' + pageIndex + '"' + (pageIndex ? ' hidden' : '') + '>';
-      html += renderMesQcmTableHtml(pageItems, allQuizzes);
+      html += renderMesQcmTableHtml(pageItems, allQuizzes, showCheckbox);
       html += '</div>';
     }
     if (pageCount > 1) {
@@ -4680,18 +5144,21 @@
     var inProgressQuizzes = pendingQuizzes.filter(function (q) { return q.inProgress; });
     var notStartedQuizzes = pendingQuizzes.filter(function (q) { return !q.inProgress; });
 
-    var html = MESQCM_BULK_BAR_HTML;
-    html += '<div class="qcm-mesqcm-groups">';
+    // Pas de sélection groupée ici (demande du 26/08/2026, "on le laisse juste dans mes
+    // acquis") : ni la barre "Tout cocher" (MESQCM_BULK_BAR_HTML, non préfixée ci-dessous) ni
+    // la colonne de cases à cocher par ligne (showCheckbox=false plus bas) — la suppression
+    // individuelle (icône corbeille par ligne) reste disponible.
+    var html = '<div class="qcm-mesqcm-groups">';
     if (inProgressQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--inprogress">';
       html += '<h2 class="qcm-mesqcm-group-title">Mes apprentissages en cours</h2>';
-      html += renderMesQcmPaginatedTablesHtml(inProgressQuizzes, quizzes);
+      html += renderMesQcmPaginatedTablesHtml(inProgressQuizzes, quizzes, false);
       html += '</section>';
     }
     if (notStartedQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
       html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
-      html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes);
+      html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes, false);
       html += '</section>';
     }
     if (!pendingQuizzes.length) {
@@ -4746,7 +5213,7 @@
       html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-theme-chevron" aria-hidden="true"></i>';
       html += '</button>';
       html += '<div class="qcm-mesqcm-theme-panel">';
-      html += renderMesQcmPaginatedTablesHtml(themeQuizzes, quizzes);
+      html += renderMesQcmPaginatedTablesHtml(themeQuizzes, quizzes, true);
       html += '<button type="button" class="qcm-mesqcm-theme-collapse"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i> Masquer</button>';
       html += '</div>';
       html += '</section>';
@@ -4957,6 +5424,16 @@
       ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
       : '<span class="qcm-acquis-badge">' + progressPct + '%</span>';
 
+    // Bouton Noès (intégration du 26/08/2026) : uniquement pour les fiches
+    // "recherche IA" (sourceType "custom") — cf. server.js POST
+    // /api/noes/videos, même restriction de périmètre V1. L'architecture
+    // reste indépendante de la source (rien de spécifique à "custom" au-delà
+    // de cette vérification), il suffira de l'étendre ici le jour où
+    // d'autres imports seront ouverts à Noès.
+    var noesButtonHtml = q.sourceType === 'custom'
+      ? '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="noes"><i class="fa-solid fa-clapperboard"></i> Regarder Noès</button>'
+      : '';
+
     var modalHtml =
       '<div class="qcm-fiche-modal qcm-mesqcm-action-modal">' +
         '<div class="qcm-fiche-head">' +
@@ -4967,6 +5444,7 @@
         '<div class="qcm-mesqcm-action-menu-info"><span>Ancrage</span>' + ancrageBadgeHtml + '</div>' +
         '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="fiche"><i class="fa-solid fa-file-lines"></i> Consulter la fiche</button>' +
         '<button type="button" class="qcm-mesqcm-action-menu-item" data-action="quiz"><i class="fa-solid fa-play"></i> ' + escapeHtml(doLabel) + '</button>' +
+        noesButtonHtml +
         '<button type="button" class="qcm-mesqcm-action-menu-item qcm-mesqcm-action-menu-item-danger" data-action="delete"><i class="fa-solid fa-trash-can"></i> Supprimer</button>' +
       '</div>';
 
@@ -4998,8 +5476,83 @@
       closeMesQcmActionModal();
       removeMesQcmItem(q, quizzes, btn);
     });
+    var noesBtn = overlay.querySelector('[data-action="noes"]');
+    if (noesBtn) {
+      noesBtn.addEventListener('click', function () {
+        closeMesQcmActionModal();
+        openMesQcmNoesModal(q);
+      });
+    }
 
     mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown };
+  }
+
+  // Noès (intégration du 26/08/2026) : lecteur vidéo d'un lot d'au plus 5
+  // connaissances de cette fiche (batchIndex 0 pour l'instant — pas encore
+  // de sélecteur de lot dans l'UI, cf. rapport d'audit section 10, "écart
+  // produit à trancher" ; une fiche "recherche IA" dépasse rarement 5
+  // connaissances en pratique). Réutilise le même gabarit de fiche
+  // (buildFicheModalHtml/openFicheOverlay) que "Consulter la fiche", avec un
+  // corps qui bascule de "génération en cours" à un lecteur <video> natif.
+  var NOES_POLL_INTERVAL_MS = 3000;
+  var NOES_BATCH_INDEX = 0;
+  function openMesQcmNoesModal(q) {
+    var bodyHtml = '<div class="qcm-noes-body" id="qcm-noes-body">' +
+      '<p class="qcm-noes-status"><i class="fa-solid fa-spinner fa-spin"></i> Noès prépare cette séance…</p>' +
+      '</div>';
+    openFicheOverlay(buildFicheModalHtml('fa-clapperboard', 'Noès', q.label || 'Cette fiche', { meta: null, sections: [] }, bodyHtml));
+    requestNoesVideo(q, document.getElementById('qcm-noes-body'));
+  }
+  function showNoesVideo(bodyEl, url) {
+    if (!bodyEl || !document.body.contains(bodyEl)) return;
+    // playsinline + preload="metadata" : même stratégie mobile que le
+    // lecteur natif déjà en place pour les vidéos de débat (cf.
+    // views/debate.html) — autoplay volontairement absent, l'utilisateur
+    // vient d'ouvrir la modale exprès pour regarder, un clic sur "lire" est
+    // attendu, pas un déclenchement automatique.
+    bodyEl.innerHTML = '<video src="' + escapeHtml(url) + '" controls playsinline preload="metadata" class="qcm-noes-video"></video>';
+  }
+  function showNoesError(bodyEl, message) {
+    if (!bodyEl || !document.body.contains(bodyEl)) return;
+    bodyEl.innerHTML = '<p class="qcm-noes-status qcm-noes-status-error"><i class="fa-solid fa-triangle-exclamation"></i> ' +
+      escapeHtml(message || "Noès n'est pas disponible pour le moment.") + '</p>';
+  }
+  function pollNoesVideoStatus(videoId, bodyEl) {
+    // bodyEl retiré du DOM = modale fermée entre-temps : on arrête le
+    // polling au lieu de continuer à interroger le serveur pour rien (cf.
+    // rapport d'audit section 9, "le client ferme la page" — le job RunPod
+    // continue de son côté, seul le polling client s'arrête ici).
+    if (!bodyEl || !document.body.contains(bodyEl)) return;
+    fetch('/api/noes/videos/' + encodeURIComponent(videoId) + '/status', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!bodyEl || !document.body.contains(bodyEl)) return;
+        if (!data.ok) { showNoesError(bodyEl, data.error); return; }
+        if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
+        if (data.status === 'failed') { showNoesError(bodyEl); return; }
+        setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl); }, NOES_POLL_INTERVAL_MS);
+      })
+      .catch(function () {
+        if (bodyEl && document.body.contains(bodyEl)) setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl); }, NOES_POLL_INTERVAL_MS);
+      });
+  }
+  function requestNoesVideo(q, bodyEl) {
+    fetch('/api/noes/videos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legacyKey: voterKey, slot: q.slot, quizDate: q.quizDate, batchIndex: NOES_BATCH_INDEX })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!bodyEl || !document.body.contains(bodyEl)) return;
+        if (!data.ok) { showNoesError(bodyEl, data.error); return; }
+        if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
+        if (data.status === 'failed') { showNoesError(bodyEl); return; }
+        pollNoesVideoStatus(data.videoId, bodyEl);
+      })
+      .catch(function () {
+        if (bodyEl && document.body.contains(bodyEl)) showNoesError(bodyEl, 'Erreur réseau.');
+      });
   }
 
   // Fiche d'un QCM de notion (cf. server.js GET /api/users/notion-quizzes/fiche) :

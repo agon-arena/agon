@@ -23,6 +23,22 @@ html {
   --color-b-bg:       #e8f3f7;
   --color-b-border:   #AEC0CC;
   --color-b-border-dark: #7a9bab;
+
+  /* Polices centralisées (audit typographique 2026-08-26, relecture 2026-08-27).
+     Ne couvrent QUE les déclarations sans risque : ni les bulles
+     (tagTrendCloud.css/.mnoria-tag-*), ni les cartes de carrousel
+     (.debate-card*, .index-card*, .index-social*), ni le switch Actualités/Ma
+     mémoire/Communauté (.mnoria-cloud-mode-*), qui restent en valeurs
+     littérales pour ne prendre aucun risque sur ces zones protégées.
+     --font-heading-condensed-legacy documente une variante à fallback
+     Impact/Arial Narrow déjà présente sur certaines pages (repris tel quel,
+     pas corrigé : la police web se charge presque toujours, ce fallback ne
+     joue quasi jamais). Pas de --font-serif : la seule utilisatrice de Libre
+     Baskerville est .debate-card (protégée), laissée en littéral. */
+  --font-ui: Arial, Helvetica, sans-serif;
+  --font-heading: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  --font-heading-condensed: 'Barlow Condensed', Arial, sans-serif;
+  --font-heading-condensed-legacy: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
 }
 
 html {
@@ -48,7 +64,7 @@ body.page-home-mobile .page-arrival-loading-title {
 
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   margin: 0;
   color: #1f2937;
   background: #f3f4f6;
@@ -130,7 +146,7 @@ html.thematic-scroll body {
 }
 
 .mnoria-startup-logo {
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  font-family: var(--font-heading);
   font-size: 44px;
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -753,8 +769,11 @@ main.create-page {
   font-family: "Libre Baskerville", Georgia, serif;
   padding: 16px 16px 8px;
   border-radius: 14px;
+  /* border seul (pas de box-shadow inset en renfort) : les deux superposés sur un
+     border-radius provoquaient un léger espace non noir dans les coins arrondis,
+     chacun anti-aliasant sa propre courbe indépendamment (demande du 26/08/2026,
+     "bordure noire mais les coins n'apparaissent pas noirs"). */
   border: 1px solid #111827;
-  box-shadow: inset 0 0 0 1px rgba(17,24,39,0.7);
   overflow: visible;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   position: relative;
@@ -5116,7 +5135,7 @@ body.page-debate #score-b {
   border-radius:999px;
   background:#f5b642;
   color:#243038;
-  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-family:var(--font-heading-condensed);
   font-size:16px;
   font-weight:700;
   letter-spacing:0.02em;
@@ -5133,7 +5152,7 @@ body.page-debate #score-b {
   border-radius:999px;
   background:none;
   color:#6b7280;
-  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-family:var(--font-heading-condensed);
   font-size:14px;
   font-weight:700;
   letter-spacing:0.02em;
@@ -5215,7 +5234,7 @@ body.page-debate #score-b {
 }
 .notion-level-picker-option-name{
   color:#243038;
-  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-family:var(--font-heading-condensed);
   font-size:16px;
   font-weight:700;
   letter-spacing:0.02em;
@@ -5234,7 +5253,7 @@ body.page-debate #score-b {
   border-radius:999px;
   background:none;
   color:#6b7280;
-  font-family:"Barlow Condensed", Arial, sans-serif;
+  font-family:var(--font-heading-condensed);
   font-size:14px;
   font-weight:700;
   letter-spacing:0.02em;
@@ -6425,7 +6444,7 @@ body.page-debate .topbar::after {
 .mnoria-source-panel-title {
   margin: 0;
   color: #111827;
-  font-family: "Oswald", Impact, "Arial Narrow", sans-serif;
+  font-family: var(--font-heading);
   font-size: clamp(1.7rem, 7vw, 2.3rem);
   font-weight: 900;
   line-height: 1.05;
@@ -12016,35 +12035,6 @@ body:has(#home-bottom-share-menu.home-bottom-share-menu-open) .index-floating-re
   height: 1px;
   background: #e5e7eb;
   margin: 18px 0;
-}
-
-.mnoria-score-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.mnoria-score-tab {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
-  border-radius: 999px;
-  padding: 8px 10px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-}
-
-.mnoria-score-tab.active {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
 }
 
 .install-modal-steps {
@@ -20248,7 +20238,7 @@ body.page-home #debates-list .theme-row-section:first-child {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.75);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -21408,7 +21398,7 @@ body.page-home,
 body.page-home-mobile,
 body.page-home :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
 body.page-home-mobile :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  font-family: var(--font-heading);
 }
 
 body.page-home .debate-card-context-text,
@@ -21427,7 +21417,7 @@ body.page-home-mobile .debate-card-context-text .context-latin-question {
 /* Barlow Condensed on the debate page */
 body.page-debate,
 body.page-debate :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
-  font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
+  font-family: var(--font-heading-condensed-legacy);
 }
 
 /* Barlow Condensed on create and notifications pages, like debate */
@@ -21439,7 +21429,7 @@ body.page-create :where(button, input, textarea, select, p, span, div, a, h1, h2
 body.page-create-mobile :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
 body.page-notifications :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]),
 body.page-notifications-mobile :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
-  font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif;
+  font-family: var(--font-heading-condensed-legacy);
 }
 
 /* Page Mes scores et contributions : police condensée peu lisible pour du texte
@@ -21447,7 +21437,7 @@ body.page-notifications-mobile :where(button, input, textarea, select, p, span, 
    le site pour le corps de texte, plus lisible. */
 body.page-contributions,
 body.page-contributions :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
 }
 
 /* Idées page débat : titre en gras, corps en normal avec première lettre en gras */
@@ -22106,7 +22096,7 @@ body.page-debate .debate-side-focus-btn-right {
 
 .contact-panel h1 {
   margin: 0 0 18px;
-  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-family: var(--font-heading-condensed);
   font-size: 34px;
   line-height: 1;
   color: #111827;
@@ -22255,7 +22245,7 @@ body.page-contact.in-iframe .contact-page-shell {
 
 .about-panel h1 {
   margin: 0 0 16px;
-  font-family: "Barlow Condensed", Arial, sans-serif;
+  font-family: var(--font-heading-condensed);
   font-size: 34px;
   line-height: 1;
   color: #111827;
@@ -23466,7 +23456,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   border-radius: 999px;
   background: #eafbf0;
   color: #1a7a3d;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -23501,7 +23491,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   border-radius: 999px;
   background: #f4eff8;
   color: #7a5c94;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -23837,7 +23827,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   border-radius: 999px;
   background: #fff;
   color: #374151;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -23866,7 +23856,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #6b7280;
   padding: 6px 16px;
   min-width: 90px;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -23934,12 +23924,20 @@ body.page-home-mobile .debate-card::after {
   border-radius: 0 0 14px 14px;
 }
 
-/* Cadre noir + dégradés latéraux en overlay (z-index 15, au-dessus du contenu) */
+/* Cadre noir + dégradés latéraux en overlay (z-index 15, au-dessus du contenu). top/left/right/
+   bottom:-1px (pas 0) : .debate-card a position:relative ET son propre border:1px — le containing
+   block d'un absolute sur un ancêtre position:relative est sa PADDING BOX (pas sa border box),
+   donc inset:0 casait ce calque 1px trop à l'intérieur du bord réel de la carte. Son propre
+   border-radius:14px se retrouvait alors légèrement décalé par rapport à la vraie courbe de la
+   carte, décalage invisible sur un bord droit (les deux bordures restent adjacentes, 1+2=3px de
+   noir continu) mais visible en triangle clair au niveau du coin arrondi, où les deux courbes ne
+   se superposent plus exactement (demande du 26/08/2026, "coins blancs, pas noirs", carte "À la
+   une"). -1px ramène ce calque exactement sur la border box réelle de la carte. */
 body.page-home .debate-card::before,
 body.page-home-mobile .debate-card::before {
   content: '';
   position: absolute;
-  top: 0; bottom: 0; left: 0; right: 0;
+  top: -1px; bottom: -1px; left: -1px; right: -1px;
   border: 2px solid #111827;
   border-radius: 14px;
   background:
@@ -24025,13 +24023,38 @@ body.page-home-mobile .index-card-episode-btn {
   color: #1A1F24 !important;
 }
 
-/* Media dans les bords de la carte sur page-home → coins arrondis visibles */
+/* Media dans les bords de la carte sur page-home → coins arrondis visibles. Le débord de chaque
+   côté doit laisser le média affleurer le bord intérieur de la bordure VISIBLE de la carte, sans
+   empiéter dessus. Mesuré en direct le 26/08/2026 (getBoundingClientRect + getComputedStyle) : la
+   bordure réellement peinte n'est pas le "border:1px" de .debate-card lui-même, mais une bordure
+   décorative séparée posée en overlay par-dessus tout le contenu (.debate-card::before, z-index
+   15, "border: 2px solid" — cf. règle plus bas, ~ligne 23920). Deux ajustements liés à cette
+   bordure de 2px (pas 1px) :
+   1. Position (débord = padding - 1px, pas padding pile) : laisse les 2px pleins de la bordure
+      overlay libres — un débord calé pile sur le padding n'en laissait qu'1px libre, invisible sur
+      un bord droit mais visible au coin arrondi.
+   2. Rayon du média = rayon extérieur de la bordure overlay (14px) MOINS SON ÉPAISSEUR (2px) = 12px
+      — pas 13px (piège : 13px utilisait par erreur l'épaisseur de la bordure DE LA CARTE elle-même,
+      1px, alors que c'est le rayon INTÉRIEUR de la bordure OVERLAY, à 2px, qu'il faut égaler pour
+      que les deux courbes se superposent exactement). Un rayon de 13px (plus grand que 12px) fait
+      déborder le coin arrondi du média légèrement hors de la courbe intérieure de la bordure, pile
+      dans la diagonale du coin — d'où le résidu clair encore visible après le correctif de
+      position seul. */
 body.page-home .debate-card.has-title-banner .index-card-media-with-title,
 body.page-home-mobile .debate-card.has-title-banner .index-card-media-with-title {
-  width: calc(100% + 32px) !important;
-  margin-left: -16px !important;
-  margin-right: -16px !important;
+  width: calc(100% + 30px) !important;
+  margin-left: -15px !important;
+  margin-right: -15px !important;
   border-radius: 12px 12px 0 0 !important;
+}
+
+@media (max-width: 480px) {
+  body.page-home .debate-card.has-title-banner .index-card-media-with-title,
+  body.page-home-mobile .debate-card.has-title-banner .index-card-media-with-title {
+    width: calc(100% + 26px) !important;
+    margin-left: -13px !important;
+    margin-right: -13px !important;
+  }
 }
 
 /* Image zoomée dans les cartes index */
@@ -26519,7 +26542,7 @@ body.page-home-mobile:not(.mnoria-memoire-cloud-mode) .universe-isolation-info {
 .universe-isolation-info-hint {
   margin: 0 0 16px;
   color: rgba(240, 249, 252, 0.72);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -26530,7 +26553,7 @@ body.page-home-mobile:not(.mnoria-memoire-cloud-mode) .universe-isolation-info {
   border-radius: 999px;
   background: rgba(205, 229, 240, 0.92);
   color: #08141f;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -26817,7 +26840,7 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
    reste des écrans techniques Mnoria. */
 .universe-status__retry {
   margin-top: 14px;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  font-family: var(--font-heading);
   font-size: 14px;
   letter-spacing: 0.04em;
   background: #2c3e50;

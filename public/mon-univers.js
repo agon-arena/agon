@@ -2343,6 +2343,23 @@ async function loadUniverse() {
   // Actu/Mnoria déjà affichées entre-temps sur le conteneur partagé.
   const modeToken = window._mnoriaCloudModeToken;
 
+  // Cadre de l'accueil (mnoria-tag-trends-cloud, cf. syncMobileCloudFrameHeight dans script.js) :
+  // son calage se verrouille une seule fois au premier calcul réussi, potentiellement pendant un
+  // AUTRE mode (Actu/Communauté) — mountUniverse() (plus bas, via mountUniverseAndHideSpinnerWhenReady)
+  // mesure ensuite la taille du cadre UNE SEULE FOIS pour figer toute la disposition des
+  // galaxies, jamais recalculée après (cf. son commentaire). Un ancien correctif (demande du
+  // 17/08/2026) redéclenchait ce recalage APRÈS le montage plutôt qu'avant — le cadre changeait
+  // alors parfois de taille juste après que les bulles aient déjà été positionnées pour l'ancienne
+  // taille, les laissant décalées/agglutinées dans un coin (constaté le 26/08/2026 au switch
+  // Communauté→Ma mémoire, confirmé par mesures réelles). Redéclenché ICI, AVANT tout montage :
+  // mountUniverseAndHideSpinnerWhenReady attend déjà que la taille du cadre soit stable
+  // (waitForContainerSizeStable) avant de monter, donc ce recalage a le temps de se terminer et de
+  // se stabiliser avant que quoi que ce soit ne lise sa taille.
+  if (typeof window.syncCloudSectionHeight === "function") {
+    window._mobileCloudFrameLocked = false;
+    window.syncCloudSectionHeight(true);
+  }
+
   destroyUniverseScene();
   breadcrumbEl.innerHTML = "";
   backBtn.classList.remove("is-visible");
@@ -2385,28 +2402,11 @@ async function loadUniverse() {
   cacheUniverseEmptyState(emptyUniverse);
   if (emptyUniverse) {
     showStatus("empty");
-    // Même correctif que pour l'état peuplé juste en dessous (demande du 17/08/2026, cadre
-    // "vide" cette fois trop grand/déborde en bas) : le calage du cadre de l'accueil peut
-    // s'être verrouillé pendant un DOM différent (chargement, ou l'inverse — peuplé puis
-    // redevenu vide après suppression d'un apprentissage). Redéclenché ici aussi.
-    if (typeof window.syncCloudSectionHeight === "function") {
-      window._mobileCloudFrameLocked = false;
-      window.syncCloudSectionHeight(true);
-    }
     return;
   }
 
   showStatus("none");
   await mountUniverseAndHideSpinnerWhenReady(modeToken);
-  // Cadre de l'accueil (mnoria-tag-trends-cloud, cf. syncMobileCloudFrameHeight dans script.js) :
-  // son calage se verrouille une seule fois au premier calcul réussi, potentiellement pendant
-  // l'état vide/chargement (DOM différent) — un élément qui vient de faire passer l'univers de
-  // vide à peuplé ne redéclenchait jamais ce calcul, laissant le cadre parfois trop bas/petit en
-  // bas (demande du 17/08/2026). Déverrouille puis relance une fois le vrai contenu monté.
-  if (typeof window.syncCloudSectionHeight === "function") {
-    window._mobileCloudFrameLocked = false;
-    window.syncCloudSectionHeight(true);
-  }
 }
 
 loadUniverse();

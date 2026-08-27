@@ -14,10 +14,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260825-mnoria-status-harmonize" />
+<link rel="stylesheet" href="/style.min.css?v=20260827-card-corner-fix5" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
   <style>
@@ -72,11 +72,16 @@
     }
     /* Flèche de fermeture/retour : .page-mon-univers (style.css) masque tout
        ce qui n'est pas le logo dans le bandeau — on réintroduit .topbar-actions
-       ici. Mon univers n'est jamais ouvert dans la modale iframe (bulles
-       incompatibles avec ce rendu), donc pas de vrai #debate-iframe-modal-close
-       ici : on reproduit son visuel exact (bouton rond, bas-gauche, même
-       dégradé/couleurs) plutôt que le petit bouton carré en haut à droite
-       utilisé par défaut sur desktop pour .mobile-back-button. */
+       ici, pour les deux pages qui partagent ce gabarit (Ma mémoire ET Scores
+       et contributions). Mon univers n'est jamais ouvert dans la modale iframe
+       (bulles incompatibles avec ce rendu), donc pas de vrai
+       #debate-iframe-modal-close ici : on reproduit son visuel exact (bouton
+       rond, bas-gauche, même dégradé/couleurs) plutôt que le petit bouton carré
+       en haut à droite utilisé par défaut sur desktop pour .mobile-back-button.
+       Scores et contributions, elle, s'ouvre normalement dans la modale iframe
+       comme Meilleures idées : on ne reproduit rien, la flèche doit rester au
+       même endroit et avoir le même visuel que sur les autres pages
+       "notifications" (Meilleures idées, etc.) — demande du 27/08/2026. */
     body.page-mon-univers .topbar-inner.topbar-home > .topbar-actions {
       display: flex !important;
     }
@@ -84,7 +89,7 @@
     body.page-mon-univers .back-link {
       display: none !important;
     }
-    body.page-mon-univers .mobile-back-button {
+    body.page-mon-univers:not(.page-contributions-only) .mobile-back-button {
       display: flex !important;
       position: fixed !important;
       top: auto !important;
@@ -112,7 +117,7 @@
       cursor: pointer;
       font-size: 16px;
     }
-    body.page-mon-univers .mobile-back-button:hover {
+    body.page-mon-univers:not(.page-contributions-only) .mobile-back-button:hover {
       background:
         linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
         linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box !important;
@@ -146,21 +151,32 @@
       display: none !important;
     }
     body.page-contributions-only #scores-contributions-page {
-      margin-top: 26px;
+      margin-top: 0;
       margin-bottom: 110px;
     }
 
-    /* Textes sur fond sombre — même habillage que la page notifications */
+    /* Cadre blanc autour du contenu, même recette que .about-panel/.ecl-panel :
+       le fond sombre de la page (body.page-mon-univers, style.css) reste inchangé,
+       comme sur les autres pages (demande du 27/08/2026). */
+    .page-contributions-panel {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    }
+
+    /* Textes sur fond clair (harmonisé avec le reste du site, 27/08/2026) */
     .page-contributions .section-header h3 {
-      color: #e8e8e8;
+      color: #111827;
     }
     .page-contributions .section-header-home {
       justify-content: center;
       text-align: center;
     }
     .page-contributions .contributions-accordion {
-      background: #2e3d47;
-      border: 1px solid #3a4a55;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
       border-radius: 14px;
       margin-bottom: 12px;
       overflow: hidden;
@@ -180,7 +196,7 @@
       display: none;
     }
     .page-contributions .contributions-accordion-label {
-      color: #e8e8e8;
+      color: #111827;
       font-size: 16px;
       font-weight: 700;
       display: inline-flex;
@@ -188,8 +204,8 @@
       gap: 9px;
     }
     .page-contributions .contributions-count {
-      color: #9cc3f0;
-      background: #1e3a5f;
+      color: #1e3a8a;
+      background: #eff6ff;
       border-radius: 999px;
       padding: 1px 9px;
       font-size: 12px;
@@ -201,7 +217,7 @@
       display: none;
     }
     .page-contributions .contributions-accordion-chevron {
-      color: #7a8a94;
+      color: #9ca3af;
       font-size: 13px;
       transition: transform 0.18s ease;
       flex: 0 0 auto;
@@ -211,14 +227,14 @@
     }
     .page-contributions .contributions-accordion-body {
       padding: 2px 12px 12px;
-      border-top: 1px solid #3a4a55;
+      border-top: 1px solid #e5e7eb;
       padding-top: 12px;
     }
     .page-contributions .contribution-item {
       display: block;
-      color: #e8e8e8;
-      background: #243038;
-      border: 1px solid #3a4a55;
+      color: #111827;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
       border-radius: 12px;
       padding: 13px 15px;
       margin-bottom: 10px;
@@ -226,20 +242,20 @@
       transition: background 0.12s ease;
     }
     .page-contributions .contribution-item:hover {
-      background: #2a3843;
+      background: #f3f4f6;
     }
     .page-contributions .contribution-item:last-child {
       margin-bottom: 2px;
     }
     .page-contributions .contribution-title {
-      color: #e8e8e8;
+      color: #111827;
       font-weight: 700;
       font-size: 15px;
       margin: 0 0 4px;
       line-height: 1.35;
     }
     .page-contributions .contribution-subtitle {
-      color: #a0b0bb;
+      color: #6b7280;
       font-size: 13px;
       margin: 0 0 6px;
       line-height: 1.45;
@@ -249,7 +265,7 @@
       overflow: hidden;
     }
     .page-contributions .contribution-meta {
-      color: #7a8a94;
+      color: #6b7280;
       font-size: 12px;
       display: flex;
       align-items: center;
@@ -260,8 +276,8 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      background: #1e3a5f;
-      color: #9cc3f0;
+      background: #eff6ff;
+      color: #1e3a8a;
       border-radius: 999px;
       padding: 2px 9px;
       font-size: 11px;
@@ -278,9 +294,9 @@
       width: 32px;
       height: 32px;
       border-radius: 999px;
-      border: 1px solid #3a4a55;
-      background: #243038;
-      color: #e8e8e8;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #374151;
       font-size: 12px;
       cursor: pointer;
       display: inline-flex;
@@ -292,7 +308,7 @@
       cursor: default;
     }
     .page-contributions .contributions-pager-info {
-      color: #a0b0bb;
+      color: #6b7280;
       font-size: 13px;
       font-weight: 700;
       min-width: 44px;
@@ -302,9 +318,9 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: #1e3a5f;
-      color: #9cc3f0;
-      border: 1px solid #2c4d78;
+      background: #eff6ff;
+      color: #1e3a8a;
+      border: 1px solid #bfdbfe;
       border-radius: 999px;
       padding: 8px 16px;
       font-size: 13px;
@@ -312,7 +328,7 @@
       cursor: pointer;
     }
     .notes-evolution-btn:hover {
-      background: #234570;
+      background: #dbeafe;
     }
     #notes-evolution-overlay {
       position: fixed;
@@ -333,21 +349,21 @@
     .notes-evolution-panel {
       position: relative;
       width: min(100%, 420px);
-      background: #2e3d47;
-      border: 1px solid #3a4a55;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
       border-radius: 18px;
       padding: 20px 16px 16px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
       box-sizing: border-box;
     }
     .notes-evolution-title {
-      color: #e8e8e8;
+      color: #111827;
       font-size: 16px;
       font-weight: 800;
       margin: 0 34px 2px 4px;
     }
     .notes-evolution-subtitle {
-      color: #7a8a94;
+      color: #6b7280;
       font-size: 12px;
       margin: 0 0 12px 4px;
     }
@@ -358,9 +374,9 @@
       width: 30px;
       height: 30px;
       border-radius: 50%;
-      border: 1px solid #3a4a55;
-      background: #243038;
-      color: #a0b0bb;
+      border: 1px solid #d1d5db;
+      background: #f3f4f6;
+      color: #6b7280;
       font-size: 14px;
       cursor: pointer;
       display: flex;
@@ -372,6 +388,8 @@
       display: block;
       touch-action: pan-y;
     }
+    /* Info-bulle du graphique volontairement laissée sombre (comme un tooltip natif) :
+       reste lisible et bien distincte, qu'elle flotte sur fond blanc ou sombre. */
     .notes-evolution-tooltip {
       position: absolute;
       background: #243038;
@@ -400,9 +418,9 @@
       margin: 0;
     }
     .page-contributions .empty-state {
-      color: #a0b0bb;
-      background: #243038;
-      border: 1px dashed #3a4a55;
+      color: #6b7280;
+      background: #ffffff;
+      border: 1px dashed #d1d5db;
       border-radius: 12px;
       padding: 14px 16px;
       font-size: 13.5px;
@@ -421,7 +439,9 @@
     }
     .contributions-scores {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      /* 2 colonnes fixes (pas auto-fit) : Rhetor+Logos sur la 1re ligne, Gnosis+Noesis sur la 2e,
+         quelle que soit la largeur d'écran — demande du 26/08/2026. */
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
       margin-bottom: 14px;
     }
@@ -429,10 +449,9 @@
       grid-template-columns: 1fr;
     }
     .contributions-score-card {
-      background: #2e3d47;
-      border: 1px solid #3a4a55;
-      border-radius: 14px;
-      padding: 14px 15px;
+      background: transparent;
+      border: none;
+      padding: 6px 12px;
       text-align: center;
     }
     .contributions-score-card-title {
@@ -440,34 +459,34 @@
       align-items: center;
       justify-content: center;
       gap: 7px;
-      color: #e8e8e8;
+      color: #111827;
       font-weight: 700;
       font-size: 14px;
       margin: 0 0 4px;
     }
-    .contributions-score-card-title i { color: #9cc3f0; font-size: 13px; }
+    .contributions-score-card-title i { color: #1e3a8a; font-size: 13px; }
     .contributions-score-card-value {
-      color: #9cc3f0;
+      color: #1e3a8a;
       font-size: 20px;
       font-weight: 800;
       margin: 0 0 2px;
     }
     .contributions-score-card-hint {
-      color: #a0b0bb;
+      color: #6b7280;
       font-size: 12px;
       margin: 0;
       line-height: 1.4;
     }
-    .contributions-scores-empty .contributions-score-card-title i { color: #f0c96a; }
+    .contributions-scores-empty .contributions-score-card-title i { color: #92400e; }
     .contributions-score-card-locked {
       opacity: 0.7;
     }
     .contributions-score-card-locked .contributions-score-card-title i,
     .contributions-score-card-locked .contributions-score-card-title .mnoria-logos-icon {
-      color: #7a8a94;
+      color: #9ca3af;
     }
     .contributions-score-card-value-locked {
-      color: #7a8a94;
+      color: #9ca3af;
     }
 
     /* Bloc "Mon univers" (bulles) inséré après la section "Mes scores et
@@ -553,7 +572,7 @@
 </header>
 
 <main class="container home-page" id="scores-contributions-page">
-  <section class="debates-section">
+  <section class="debates-section page-contributions-panel">
     <div class="section-header section-header-home">
       <div>
         <h3>Mes scores et contributions</h3>
@@ -809,11 +828,11 @@
   }
 
   // ===== Évolution des notes IA (modale graphique) =====
-  var SERIES_COLOR = "#3987e5";   // slot 1 sombre, validé ≥3:1 sur #2e3d47
-  var SURFACE = "#2e3d47";
-  var GRID = "#3a4a55";
-  var TEXT_MUTED = "#7a8a94";
-  var TEXT_PRIMARY = "#e8e8e8";
+  var SERIES_COLOR = "#2563eb";   // même bleu d'accent que le reste de la page (badges, bouton)
+  var SURFACE = "#ffffff";        // liseré des points = fond du panneau (harmonisation 27/08/2026)
+  var GRID = "#e5e7eb";
+  var TEXT_MUTED = "#6b7280";
+  var TEXT_PRIMARY = "#111827";
 
   function shortDate(iso) {
     try {
@@ -968,9 +987,8 @@
     if (!container) return;
 
     // Detail au clic ré-activé le 20/08/2026 (cf. plus bas, fin de renderCards)
-    // — réutilise la même modale que le badge de la topbar (showUserScoreModal),
-    // désormais avec un onglet Noesis qui n'existait pas lors du retrait du
-    // 17/08/2026.
+    // — réutilise showUserScoreModal (script.js), seul appelant restant depuis la
+    // suppression de la notification "Ton score a évolué" le 26/08/2026.
 
     // Une carte par axe systématiquement, verrouillée (fond grisé, valeur
     // "—") tant que le score n'existe pas encore, plutôt que de la faire
@@ -1213,10 +1231,10 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260825-connection-error-page23" defer></script>
+<script src="/script.min.js?v=20260826-blur-bottom-nav" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260825-ta-memoire");
+    import("/mon-univers.js?v=20260826-early-frame-resync");
   }
 </script>
 </body>

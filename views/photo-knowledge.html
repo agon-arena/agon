@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Importer une photo | mnoria</title>
 <link rel="icon" type="image/png" href="/mnoria-icon-64.png?v=20260825-mnoria-icon-v2">
-<link rel="stylesheet" href="/style.min.css?v=20260825-mnoria-status-harmonize">
+<link rel="stylesheet" href="/style.min.css?v=20260827-card-corner-fix5">
 <style>
   /* Page volontairement autonome (pas de dépendance à public/script.js) :
      flux court, isolé, pas encore relié au reste de l'interface mémoire. */
@@ -29,6 +29,12 @@
     border-radius: 10px;
     padding: 28px 16px;
     text-align: center;
+  }
+  /* [hidden] a la même spécificité qu'une classe : sans ce garde-fou, .pk-btn{display:
+     inline-block} l'emportait sur l'attribut hidden posé en JS (ex. "Choisir une autre
+     image" masqué en mode manuel, restait pourtant visible — demande du 27/08/2026). */
+  [hidden] {
+    display: none !important;
   }
   .pk-btn {
     display: inline-block;
@@ -261,6 +267,43 @@
     showState("error");
   }
 
+  // Redimensionnement/compression côté client des photos (demande du
+  // 27/08/2026, suite à "The string did not match the expected pattern" sur
+  // une photo trop lourde une fois encodée en base64 + JSON — même principe
+  // que la compression vidéo déjà en place ailleurs sur le site) : une photo
+  // de téléphone récent (souvent 8-15 Mo) tient largement sous le seuil du
+  // contrôle client (10 Mo) mais peut dépasser la limite du corps JSON côté
+  // serveur une fois gonflée de ~33% par le base64. Aucun intérêt à analyser
+  // du texte sur une image à pleine résolution capteur : 2200px de long
+  // côté suffit très largement à rester lisible, pour une taille de fichier
+  // divisée par 5 à 10 en général. PDF non concerné (traité tel quel).
+  var PHOTO_KNOWLEDGE_MAX_DIMENSION_PX = 2200;
+  var PHOTO_KNOWLEDGE_JPEG_QUALITY = 0.85;
+  function resizeImageFileToDataUrl(file, maxDimension, quality) {
+    return new Promise(function (resolve, reject) {
+      var objectUrl = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(objectUrl);
+        var scale = Math.min(1, maxDimension / Math.max(img.naturalWidth, img.naturalHeight));
+        var width = Math.max(1, Math.round(img.naturalWidth * scale));
+        var height = Math.max(1, Math.round(img.naturalHeight * scale));
+        var canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        var ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Redimensionnement indisponible sur cet appareil.")); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Impossible de lire cette image."));
+      };
+      img.src = objectUrl;
+    });
+  }
+
   fileInput.addEventListener("change", function () {
     var file = fileInput.files && fileInput.files[0];
     if (!file) return;
@@ -274,10 +317,9 @@
       return;
     }
 
-    var reader = new FileReader();
-    reader.onload = function () {
-      currentDataUrl = reader.result;
-      currentType = file.type;
+    function onFileReady(dataUrl, mimeType) {
+      currentDataUrl = dataUrl;
+      currentType = mimeType;
       document.getElementById("pk-file-name").textContent = file.name;
       document.getElementById("pk-file-name").hidden = false;
       if (!isPdfMode) {
@@ -285,11 +327,18 @@
         preview.style.display = "block";
       }
       analyzeBtn.disabled = false;
-    };
-    reader.onerror = function () {
-      showError("Impossible de lire ce fichier.");
-    };
-    reader.readAsDataURL(file);
+    }
+
+    if (isPdfMode) {
+      var reader = new FileReader();
+      reader.onload = function () { onFileReady(reader.result, file.type); };
+      reader.onerror = function () { showError("Impossible de lire ce fichier."); };
+      reader.readAsDataURL(file);
+    } else {
+      resizeImageFileToDataUrl(file, PHOTO_KNOWLEDGE_MAX_DIMENSION_PX, PHOTO_KNOWLEDGE_JPEG_QUALITY)
+        .then(function (dataUrl) { onFileReady(dataUrl, "image/jpeg"); })
+        .catch(function (error) { showError(error.message || "Impossible de lire ce fichier."); });
+    }
   });
 
   function renderResults(result) {
@@ -398,8 +447,17 @@
         : { dataUrl: currentDataUrl, type: currentType }))
     })
       .then(function (response) {
-        return response.json().then(function (body) {
-          if (!response.ok) throw new Error(body && body.error ? body.error : "Erreur d'analyse.");
+        // response.text() + JSON.parse manuel plutôt que response.json() direct
+        // (demande du 27/08/2026) : une réponse non-JSON (ex. page d'erreur HTML
+        // par défaut d'Express sur un corps trop volumineux) faisait échouer le
+        // parsing avec une SyntaxError native, affichée telle quelle par le
+        // .catch() plus bas — "The string did not match the expected pattern."
+        // sur Safari, illisible pour un visiteur. On retombe ici sur un message
+        // clair à la place.
+        return response.text().then(function (text) {
+          var body = null;
+          try { body = text ? JSON.parse(text) : null; } catch (e) {}
+          if (!response.ok || !body) throw new Error((body && body.error) || "Erreur d'analyse.");
           return body;
         });
       })
@@ -506,8 +564,12 @@
       })
     })
       .then(function (response) {
-        return response.json().then(function (body) {
-          if (!response.ok) throw new Error(body && body.error ? body.error : "Erreur d'ajout.");
+        // Même précaution que pour l'analyse plus haut (demande du 27/08/2026) :
+        // évite qu'une réponse non-JSON affiche une SyntaxError native brute.
+        return response.text().then(function (text) {
+          var body = null;
+          try { body = text ? JSON.parse(text) : null; } catch (e) {}
+          if (!response.ok || !body) throw new Error((body && body.error) || "Erreur d'ajout.");
           return body;
         });
       })

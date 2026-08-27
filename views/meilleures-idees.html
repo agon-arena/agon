@@ -13,17 +13,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
-<link rel="stylesheet" href="/style.min.css?v=20260825-mnoria-status-harmonize" />
+<link rel="stylesheet" href="/style.min.css?v=20260827-card-corner-fix5" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Cormorant+Garamond:wght@400;500;600&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
   <style>
     body { background-color: #243038; }
     html.in-iframe .mobile-back-button,
     html.in-iframe .back-link { display: none !important; }
-    html.in-iframe .app-floating-refresh-btn { display: none !important; }
     .page-notifications .topbar-inner,
     .page-notifications-mobile .topbar-inner {
       justify-content: center;
@@ -79,17 +78,28 @@
     }
     .home-bottom-nav { display: none !important; }
 
-    /* Textes sur fond sombre — même habillage que la page notifications */
+    /* Cadre blanc autour du contenu, même recette que .about-panel/.ecl-panel :
+       le fond sombre de la page (body { background-color: #243038 } ci-dessus)
+       reste inchangé, comme sur les autres pages (demande du 27/08/2026). */
+    .page-contributions-panel {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    }
+
+    /* Textes sur fond clair (harmonisé avec le reste du site, 27/08/2026) */
     .page-contributions .section-header h3 {
-      color: #e8e8e8;
+      color: #111827;
     }
     .page-contributions .section-header-home {
       justify-content: center;
       text-align: center;
     }
     .page-contributions .contributions-accordion {
-      background: #2e3d47;
-      border: 1px solid #3a4a55;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
       border-radius: 14px;
       margin-bottom: 12px;
       overflow: hidden;
@@ -109,7 +119,7 @@
       display: none;
     }
     .page-contributions .contributions-accordion-label {
-      color: #e8e8e8;
+      color: #111827;
       font-size: 16px;
       font-weight: 700;
       display: inline-flex;
@@ -117,8 +127,8 @@
       gap: 9px;
     }
     .page-contributions .contributions-count {
-      color: #9cc3f0;
-      background: #1e3a5f;
+      color: #1e3a8a;
+      background: #eff6ff;
       border-radius: 999px;
       padding: 1px 9px;
       font-size: 12px;
@@ -130,7 +140,7 @@
       display: none;
     }
     .page-contributions .contributions-accordion-chevron {
-      color: #7a8a94;
+      color: #9ca3af;
       font-size: 13px;
       transition: transform 0.18s ease;
       flex: 0 0 auto;
@@ -140,14 +150,14 @@
     }
     .page-contributions .contributions-accordion-body {
       padding: 2px 12px 12px;
-      border-top: 1px solid #3a4a55;
+      border-top: 1px solid #e5e7eb;
       padding-top: 12px;
     }
     .page-contributions .contribution-item {
       display: block;
-      color: #e8e8e8;
-      background: #243038;
-      border: 1px solid #3a4a55;
+      color: #111827;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
       border-radius: 12px;
       padding: 13px 15px;
       margin-bottom: 10px;
@@ -155,20 +165,20 @@
       transition: background 0.12s ease;
     }
     .page-contributions .contribution-item:hover {
-      background: #2a3843;
+      background: #f3f4f6;
     }
     .page-contributions .contribution-item:last-child {
       margin-bottom: 2px;
     }
     .page-contributions .contribution-title {
-      color: #e8e8e8;
+      color: #111827;
       font-weight: 700;
       font-size: 15px;
       margin: 0 0 4px;
       line-height: 1.35;
     }
     .page-contributions .contribution-subtitle {
-      color: #a0b0bb;
+      color: #6b7280;
       font-size: 13px;
       margin: 0 0 6px;
       line-height: 1.45;
@@ -178,7 +188,7 @@
       overflow: hidden;
     }
     .page-contributions .contribution-meta {
-      color: #7a8a94;
+      color: #6b7280;
       font-size: 12px;
       display: flex;
       align-items: center;
@@ -189,8 +199,8 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      background: #1e3a5f;
-      color: #9cc3f0;
+      background: #eff6ff;
+      color: #1e3a8a;
       border-radius: 999px;
       padding: 2px 9px;
       font-size: 11px;
@@ -207,9 +217,9 @@
       width: 32px;
       height: 32px;
       border-radius: 999px;
-      border: 1px solid #3a4a55;
-      background: #243038;
-      color: #e8e8e8;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #374151;
       font-size: 12px;
       cursor: pointer;
       display: inline-flex;
@@ -221,16 +231,16 @@
       cursor: default;
     }
     .page-contributions .contributions-pager-info {
-      color: #a0b0bb;
+      color: #6b7280;
       font-size: 13px;
       font-weight: 700;
       min-width: 44px;
       text-align: center;
     }
     .page-contributions .empty-state {
-      color: #a0b0bb;
-      background: #243038;
-      border: 1px dashed #3a4a55;
+      color: #6b7280;
+      background: #ffffff;
+      border: 1px dashed #d1d5db;
       border-radius: 12px;
       padding: 14px 16px;
       font-size: 13.5px;
@@ -259,9 +269,9 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
-      background: #2e3d47;
-      border: 1px solid #3a4a55;
-      color: #a0b0bb;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      color: #374151;
       border-radius: 999px;
       padding: 8px 10px;
       font-size: 13px;
@@ -270,15 +280,15 @@
       transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
     }
     .best-ideas-period-tab.active {
-      background: #1e3a5f;
-      border-color: #2c4d78;
-      color: #9cc3f0;
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: #1e3a8a;
     }
     .best-ideas-subheading {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: #a0b0bb;
+      color: #6b7280;
       font-size: 13px;
       font-weight: 700;
       margin: 0 0 8px;
@@ -287,8 +297,8 @@
       margin-top: 16px;
     }
     .page-contributions .best-ideas-side-badge {
-      background: #3a2f1e;
-      color: #f0c96a;
+      background: #fef3c7;
+      color: #92400e;
     }
   </style>
   <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
@@ -322,7 +332,7 @@
 </header>
 
 <main class="container home-page">
-  <section class="debates-section best-ideas-section">
+  <section class="debates-section best-ideas-section page-contributions-panel">
     <div class="section-header section-header-home">
       <div>
         <h3>Les meilleures idées</h3>
@@ -362,16 +372,6 @@
     </details>
   </section>
 </main>
-
-<button
-  type="button"
-  class="app-floating-refresh-btn"
-  onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(this) : window.location.reload()"
-  title="Actualiser"
-  aria-label="Actualiser la page"
->
-  <i class="fa-solid fa-rotate-right"></i>
-</button>
 
 <script>
 (function() {
@@ -569,5 +569,5 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260825-connection-error-page23" defer></script>
+<script src="/script.min.js?v=20260826-blur-bottom-nav" defer></script>
 </body></html>
