@@ -18,6 +18,14 @@ const { mapMnoriaReviewToFsrsRating } = require("./lib/spaced-repetition/rating-
 const { resolveQuestionVariantLabel, resolveActiveQuestionVariant } = require("./lib/spaced-repetition/question-variant");
 const { HELP_LEVELS, deriveHelpLevel } = require("./lib/spaced-repetition/help-level");
 const { DEFAULT_PROJECTION_DAYS, computeLearningLoadGauge } = require("./lib/spaced-repetition/learning-load");
+const learnNextConfig = require("./lib/learn-next/config");
+const learnNextScoring = require("./lib/learn-next/scoring");
+const learnNextRepository = require("./lib/learn-next/repository");
+const { computeLearnNextRecommendations } = require("./lib/learn-next/engine");
+const noesRepository = require("./lib/coeus/noes-repository");
+const { requestNoesVideo, pollAndFinalizeNoesVideo, NoesRequestError } = require("./lib/coeus/noes-orchestrator");
+const { createCoeusRunpodClient } = require("./lib/coeus/runpod-client");
+const { createCoeusVolumeClient } = require("./lib/coeus/runpod-volume");
 const {
   QUESTION_TYPES,
   FILL_BLANK_MARKER,
@@ -17152,6 +17160,366 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
   }
 });
 
+// ── "À apprendre ensuite" (mission du 26/08/2026) ───────────────────────────
+// Moteur de recommandation pédagogique personnalisé — cf. lib/learn-next/
+// pour tout l'algorithme (ZPD, connexions, ponts entre branches, intérêt,
+// découverte contrôlée) et data/migration-learn-next-engine.sql pour le
+// schéma. AUCUN appel IA sur ce chemin : le classement est entièrement local
+// (SQL borné au graphe propre à l'utilisateur + calcul déterministe Node).
+// L'unique enrichissement IA existant (détection de liens entre
+// connaissances, cf. findAndStoreCultureGeneraleNotionLink plus haut) reste
+// mutualisé au niveau global, jamais relancé ici.
+
+// Même pattern Map()+TTL que le reste du fichier (cf. debatesApiResponseCache) :
+// une clé par (legacyKey, debug on/off) puisque le mode debug ajoute des
+// champs jamais mis en cache en production.
+const learnNextRecommendationsCache = new Map();
+function getCachedLearnNextRecommendations(cacheKey) {
+  const entry = learnNextRecommendationsCache.get(cacheKey);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) { learnNextRecommendationsCache.delete(cacheKey); return null; }
+  return entry.value;
+}
+function setCachedLearnNextRecommendations(cacheKey, value) {
+  _cacheSet(
+    learnNextRecommendationsCache,
+    cacheKey,
+    { value, expiresAt: Date.now() + learnNextConfig.RECOMMENDATIONS_CACHE_TTL_MS },
+    learnNextConfig.RECOMMENDATIONS_CACHE_MAX
+  );
+}
+// Invalidation CIBLÉE (jamais globale, section 16 du plan) : appelée juste
+// après qu'UN utilisateur acquiert une connaissance (cf.
+// recordDailyQuizEclairageAcquisition) ou ajoute une recommandation à sa
+// mémoire (cf. POST .../events ci-dessous) — les autres caches utilisateur
+// ne sont jamais touchés.
+function invalidateLearnNextRecommendations(legacyKey) {
+  learnNextRecommendationsCache.delete(`${legacyKey}:prod`);
+}
+
+// Upsert best-effort du cache mutualisé knowledge_nodes (section 12) : un
+// échec ici ne doit JAMAIS faire échouer l'écriture principale qui l'a
+// déclenché (acquisition, création d'un lien) — même garantie que les autres
+// écritures dérivées de ces chemins (ex. activation Solar dans
+// recordDailyQuizEclairageAcquisition).
+async function bestEffortUpsertKnowledgeNode(params) {
+  try {
+    await learnNextRepository.upsertKnowledgeNode(
+      supabase,
+      learnNextScoring.computeImportanceScore,
+      learnNextScoring.computeImportanceTier,
+      learnNextConfig,
+      params
+    );
+  } catch (error) {
+    console.warn("[learn-next] upsert knowledge_nodes échoué :", error.message);
+  }
+}
+
+app.get("/api/users/recommendations/learn-next", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+
+    // Observabilité (section 21) : uniquement hors production, jamais envoyé
+    // au client en prod, jamais mis en cache (les scores intermédiaires
+    // n'ont pas vocation à rester figés 20 minutes).
+    const debug = process.env.NODE_ENV !== "production" && req.query?.debug === "1";
+    const cacheKey = `${validation.legacyKey}:${debug ? "debug" : "prod"}`;
+    if (!debug) {
+      const cached = getCachedLearnNextRecommendations(cacheKey);
+      if (cached) return res.json(cached);
+    }
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    const limit = Math.min(
+      learnNextConfig.MAX_RECOMMENDATION_LIMIT,
+      Math.max(1, parseInt(req.query?.limit, 10) || learnNextConfig.DEFAULT_RECOMMENDATION_LIMIT)
+    );
+
+    const result = await computeLearnNextRecommendations(
+      { supabase, fetchAllSupabaseRowsIn, computeRetrievability },
+      { userId: user.id, limit, debug }
+    );
+
+    const payload = { recommendations: result.recommendations, coldStart: result.coldStart };
+    if (!debug) setCachedLearnNextRecommendations(cacheKey, payload);
+
+    // Tracking "shown" (section 17) : best-effort, jamais bloquant pour la
+    // réponse — un échec d'écriture ne doit jamais faire attendre ni
+    // échouer l'affichage des recommandations elles-mêmes. Volume maîtrisé
+    // (revue du 27/08/2026, section 11) : jamais en mode debug (introspection
+    // dev, ne doit pas polluer les données de tracking) et jamais sur un HIT
+    // de cache (return anticipé plus haut) — le TTL de 20 min du cache
+    // borne donc déjà à au plus un batch "shown" par utilisateur et par
+    // fenêtre, plutôt qu'à chaque rerender frontend/rechargement de page.
+    if (!debug && result.recommendations.length) {
+      supabase.from("recommendation_events").insert(result.recommendations.map((r) => ({
+        user_id: user.id,
+        subject_type: r.subjectType,
+        subject_source_id: r.subjectSourceId,
+        solar_system_id: r.solarSystemId,
+        event_type: "shown",
+        recommendation_type: r.recommendationType,
+        score: r.score
+      }))).then(({ error }) => {
+        if (error) console.warn("[learn-next] tracking shown échoué :", error.message);
+      });
+    }
+
+    res.json(payload);
+  } catch (error) {
+    console.error("[learn-next] recommandations :", error.message);
+    res.status(500).json({ recommendations: [], error: "Erreur calcul des recommandations." });
+  }
+});
+
+// Tracking minimal des interactions (section 17) : "shown" est déjà loggé
+// automatiquement par la route GET ci-dessus — ici uniquement les
+// événements que seul le client peut connaître (ouverture d'une fiche,
+// ajout à la mémoire, rejet explicite).
+app.post("/api/users/recommendations/learn-next/events", rateLimit("users", 60), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+    const rawEvents = Array.isArray(req.body?.events) ? req.body.events : [];
+    if (!rawEvents.length) return res.json({ ok: true });
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    const allowedTypes = new Set(["opened", "added", "dismissed"]);
+    const rows = [];
+    for (const raw of rawEvents.slice(0, 20)) {
+      const eventType = String(raw?.eventType || "").trim();
+      const subjectType = String(raw?.subjectType || "").trim();
+      const subjectSourceId = String(raw?.subjectSourceId || "").trim();
+      if (!allowedTypes.has(eventType) || !subjectType || !subjectSourceId) continue;
+      rows.push({
+        user_id: user.id,
+        subject_type: subjectType,
+        subject_source_id: subjectSourceId,
+        solar_system_id: Number.isInteger(raw?.solarSystemId) ? raw.solarSystemId : null,
+        event_type: eventType,
+        recommendation_type: raw?.recommendationType ? String(raw.recommendationType).slice(0, 30) : null,
+        score: Number.isFinite(Number(raw?.score)) ? Number(raw.score) : null
+      });
+    }
+    if (!rows.length) return res.json({ ok: true });
+
+    const { error } = await supabase.from("recommendation_events").insert(rows);
+    if (error) throw new Error(error.message);
+
+    // "added" = l'utilisateur a choisi de mémoriser cette recommandation :
+    // le prochain calcul doit cesser de la re-proposer (invalidation
+    // ciblée à CET utilisateur uniquement).
+    if (rows.some((r) => r.event_type === "added")) invalidateLearnNextRecommendations(validation.legacyKey);
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[learn-next] events :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// ── Intégration Noès (mission du 26/08/2026, finalisée le 27/08/2026) ──────
+// Vidéo avatar : Noès pose une question, marque une pause, donne la réponse
+// — jusqu'à 5 connaissances par vidéo. Toute la logique métier (cache
+// script, batching, hash, dédup vidéo, soumission RunPod, finalisation) vit
+// désormais dans lib/coeus/noes-orchestrator.js — testable sans serveur HTTP
+// ni dépendances réelles, cf. test/noes-orchestrator.test.js. Cette section
+// ne fait plus que la couche HTTP : légitimité de la requête (ownership,
+// périmètre V1), rate limit, forme de la réponse.
+//
+// Point fondamental : le script oral est généré à partir de
+// question.knowledgeTarget (jamais la question QCM elle-même), en UN SEUL
+// appel IA par fiche, mis en cache dans noes_scripts (cf.
+// lib/coeus/noes-script.js). Périmètre V1 : uniquement les fiches
+// "recherche IA" (sourceType "custom") — le reste de l'architecture (slot
+// générique, natural_key comme knowledge_id, batching par position) reste
+// indépendant de la source, prêt pour les autres imports plus tard.
+const NOES_CONFIG = {
+  pipelineVersion: process.env.NOES_PIPELINE_VERSION || "coeus-items-v1",
+  // Valeurs fixées par le worker lui-même (cf. coeus-serverless/handler.py :
+  // KOKORO_VOICE="ff_siwis", COEUS_STAGING_AVATAR=coeusfemme2) — recopiées ici
+  // UNIQUEMENT pour entrer dans video_hash, jamais envoyées au worker comme
+  // paramètres (submitCoeusItemsVideo ne transmet ni voix ni avatar).
+  voice: "kokoro:ff_siwis",
+  avatar: "coeusfemme2",
+  thinkingPauseSeconds: Math.min(10, Math.max(0.5, Number(process.env.NOES_THINKING_PAUSE_SECONDS) || 3)),
+  itemGapSeconds: Math.min(5, Math.max(0, Number(process.env.NOES_ITEM_GAP_SECONDS) || 0.6)),
+  maxVideosPerDay: Number(process.env.NOES_MAX_VIDEOS_PER_DAY) || 4,
+  jobTimeoutMs: 5 * 60 * 1000,
+  // Stockage isolé dans lib/coeus/noes-storage.js (demande du 27/08/2026) :
+  // seul ce module connaît "où" vit le MP4 final — bucket existant
+  // (SUPABASE_DEBATE_MEDIA_BUCKET) réutilisé pour cette première intégration,
+  // remplaçable plus tard sans toucher à l'orchestrateur.
+  storageBucket: SUPABASE_DEBATE_MEDIA_BUCKET,
+  storageCacheControl: DEBATE_MEDIA_CACHE_CONTROL
+};
+
+// RUNPOD_NOES_ENDPOINT_ID (finalisation du 27/08/2026) : endpoint RunPod
+// DÉDIÉ à Noès ("coeus kokoro staging", seul déploiement à comprendre
+// `mode: "items"`, cf. commit 632be017f438a2eea31f782e76516000fd7df94d de
+// coeus-serverless), volontairement distinct de RUNPOD_COEUS_ENDPOINT_ID
+// (l'endpoint historique utilisé par lib/coeus/coeus-service.js pour le
+// mode audio/text à un seul clip, cf. scripts/test-coeus-real.js) —
+// détourner cette dernière variable aurait fait pointer les anciens usages
+// Coeus vers un endpoint de staging, ou Noès vers un endpoint qui ne
+// comprend pas `items`. AUCUN repli silencieux sur RUNPOD_COEUS_ENDPOINT_ID
+// si RUNPOD_NOES_ENDPOINT_ID est absente : ce dernier endpoint échouerait de
+// façon confuse (input.mode must be audio or text) plutôt que d'échouer
+// clairement sur une configuration manquante.
+//
+// Construit paresseusement (jamais au chargement du module) : un
+// environnement sans RUNPOD_API_KEY/RUNPOD_NOES_ENDPOINT_ID configurés (dev
+// local, par ex.) ne doit jamais empêcher le serveur de démarrer, seulement
+// faire échouer proprement les routes Noès avec un message clair.
+let _noesRunpodClients = null;
+function getNoesRunpodClients() {
+  if (_noesRunpodClients) return _noesRunpodClients;
+  // Vérification explicite plutôt que de laisser createCoeusRunpodClient
+  // faire `options.endpointId ?? process.env.RUNPOD_COEUS_ENDPOINT_ID` : ce
+  // repli interne au client existe pour son usage historique (coeus-
+  // service.js, un seul endpoint) et retomberait silencieusement sur
+  // l'ancien endpoint si RUNPOD_NOES_ENDPOINT_ID venait à manquer — exactement
+  // le repli qu'on veut exclure pour Noès (cf. commentaire au-dessus).
+  if (!String(process.env.RUNPOD_NOES_ENDPOINT_ID || "").trim()) {
+    console.error("[noes] configuration RunPod/volume manquante : RUNPOD_NOES_ENDPOINT_ID est absente.");
+    return null;
+  }
+  try {
+    _noesRunpodClients = {
+      runpodClient: createCoeusRunpodClient({ endpointId: process.env.RUNPOD_NOES_ENDPOINT_ID }),
+      volumeClient: createCoeusVolumeClient()
+    };
+  } catch (error) {
+    console.error("[noes] configuration RunPod/volume manquante :", error.message);
+    return null;
+  }
+  return _noesRunpodClients;
+}
+
+// Une seule soumission RunPod en vol par video_hash À LA FOIS DANS CE
+// PROCESS (même pattern que debatesApiInFlight/_cloudBubblesRefreshPromiseByKey,
+// cf. server.js plus haut) : une deuxième requête simultanée sur le même
+// contenu attend la même promesse plutôt que de tenter sa propre soumission.
+// claimPendingNoesVideoForSubmission (lib/coeus/noes-repository.js) protège
+// en plus le cas multi-instance, que ce Map ne couvre pas.
+const _noesVideoSubmissionInFlight = new Map();
+
+const noesDeps = {
+  supabase,
+  callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts),
+  getRunpodClients: getNoesRunpodClients,
+  inFlightMap: _noesVideoSubmissionInFlight,
+  config: NOES_CONFIG
+};
+
+// POST /api/noes/videos : soumet (ou retrouve en cache) la vidéo Noès d'un
+// lot de connaissances. RÉPOND IMMÉDIATEMENT après confirmation RunPod que
+// le job est accepté (quelques secondes) — ne tient JAMAIS la route ouverte
+// pendant tout le rendu (30 à 120s), cf. rapport d'audit section 3/12.
+app.post("/api/noes/videos", rateLimit("noes", 20), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+
+    const slot = String(req.body?.slot || "").trim();
+    const quizDate = String(req.body?.quizDate || "").trim();
+    const batchIndex = Number(req.body?.batchIndex);
+    if (!slot.startsWith("notion:custom:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate) || !Number.isInteger(batchIndex) || batchIndex < 0) {
+      return res.status(400).json({ ok: false, error: "Requête invalide." });
+    }
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    // Sécurité (cf. rapport d'audit section 8) : Noès ne génère que pour une
+    // fiche que l'utilisateur a réellement choisie de mémoriser, jamais un
+    // slot arbitraire fourni par le client.
+    const { data: ownership, error: ownershipError } = await supabase
+      .from("user_notion_quizzes")
+      .select("slot")
+      .eq("user_id", user.id)
+      .eq("slot", slot)
+      .eq("quiz_date", quizDate)
+      .maybeSingle();
+    if (ownershipError) throw new Error(ownershipError.message);
+    if (!ownership) return res.status(403).json({ ok: false, error: "Cette fiche n'est pas dans vos apprentissages." });
+
+    const { data: quizRow, error: quizError } = await supabase
+      .from("daily_quiz").select("questions").eq("slot", slot).eq("quiz_date", quizDate).maybeSingle();
+    if (quizError) throw new Error(quizError.message);
+    const questions = quizRow?.questions || [];
+    if (!questions.length) return res.status(404).json({ ok: false, error: "QCM introuvable." });
+    // Périmètre V1 (cf. rapport d'audit, "Périmètre V1") : uniquement les
+    // fiches issues de la recherche IA.
+    if (questions[0]?.sourceType !== "custom") {
+      return res.status(422).json({ ok: false, error: "Noès n'est pas encore disponible pour cette source de connaissance." });
+    }
+    if (!process.env.OPENAI_API_KEY) return res.status(503).json({ ok: false, error: "OPENAI_API_KEY manquant." });
+
+    const video = await requestNoesVideo(noesDeps, { userId: user.id, slot, quizDate, batchIndex, questions });
+
+    res.json({
+      ok: true,
+      videoId: video.id,
+      status: video.status,
+      outputUrl: video.status === "ready" ? video.output_path : null
+    });
+  } catch (error) {
+    if (error instanceof NoesRequestError) {
+      return res.status(error.status).json({ ok: false, error: error.message });
+    }
+    console.error("[noes] soumission vidéo :", error.message);
+    res.status(500).json({ ok: false, error: "Erreur lors de la préparation de la vidéo Noès." });
+  }
+});
+
+// GET /api/noes/videos/:id/status : consultation idempotente — c'est CETTE
+// route (appelée en polling par le client, cf. views/qcm-du-jour.html) qui
+// déclenche la finalisation dès que RunPod signale COMPLETED, jamais la
+// route POST ci-dessus. Fonctionne même si l'utilisateur a fermé l'onglet
+// entre-temps : un autre appel (ou le sweeper) finalise à sa place — cf.
+// rapport d'audit section 9, "finalisation indépendante du navigateur".
+app.get("/api/noes/videos/:id/status", rateLimit("noes-status", 60), async (req, res) => {
+  try {
+    let video = await noesRepository.getNoesVideoById(supabase, req.params.id);
+    if (!video) return res.status(404).json({ ok: false, error: "Vidéo introuvable." });
+
+    if (video.status === "processing") {
+      video = await pollAndFinalizeNoesVideo(noesDeps, video);
+    }
+
+    res.json({
+      ok: true,
+      status: video.status,
+      outputUrl: video.status === "ready" ? video.output_path : null,
+      errorStage: video.status === "failed" ? video.error_stage : null
+    });
+  } catch (error) {
+    console.error("[noes] statut vidéo :", error.message);
+    res.status(500).json({ ok: false, error: "Erreur lors de la lecture du statut Noès." });
+  }
+});
+
+// Réconciliation (cf. rapport d'audit section 9) : jobs restés "processing"
+// au-delà du timeout attendu — crash serveur, redeploy en cours de job,
+// utilisateur jamais revenu consulter /status. Même garde
+// isRenderScopedTaskEnabled que le scheduler d'analyse IA plus haut, mais
+// claimNoesVideoForFinalization protège de toute façon contre un doublon si
+// plusieurs instances tournaient malgré tout.
+if (isRenderScopedTaskEnabled("NOES_SWEEPER_ENABLED")) {
+  setInterval(async () => {
+    try {
+      const stale = await noesRepository.findStaleProcessingNoesVideos(supabase, NOES_CONFIG.jobTimeoutMs);
+      for (const row of stale) {
+        await pollAndFinalizeNoesVideo(noesDeps, row);
+      }
+    } catch (error) {
+      console.error("[noes sweeper]", error.message);
+    }
+  }, 2 * 60 * 1000).unref();
+}
+
 // isAssociationAnswerFullyCorrect/isQcmMultiAnswerFullyCorrect/
 // isOrderAnswerFullyCorrect vivent désormais dans lib/question-formats.js
 // (cf. import en haut du fichier) — correction tout-ou-rien, pas de score
@@ -17525,6 +17893,19 @@ async function resolveOrCreateCultureGeneraleNotionLink(typeA, idA, nameA, typeB
     typeA: type1, idA: id1, nameA: name1,
     typeB: type2, idB: id2, nameB: name2
   } = canonicalNotionLinkPair(typeA, idA, nameA, typeB, idB, nameB);
+  // Existence vérifiée AVANT l'upsert (plutôt que de déduire "created" de son
+  // résultat, que le client Supabase ne distingue pas d'un conflit ignoré) :
+  // sert uniquement à ne pas compter deux fois le même lien dans
+  // knowledge_nodes.link_degree quand plusieurs utilisateurs déclenchent
+  // indépendamment sa (re)détection (cf. bestEffortUpsertKnowledgeNode plus
+  // bas, section 12 — mutualisation, jamais un recalcul par utilisateur).
+  const { data: existing, error: existingError } = await supabase
+    .from("culture_generale_notion_links")
+    .select("id")
+    .eq("type_a", type1).eq("source_id_a", id1).eq("type_b", type2).eq("source_id_b", id2)
+    .maybeSingle();
+  if (existingError) console.warn("[culture-generale notion-links] vérification échouée :", existingError.message);
+
   const { error } = await supabase.from("culture_generale_notion_links").upsert(
     { type_a: type1, source_id_a: id1, name_a: name1, type_b: type2, source_id_b: id2, name_b: name2, label },
     { onConflict: "type_a,source_id_a,type_b,source_id_b", ignoreDuplicates: true }
@@ -17533,7 +17914,7 @@ async function resolveOrCreateCultureGeneraleNotionLink(typeA, idA, nameA, typeB
     console.warn("[culture-generale notion-links] création échouée :", error.message);
     return null;
   }
-  return { typeA: type1, idA: String(id1), nameA: name1, typeB: type2, idB: String(id2), nameB: name2, label };
+  return { typeA: type1, idA: String(id1), nameA: name1, typeB: type2, idB: String(id2), nameB: name2, label, created: !existing };
 }
 
 // Corpus personnel réel : user_article_acquisitions n'est alimentée qu'après
@@ -17875,6 +18256,16 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
         detailA: detailByKey.get(cultureGeneraleNotionKey(savedLink.typeA, savedLink.idA)) || "",
         detailB: detailByKey.get(cultureGeneraleNotionKey(savedLink.typeB, savedLink.idB)) || ""
       });
+      // knowledge_nodes (moteur "À apprendre ensuite", section 12) : le
+      // degré de connexion global des DEUX extrémités augmente d'exactement
+      // 1 pour ce lien — uniquement s'il vient d'être créé (jamais recompté
+      // à chaque redétection par un autre utilisateur, cf. `created` ci-dessus).
+      if (savedLink.created) {
+        await Promise.all([
+          bestEffortUpsertKnowledgeNode({ type: savedLink.typeA, sourceId: savedLink.idA, name: savedLink.nameA, incrementLinkDegreeBy: 1 }),
+          bestEffortUpsertKnowledgeNode({ type: savedLink.typeB, sourceId: savedLink.idB, name: savedLink.nameB, incrementLinkDegreeBy: 1 })
+        ]);
+      }
     }));
   } catch (e) {
     console.warn("[culture-generale notion-links] classification IA ignorée :", e.message);
@@ -19065,6 +19456,23 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
       if (activationError) console.warn("[daily quiz eclairage acquisitions] failed : activation solar —", activationError.message);
     }
 
+    // knowledge_nodes (moteur "À apprendre ensuite", section 12) : cette
+    // acquisition est garantie NOUVELLE (le early-return "Déjà acquis"
+    // plus haut a déjà écarté toute répétition), l'incrément est donc sûr.
+    // Best-effort : ne bloque jamais l'acquisition elle-même, déjà actée.
+    await bestEffortUpsertKnowledgeNode({
+      type: sourceType,
+      sourceId: sourceDebateId,
+      name: sourceName,
+      solarSystemId,
+      starId,
+      incrementAcquisition: true
+    });
+    // Le prochain calcul de "À apprendre ensuite" pour CET utilisateur doit
+    // refléter ce nouvel acquis (ZPD/connexions recalculés) — jamais les
+    // caches des autres utilisateurs.
+    invalidateLearnNextRecommendations(legacyKey);
+
     // La connaissance existe désormais réellement dans la mémoire. C'est à
     // cet instant précis — première bonne réponse, jamais à la création du
     // QCM — que l'IA examine tous les autres acquis de cet utilisateur.
@@ -19978,6 +20386,28 @@ app.get("/api/debug/scroll-jump-sample", requireAdmin, (req, res) => {
 app.delete("/api/debug/scroll-jump-sample", requireAdmin, (req, res) => {
   try { fs.unlinkSync(SCROLL_JUMP_DIAG_FILE); } catch (_) {}
   res.json({ ok: true });
+});
+
+// Gestionnaire d'erreurs global pour express.json({ limit: ... }) (photo/PDF/
+// vidéo knowledge, notamment) : sans lui, un corps trop volumineux ou mal
+// formé fait tomber sur la page d'erreur HTML par défaut d'Express plutôt
+// que sur une réponse JSON. Le client (ex. photo-knowledge.html) appelle
+// systématiquement response.json() sur la réponse — parser cette page HTML
+// comme du JSON lève une SyntaxError, que Safari/WebKit rapporte sous le nom
+// générique "The string did not match the expected pattern." au lieu du
+// vrai message ("Analyser la photo" avec une image trop lourde pour la
+// limite de la route, demande du 27/08/2026). Ne concerne que les erreurs
+// de body-parser (413/400 posées par express.json), jamais les erreurs
+// métier des routes elles-mêmes (déjà toutes en JSON).
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err && err.type === "entity.too.large") {
+    return res.status(413).json({ error: "Fichier trop volumineux pour cette limite." });
+  }
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    return res.status(400).json({ error: "Requête invalide." });
+  }
+  return next(err);
 });
 
 app.listen(PORT, "0.0.0.0", async () => {
