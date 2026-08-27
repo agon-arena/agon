@@ -52,7 +52,14 @@ test("les longues transcriptions sont découpées en plusieurs blocs ordonnés",
     { text: "B".repeat(80), offset: 10, duration: 10 }
   ], 100);
   assert.equal(blocks.length, 2);
-  assert.deepEqual(blocks.map((block) => [block.startSeconds, block.endSeconds]), [[0, 10], [10, 20]]);
+  assert.deepEqual(blocks.map((block) => [block.startSeconds, block.endSeconds]), [[0, 10], [10, 20]], "un segment trop grand n'est jamais tronqué pour forcer le chevauchement");
+  const overlapped = buildYoutubeBlocks([
+    { text: "Premier passage complet.", offset: 0, duration: 5 },
+    { text: "Contexte proche de la frontière.", offset: 5, duration: 5 },
+    { text: "Nouveau bloc complet.", offset: 10, duration: 5 }
+  ], 75);
+  assert.equal(overlapped.length, 2);
+  assert.match(overlapped[1].text, /Contexte proche de la frontière/, "le chevauchement conserve un segment entier lorsque la limite le permet");
 });
 
 test("analyse tous les blocs avec gpt-4o-mini, déduplique et accepte knowledge vide", async () => {

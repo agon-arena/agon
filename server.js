@@ -49,6 +49,10 @@ const {
   gradeQuizSubmissionOptionIndex
 } = require("./lib/question-formats");
 const {
+  buildSemanticReviewPrompt,
+  runQuestionQualityPipeline
+} = require("./lib/qcm-quality");
+const {
   buildKnowledgeAdmissionPrompt,
   buildQuestionsFromKnowledgePrompt,
   buildFicheAndKnowledgeAdmissionPrompt,
@@ -58,6 +62,7 @@ const {
 } = require("./lib/knowledge-admission");
 const { findEquivalentCustomTopic, parseCustomTopicSlotLevel } = require("./lib/topic-dedup");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
+const { truncateAtTextBoundary } = require("./lib/text-boundaries");
 const {
   ACCEPTED_PHOTO_MIME_TYPES,
   buildAnalysisDataUrl,
@@ -13245,6 +13250,10 @@ app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate
 // dégrader avec un modèle plus faible sur un contenu déjà exigeant (concepts
 // philosophiques/sociologiques, nuances historiques).
 const DAILY_QUIZ_NARRATIVE_MODEL = process.env.OPENAI_DAILY_QUIZ_NARRATIVE_MODEL || "gpt-4.1-mini";
+const DAILY_QUIZ_CRITIC_MODEL = process.env.OPENAI_DAILY_QUIZ_CRITIC_MODEL || DAILY_QUIZ_NARRATIVE_MODEL;
+const QCM_SEMANTIC_REVIEW_ENABLED = !/^(?:0|false|off|no)$/i.test(String(process.env.QCM_SEMANTIC_REVIEW_ENABLED || "true").trim());
+const QCM_SEMANTIC_REVIEW_MAX_RETRIES = Math.max(0, Math.min(2, Number.parseInt(process.env.QCM_SEMANTIC_REVIEW_MAX_RETRIES || "2", 10) || 0));
+const QCM_CRITIC_TECHNICAL_MAX_RETRIES = Math.max(0, Math.min(3, Number.parseInt(process.env.QCM_CRITIC_TECHNICAL_MAX_RETRIES || "2", 10) || 0));
 
 // Pseudo-slot "Renforcement des connaissances" : jamais généré ni stocké
 // dans `daily_quiz`, composé exclusivement des repasses de répétition espacée dues aujourd'hui
@@ -13434,6 +13443,9 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     // qcm/texte_a_trous/intrus/qcm_multi : une tentative de contournement à 2
     // options échoue mécaniquement, même si cette consigne était ignorée.
     "INTERDICTION ABSOLUE : ne génère JAMAIS de question vrai/faux, oui/non, correct/incorrect, ni aucune formulation binaire équivalente qui donnerait artificiellement ~50% de chances de réussite au hasard — même sous un nom ou une apparence différente (ex. un \"qcm\" réduit à 2 options \"Vrai\"/\"Faux\", une question fermée dont la réponse est oui ou non). Toute question, quel que soit son format, doit toujours proposer au moins 3 options distinctes et sémantiquement plausibles (ou reposer sur un vrai appariement/une vraie séquence pour association/ordre).",
+    "QUALITÉ OBLIGATOIRE : pour un QCM simple, une seule option doit être défendable et chaque distracteur doit être incontestablement faux au regard de la connaissance/source. Interdits : options sémantiquement équivalentes, \"toutes les réponses\", \"aucune de ces réponses\", double négation et piège de langage.",
+    "La question doit être claire et autonome sans relire la fiche. La difficulté doit venir du savoir testé, jamais d'une formulation confuse. Avant de répondre, vérifie silencieusement la cohérence entre correctIndex/correctIndexes, le texte de la ou des bonnes options et l'explication.",
+    "Respecte strictement knowledgeTarget. Si le format suggéré ne convient pas naturellement, abandonne-le au profit d'un QCM simple solide plutôt que de forcer une association, un ordre, un intrus ou un choix multiple artificiel.",
     "",
     // "intrus" banni (cf. excludeTypes) : rappel explicite plutôt que de
     // compter sur sa seule absence ci-dessus — sans cette ligne, rien
@@ -13679,22 +13691,22 @@ function resolveNotionQuizLevel(rawLevel) {
 // qu'un seul gabarit générique.
 function formatEclairagesItemForPrompt(item) {
   const common = `${String(item.current_topic_title || "").trim()}`;
-  const sharedMechanism = String(item.shared_mechanism || "").trim().slice(0, 500).replace(/\s+/g, " ");
-  const essentialDifference = String(item.essential_difference || "").trim().slice(0, 500).replace(/\s+/g, " ");
+  const sharedMechanism = truncateAtTextBoundary(item.shared_mechanism, 500);
+  const essentialDifference = truncateAtTextBoundary(item.essential_difference, 500);
   if (item.type === "parallele") {
     return `- id:${item.current_topic_id} | Type : parallèle historique | Actualité : ${common} | Précédent historique : ${String(item.historical_event_title || "").trim()}\n  Contexte historique : ${String(item.historical_context || "").trim().slice(0, 700).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
   }
   if (item.type === "pensee") {
-    return `- id:${item.current_topic_id} | Type : pensée philosophique | Actualité : ${common} | Concept : ${String(item.philosophical_concept || "").trim()} (${String(item.philosopher_name || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+    return `- id:${item.current_topic_id} | Type : pensée philosophique | Actualité : ${common} | Concept : ${String(item.philosophical_concept || "").trim()} (${String(item.philosopher_name || "").trim()})\n  Origine du concept : ${truncateAtTextBoundary(item.concept_origin, 500)}\n  Explication : ${truncateAtTextBoundary(item.concept_explanation, 500)}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
   }
   if (item.type === "mecanisme") {
-    return `- id:${item.current_topic_id} | Type : mécanisme sociologique | Actualité : ${common} | Concept : ${String(item.sociological_concept || "").trim()} (${String(item.sociologist_name || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+    return `- id:${item.current_topic_id} | Type : mécanisme sociologique | Actualité : ${common} | Concept : ${String(item.sociological_concept || "").trim()} (${String(item.sociologist_name || "").trim()})\n  Origine du concept : ${truncateAtTextBoundary(item.concept_origin, 500)}\n  Explication : ${truncateAtTextBoundary(item.concept_explanation, 500)}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
   }
   if (item.type === "concept") {
-    return `- id:${item.current_topic_id} | Type : concept du jour | Actualité : ${common} | Concept : ${String(item.concept_name || "").trim()} (${String(item.concept_originator || "").trim()})\n  Origine du concept : ${String(item.concept_origin || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Explication : ${String(item.concept_explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
+    return `- id:${item.current_topic_id} | Type : concept du jour | Actualité : ${common} | Concept : ${String(item.concept_name || "").trim()} (${String(item.concept_originator || "").trim()})\n  Origine du concept : ${truncateAtTextBoundary(item.concept_origin, 500)}\n  Explication : ${truncateAtTextBoundary(item.concept_explanation, 500)}\n  Mécanisme commun : ${sharedMechanism}\n  Différence essentielle : ${essentialDifference}`;
   }
   if (item.type === "oeuvre") {
-    return `- id:${item.current_topic_id} | Type : œuvre d'art du jour | Actualité : ${common} | Œuvre : ${String(item.artwork_title || "").trim()} (${String(item.artist_name || "").trim()}, ${String(item.artwork_date || "").trim()})\n  Description de l'œuvre : ${String(item.artwork_description || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Présentation de l'artiste : ${String(item.artist_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
+    return `- id:${item.current_topic_id} | Type : œuvre d'art du jour | Actualité : ${common} | Œuvre : ${String(item.artwork_title || "").trim()} (${String(item.artist_name || "").trim()}, ${String(item.artwork_date || "").trim()})\n  Description de l'œuvre : ${truncateAtTextBoundary(item.artwork_description, 500)}\n  Présentation de l'artiste : ${truncateAtTextBoundary(item.artist_presentation, 500)}`;
   }
   // Notion extraite d'une arène de débat (cf. extractDebateTopicNotions) :
   // pas de "shared_mechanism"/"essential_difference" (pas de parallèle avec
@@ -13707,13 +13719,13 @@ function formatEclairagesItemForPrompt(item) {
       .map((g) => `${String(g.word || "").trim()} (${String(g.note || "").trim()})`)
       .join(" ; ");
     const originLabel = { article: "reprise du sujet d'actualité", attested: "expression latine réellement attestée", composed: "traduction composée pour l'occasion, PAS une expression ancienne" }[item.phrase_origin] || "inconnue";
-    return `- id:${item.current_topic_id} | Type : mot latin du jour | Actualité : ${common} | Expression latine : « ${String(item.latin_phrase || "").trim()} » (${String(item.literal_translation || "").trim()}) | Provenance : ${originLabel}\n  Sens et usage : ${String(item.explanation || "").trim().slice(0, 500).replace(/\s+/g, " ")}\n  Grammaire : ${grammar.slice(0, 600).replace(/\s+/g, " ")}`;
+    return `- id:${item.current_topic_id} | Type : mot latin du jour | Actualité : ${common} | Expression latine : « ${String(item.latin_phrase || "").trim()} » (${String(item.literal_translation || "").trim()}) | Provenance : ${originLabel}\n  Sens et usage : ${truncateAtTextBoundary(item.explanation, 500)}\n  Grammaire : ${truncateAtTextBoundary(grammar, 600)}`;
   }
   // Citation du jour : présentation simplifiée à l'affichage (pas de
   // shared_mechanism/essential_difference montrés au lecteur), mais choisie
   // en écho à un sujet d'actualité comme les autres — current_topic_id est
   // bien présent (cf. lib/citation-du-jour.js).
-  return `- id:${item.current_topic_id} | Type : citation du jour | Citation : « ${String(item.quote_text || "").trim().slice(0, 500).replace(/\s+/g, " ")} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${String(item.quote_origin || "").trim().slice(0, 300).replace(/\s+/g, " ")}\n  Présentation de l'auteur : ${String(item.author_presentation || "").trim().slice(0, 500).replace(/\s+/g, " ")}`;
+  return `- id:${item.current_topic_id} | Type : citation du jour | Citation : « ${truncateAtTextBoundary(item.quote_text, 500)} » — ${String(item.quote_author || "").trim()}\n  Origine de la citation : ${truncateAtTextBoundary(item.quote_origin, 300)}\n  Présentation de l'auteur : ${truncateAtTextBoundary(item.author_presentation, 500)}`;
 }
 
 function formatCultureGeneraleItemForPrompt(item) {
@@ -13892,6 +13904,85 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
   return valid;
 }
 
+// Chaîne V2 commune à toutes les sorties fraîchement générées. Elle reçoit
+// les objets BRUTS (avant validateQuestionItemCore et donc avant shuffle),
+// exécute validation déterministe + critique sémantique, puis régénère
+// uniquement les refusés. Le mélange et son verrou structurel final restent
+// ensuite assurés par validateQuestionItemCoreBase (lib/question-formats.js).
+async function qualityControlRawQuestions({
+  apiKey,
+  rawQuestions,
+  basePrompt,
+  route,
+  context = {},
+  timeoutMs
+}) {
+  const startedAt = Date.now();
+  const outcome = await runQuestionQualityPipeline(rawQuestions, {
+    semanticReviewEnabled: QCM_SEMANTIC_REVIEW_ENABLED,
+    maxRetries: QCM_SEMANTIC_REVIEW_MAX_RETRIES,
+    maxTechnicalRetries: QCM_CRITIC_TECHNICAL_MAX_RETRIES,
+    context,
+    reviewSemantic: async ({ entries, context: reviewContext }) => {
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: buildSemanticReviewPrompt(entries, reviewContext) }], {
+        model: DAILY_QUIZ_CRITIC_MODEL,
+        temperature: 0.1,
+        responseFormat: { type: "json_object" },
+        timeoutMs: timeoutMs || 90_000,
+        feature: "question_semantic_review"
+      });
+      return JSON.parse(content);
+    },
+    regenerate: async ({ rejected, accepted, attempt }) => {
+      const rejectionPayload = rejected.map((entry, index) => ({
+        replacementIndex: index,
+        sourceId: entry.question?.sourceId || entry.question?.sourceDebateId || null,
+        knowledgeTarget: entry.question?.knowledgeTarget || null,
+        rejectedQuestion: entry.question,
+        reasonCodes: entry.reasons.map((item) => item.code),
+        reasonMessages: entry.reasons.map((item) => item.message)
+      }));
+      const acceptedPayload = accepted.map((question) => ({
+        sourceId: question?.sourceId || question?.sourceDebateId || null,
+        knowledgeTarget: question?.knowledgeTarget || null,
+        question: question?.question || question?.variants?.[0]?.question || null,
+        options: question?.options || question?.variants?.[0]?.options || null
+      }));
+      const regenerationPrompt = [
+        basePrompt,
+        "",
+        `CYCLE DE RÉGÉNÉRATION CIBLÉE ${attempt}. Remplace exactement ${rejectionPayload.length} question(s) refusée(s), et uniquement celles-ci.`,
+        "Corrige explicitement chaque motif. Ne réutilise aucune formulation ni aucun ensemble d’options refusé. Ne duplique aucune question déjà acceptée.",
+        "Questions déjà acceptées (interdit de les régénérer ou de les paraphraser) :",
+        JSON.stringify(acceptedPayload),
+        "Questions refusées et motifs à corriger :",
+        JSON.stringify(rejectionPayload),
+        `Réponds uniquement avec {"questions":[...]} contenant exactement ${rejectionPayload.length} remplacement(s).`
+      ].join("\n");
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: regenerationPrompt }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.35,
+        responseFormat: { type: "json_object" },
+        timeoutMs: timeoutMs || 90_000,
+        feature: "question_targeted_regeneration"
+      });
+      const parsed = JSON.parse(content);
+      return Array.isArray(parsed?.questions) ? parsed.questions.slice(0, rejectionPayload.length) : [];
+    }
+  });
+  // Observabilité agrégée uniquement : aucun texte de question, fait privé,
+  // contenu de document ou identifiant utilisateur n'est journalisé.
+  console.info("[qcm-quality]", JSON.stringify({
+    route,
+    model: DAILY_QUIZ_NARRATIVE_MODEL,
+    criticModel: QCM_SEMANTIC_REVIEW_ENABLED ? DAILY_QUIZ_CRITIC_MODEL : null,
+    semanticReviewEnabled: QCM_SEMANTIC_REVIEW_ENABLED,
+    latencyMs: Date.now() - startedAt,
+    ...outcome.metrics
+  }));
+  return outcome.accepted;
+}
+
 // QCM d'une seule notion (un événement "Ce jour dans l'Histoire" ou un item
 // Éclairages, cf. buildNotionQuestions plus bas) ou d'un sujet libre/notion
 // de débat avec niveau (cf. generateNotionLevelQuiz plus bas), généré à la
@@ -14019,34 +14110,53 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
     return { error: "failed", reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." };
   }
 
-  let questionsParsed;
-  try {
+  let validated = [];
+  // Une seule génération initiale : les reprises sont désormais exclusivement
+  // ciblées dans qualityControlRawQuestions. Rejouer ce lot entier ici
+  // régénérerait aussi les questions déjà acceptées, contrairement au contrat V2.
+  const questionAttempts = 1;
+  for (let attempt = 1; attempt <= questionAttempts; attempt++) {
     const formatBlock = buildQuestionFormatsPromptBlock("sourceId", accepted.length, true);
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildQuestionsFromKnowledgePrompt("sourceId", id, accepted, instruction, formatBlock) }], {
-      model: DAILY_QUIZ_NARRATIVE_MODEL,
-      temperature: 0.4,
-      responseFormat: { type: "json_object" },
-      timeoutMs,
-      feature: "question_generation"
-    });
-    questionsParsed = JSON.parse(content);
-  } catch (error) {
-    console.error(`[notion-quiz:${id}] génération des questions :`, error.message);
-    return { error: "failed" };
+    const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, accepted, instruction, formatBlock);
+    try {
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" },
+        timeoutMs,
+        feature: "question_generation"
+      });
+      const questionsParsed = JSON.parse(content);
+      const qualityApproved = await qualityControlRawQuestions({
+        apiKey,
+        rawQuestions: questionsParsed?.questions,
+        basePrompt: questionPrompt,
+        route: "free_search",
+        timeoutMs,
+        context: { hasIndependentSource: false }
+      });
+      // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
+      // structurel en plus de la consigne de prompt — retire toute question dont
+      // le knowledgeTarget ne correspond à AUCUNE connaissance acceptée.
+      validated = filterVariantsByKnowledgeConstraints(
+        filterQuestionsToAdmittedKnowledge(
+          validateNarrativeQuizQuestions(qualityApproved, [id], max, max),
+          accepted
+        ),
+        accepted
+      );
+      if (validated.length >= min) break;
+      console.warn(`[notion-quiz:${id}] questions non conformes (tentative ${attempt}/${questionAttempts}, ${validated.length} valide(s)).`);
+    } catch (error) {
+      // Une erreur HTTP/réseau a déjà épuisé les trois tentatives internes de
+      // _callOpenAI : ne jamais empiler une nouvelle série de requêtes.
+      if (error?.status) {
+        console.error(`[notion-quiz:${id}] génération des questions :`, error.message);
+        return { error: "failed" };
+      }
+      console.warn(`[notion-quiz:${id}] JSON questions invalide (tentative ${attempt}/${questionAttempts}) :`, error.message);
+    }
   }
-  // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
-  // structurel en plus de la consigne de prompt — retire toute question dont
-  // le knowledgeTarget ne correspond à AUCUNE connaissance acceptée.
-  // filterVariantsByKnowledgeConstraints (demande du 17/08/2026, second
-  // mini-patch) : ensuite seulement — retire toute variante "ordre"/"intrus"
-  // non justifiée par sequential/clearBoundary, indépendamment du prompt.
-  const validated = filterVariantsByKnowledgeConstraints(
-    filterQuestionsToAdmittedKnowledge(
-      validateNarrativeQuizQuestions(questionsParsed?.questions, [id], max, max),
-      accepted
-    ),
-    accepted
-  );
   if (validated.length < min) {
     console.warn(`[notion-quiz:${id}] seulement ${validated.length} question(s) valide(s) et traçable(s) sur ${accepted.length} connaissance(s) acceptée(s).`);
     return { error: "failed" };
@@ -14168,13 +14278,24 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
     // variantes par connaissance admise, jamais un quota (cf. son propre commentaire
     // "vise 2 variantes par défaut... redescends à 1 seulement quand...").
     const formatBlock = buildQuestionFormatsPromptBlock("sourceId", admittedKnowledge.length, true);
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, instruction, formatBlock) }], {
+    const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, instruction, formatBlock);
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" },
       feature: "question_generation"
     });
     parsed = JSON.parse(content);
+    parsed.questions = await qualityControlRawQuestions({
+      apiKey,
+      rawQuestions: parsed?.questions,
+      basePrompt: questionPrompt,
+      route: `notion_${sourceType}`,
+      context: {
+        hasIndependentSource: true,
+        sourceExcerptFor: (_sourceId, question) => String(question?.knowledgeTarget || "").slice(0, 1200)
+      }
+    });
   } catch (error) {
     console.error(`[notion-quiz:${sourceType}:${id}] génération des questions :`, error.message);
     return [];
@@ -14296,9 +14417,10 @@ async function buildImportedKnowledgeQuestions(knowledge, id, userId, sharedSour
   let parsed;
   try {
     const formatBlock = buildQuestionFormatsPromptBlock("sourceId", 1, true);
+    const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, null, formatBlock);
     const content = await _callOpenAI(apiKey, [{
       role: "user",
-      content: buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, null, formatBlock)
+      content: questionPrompt
     }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
@@ -14306,6 +14428,13 @@ async function buildImportedKnowledgeQuestions(knowledge, id, userId, sharedSour
       feature: "question_generation"
     });
     parsed = JSON.parse(content);
+    parsed.questions = await qualityControlRawQuestions({
+      apiKey,
+      rawQuestions: parsed?.questions,
+      basePrompt: questionPrompt,
+      route: sourceType || "knowledge_import",
+      context: { hasIndependentSource: true, sourceExcerpt: fact }
+    });
   } catch (error) {
     console.error(`[photo-knowledge:${id}] génération des questions :`, error.message);
     return [];
@@ -14368,9 +14497,10 @@ async function buildImportedKnowledgeQuestionsBatch(items, documentImportId) {
 
   try {
     const formatBlock = buildQuestionFormatsPromptBlock("sourceId", items.length, true);
+    const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", null, admittedKnowledge, null, formatBlock);
     const content = await _callOpenAI(apiKey, [{
       role: "user",
-      content: buildQuestionsFromKnowledgePrompt("sourceId", null, admittedKnowledge, null, formatBlock)
+      content: questionPrompt
     }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
@@ -14379,6 +14509,17 @@ async function buildImportedKnowledgeQuestionsBatch(items, documentImportId) {
       feature: "question_generation"
     });
     const parsed = JSON.parse(content);
+    parsed.questions = await qualityControlRawQuestions({
+      apiKey,
+      rawQuestions: parsed?.questions,
+      basePrompt: questionPrompt,
+      route: "knowledge_import_batch",
+      timeoutMs: Math.min(120_000, 45_000 + items.length * 3_000),
+      context: {
+        hasIndependentSource: true,
+        sourceExcerptFor: (sourceId, question) => admittedKnowledge.find((item) => item.id === sourceId)?.fact || question?.knowledgeTarget || null
+      }
+    });
     const validated = filterVariantsByKnowledgeConstraints(
       filterQuestionsToAdmittedKnowledge(
         validateNarrativeQuizQuestions(parsed?.questions, allIds, items.length, 1),
@@ -14588,7 +14729,8 @@ async function generateEnumerableQuizQuestions(apiKey, subject, items, id) {
   for (let start = 0; start < items.length; start += NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) {
     const chunk = items.slice(start, start + NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE);
     try {
-      const content = await _callOpenAI(apiKey, [{ role: "user", content: buildEnumerableQuizChunkPrompt(subject, chunk, id) }], {
+      const questionPrompt = buildEnumerableQuizChunkPrompt(subject, chunk, id);
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
         responseFormat: { type: "json_object" },
@@ -14596,7 +14738,15 @@ async function generateEnumerableQuizQuestions(apiKey, subject, items, id) {
         feature: "question_generation"
       });
       const parsedChunk = JSON.parse(content);
-      all.push(...validateNarrativeQuizQuestions(parsedChunk?.questions, [id], chunk.length, chunk.length));
+      const qualityApproved = await qualityControlRawQuestions({
+        apiKey,
+        rawQuestions: parsedChunk?.questions,
+        basePrompt: questionPrompt,
+        route: "free_search_enumerable",
+        timeoutMs: Math.min(120_000, 45_000 + chunk.length * 3_000),
+        context: { hasIndependentSource: false }
+      });
+      all.push(...validateNarrativeQuizQuestions(qualityApproved, [id], chunk.length, chunk.length));
     } catch (error) {
       console.warn(`[notion-quizzes:custom:${id}] lot ${start + 1}-${start + chunk.length} échoué :`, error.message);
     }
@@ -18051,7 +18201,18 @@ async function buildCultureGeneraleComprehensionQuiz(link) {
       feature: "question_generation"
     });
     const parsed = JSON.parse(content);
-    const validated = validateNarrativeQuizQuestions(parsed?.questions, [pairHash], COMPREHENSION_QUIZ_MAX_QUESTIONS, COMPREHENSION_QUIZ_MAX_QUESTIONS);
+    const qualityApproved = await qualityControlRawQuestions({
+      apiKey,
+      rawQuestions: parsed?.questions,
+      basePrompt: prompt,
+      route: "comprendre",
+      context: {
+        hasIndependentSource: true,
+        isComprehension: true,
+        sourceExcerpt: `A: ${detailA}\nB: ${detailB}\nRelation: ${String(link.label || "")}`.slice(0, 4800)
+      }
+    });
+    const validated = validateNarrativeQuizQuestions(qualityApproved, [pairHash], COMPREHENSION_QUIZ_MAX_QUESTIONS, COMPREHENSION_QUIZ_MAX_QUESTIONS);
     if (validated.length < 1) {
       console.warn(`[culture-generale comprehension:${pairHash}] aucune question valide.`);
       return [];

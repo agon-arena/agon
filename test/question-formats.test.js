@@ -54,6 +54,18 @@ test("qcm_multi : au moins 2 bonnes réponses, jamais toutes, est accepté", () 
   assert.deepEqual(validated.correctIndexes, [0, 2]);
 });
 
+test("qcm_multi : le shuffle conserve les deux bonnes options et recalcule correctIndexes", () => {
+  const result = validateQuestionItemCore({
+    type: "qcm_multi",
+    question: "Quelles villes se trouvent au Canada ?",
+    options: ["Ottawa", "Montréal", "Paris", "Rome"],
+    correctIndexes: [0, 1],
+    explanation: "Ottawa et Montréal se trouvent au Canada."
+  });
+  assert.ok(result);
+  assert.deepEqual(result.correctIndexes.map((index) => result.options[index]).sort(), ["Montréal", "Ottawa"]);
+});
+
 test("qcm_multi : une seule bonne réponse est rejetée (ce n'est pas un qcm_multi)", () => {
   assert.equal(validateQcmMultiOptions(["A", "B", "C", "D"], [0]), null);
 });
@@ -135,7 +147,7 @@ test("ordre : correction déterministe — terme à terme, jamais un ré-ordonna
 test("altVariant : un type composite (association/qcm_multi/ordre/intrus) est rejeté", () => {
   const item = {
     type: "qcm",
-    question: "Q ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "...",
+    question: "Question principale ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "...",
     altVariant: { type: "association", question: "Q alt ?", pairs: [{ left: "A", right: "1" }, { left: "B", right: "2" }, { left: "C", right: "3" }] }
   };
   const result = validateQuestionItemCore(item);
@@ -146,7 +158,7 @@ test("altVariant : un type composite (association/qcm_multi/ordre/intrus) est re
 test("altVariant : un type identique à la question principale est rejeté (pas une vraie variante)", () => {
   const item = {
     type: "qcm",
-    question: "Q ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "...",
+    question: "Question principale ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "...",
     altVariant: { type: "qcm", question: "Q reformulée ?", options: ["W", "X", "Y", "Z"], correctIndex: 1, explanation: "..." }
   };
   const result = validateQuestionItemCore(item);
@@ -209,11 +221,9 @@ test("génération invalide : un item complètement malformé est rejeté sans e
   assert.equal(validateQuestionItemCore({ type: "association", question: "Q ?", pairs: "pas un tableau" }), null);
 });
 
-test("génération invalide : un type inconnu retombe sur qcm plutôt que de planter", () => {
-  const item = { type: "format-inexistant", question: "Q ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "..." };
-  const result = validateQuestionItemCore(item);
-  assert.ok(result);
-  assert.equal(result.type, "qcm");
+test("génération invalide : un type inconnu est rejeté explicitement", () => {
+  const item = { type: "format-inexistant", question: "Question inconnue ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "..." };
+  assert.equal(validateQuestionItemCore(item), null);
 });
 
 // ── gradeQuizSubmissionOptionIndex : point d'entrée commun POST /answer et /practice-answer ──
@@ -240,11 +250,11 @@ function qcmVariant(question, correctIndex, extra) {
 }
 
 test("variants : 1 seul variant est accepté (3 n'est jamais une obligation)", () => {
-  const item = { variants: [qcmVariant("Q1 ?", 0)] };
+  const item = { variants: [qcmVariant("Question 1 ?", 0)] };
   const result = validateQuestionItemCore(item);
   assert.ok(result);
   assert.equal(result.variants.length, 1);
-  assert.equal(result.question, "Q1 ?", "la variante principale est dupliquée à plat pour les lecteurs historiques (stripQuestionForClient, GET /fiche)");
+  assert.equal(result.question, "Question 1 ?", "la variante principale est dupliquée à plat pour les lecteurs historiques (stripQuestionForClient, GET /fiche)");
 });
 
 test("variants : 2 variants sont acceptés", () => {
@@ -270,11 +280,11 @@ test("variants : 3 variants pertinents sont acceptés", () => {
 
 test("variants : au-delà de 3 (le maximum), seules les 3 premières sont conservées — pas un rejet total", () => {
   assert.equal(MAX_VARIANTS_PER_QUESTION, 3);
-  const item = { variants: [qcmVariant("Q1 ?", 0), qcmVariant("Q2 ?", 1), qcmVariant("Q3 ?", 2), qcmVariant("Q4 ?", 3)] };
+  const item = { variants: [qcmVariant("Question 1 ?", 0), qcmVariant("Question 2 ?", 1), qcmVariant("Question 3 ?", 2), qcmVariant("Question 4 ?", 3)] };
   const result = validateQuestionItemCore(item);
   assert.ok(result, "3 variantes valides existent, la question ne doit pas être perdue pour un 4e excédent");
   assert.equal(result.variants.length, 3);
-  assert.deepEqual(result.variants.map((v) => v.question), ["Q1 ?", "Q2 ?", "Q3 ?"]);
+  assert.deepEqual(result.variants.map((v) => v.question), ["Question 1 ?", "Question 2 ?", "Question 3 ?"]);
 });
 
 test("variants : un tableau vide est rejeté", () => {
@@ -289,11 +299,11 @@ test("variants : un tableau vide est rejeté", () => {
 // 29 du prompt de refonte : "ne rejette pas nécessairement tout le
 // MemoryItem").
 test("variants : une variante malformée est retirée, la question reste valide avec les variantes restantes", () => {
-  const item = { variants: [qcmVariant("Q1 ?", 0), { type: "qcm", question: "Q2 ?", options: ["A", "B"] /* pas assez d'options */ }] };
+  const item = { variants: [qcmVariant("Question 1 ?", 0), { type: "qcm", question: "Question 2 ?", options: ["A", "B"] /* pas assez d'options */ }] };
   const result = validateQuestionItemCore(item);
   assert.ok(result, "la variante 0, valide seule, doit survivre");
   assert.equal(result.variants.length, 1);
-  assert.equal(result.question, "Q1 ?");
+  assert.equal(result.question, "Question 1 ?");
 });
 
 test("variants : une variante strictement dupliquée est retirée, pas l'autre", () => {
@@ -345,15 +355,15 @@ test("variants : un tableau qui ne laisse RIEN de valide après filtrage renvoie
 });
 
 test("variants : knowledgeTarget est conservé s'il est fourni, jamais requis", () => {
-  const withTarget = validateQuestionItemCore({ knowledgeTarget: "La chute du mur de Berlin a lieu en 1989.", variants: [qcmVariant("Q ?", 0)] });
+  const withTarget = validateQuestionItemCore({ knowledgeTarget: "La chute du mur de Berlin a lieu en 1989.", variants: [qcmVariant("Question sur Berlin ?", 0)] });
   assert.equal(withTarget.knowledgeTarget, "La chute du mur de Berlin a lieu en 1989.");
 
-  const withoutTarget = validateQuestionItemCore({ variants: [qcmVariant("Q ?", 0)] });
+  const withoutTarget = validateQuestionItemCore({ variants: [qcmVariant("Question sans cible ?", 0)] });
   assert.equal(withoutTarget.knowledgeTarget, undefined);
 });
 
 test("variants : un retrievalMode inconnu est ignoré plutôt que de faire échouer la validation", () => {
-  const item = { variants: [qcmVariant("Q ?", 0, { retrievalMode: "n'importe quoi" })] };
+  const item = { variants: [qcmVariant("Question valide ?", 0, { retrievalMode: "n'importe quoi" })] };
   const result = validateQuestionItemCore(item);
   assert.ok(result);
   assert.equal(result.retrievalMode, undefined);
