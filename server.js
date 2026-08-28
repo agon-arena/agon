@@ -13973,6 +13973,12 @@ async function qualityControlRawQuestions({
       if (rejectionCodes.has("INVALID_ORDER_COUNT")) {
         targetedConstraints.push("- INVALID_ORDER_COUNT : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide.");
       }
+      if (["incorrectCorrectAnswer", "missingCorrectAnswerIndex", "noCorrectAnswerMarked"].some((code) => rejectionCodes.has(code))) {
+        targetedConstraints.push("- RÉPONSE CORRECTE MAL IDENTIFIÉE : remplace la question par un qcm simple avec exactement 4 options distinctes. Fournis un unique correctIndex entier entre 0 et 3, vérifie que l’option à cet index est factuellement la bonne réponse, et explique explicitement pourquoi elle est correcte.");
+      }
+      if (["unclearQuestion", "vagueQuestion"].some((code) => rejectionCodes.has(code))) {
+        targetedConstraints.push("- QUESTION FLOUE OU VAGUE : réécris entièrement la question. Nomme explicitement le sujet, l’entité, le lieu ou la période nécessaires ; bannis les pronoms et références implicites ; la question doit être autonome, précise et répondre uniquement à knowledgeTarget.");
+      }
       const regenerationPrompt = [
         basePrompt,
         "",

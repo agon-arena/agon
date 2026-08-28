@@ -57,4 +57,11 @@ test("la régénération ciblée impose une correction concrète des formats obs
   assert.match(server, /DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe/);
   assert.match(server, /INVALID_ORDER_COUNT : abandonne obligatoirement le type ordre/);
   assert.match(server, /qcm simple avec exactement 4 options distinctes/);
+  assert.match(server, /incorrectCorrectAnswer/);
+  assert.match(server, /missingCorrectAnswerIndex/);
+  assert.match(server, /noCorrectAnswerMarked/);
+  assert.match(server, /unique correctIndex entier entre 0 et 3/);
+  assert.match(server, /unclearQuestion/);
+  assert.match(server, /vagueQuestion/);
+  assert.match(server, /la question doit être autonome, précise/);
 });
