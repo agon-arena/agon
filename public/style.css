@@ -27386,6 +27386,65 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .pag
   transform: translateY(-50%) !important;
 }
 
+/* Bandeau inférieur unifié — mêmes dimensions et mêmes espacements sur toutes les pages. */
+html body .home-bottom-nav {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 6px !important;
+  border-radius: 0 !important;
+}
+
+html body .home-bottom-nav > .home-bottom-nav-item,
+html body .home-bottom-nav > .home-bottom-nav-item-wrap {
+  flex: 0 0 86px !important;
+  width: 86px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+html body .home-bottom-nav .home-bottom-nav-item-wrap > .home-bottom-nav-item,
+html body .home-bottom-nav > .home-bottom-nav-item {
+  min-width: 0 !important;
+  min-height: 46px !important;
+  height: 46px !important;
+  padding: 4px 6px !important;
+  gap: 4px !important;
+  box-sizing: border-box !important;
+  color: #000000 !important;
+}
+
+html body .home-bottom-nav .home-bottom-nav-item-wrap > .home-bottom-nav-item {
+  width: 100% !important;
+}
+
+html body .home-bottom-nav .home-bottom-nav-item i {
+  font-size: 20px !important;
+  line-height: 1 !important;
+  color: #000000 !important;
+}
+
+html body .home-bottom-nav .home-bottom-nav-item span {
+  font-size: 10px !important;
+  line-height: 1 !important;
+  color: #000000 !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 520px) {
+  html body .home-bottom-nav {
+    gap: 2px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+
+  html body .home-bottom-nav > .home-bottom-nav-item,
+  html body .home-bottom-nav > .home-bottom-nav-item-wrap {
+    flex: 0 0 min(18.5vw, 72px) !important;
+    width: min(18.5vw, 72px) !important;
+  }
+}
+
 /* Sur Notifications desktop, l'ancien bouton retour partage le côté droit du
    bandeau. En standalone on lui réserve une case distincte à gauche du bouton
    d'allumage pour qu'aucun des deux ne se superpose. */

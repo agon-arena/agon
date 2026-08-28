@@ -5273,6 +5273,8 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("contact-frame-open", safePathname === "/contact");
   modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
   modal.classList.toggle("debate-frame-open", safePathname === "/debate");
+  modal.classList.toggle("create-frame-open", safePathname === "/create");
+  modal.classList.toggle("notifications-frame-open", safePathname === "/notifications");
   modal.classList.toggle("qcm-frame-open", safePathname === "/apprentissage");
   modal.classList.toggle("parallele-historique-frame-open", safePathname === "/parallele-historique");
   modal.classList.toggle("pensee-philosophique-frame-open", safePathname === "/pensee-philosophique");
@@ -5816,6 +5818,8 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.sort-menu-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.debate-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.create-frame-open #debate-iframe-modal-refresh,
+    #debate-iframe-modal.notifications-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.parallele-historique-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.pensee-philosophique-frame-open #debate-iframe-modal-refresh,
@@ -5826,6 +5830,9 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.historical-events-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.mon-univers-frame-open #debate-iframe-modal-refresh {
+      display: none !important;
+    }
+    #debate-iframe-modal.notifications-frame-open #debate-iframe-modal-close {
       display: none !important;
     }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,

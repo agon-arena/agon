@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260827-card-corner-fix5">
+  <link rel="stylesheet" href="/style.min.css?v=20260828-bottom-nav-unified">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -66,6 +66,21 @@
     body.page-qcm-du-jour .qcm-home-bottom-nav {
       z-index: 10020;
       padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+      border-radius: 0 !important;
+    }
+    body.page-qcm-du-jour .qcm-home-bottom-nav .home-bottom-nav-item,
+    body.page-qcm-du-jour .qcm-home-bottom-nav .home-bottom-nav-item i,
+    body.page-qcm-du-jour .qcm-home-bottom-nav .home-bottom-nav-item span {
+      color: #000000 !important;
+    }
+    @media (min-width: 769px) {
+      body.page-qcm-du-jour .qcm-home-bottom-nav {
+        gap: 6px !important;
+      }
+      body.page-qcm-du-jour .qcm-home-bottom-nav .home-bottom-nav-item {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+      }
     }
     /* html.in-iframe (pas body.in-iframe) : la classe est posée sur
        <html> de façon synchrone dès l'exécution de ce script (ligne ~21),
