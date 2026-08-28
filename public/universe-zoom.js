@@ -328,6 +328,10 @@ function createUniverseCamera({
 }) {
   let state = { x: 0, y: 0, scale: minScale };
   let raf = null;
+  // Le conteneur autonome /mon-univers occupe toute la page. Dans cette vue seulement, la
+  // molette/trackpad explore donc directement la mémoire avec une inertie légère. Le nuage
+  // embarqué dans l'accueil conserve exactement son scroll de page historique.
+  const isFullPageUniverse = Boolean(viewportEl.closest("#mnoria-universe-cloud"));
 
   // La texture ne change d'échelle que lorsque la scène zoome, mais son grossissement physique
   // reste très faible : à +15 % maximum, le PNG 4K conserve sa finesse même lorsque les objets
@@ -435,14 +439,46 @@ function createUniverseCamera({
   }
 
   // ---- Molette (desktop) ----
-  // Une molette/scroll vertical ordinaire appartient désormais à la PAGE, même si le pointeur
-  // se trouve sur Ma mémoire. Seul Ctrl/Meta + molette (le signal produit par le pincement des
-  // trackpads Chromium) zoome la scène ; Safari utilise les événements gesture* juste après.
-  // Cela évite que le cadre emprisonne le défilement vertical du site.
+  // Dans la mémoire embarquée, une molette ordinaire appartient toujours à la PAGE. Dans la
+  // page autonome, elle déplace la scène avec une décélération courte : les impulsions d'une
+  // molette deviennent continues et les petits deltas d'un trackpad restent naturels.
+  let wheelPanX = 0;
+  let wheelPanY = 0;
+  let wheelPanRaf = null;
+
+  function animateFullPageWheelPan() {
+    const stepX = wheelPanX * 0.24;
+    const stepY = wheelPanY * 0.24;
+    wheelPanX -= stepX;
+    wheelPanY -= stepY;
+    setState({
+      x: state.x + stepX / state.scale,
+      y: state.y + stepY / state.scale
+    }, false, { skipBackground: true });
+
+    if (Math.abs(wheelPanX) < 0.15 && Math.abs(wheelPanY) < 0.15) {
+      wheelPanX = 0;
+      wheelPanY = 0;
+      wheelPanRaf = null;
+      syncBackgroundNow();
+      return;
+    }
+    wheelPanRaf = requestAnimationFrame(animateFullPageWheelPan);
+  }
+
   viewportEl.addEventListener("wheel", (e) => {
-    if (!e.ctrlKey && !e.metaKey) return;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      zoomInPlace(Math.exp(-e.deltaY * 0.0009));
+      return;
+    }
+    if (!isFullPageUniverse) return;
+
     e.preventDefault();
-    zoomInPlace(Math.exp(-e.deltaY * 0.0009));
+    const deltaUnit = e.deltaMode === 1 ? 16 : (e.deltaMode === 2 ? viewportEl.clientHeight : 1);
+    wheelPanX += e.deltaX * deltaUnit;
+    wheelPanY += e.deltaY * deltaUnit;
+    if (!wheelPanRaf) wheelPanRaf = requestAnimationFrame(animateFullPageWheelPan);
   }, { passive: false });
 
   // ---- Pincement trackpad Mac dans Safari ----
@@ -539,9 +575,9 @@ function createUniverseCamera({
         // Attend quelques pixels avant de verrouiller le geste : les petites
         // oscillations du doigt ne déplacent ni la page ni la mémoire.
         if (Math.hypot(totalDx, totalDy) < 8) return;
-        singlePointerIntent = Math.abs(totalDy) > Math.abs(totalDx) * 1.15
-          ? "page-scroll"
-          : "memory-pan";
+        singlePointerIntent = isFullPageUniverse
+          ? "memory-pan"
+          : (Math.abs(totalDy) > Math.abs(totalDx) * 1.15 ? "page-scroll" : "memory-pan");
       }
       if (singlePointerIntent === "page-scroll") {
         // Aucun preventDefault, aucun scrollBy : `touch-action: pan-y` confie

@@ -17265,6 +17265,60 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (quizRowsError) throw new Error(quizRowsError.message);
     const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
 
+    // Le pourcentage FSRS ci-dessous mesure la rétrivabilité actuelle ; il
+    // peut naturellement frôler 100 % juste après une première exposition.
+    // Le statut durable « Acquis » doit rester plus exigeant : il réutilise
+    // la source de vérité historique de fetchUserAcquis, validée uniquement
+    // après DAILY_QUIZ_ACQUIS_VALIDATION_STREAK journées consécutives
+    // réussies (4 actuellement, une journée incorrecte remet la série à 0).
+    const durableAcquis = await fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
+    const durableAcquisBySourceId = new Map(
+      durableAcquis.map((item) => [String(item.sourceDebateId), item])
+    );
+
+    // Même rubrique que « Ma mémoire » : celle-ci ne se contente pas de la
+    // catégorie copiée dans daily_quiz lors de la génération, elle construit
+    // ses rubriques depuis le Solar réellement enregistré pour l'utilisateur
+    // (user_article_acquisitions -> solar_systems.galaxy). Prioriser cette
+    // galaxie ici garantit qu'une même connaissance apparaît sous le même
+    // libellé dans « Mes acquis » et « Ma mémoire ». Les QCM pas encore acquis
+    // gardent leur sourcePlacement comme repli, puisqu'ils n'ont logiquement
+    // encore aucune position personnelle dans la mémoire.
+    const memoryGalaxyByKnowledgeKey = new Map();
+    try {
+      const { data: memoryAcquisitions, error: memoryAcquisitionsError } = await supabase
+        .from("user_article_acquisitions")
+        .select("eclairage_type, eclairage_source_id, solar_system_id")
+        .eq("user_id", userRow.id)
+        .not("eclairage_type", "is", null)
+        .not("solar_system_id", "is", null);
+      if (memoryAcquisitionsError) throw memoryAcquisitionsError;
+
+      const memorySolarIds = [...new Set((memoryAcquisitions || []).map((item) => item.solar_system_id).filter(Boolean))];
+      let memorySolarById = new Map();
+      if (memorySolarIds.length) {
+        const { data: memorySolars, error: memorySolarsError } = await supabase
+          .from("solar_systems")
+          .select("id, galaxy")
+          .in("id", memorySolarIds);
+        if (memorySolarsError) throw memorySolarsError;
+        memorySolarById = new Map((memorySolars || []).map((solar) => [solar.id, solar]));
+      }
+
+      for (const acquisition of memoryAcquisitions || []) {
+        const galaxy = String(memorySolarById.get(acquisition.solar_system_id)?.galaxy || "").trim();
+        if (!galaxy) continue;
+        memoryGalaxyByKnowledgeKey.set(
+          `${acquisition.eclairage_type}:${acquisition.eclairage_source_id}`,
+          galaxy
+        );
+      }
+    } catch (error) {
+      // Le classement d'affichage ne doit jamais rendre toute la liste
+      // indisponible : sourcePlacement reste un repli cohérent et déjà stocké.
+      console.warn("[notion-quizzes] rubriques Ma mémoire indisponibles :", error.message);
+    }
+
     // Progression par sujet : AGRÉGATION DÉRIVÉE de l'état FSRS de chacune de
     // ses questions (memory_item_fsrs_states, cf. lib/spaced-repetition/),
     // jamais l'inverse — ce calcul ne réinjecte rien dans le scheduler
@@ -17308,7 +17362,11 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         answeredCount += 1;
       }
       const progressPct = Math.round((creditSum / questions.length) * 100);
-      const primaryTheme = getPrimaryNotionQuizTheme(questions[0]);
+      const durableAcquisState = durableAcquisBySourceId.get(String(questions[0]?.sourceDebateId || ""));
+      const firstQuestion = questions[0];
+      const memoryKnowledgeKey = `${firstQuestion?.sourceType || ""}:${firstQuestion?.sourceDebateId || ""}`;
+      const primaryTheme = memoryGalaxyByKnowledgeKey.get(memoryKnowledgeKey)
+        || getPrimaryNotionQuizTheme(firstQuestion);
       quizzes.push({
         slot: link.slot,
         quizDate: link.quiz_date,
@@ -17328,7 +17386,9 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         realized: answeredCount >= questions.length,
         inProgress: answeredCount > 0 && answeredCount < questions.length,
         progressPct,
-        validated: progressPct >= 100
+        // Ne jamais confondre « je peux probablement m'en souvenir maintenant »
+        // (progressPct) avec « cette notion a été consolidée dans le temps ».
+        validated: durableAcquisState?.validated === true
       });
     }
     res.json({ quizzes });

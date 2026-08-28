@@ -1020,7 +1020,15 @@
        classe déjà présente, le cadre affichait ~1s le fond par défaut (Bulles Actu) avant que le
        JS ajoute la classe et bascule sur le fond étoilé, décalage visible à chaque
        rafraîchissement (demande du 17/08/2026, "il y a encore déplacement du fond"). -->
-  <div id="mnoria-tag-trends-cloud" class="mnoria-tag-trends-cloud mnoria-memoire-frame"></div>
+  <div id="mnoria-tag-trends-cloud" class="mnoria-tag-trends-cloud mnoria-memoire-frame">
+    <!-- Présent dès le HTML initial, avant même le chargement des données de Ma mémoire : le
+         moteur de scène le remonte ensuite au-dessus de ses calques, mais un état vide ou lent
+         ne peut plus faire disparaître l'accès plein écran. -->
+    <a href="/mon-univers" id="mnoria-memory-fullpage-btn" class="mnoria-memory-fullpage-btn" aria-label="Ouvrir Ma mémoire sur toute la page">
+      <i class="fa-solid fa-expand" aria-hidden="true"></i>
+      <span>Plein écran</span>
+    </a>
+  </div>
   <div id="mnoria-memoire-embed-after" hidden>
     <button type="button" id="universe-back-btn" class="universe-back-btn" aria-label="Revenir au niveau précédent">
       <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Retour
@@ -1054,6 +1062,52 @@
   <span>Autres actus</span>
 </a>
 <style>
+.mnoria-memory-fullpage-btn {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 150;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid rgba(229, 237, 243, 0.42);
+  border-radius: 999px;
+  background: rgba(8, 20, 31, 0.78);
+  color: rgba(240, 249, 252, 0.92);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.24);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+/* La classe du CADRE est la source de vérité : sur certaines restaurations desktop/PWA, la
+   scène mémoire est déjà rendue alors que la classe équivalente du body n'a pas encore été
+   resynchronisée. Le bouton ne doit pas dépendre de ce décalage transitoire. */
+#mnoria-tag-trends-cloud.mnoria-memoire-frame > .mnoria-memory-fullpage-btn {
+  display: inline-flex !important;
+  top: calc(var(--bubble-frame-top, 55px) + 12px) !important;
+  right: 42px !important;
+  z-index: 1000 !important;
+}
+.mnoria-memory-fullpage-btn:hover,
+.mnoria-memory-fullpage-btn:focus-visible {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.72);
+  background: rgba(27, 51, 66, 0.94);
+  outline: none;
+}
+@media (max-width: 768px) {
+  #mnoria-tag-trends-cloud.mnoria-memoire-frame > .mnoria-memory-fullpage-btn {
+    top: calc(var(--bubble-frame-top, 55px) + 10px) !important;
+    right: 32px !important;
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+}
 .tribunes-nav-overlay {
   position: fixed;
   inset: 0;
@@ -1715,7 +1769,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260826-blur-bottom-nav" defer></script>
+<script src="/script.min.js?v=20260828-fullpage-button" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

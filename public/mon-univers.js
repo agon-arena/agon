@@ -1066,6 +1066,21 @@ function mountUniverse() {
   viewportEl.appendChild(worldEl);
   viewportEl.appendChild(labelsOverlayEl);
   cloudEl.appendChild(viewportEl);
+
+  // Sur l'accueil uniquement, le bouton plein écran appartient directement au cadre étoilé.
+  // Le placer dans le fil d'Ariane le rendait invisible dans les configurations où ce bandeau
+  // est masqué ou déplacé. Ici il partage le contexte d'empilement de la scène et reste donc
+  // toujours visible, indépendamment du niveau de navigation affiché.
+  if (cloudEl.id === "mnoria-tag-trends-cloud") {
+    cloudEl.querySelector("#mnoria-memory-fullpage-btn")?.remove();
+    const fullPageButton = document.createElement("a");
+    fullPageButton.id = "mnoria-memory-fullpage-btn";
+    fullPageButton.className = "mnoria-memory-fullpage-btn";
+    fullPageButton.href = "/mon-univers";
+    fullPageButton.setAttribute("aria-label", "Ouvrir Ma mémoire sur toute la page");
+    fullPageButton.innerHTML = '<i class="fa-solid fa-expand" aria-hidden="true"></i><span>Plein écran</span>';
+    cloudEl.appendChild(fullPageButton);
+  }
   let backgroundTileMetrics = syncMnoriaTileMetrics();
   if (universeBgResizeObserver) universeBgResizeObserver.disconnect();
   universeBgResizeObserver = new ResizeObserver(() => {

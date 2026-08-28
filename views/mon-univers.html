@@ -21,6 +21,13 @@
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
   <style>
+    /* La page autonome est elle-même la surface d'exploration : un glissement tactile déplace
+       la mémoire. Cette surcharge ne s'applique jamais à la mémoire intégrée à l'accueil, qui
+       conserve son `touch-action: pan-y` et donc son scroll de page natif. */
+    #mnoria-universe-cloud .universe-zoom-viewport {
+      touch-action: none;
+    }
+
     /* Fond étoilé de la page déplacé dans style.css (body.page-mon-univers) : ce simple
        `body { ... }` ici était systématiquement écrasé par la règle plus spécifique
        body.page-mon-univers { background-color: #243038; } de style.css, quel que soit
@@ -1234,7 +1241,7 @@
 <script src="/script.min.js?v=20260826-blur-bottom-nav" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260826-early-frame-resync");
+    import("/mon-univers.js?v=20260828-fullpage-button");
   }
 </script>
 </body>

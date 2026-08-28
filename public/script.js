@@ -2782,11 +2782,11 @@ function isIframeDebateLoadingOverlayContext() {
 // Pages embarquées où le bandeau/voile "Chargement en cours" n'apporte qu'un
 // flash de plus plutôt qu'un vrai confort d'attente. Liste partagée par les
 // différents points d'entrée (ouverture, navigation historique, voile posé
-// par la page elle-même) plutôt que répétée à chaque appel. Vide pour
-// l'instant : Connaissances et Éclairages ont toutes deux redemandé l'écran
-// de chargement du parent (cf. MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY),
-// comme Ce jour dans l'Histoire (jamais dans cette liste).
-const MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = [];
+// par la page elle-même) plutôt que répétée à chaque appel. Apprentissage
+// affiche désormais immédiatement son propre fond neuronal et son cadre
+// translucide : le voile bleu pétrole du parent produisait précisément le
+// flash visuel que cet état initial cherche à supprimer.
+const MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/apprentissage"];
 function isIframePageWithoutLoadingOverlay(pathname) {
   return MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
 }
@@ -2798,7 +2798,7 @@ function isIframePageWithoutLoadingOverlay(pathname) {
 // (.page-arrival-loading-box) — redondant avec le bandeau du parent déjà
 // suffisant. Distinct de MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY (qui
 // supprime les deux) : ici seul le voile de la page elle-même est coupé.
-const MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/apprentissage", "/eclairages"];
+const MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/eclairages"];
 function isIframePageUsingParentLoadingOnly(pathname) {
   return MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY.includes(String(pathname || ""));
 }
@@ -19644,7 +19644,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260826-early-frame-resync').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260828-fullpage-button').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
