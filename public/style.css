@@ -163,6 +163,13 @@ html.thematic-scroll body {
   display: block;
   margin: 0 auto;
   filter: brightness(0.914) saturate(0.96);
+  visibility: hidden;
+}
+
+/* Le PNG du logo est volontairement masqué jusqu'à la fin de son chargement : Safari mobile
+   peut autrement en peindre une bande ou quelques fragments pendant son décodage progressif. */
+.mnoria-startup-logo-img.is-loaded {
+  visibility: visible;
 }
 
 .mnoria-startup-subtitle {

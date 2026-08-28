@@ -538,7 +538,7 @@ function showMnoriaStartupBeforeRefresh() {
     loader.innerHTML =
       '<div class="mnoria-startup-loader-inner">' +
         '<div class="mnoria-startup-brand">' +
-          '<img src="/mnoria-logo.png?v=20260815-startup-v1" class="mnoria-startup-logo-img" alt="Mnoria" width="2172" height="724">' +
+          '<img src="/mnoria-logo.png?v=20260815-startup-v1" class="mnoria-startup-logo-img" alt="Mnoria" width="2172" height="724" onload="this.classList.add(\'is-loaded\')" onerror="this.classList.add(\'is-loaded\')">' +
         '</div>' +
         '<div class="mnoria-startup-lines">' +
           '<p class="mnoria-startup-line mnoria-startup-line-1">Cultive ton esprit</p>' +
