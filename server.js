@@ -13931,7 +13931,8 @@ async function qualityControlRawQuestions({
   basePrompt,
   route,
   context = {},
-  timeoutMs
+  timeoutMs,
+  metricsSink
 }) {
   const startedAt = Date.now();
   const outcome = await runQuestionQualityPipeline(rawQuestions, {
@@ -13996,6 +13997,7 @@ async function qualityControlRawQuestions({
     latencyMs: Date.now() - startedAt,
     ...outcome.metrics
   }));
+  if (typeof metricsSink === "function") metricsSink(outcome.metrics);
   return outcome.accepted;
 }
 
@@ -14168,6 +14170,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   }
 
   let validated = [];
+  let questionQualityMetrics = null;
   // Une seule génération initiale : les reprises sont désormais exclusivement
   // ciblées dans qualityControlRawQuestions. Rejouer ce lot entier ici
   // régénérerait aussi les questions déjà acceptées, contrairement au contrat V2.
@@ -14190,7 +14193,8 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         basePrompt: questionPrompt,
         route: "free_search",
         timeoutMs,
-        context: { hasIndependentSource: false }
+        context: { hasIndependentSource: false },
+        metricsSink: (metrics) => { questionQualityMetrics = metrics; }
       });
       // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
       // structurel en plus de la consigne de prompt — retire toute question dont
@@ -14218,7 +14222,19 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   if (validated.length < min) {
     console.warn(`[notion-quiz:${id}] seulement ${validated.length} question(s) valide(s) et traçable(s) sur ${accepted.length} connaissance(s) acceptée(s).`);
     return generationFailure("QCM_UNUSABLE", "question_validation", {
-      diagnostics: { acceptedKnowledgeCount: accepted.length, validQuestionCount: validated.length }
+      diagnostics: {
+        acceptedKnowledgeCount: accepted.length,
+        validQuestionCount: validated.length,
+        generatedQuestionCount: questionQualityMetrics?.generated ?? null,
+        deterministicRejectedCount: questionQualityMetrics?.deterministicRejected ?? null,
+        semanticRejectedCount: questionQualityMetrics?.semanticRejected ?? null,
+        regenerationCycles: questionQualityMetrics?.regenerationCycles ?? null,
+        finalQualityAcceptedCount: questionQualityMetrics?.finalAccepted ?? null,
+        reasonCounts: questionQualityMetrics?.reasonCounts || {},
+        criticErrorCode: questionQualityMetrics?.criticErrorCode || null,
+        criticTechnicalAttempts: questionQualityMetrics?.criticTechnicalAttempts ?? null,
+        technicalFailure: questionQualityMetrics?.technicalFailure === true
+      }
     });
   }
 
@@ -16949,8 +16965,9 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
         if (result.error) {
           const code = result.code || (result.error === "rejected" ? "CONTENT_UNUSABLE" : "INTERNAL_ERROR");
           const publicError = publicGenerationError(code, result.reason);
-          console.warn(`[notion-quizzes:custom:${id}] response stage=${result.stage || "subject_validation"} code=${publicError.body.code}`);
-          return res.status(publicError.status).json(publicError.body);
+          const safeDiagnostics = result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : null;
+          console.warn(`[notion-quizzes:custom:${id}] response stage=${result.stage || "subject_validation"} code=${publicError.body.code}${safeDiagnostics ? ` diagnostics=${JSON.stringify(safeDiagnostics)}` : ""}`);
+          return res.status(publicError.status).json({ ...publicError.body, ...(safeDiagnostics ? { diagnostics: safeDiagnostics } : {}) });
         }
         // searchTopic : l'intitulé exact tapé par le créateur dans la barre de
         // recherche, distinct de sourceName (repris/reformulé par l'IA, cf.

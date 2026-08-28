@@ -11,7 +11,11 @@ const view = fs.readFileSync(path.join(root, "views/qcm-du-jour.html"), "utf8");
 
 test("la panne reproduite après création de fiche est identifiée comme QCM_UNUSABLE", () => {
   assert.match(server, /generationFailure\("QCM_UNUSABLE", "question_validation"/);
-  assert.match(server, /acceptedKnowledgeCount: accepted\.length, validQuestionCount: validated\.length/);
+  assert.match(server, /acceptedKnowledgeCount: accepted\.length/);
+  assert.match(server, /validQuestionCount: validated\.length/);
+  assert.match(server, /reasonCounts: questionQualityMetrics\?\.reasonCounts/);
+  assert.match(server, /diagnostics=\$\{JSON\.stringify\(safeDiagnostics\)\}/);
+  assert.match(view, /\[qcm-generation-diagnostics\]/);
 });
 
 test("les échecs IA, parsing, admission et stockage ont des codes distincts", () => {

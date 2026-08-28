@@ -4490,6 +4490,9 @@
             if (!result.data.ok) {
               customTopicGenerationLabel = '';
               if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
+              if (result.data.diagnostics) {
+                console.warn('[qcm-generation-diagnostics]', result.data.code, result.data.diagnostics);
+              }
               setCustomSearchStatus(customGenerationErrorMessage(result.data.code, result.data.error), true);
               return;
             }
