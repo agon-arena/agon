@@ -1137,6 +1137,43 @@
       color: #7c4a12;
       border-bottom-color: #f1cf98;
     }
+    .qcm-mesqcm-group--creating > .qcm-mesqcm-group-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #516776;
+      border-bottom-color: #d9e2e8;
+    }
+    .qcm-mesqcm-group--creating .qcm-loading-hourglass {
+      width: 22px;
+      height: 22px;
+      margin: 0;
+    }
+    .qcm-mesqcm-creating-list {
+      display: grid;
+      gap: 8px;
+    }
+    .qcm-mesqcm-creating-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid #d9dfe3;
+      border-radius: 12px;
+      background: #f7f9fa;
+      color: #243038;
+    }
+    .qcm-mesqcm-creating-item .qcm-loading-hourglass {
+      flex: 0 0 auto;
+      width: 24px;
+      height: 24px;
+      margin: 0;
+    }
+    .qcm-mesqcm-creating-label {
+      min-width: 0;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
     .qcm-mesqcm-theme-group + .qcm-mesqcm-theme-group {
       margin-top: 10px;
     }
@@ -2891,6 +2928,7 @@
   var customSearchGenerationActive = false;
   var pendingNotionQuizPollId = null;
   var pendingNotionQuizStatusVisible = false;
+  var customTopicGenerationLabel = '';
 
   // Signale au parent (bandeau bleu + sablier "Chargement en cours",
   // cf. showDebateIframeParentLoadingOverlay dans script.js) que du contenu
@@ -4193,6 +4231,29 @@
     return [];
   }
 
+  function getVisiblePendingNotionQuizGenerations() {
+    var pending = getPendingNotionQuizGenerations().slice();
+    if (customTopicGenerationLabel && !pending.some(function (item) {
+      return item.label === customTopicGenerationLabel;
+    })) {
+      pending.push({ slot: '', label: customTopicGenerationLabel, startedAt: Date.now() });
+    }
+    return pending;
+  }
+
+  function renderCreatingNotionQuizzesHtml() {
+    var pending = getVisiblePendingNotionQuizGenerations();
+    if (!pending.length) return '';
+    return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating">' +
+      '<h2 class="qcm-mesqcm-group-title"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Parcours d’apprentissage en cours de création</h2>' +
+      '<div class="qcm-mesqcm-creating-list">' + pending.map(function (item) {
+        return '<div class="qcm-mesqcm-creating-item">' +
+          '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">' +
+          '<span class="qcm-mesqcm-creating-label">' + escapeHtml(item.label) + '</span>' +
+          '</div>';
+      }).join('') + '</div></section>';
+  }
+
   function pendingNotionQuizMessage(pending) {
     if (pending.length === 1) {
       return 'Génération du QCM « ' + pending[0].label + ' » en cours…';
@@ -4250,8 +4311,10 @@
         if (currentCategory !== 'mesqcm' || currentSlot) return;
         var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
         var changed = mesQcmListSignature(quizzes) !== mesQcmListSignature(currentMesQcmQuizzes);
+        var pendingCountBeforeSync = getVisiblePendingNotionQuizGenerations().length;
         syncPendingNotionQuizGenerations(quizzes);
-        if (changed) renderMesQcmList(quizzes);
+        var pendingChanged = pendingCountBeforeSync !== getVisiblePendingNotionQuizGenerations().length;
+        if (changed || pendingChanged) renderMesQcmList(quizzes);
       });
   }
 
@@ -4376,8 +4439,10 @@
     showNotionQuizLevelPicker(function (level) {
       showGenerateConfirmModal(topic, level, function () {
         customSearchGenerationActive = true;
+        customTopicGenerationLabel = topic;
         customSearchBtn.disabled = true;
         customSearchInput.disabled = true;
+        if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
         setCustomSearchStatus(
           level === 'exhaustif'
             ? 'Génération du QCM « ' + topic + ' » en cours — jusqu’à quelques minutes pour une liste à mémoriser en entier…'
@@ -4417,13 +4482,18 @@
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
             if (result.invalidJson) {
+              customTopicGenerationLabel = '';
+              if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
               setCustomSearchStatus('Le service a renvoyé une réponse illisible. Réessaie dans quelques instants.', true);
               return;
             }
             if (!result.data.ok) {
+              customTopicGenerationLabel = '';
+              if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
               setCustomSearchStatus(customGenerationErrorMessage(result.data.code, result.data.error), true);
               return;
             }
+            customTopicGenerationLabel = '';
             customSearchInput.value = '';
             setCustomSearchStatus('', false);
             loadSlot(result.data.slot, result.data.quizDate, result.data.label);
@@ -4431,9 +4501,11 @@
           })
           .catch(function () {
             customSearchGenerationActive = false;
+            customTopicGenerationLabel = '';
             stopPieSpinner();
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
+            if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
             setCustomSearchStatus('Connexion interrompue. Vérifie ton réseau puis réessaie.', true);
           });
         });
@@ -5284,7 +5356,8 @@
   // thématique) reste dans "Mes acquis", cf. renderMesAcquisList/loadMesAcquis.
   function renderMesQcmList(quizzes) {
     currentMesQcmQuizzes = quizzes;
-    if (!quizzes.length) { renderMesQcmEmpty(); return; }
+    var creatingHtml = renderCreatingNotionQuizzesHtml();
+    if (!quizzes.length && !creatingHtml) { renderMesQcmEmpty(); return; }
 
     var pendingQuizzes = quizzes.filter(function (q) { return !q.realized; })
       .slice()
@@ -5296,7 +5369,7 @@
     // acquis") : ni la barre "Tout cocher" (MESQCM_BULK_BAR_HTML, non préfixée ci-dessous) ni
     // la colonne de cases à cocher par ligne (showCheckbox=false plus bas) — la suppression
     // individuelle (icône corbeille par ligne) reste disponible.
-    var html = '<div class="qcm-mesqcm-groups">';
+    var html = '<div class="qcm-mesqcm-groups">' + creatingHtml;
     if (inProgressQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--inprogress">';
       html += '<h2 class="qcm-mesqcm-group-title">Mes apprentissages en cours</h2>';
@@ -5309,7 +5382,7 @@
       html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes, false);
       html += '</section>';
     }
-    if (!pendingQuizzes.length) {
+    if (!pendingQuizzes.length && !creatingHtml) {
       html += '<p class="qcm-state-message">Rien en attente — retrouve tes apprentissages déjà réalisés dans « Mes acquis ».</p>';
     }
     html += '</div>';
