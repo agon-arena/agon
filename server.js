@@ -13965,6 +13965,14 @@ async function qualityControlRawQuestions({
         question: question?.question || question?.variants?.[0]?.question || null,
         options: question?.options || question?.variants?.[0]?.options || null
       }));
+      const rejectionCodes = new Set(rejectionPayload.flatMap((entry) => entry.reasonCodes));
+      const targetedConstraints = [];
+      if (rejectionCodes.has("DOUBLE_NEGATION")) {
+        targetedConstraints.push("- DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe. N’utilise aucun assemblage de négations (ne/n’, pas, plus, jamais, aucun/aucune, ni). Ne te contente pas de retirer un seul mot.");
+      }
+      if (rejectionCodes.has("INVALID_ORDER_COUNT")) {
+        targetedConstraints.push("- INVALID_ORDER_COUNT : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide.");
+      }
       const regenerationPrompt = [
         basePrompt,
         "",
@@ -13974,6 +13982,7 @@ async function qualityControlRawQuestions({
         JSON.stringify(acceptedPayload),
         "Questions refusées et motifs à corriger :",
         JSON.stringify(rejectionPayload),
+        ...(targetedConstraints.length ? ["Corrections obligatoires associées aux codes présents :", ...targetedConstraints] : []),
         `Réponds uniquement avec {"questions":[...]} contenant exactement ${rejectionPayload.length} remplacement(s).`
       ].join("\n");
       const content = await _callOpenAI(apiKey, [{ role: "user", content: regenerationPrompt }], {

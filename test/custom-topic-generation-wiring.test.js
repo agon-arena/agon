@@ -48,3 +48,9 @@ test("l'ancien message générique trompeur a disparu du parcours", () => {
   assert.doesNotMatch(server, /Génération de la fiche impossible pour le moment/);
   assert.doesNotMatch(view, /Génération de la fiche impossible pour le moment/);
 });
+
+test("la régénération ciblée impose une correction concrète des formats observés en production", () => {
+  assert.match(server, /DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe/);
+  assert.match(server, /INVALID_ORDER_COUNT : abandonne obligatoirement le type ordre/);
+  assert.match(server, /qcm simple avec exactement 4 options distinctes/);
+});
