@@ -14208,13 +14208,14 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
       // structurel en plus de la consigne de prompt — retire toute question dont
       // le knowledgeTarget ne correspond à AUCUNE connaissance acceptée.
-      validated = filterVariantsByKnowledgeConstraints(
-        filterQuestionsToAdmittedKnowledge(
-          validateNarrativeQuizQuestions(qualityApproved, [id], max, max),
-          accepted
-        ),
-        accepted
-      );
+      const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], max, max);
+      const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, accepted);
+      validated = filterVariantsByKnowledgeConstraints(knowledgeMatched, accepted);
+      if (questionQualityMetrics) {
+        questionQualityMetrics.postQualityStructuralCount = structurallyValid.length;
+        questionQualityMetrics.postQualityKnowledgeMatchedCount = knowledgeMatched.length;
+        questionQualityMetrics.postQualityConstraintCount = validated.length;
+      }
       if (validated.length >= min) break;
       console.warn(`[notion-quiz:${id}] questions non conformes (tentative ${attempt}/${questionAttempts}, ${validated.length} valide(s)).`);
     } catch (error) {
@@ -14239,6 +14240,9 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         semanticRejectedCount: questionQualityMetrics?.semanticRejected ?? null,
         regenerationCycles: questionQualityMetrics?.regenerationCycles ?? null,
         finalQualityAcceptedCount: questionQualityMetrics?.finalAccepted ?? null,
+        postQualityStructuralCount: questionQualityMetrics?.postQualityStructuralCount ?? null,
+        postQualityKnowledgeMatchedCount: questionQualityMetrics?.postQualityKnowledgeMatchedCount ?? null,
+        postQualityConstraintCount: questionQualityMetrics?.postQualityConstraintCount ?? null,
         reasonCounts: questionQualityMetrics?.reasonCounts || {},
         criticErrorCode: questionQualityMetrics?.criticErrorCode || null,
         criticTechnicalAttempts: questionQualityMetrics?.criticTechnicalAttempts ?? null,

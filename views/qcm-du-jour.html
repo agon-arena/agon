@@ -4457,7 +4457,10 @@
           if (diagnostics.criticErrorCode) reasons.push(String(diagnostics.criticErrorCode));
           if (!reasons.length) {
             reasons.push('générées=' + Number(diagnostics.generatedQuestionCount || 0));
-            reasons.push('validées=' + Number(diagnostics.finalQualityAcceptedCount || 0));
+            reasons.push('qualité=' + Number(diagnostics.finalQualityAcceptedCount || 0));
+            reasons.push('structure=' + Number(diagnostics.postQualityStructuralCount || 0));
+            reasons.push('connaissance=' + Number(diagnostics.postQualityKnowledgeMatchedCount || 0));
+            reasons.push('stockables=' + Number(diagnostics.postQualityConstraintCount || 0));
           }
           return reasons.length ? ' Référence diagnostic : ' + reasons.join(', ') + '.' : '';
         }

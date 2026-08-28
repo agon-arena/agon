@@ -18,6 +18,10 @@ test("la panne reproduite après création de fiche est identifiée comme QCM_UN
   assert.match(view, /\[qcm-generation-diagnostics\]/);
   assert.match(view, /Référence diagnostic/);
   assert.match(view, /reasonCounts/);
+  assert.match(server, /postQualityStructuralCount/);
+  assert.match(server, /postQualityKnowledgeMatchedCount/);
+  assert.match(server, /postQualityConstraintCount/);
+  assert.match(view, /stockables=/);
 });
 
 test("les échecs IA, parsing, admission et stockage ont des codes distincts", () => {
