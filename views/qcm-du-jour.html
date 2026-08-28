@@ -627,6 +627,19 @@
     .qcm-knowledge-add-menu[hidden] {
       display: none;
     }
+    /* Dans la fenêtre "Commencer un nouvel apprentissage", la liste reprend
+       les mêmes options mais n'est plus un menu déroulant ancré au bouton. */
+    .qcm-knowledge-add-menu.qcm-knowledge-add-menu-dialog {
+      position: static;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      transform: none;
+      box-sizing: border-box;
+    }
     .qcm-knowledge-add-option {
       display: grid;
       grid-template-columns: 24px minmax(0, 1fr);
@@ -2752,16 +2765,52 @@
   var loadGaugeCaption = document.getElementById('qcm-load-gauge-caption');
   var loadGaugeToken = 0;
   var learnNextBtn = document.getElementById('qcm-learn-next-btn');
+  var knowledgeAddDialog = null;
 
   function closeKnowledgeAddMenu(options) {
     if (!knowledgeAddMenu || knowledgeAddMenu.hidden) return;
     knowledgeAddMenu.hidden = true;
+    knowledgeAddMenu.classList.remove('qcm-knowledge-add-menu-dialog');
+    if (knowledgeAdd && knowledgeAddMenu.parentNode !== knowledgeAdd) knowledgeAdd.appendChild(knowledgeAddMenu);
+    if (knowledgeAddDialog) {
+      knowledgeAddDialog.remove();
+      knowledgeAddDialog = null;
+    }
     knowledgeAddToggle.setAttribute('aria-expanded', 'false');
     // Le bouton de fermeture appartient au document parent : aucun z-index
     // interne à cette iframe ne peut placer le menu devant lui. On le remet
     // donc seulement une fois le panneau refermé.
     setParentIframeCloseVisible(true);
     if (options && options.restoreFocus) knowledgeAddToggle.focus();
+  }
+  function openKnowledgeAddWindow() {
+    var modalHtml =
+      '<div class="qcm-fiche-modal" role="dialog" aria-modal="true" aria-labelledby="qcm-knowledge-add-title">' +
+        '<div class="qcm-fiche-head">' +
+          '<p class="qcm-fiche-rubric" id="qcm-knowledge-add-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Commencer un nouvel apprentissage</p>' +
+          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>' +
+        '<div id="qcm-knowledge-add-window-slot"></div>' +
+      '</div>';
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#qcm-knowledge-add-window-slot').appendChild(knowledgeAddMenu);
+    knowledgeAddMenu.classList.add('qcm-knowledge-add-menu-dialog');
+    knowledgeAddMenu.hidden = false;
+    knowledgeAddToggle.setAttribute('aria-expanded', 'true');
+    knowledgeAddDialog = overlay;
+    setParentIframeCloseVisible(false);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', function () {
+      closeKnowledgeAddMenu({ restoreFocus: true });
+    });
+    overlay.addEventListener('click', function (event) {
+      if (event.target === overlay || event.target.classList.contains('qcm-fiche-overlay-inner')) {
+        closeKnowledgeAddMenu({ restoreFocus: true });
+      }
+    });
+    knowledgeAddMenu.querySelector('button, a')?.focus();
   }
   if (knowledgeAddToggle && knowledgeAddMenu) {
     knowledgeAddToggle.addEventListener('click', function () {
@@ -2770,17 +2819,12 @@
         closeKnowledgeAddMenu();
         return;
       }
-      knowledgeAddMenu.hidden = false;
-      knowledgeAddToggle.setAttribute('aria-expanded', 'true');
-      setParentIframeCloseVisible(false);
+      openKnowledgeAddWindow();
     });
     knowledgeAddToggle.addEventListener('keydown', function (event) {
       if (event.key !== 'ArrowDown') return;
       event.preventDefault();
-      knowledgeAddMenu.hidden = false;
-      knowledgeAddToggle.setAttribute('aria-expanded', 'true');
-      setParentIframeCloseVisible(false);
-      knowledgeAddMenu.querySelector('a, button')?.focus();
+      if (knowledgeAddMenu.hidden) openKnowledgeAddWindow();
     });
     document.addEventListener('click', function (event) {
       if (!knowledgeAdd.contains(event.target)) closeKnowledgeAddMenu();
