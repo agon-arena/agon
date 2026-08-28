@@ -87,3 +87,9 @@ test("la régénération ciblée impose une correction concrète des formats obs
 test("le diagnostic utilisateur expose uniquement les rejets finaux non résolus", () => {
   assert.match(server, /questionQualityMetrics\?\.unresolvedReasonCounts \|\| questionQualityMetrics\?\.reasonCounts/);
 });
+
+test("un sujet à source unique récupère mécaniquement son sourceId serveur", () => {
+  assert.match(server, /const soleValidSourceId = validIds\.size === 1/);
+  assert.match(server, /const sourceId = soleValidSourceId \|\| modelSourceId/);
+  assert.match(server, /filterQuestionsToAdmittedKnowledge\(structurallyValid, accepted\)/);
+});

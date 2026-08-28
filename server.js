@@ -13904,12 +13904,20 @@ function extractCultureGeneraleItemDetail(item) {
 function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, maxPerSource) {
   if (!Array.isArray(rawQuestions)) return [];
   const validIds = new Set(validSourceIds.map(String));
+  const soleValidSourceId = validIds.size === 1 ? validIds.values().next().value : null;
   const countPerSource = new Map();
   const valid = [];
   for (const item of rawQuestions) {
     const core = validateQuestionItemCore(item);
     if (!core) continue;
-    const sourceId = String(item?.sourceId ?? "").trim().replace(/^id:/i, "").trim();
+    const modelSourceId = String(item?.sourceId ?? "").trim().replace(/^id:/i, "").trim();
+    // Correction mécanique sûre : lorsque l'appelant déclare UNE seule source possible
+    // (cas d'un sujet libre), sourceId n'est pas une décision sémantique du modèle. Le
+    // serveur connaît déjà nécessairement sa valeur. La recopie manquante ou erronée ne
+    // doit donc pas jeter une question dont le contenu a passé QCM V2 ; knowledgeTarget
+    // reste contrôlé juste après par filterQuestionsToAdmittedKnowledge. Avec plusieurs
+    // sources possibles, aucune correction n'est devinée et la validation reste stricte.
+    const sourceId = soleValidSourceId || modelSourceId;
     if (!sourceId || !validIds.has(sourceId)) continue;
     const usedCount = countPerSource.get(sourceId) || 0;
     if (usedCount >= maxPerSource) continue;
