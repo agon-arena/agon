@@ -4406,6 +4406,30 @@
     });
   }
 
+  // Même slot déterministe que normalizeCustomTopicKey côté serveur. Il est calculé avant
+  // le POST afin d'inscrire aussi les sujets libres dans le suivi local persistant : quitter
+  // la page ne fait ainsi plus disparaître la ligne « En cours de création », et
+  // /apprentissage peut interroger generation-status jusqu'à l'apparition du QCM.
+  function getCustomTopicPendingSlot(topic, level) {
+    var normalized = String(topic || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+    if (!window.crypto || !window.crypto.subtle || typeof TextEncoder !== 'function') {
+      return Promise.resolve('');
+    }
+    return window.crypto.subtle.digest('SHA-1', new TextEncoder().encode(normalized))
+      .then(function (digest) {
+        var id = Array.from(new Uint8Array(digest)).map(function (byte) {
+          return byte.toString(16).padStart(2, '0');
+        }).join('').slice(0, 16);
+        return 'notion:custom:' + id + (level ? ':' + level : '');
+      })
+      .catch(function () { return ''; });
+  }
+
   // Barre de recherche libre "Mes apprentissages" (cf. server.js POST
   // /api/users/notion-quizzes/custom). Comme pour un clic "Mémoriser" sur
   // Éclairages/Ce jour dans l'Histoire, le sujet nommé et l'indicateur animé
@@ -4429,7 +4453,11 @@
       return;
     }
     showNotionQuizLevelPicker(function (level) {
-      showGenerateConfirmModal(topic, level, function () {
+      showGenerateConfirmModal(topic, level, async function () {
+        var pendingCustomSlot = await getCustomTopicPendingSlot(topic, level);
+        if (pendingCustomSlot && typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
+          window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic });
+        }
         customSearchGenerationActive = true;
         customTopicGenerationLabel = topic;
         customSearchBtn.disabled = true;
@@ -4492,6 +4520,9 @@
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
             if (result.invalidJson) {
+              if (pendingCustomSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+                window.mnoriaFinishPendingNotionQuizGeneration(pendingCustomSlot);
+              }
               customTopicGenerationLabel = '';
               if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
               var httpReference = Number(result.status) ? ' (HTTP ' + Number(result.status) + ')' : '';
@@ -4499,6 +4530,9 @@
               return;
             }
             if (!result.data.ok) {
+              if (pendingCustomSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+                window.mnoriaFinishPendingNotionQuizGeneration(pendingCustomSlot);
+              }
               customTopicGenerationLabel = '';
               if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
               if (result.data.diagnostics) {
@@ -4510,6 +4544,9 @@
               );
               return;
             }
+            if (pendingCustomSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+              window.mnoriaFinishPendingNotionQuizGeneration(pendingCustomSlot);
+            }
             customTopicGenerationLabel = '';
             customSearchInput.value = '';
             setCustomSearchStatus('', false);
@@ -4518,6 +4555,9 @@
           })
           .catch(function () {
             customSearchGenerationActive = false;
+            // Une coupure réseau ou la destruction de la page ne prouve pas que le serveur a
+            // arrêté son travail. On conserve donc le marqueur persistant : la page
+            // Apprentissage le réconciliera avec generation-status au prochain affichage.
             customTopicGenerationLabel = '';
             stopPieSpinner();
             customSearchBtn.disabled = false;

@@ -48,6 +48,20 @@ test("le frontend distingue statut, JSON invalide, réseau et codes serveur", ()
   }
 });
 
+test("un sujet libre reste suivi après avoir quitté la page", () => {
+  assert.match(view, /function getCustomTopicPendingSlot\(topic, level\)/);
+  assert.match(view, /crypto\.subtle\.digest\('SHA-1'/);
+  assert.match(view, /mnoriaStartPendingNotionQuizGeneration\(\{ slot: pendingCustomSlot, label: topic \}\)/);
+  assert.ok(
+    view.indexOf("mnoriaStartPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic })")
+      < view.indexOf("fetch('/api/users/notion-quizzes/custom'"),
+    "le marqueur persistant doit être écrit avant l'appel de génération"
+  );
+  const catchStart = view.indexOf(".catch(function () {", view.indexOf("fetch('/api/users/notion-quizzes/custom'"));
+  const catchEnd = view.indexOf("          });", catchStart);
+  assert.doesNotMatch(view.slice(catchStart, catchEnd), /mnoriaFinishPendingNotionQuizGeneration/);
+});
+
 test("l'ancien message générique trompeur a disparu du parcours", () => {
   assert.doesNotMatch(server, /Génération de la fiche impossible pour le moment/);
   assert.doesNotMatch(view, /Génération de la fiche impossible pour le moment/);
