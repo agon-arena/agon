@@ -6798,30 +6798,15 @@ function openDebateIframeModal(url, options = {}) {
   try { document.activeElement?.blur?.(); } catch (e) {}
   try {
     const parsedModalUrl = new URL(String(url || ""), window.location.origin);
-    /* Apprentissage est désormais une page normale dans tous les contextes :
-       son défilement, son bandeau et sa zone sûre appartiennent directement au
-       viewport, sans modal ni iframe intermédiaire. */
-    if (parsedModalUrl.origin === window.location.origin && parsedModalUrl.pathname === "/apprentissage") {
-      const learningTarget = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
-      if (window.top && window.top !== window) window.top.location.href = learningTarget;
-      else window.location.href = learningTarget;
-      return;
-    }
-    /* En standalone iOS, seul le scroll du document principal pilote
-       correctement la zone visible basse. Un scroll interne à l'iframe ne
-       rétracte pas cette zone comme sur l'index et laisse apparaître le fond
-       pétrole sous le bandeau. Les pages secondaires deviennent donc de
-       vraies navigations top-level ; les arènes conservent leur iframe et leur
-       dock spécialisés. Le comportement navigateur/desktop reste inchangé. */
+    /* Toutes les pages publiques ordinaires sont désormais de vraies
+       navigations top-level. Leur scroll, leur bandeau et leur zone sûre
+       appartiennent directement au viewport. Seules les arènes conservent
+       l'iframe modale et son dock spécialisé. */
     const isArenaPath = parsedModalUrl.pathname === "/debate" || parsedModalUrl.pathname.indexOf("/debates/") === 0;
-    if (parsedModalUrl.origin === window.location.origin && isStandaloneMode() && !isArenaPath) {
-      const standaloneTarget = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
-      if (window.top && window.top !== window) window.top.location.href = standaloneTarget;
-      else window.location.href = standaloneTarget;
-      return;
-    }
-    if (parsedModalUrl.origin === window.location.origin && parsedModalUrl.pathname === "/autres-sources") {
-      window.location.href = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
+    if (parsedModalUrl.origin === window.location.origin && !isArenaPath) {
+      const pageTarget = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
+      if (window.top && window.top !== window) window.top.location.href = pageTarget;
+      else window.location.href = pageTarget;
       return;
     }
   } catch (error) {}
