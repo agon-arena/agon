@@ -4482,7 +4482,8 @@
             if (result.invalidJson) {
               customTopicGenerationLabel = '';
               if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
-              setCustomSearchStatus('Le service a renvoyé une réponse illisible. Réessaie dans quelques instants.', true);
+              var httpReference = Number(result.status) ? ' (HTTP ' + Number(result.status) + ')' : '';
+              setCustomSearchStatus('Le serveur a interrompu la génération' + httpReference + '. Réessaie dans quelques instants.', true);
               return;
             }
             if (!result.data.ok) {
