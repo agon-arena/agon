@@ -13,7 +13,7 @@ test("la panne reproduite après création de fiche est identifiée comme QCM_UN
   assert.match(server, /generationFailure\("QCM_UNUSABLE", "question_validation"/);
   assert.match(server, /acceptedKnowledgeCount: accepted\.length/);
   assert.match(server, /validQuestionCount: validated\.length/);
-  assert.match(server, /reasonCounts: questionQualityMetrics\?\.reasonCounts/);
+  assert.match(server, /reasonCounts: questionQualityMetrics\?\.unresolvedReasonCounts \|\| questionQualityMetrics\?\.reasonCounts/);
   assert.match(server, /diagnostics=\$\{JSON\.stringify\(safeDiagnostics\)\}/);
   assert.match(view, /\[qcm-generation-diagnostics\]/);
   assert.match(view, /Référence diagnostic/);
@@ -70,6 +70,7 @@ test("l'ancien message générique trompeur a disparu du parcours", () => {
 test("la régénération ciblée impose une correction concrète des formats observés en production", () => {
   assert.match(server, /DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe/);
   assert.match(server, /INVALID_ORDER_COUNT \/ invalidOrderCount : abandonne obligatoirement le type ordre/);
+  assert.match(server, /le remplacement doit avoir type=qcm et ne doit contenir aucune variante de type ordre/);
   assert.match(server, /qcm simple avec exactement 4 options distinctes/);
   assert.match(server, /incorrectCorrectAnswer/);
   assert.match(server, /correctAnswerIncorrect/);
@@ -81,4 +82,8 @@ test("la régénération ciblée impose une correction concrète des formats obs
   assert.match(server, /vagueQuestion/);
   assert.match(server, /questionVague/);
   assert.match(server, /la question doit être autonome, précise/);
+});
+
+test("le diagnostic utilisateur expose uniquement les rejets finaux non résolus", () => {
+  assert.match(server, /questionQualityMetrics\?\.unresolvedReasonCounts \|\| questionQualityMetrics\?\.reasonCounts/);
 });

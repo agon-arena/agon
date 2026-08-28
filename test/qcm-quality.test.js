@@ -253,6 +253,8 @@ test("un véritable reject sémantique régénère uniquement la question refus�
   assert.equal(result.accepted.length, 2);
   assert.equal(result.metrics.regenerationCycles, 1);
   assert.equal(result.metrics.criticTechnicalRetries, 0);
+  assert.ok(Object.keys(result.metrics.reasonCounts).length >= 1);
+  assert.deepEqual(result.metrics.unresolvedReasonCounts, {});
 });
 
 test("post-shuffle compare le texte des réponses, même lorsque deux options sont proches", () => {
@@ -303,6 +305,7 @@ test("nouveau doublon refusé à nouveau et arrêt après deux cycles sans stock
   assert.equal(calls, 2);
   assert.equal(result.accepted.length, 0);
   assert.equal(result.metrics.regenerationCycles, 2);
+  assert.equal(result.metrics.unresolvedReasonCounts.DUPLICATE_OPTIONS, 1);
 });
 
 test("une régénération qui duplique une question déjà acceptée est refusée", async () => {

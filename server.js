@@ -13971,7 +13971,7 @@ async function qualityControlRawQuestions({
         targetedConstraints.push("- DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe. N’utilise aucun assemblage de négations (ne/n’, pas, plus, jamais, aucun/aucune, ni). Ne te contente pas de retirer un seul mot.");
       }
       if (["INVALID_ORDER_COUNT", "invalidOrderCount"].some((code) => rejectionCodes.has(code))) {
-        targetedConstraints.push("- INVALID_ORDER_COUNT / invalidOrderCount : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide.");
+        targetedConstraints.push("- INVALID_ORDER_COUNT / invalidOrderCount : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide. Cette interdiction remplace toute consigne antérieure de rotation ou de diversité des formats.");
       }
       if (["incorrectCorrectAnswer", "correctAnswerIncorrect", "missingCorrectAnswerIndex", "noCorrectAnswerMarked"].some((code) => rejectionCodes.has(code))) {
         targetedConstraints.push("- RÉPONSE CORRECTE MAL IDENTIFIÉE : remplace la question par un qcm simple avec exactement 4 options distinctes. Fournis un unique correctIndex entier entre 0 et 3, vérifie que l’option à cet index est factuellement la bonne réponse, et explique explicitement pourquoi elle est correcte.");
@@ -13989,7 +13989,8 @@ async function qualityControlRawQuestions({
         "Questions refusées et motifs à corriger :",
         JSON.stringify(rejectionPayload),
         ...(targetedConstraints.length ? ["Corrections obligatoires associées aux codes présents :", ...targetedConstraints] : []),
-        `Réponds uniquement avec {"questions":[...]} contenant exactement ${rejectionPayload.length} remplacement(s).`
+        `Réponds uniquement avec {"questions":[...]} contenant exactement ${rejectionPayload.length} remplacement(s).`,
+        "PRIORITÉ ABSOLUE : pour chaque rejet INVALID_ORDER_COUNT ou invalidOrderCount, le remplacement doit avoir type=qcm et ne doit contenir aucune variante de type ordre."
       ].join("\n");
       const content = await _callOpenAI(apiKey, [{ role: "user", content: regenerationPrompt }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
@@ -14249,7 +14250,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         postQualityStructuralCount: questionQualityMetrics?.postQualityStructuralCount ?? null,
         postQualityKnowledgeMatchedCount: questionQualityMetrics?.postQualityKnowledgeMatchedCount ?? null,
         postQualityConstraintCount: questionQualityMetrics?.postQualityConstraintCount ?? null,
-        reasonCounts: questionQualityMetrics?.reasonCounts || {},
+        reasonCounts: questionQualityMetrics?.unresolvedReasonCounts || questionQualityMetrics?.reasonCounts || {},
         criticErrorCode: questionQualityMetrics?.criticErrorCode || null,
         criticTechnicalAttempts: questionQualityMetrics?.criticTechnicalAttempts ?? null,
         technicalFailure: questionQualityMetrics?.technicalFailure === true
