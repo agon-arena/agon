@@ -17941,7 +17941,8 @@ app.post("/api/noes/videos", rateLimit("noes", 20), async (req, res) => {
       ok: true,
       videoId: video.id,
       status: video.status,
-      outputUrl: video.status === "ready" ? video.output_path : null
+      outputUrl: video.status === "ready" ? video.output_path : null,
+      errorStage: video.status === "failed" ? video.error_stage : null
     });
   } catch (error) {
     if (error instanceof NoesRequestError) {

@@ -5745,6 +5745,16 @@
     bodyEl.innerHTML = '<p class="qcm-noes-status qcm-noes-status-error"><i class="fa-solid fa-triangle-exclamation"></i> ' +
       escapeHtml(message || "Noès n'est pas disponible pour le moment.") + '</p>';
   }
+  function noesFailureMessage(errorStage) {
+    var messages = {
+      configuration: "Noès n'est pas configuré sur le serveur pour le moment.",
+      submit: "Le service vidéo Noès n'a pas accepté la génération.",
+      runpod: "La génération vidéo Noès a échoué sur le worker.",
+      finalize: "La vidéo a été générée mais n'a pas pu être récupérée.",
+      timeout: "La génération vidéo Noès a dépassé le délai prévu."
+    };
+    return messages[errorStage] || "Noès n'est pas disponible pour le moment.";
+  }
   function pollNoesVideoStatus(videoId, bodyEl) {
     // bodyEl retiré du DOM = modale fermée entre-temps : on arrête le
     // polling au lieu de continuer à interroger le serveur pour rien (cf.
@@ -5757,7 +5767,7 @@
         if (!bodyEl || !document.body.contains(bodyEl)) return;
         if (!data.ok) { showNoesError(bodyEl, data.error); return; }
         if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
-        if (data.status === 'failed') { showNoesError(bodyEl); return; }
+        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage)); return; }
         setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl); }, NOES_POLL_INTERVAL_MS);
       })
       .catch(function () {
@@ -5775,7 +5785,7 @@
         if (!bodyEl || !document.body.contains(bodyEl)) return;
         if (!data.ok) { showNoesError(bodyEl, data.error); return; }
         if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
-        if (data.status === 'failed') { showNoesError(bodyEl); return; }
+        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage)); return; }
         pollNoesVideoStatus(data.videoId, bodyEl);
       })
       .catch(function () {
