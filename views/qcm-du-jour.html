@@ -329,10 +329,13 @@
        dessein très différents de Générer/Plus d'options plus bas. */
     .qcm-category-group {
       display: none;
-      margin: 0 0 4px;
+      justify-content: center;
+      align-items: baseline;
+      gap: 28px;
+      margin: 0 0 16px;
     }
     .qcm-category-group:has(#qcm-category-switcher.visible) {
-      display: block;
+      display: flex;
     }
     .qcm-slot-switcher {
       display: none;
@@ -340,7 +343,7 @@
       align-items: baseline;
       flex-wrap: nowrap;
       gap: 28px;
-      margin: 0 0 6px;
+      margin: 0;
     }
     .qcm-slot-switcher.visible {
       display: flex;
@@ -410,6 +413,9 @@
       color: #e99a2e;
     }
     @media (max-width: 480px) {
+      .qcm-category-group {
+        gap: 18px;
+      }
       .qcm-slot-switcher {
         gap: 18px;
       }
@@ -417,12 +423,8 @@
         font-size: 14px;
       }
     }
-    /* "Mes acquis" (demande du 16/08/2026) : accueille désormais "Tous mes apprentissages"
-       (classé par thématique, y compris la rubrique "Comprendre les liens") — retiré de
-       Découvrir, qui ne garde que "En attente de réalisation" (cf. loadMesAcquis,
-       renderMesAcquisList). Repositionné le 27/08/2026 : lien secondaire discret sous les
-       onglets Découvrir/Ancrer/Relier, plus un 4e onglet de même niveau — Découvrir/Ancrer/
-       Relier sont les modes de mémorisation, Mes acquis est l'accès au bilan. */
+    /* "Mes acquis" rejoint la même rangée que Découvrir/Ancrer/Relier : les
+       quatre destinations partagent désormais un seul niveau de navigation. */
     .qcm-mes-acquis-row {
       display: none;
       justify-content: center;
@@ -433,22 +435,7 @@
        onglets Découvrir/Ancrer/Relier. */
     #qcm-category-switcher.visible + .qcm-mes-acquis-row {
       display: flex;
-      position: relative;
-      margin: 0 0 16px;
-      padding-bottom: 17px;
-    }
-    /* Séparateur volontairement court, centré et plus épais que l'ancien border-bottom
-       pleine largeur : il structure la page sans donner l'impression d'un cadre. */
-    #qcm-category-switcher.visible + .qcm-mes-acquis-row::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: 0;
-      width: min(42%, 180px);
-      height: 4px;
-      transform: translateX(-50%);
-      border-radius: 999px;
-      background: #d9dfe4;
+      margin: 0;
     }
     .qcm-mes-acquis-btn {
       display: inline-flex;
@@ -2650,7 +2637,7 @@
     <div class="qcm-category-group">
       <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
       <div class="qcm-mes-acquis-row">
-        <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><i class="fa-solid fa-award" aria-hidden="true"></i><span>Mes acquis</span></button>
+        <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><span>Mes acquis</span></button>
       </div>
     </div>
     <!-- Jauge de charge d'apprentissage (demande du 17/08/2026, repositionnée
