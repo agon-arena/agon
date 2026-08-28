@@ -16862,6 +16862,33 @@ html body.in-iframe .home-bottom-nav {
   bottom: 0 !important;
 }
 
+/* L'index est le document qui possède la zone physique basse en standalone.
+   Une page secondaire ouverte dans son iframe ne peut pas peindre hors de sa
+   propre boîte : le parent prolonge donc le bandeau dans la compensation iOS
+   située sous l'iframe. Les arènes gardent leur dock spécifique. */
+@media (display-mode: standalone) and (max-width: 768px) {
+  body.is-standalone #debate-iframe-modal.open:not(.debate-frame-open)::after {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px));
+    background:
+      linear-gradient(
+        90deg,
+        #111827 0%,
+        #374151 25%,
+        #9ca3af 50%,
+        #d1d5db 75%,
+        #f3f4f6 100%
+      ) bottom / 100% 5px no-repeat,
+      #e9ebec;
+    pointer-events: none;
+    z-index: 9998;
+  }
+}
+
 .mnoria-global-bottom-nav-spacer {
   display: block;
   width: 100%;
