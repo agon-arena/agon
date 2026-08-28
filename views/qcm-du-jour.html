@@ -4228,12 +4228,11 @@
     return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating">' +
       '<h2 class="qcm-mesqcm-group-title">Parcours d’apprentissage en cours de création</h2>' +
       '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
-      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th></tr></thead><tbody>' +
+      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th></tr></thead><tbody>' +
       pending.map(function (item) {
         return '<tr><td><span class="qcm-mesqcm-name-btn is-static">' +
           '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span></span></td>' +
-          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td>' +
-          '<td><span class="qcm-acquis-badge">—</span></td><td></td></tr>';
+          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td></tr>';
       }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></section>';
   }
 
