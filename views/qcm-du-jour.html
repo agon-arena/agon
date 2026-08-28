@@ -1137,43 +1137,6 @@
       color: #7c4a12;
       border-bottom-color: #f1cf98;
     }
-    .qcm-mesqcm-group--creating > .qcm-mesqcm-group-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #516776;
-      border-bottom-color: #d9e2e8;
-    }
-    .qcm-mesqcm-group--creating .qcm-loading-hourglass {
-      width: 22px;
-      height: 22px;
-      margin: 0;
-    }
-    .qcm-mesqcm-creating-list {
-      display: grid;
-      gap: 8px;
-    }
-    .qcm-mesqcm-creating-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      border: 1px solid #d9dfe3;
-      border-radius: 12px;
-      background: #f7f9fa;
-      color: #243038;
-    }
-    .qcm-mesqcm-creating-item .qcm-loading-hourglass {
-      flex: 0 0 auto;
-      width: 24px;
-      height: 24px;
-      margin: 0;
-    }
-    .qcm-mesqcm-creating-label {
-      min-width: 0;
-      font-weight: 700;
-      overflow-wrap: anywhere;
-    }
     .qcm-mesqcm-theme-group + .qcm-mesqcm-theme-group {
       margin-top: 10px;
     }
@@ -1469,6 +1432,16 @@
       background: #fef3c7;
       color: #92400e;
     }
+    .qcm-mesqcm-state.is-creating {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .qcm-mesqcm-state.is-creating .qcm-loading-hourglass {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+    }
     .qcm-mesqcm-name-btn {
       display: flex;
       align-items: center;
@@ -1484,6 +1457,13 @@
     .qcm-mesqcm-name-btn:hover {
       color: #243038;
       text-decoration: underline;
+    }
+    .qcm-mesqcm-name-btn.is-static {
+      cursor: default;
+    }
+    .qcm-mesqcm-name-btn.is-static:hover {
+      color: #111827;
+      text-decoration: none;
     }
     .qcm-mesqcm-name-btn i {
       flex: 0 0 auto;
@@ -4245,13 +4225,15 @@
     var pending = getVisiblePendingNotionQuizGenerations();
     if (!pending.length) return '';
     return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating">' +
-      '<h2 class="qcm-mesqcm-group-title"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Parcours d’apprentissage en cours de création</h2>' +
-      '<div class="qcm-mesqcm-creating-list">' + pending.map(function (item) {
-        return '<div class="qcm-mesqcm-creating-item">' +
-          '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">' +
-          '<span class="qcm-mesqcm-creating-label">' + escapeHtml(item.label) + '</span>' +
-          '</div>';
-      }).join('') + '</div></section>';
+      '<h2 class="qcm-mesqcm-group-title">Parcours d’apprentissage en cours de création</h2>' +
+      '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
+      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th></tr></thead><tbody>' +
+      pending.map(function (item) {
+        return '<tr><td><span class="qcm-mesqcm-name-btn is-static">' +
+          '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span></span></td>' +
+          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td>' +
+          '<td><span class="qcm-acquis-badge">—</span></td><td></td></tr>';
+      }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></section>';
   }
 
   function pendingNotionQuizMessage(pending) {
