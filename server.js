@@ -17796,7 +17796,7 @@ const NOES_CONFIG = {
   thinkingPauseSeconds: Math.min(10, Math.max(0.5, Number(process.env.NOES_THINKING_PAUSE_SECONDS) || 3)),
   itemGapSeconds: Math.min(5, Math.max(0, Number(process.env.NOES_ITEM_GAP_SECONDS) || 0.6)),
   maxVideosPerDay: Number(process.env.NOES_MAX_VIDEOS_PER_DAY) || 4,
-  jobTimeoutMs: 5 * 60 * 1000,
+  jobTimeoutMs: 60 * 60 * 1000,
   // Stockage isolé dans lib/coeus/noes-storage.js (demande du 27/08/2026) :
   // seul ce module connaît "où" vit le MP4 final — bucket existant
   // (SUPABASE_DEBATE_MEDIA_BUCKET) réutilisé pour cette première intégration,

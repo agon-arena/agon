@@ -380,6 +380,23 @@ test("un ancien échec configuration est repris une seule fois après configurat
   assert.ok([retried.status, concurrent.status].includes("processing"));
 });
 
+test("un timeout local reprend le même job RunPod encore actif sans jamais le resoumettre", async () => {
+  const supabase = createSupabase();
+  const runpod = fakeRunpodClient({ statusResponses: [{ status: "IN_PROGRESS", id: "job-1" }] });
+  const deps = baseDeps({ supabase, getRunpodClients: () => ({ runpodClient: runpod }) });
+
+  const first = await requestNoesVideo(deps, { ...BASE_REQUEST, questions: fakeQuestions() });
+  const row = supabase.__tables.noes_videos.rows.find((item) => item.id === first.id);
+  row.status = "failed";
+  row.error_stage = "timeout";
+
+  const resumed = await requestNoesVideo(deps, { ...BASE_REQUEST, questions: fakeQuestions() });
+  assert.equal(resumed.status, "processing");
+  assert.equal(resumed.runpod_job_id, "job-1");
+  assert.equal(runpod.calls.status.length, 1);
+  assert.equal(runpod.calls.submit.length, 1, "le job initial reste l'unique soumission");
+});
+
 // ── Finalisation (GET /status) ──────────────────────────────────────────────
 function fakeVolumeClient({ downloadShouldFail = false } = {}) {
   return {
