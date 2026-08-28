@@ -433,12 +433,22 @@
        onglets Découvrir/Ancrer/Relier. */
     #qcm-category-switcher.visible + .qcm-mes-acquis-row {
       display: flex;
-      /* Liseret discret (demande du 26/08/2026) : marque la séparation entre la navigation
-         Découvrir/Ancrer/Relier/Mes acquis et le contenu qui suit, sans cadre ni fond — même
-         gris clair que les séparateurs déjà utilisés ailleurs sur cette page (#eef1f3). */
+      position: relative;
       margin: 0 0 16px;
-      padding-bottom: 14px;
-      border-bottom: 1px solid #eef1f3;
+      padding-bottom: 17px;
+    }
+    /* Séparateur volontairement court, centré et plus épais que l'ancien border-bottom
+       pleine largeur : il structure la page sans donner l'impression d'un cadre. */
+    #qcm-category-switcher.visible + .qcm-mes-acquis-row::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      width: min(42%, 180px);
+      height: 4px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: #d9dfe4;
     }
     .qcm-mes-acquis-btn {
       display: inline-flex;
