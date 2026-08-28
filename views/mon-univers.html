@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260827-card-corner-fix5" />
+<link rel="stylesheet" href="/style.min.css?v=20260828-bottom-nav-unified" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -281,8 +281,11 @@
         max-height: 74px !important;
       }
     }
-    .home-bottom-nav { display: none !important; }
-
+    /* Ma mémoire en plein écran garde toute la surface disponible. Le même
+       gabarit sert à /contributions, où le bandeau reste au contraire visible. */
+    body.page-memory-only .home-bottom-nav {
+      display: none !important;
+    }
     /* Deux pages autonomes partagent ce gabarit sans mélanger leurs contenus. */
     body.page-memory-only #scores-contributions-page,
     body.page-memory-only #notes-evolution-overlay {
@@ -1377,7 +1380,36 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260826-blur-bottom-nav" defer></script>
+<nav class="home-bottom-nav" aria-label="Navigation principale">
+  <button type="button" class="home-bottom-nav-item" aria-label="Explorer" onclick="contributionsBottomNavHome()">
+    <i class="fa-regular fa-compass"></i><span>Explorer</span>
+  </button>
+  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
+    <i class="fa-solid fa-plus"></i><span>Ouvrir</span>
+  </a>
+  <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
+    <i class="fa-solid fa-rotate-right"></i><span>Actualiser</span>
+  </button>
+  <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="contributionsBottomNavHome()">
+    <i class="fa-solid fa-house"></i><span>Accueil</span>
+  </button>
+  <a href="/notifications" class="home-bottom-nav-item" aria-label="Notifications">
+    <i class="fa-regular fa-bell"></i><span>Alertes</span>
+  </a>
+</nav>
+<script>
+function contributionsBottomNavHome() {
+  try {
+    if (window.parent && window.parent !== window && typeof window.parent.closeDebateIframeModal === 'function') {
+      window.parent.closeDebateIframeModal({ skipReturnLoader: true });
+      return;
+    }
+  } catch (error) {}
+  window.location.href = '/?skipStartup=1';
+}
+</script>
+
+<script src="/script.min.js?v=20260828-hide-notifications-floating-controls" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
     import("/mon-univers.js?v=20260828-fullpage-button");

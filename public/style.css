@@ -16853,6 +16853,22 @@ body.page-create-mobile .create-source-url-preview .idea-source-description {
   }
 }
 
+/* Dans l'application standalone, les pages secondaires sont affichées dans
+   l'iframe plein écran de l'index. La boîte de cette iframe intègre déjà la
+   zone sûre iOS : ne pas appliquer une seconde fois le décalage négatif du
+   document principal, sous peine de rogner le bas du bandeau. */
+html.in-iframe body .home-bottom-nav,
+html body.in-iframe .home-bottom-nav {
+  bottom: 0 !important;
+}
+
+.mnoria-global-bottom-nav-spacer {
+  display: block;
+  width: 100%;
+  height: calc(76px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
 .create-source-preview-loading {
   margin: 0;
   color: #6b7280;
@@ -27393,6 +27409,9 @@ html body .home-bottom-nav {
   align-items: center !important;
   gap: 6px !important;
   border-radius: 0 !important;
+  /* Le bandeau reste au-dessus du contenu normal, mais sous tous les menus,
+     panneaux et modales de l'application. */
+  z-index: 145 !important;
 }
 
 html body .home-bottom-nav > .home-bottom-nav-item,
