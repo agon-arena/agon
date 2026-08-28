@@ -69,6 +69,33 @@ test("rejette variantes identiques et questions lexicalement quasi identiques av
   assert.ok(batch.rejected[0].reasons.some((entry) => entry.code === "DUPLICATE_QUESTION"));
 });
 
+test("ne confond pas deux bundles variants distincts dont le champ question racine est absent", () => {
+  const canada = {
+    knowledgeTarget: "Ottawa est la capitale du Canada.",
+    sourceId: "canada",
+    variants: [q("Quelle est la capitale du Canada ?")]
+  };
+  const japan = {
+    knowledgeTarget: "Tokyo est la capitale du Japon.",
+    sourceId: "japon",
+    variants: [q("Quelle est la capitale du Japon ?", {
+      options: ["Tokyo", "Kyoto", "Osaka", "Nagoya"],
+      explanation: "Tokyo est la capitale du Japon."
+    })]
+  };
+  const batch = validateQuestionBatchQuality([canada, japan]);
+  assert.equal(batch.accepted.length, 2);
+  assert.equal(batch.rejected.length, 0);
+});
+
+test("rejette toujours deux bundles variants dont la variante principale est réellement dupliquée", () => {
+  const first = { knowledgeTarget: q().knowledgeTarget, sourceId: "canada", variants: [q()] };
+  const duplicate = { knowledgeTarget: q().knowledgeTarget, sourceId: "canada-2", variants: [q()] };
+  const batch = validateQuestionBatchQuality([first, duplicate]);
+  assert.equal(batch.accepted.length, 1);
+  assert.ok(batch.rejected[0].reasons.some((entry) => entry.code === "DUPLICATE_QUESTION"));
+});
+
 test("parseSemanticReviews est fail-closed pour réponse invalide ou incomplète", () => {
   assert.equal(parseSemanticReviews({}, ["q-1"]).valid, false);
   assert.equal(parseSemanticReviews({ reviews: [] }, ["q-1"]).errorCode, "CRITIC_INCOMPLETE_RESPONSE");
