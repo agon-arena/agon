@@ -7,6 +7,7 @@ const {
   requestNoesVideo,
   pollAndFinalizeNoesVideo,
   getOrCreateNoesScript,
+  normalizeSubtitleCues,
   NoesRequestError
 } = require("../lib/coeus/noes-orchestrator");
 const noesRepositoryForTest = require("../lib/coeus/noes-repository");
@@ -187,6 +188,18 @@ function baseDeps(overrides = {}) {
 }
 
 const BASE_REQUEST = { userId: "user-1", slot: "notion:custom:abc", quizDate: "2026-08-27", batchIndex: 0 };
+
+test("normalizeSubtitleCues conserve uniquement une chronologie sûre et bornée", () => {
+  assert.deepEqual(normalizeSubtitleCues([
+    { start: 0, end: 1.25, text: "Question ?", kind: "question" },
+    { start: 4.25, end: 5.1, text: "Réponse.", kind: "answer" }
+  ]), [
+    { start: 0, end: 1.25, text: "Question ?", kind: "question" },
+    { start: 4.25, end: 5.1, text: "Réponse.", kind: "answer" }
+  ]);
+  assert.equal(normalizeSubtitleCues([{ start: 2, end: 1, text: "Invalide", kind: "answer" }]), null);
+  assert.equal(normalizeSubtitleCues([{ start: 0, end: 1, text: "Type", kind: "autre" }]), null);
+});
 
 // ── Point fondamental : jamais le QCM, toujours knowledgeTarget ────────────
 test("getOrCreateNoesScript envoie les knowledgeTarget à l'IA, jamais les questions QCM", async () => {
@@ -432,10 +445,11 @@ function fakeStorageSupabase(baseSupabase, { uploadShouldFail = false } = {}) {
   return baseSupabase;
 }
 
-test("finalisation : job COMPLETED -> téléchargement + upload storage + status ready", async () => {
+test("finalisation : job COMPLETED -> téléchargement + upload storage + sous-titres + status ready", async () => {
   const supabase = fakeStorageSupabase(createSupabase());
   const volumeClient = fakeVolumeClient();
-  const runpod = fakeRunpodClient({ statusResponses: [{ status: "COMPLETED", output: { output_file: "/runpod-volume/coeus/outputs/coeus_abc.mp4", duration: 12.3, output_size: 12345 } }] });
+  const subtitleCues = [{ start: 0, end: 1.2, text: "Question ?", kind: "question" }];
+  const runpod = fakeRunpodClient({ statusResponses: [{ status: "COMPLETED", output: { output_file: "/runpod-volume/coeus/outputs/coeus_abc.mp4", duration: 12.3, output_size: 12345, subtitle_cues: subtitleCues } }] });
   const deps = baseDeps({ supabase, getRunpodClients: () => ({ runpodClient: runpod, volumeClient }) });
 
   const created = await requestNoesVideo(deps, { ...BASE_REQUEST, questions: fakeQuestions() });
@@ -447,6 +461,7 @@ test("finalisation : job COMPLETED -> téléchargement + upload storage + status
   assert.equal(volumeClient.calls.delete.length, 1); // nettoyage du volume RunPod après publication
   assert.equal(supabase.__uploadCalls.length, 1);
   assert.equal(supabase.__uploadCalls[0].options.upsert, true);
+  assert.deepEqual(supabase.__tables.noes_videos.rows.find((row) => row.id === created.id).subtitle_cues, subtitleCues);
 });
 
 test("finalisation : échec de téléchargement -> status failed, error_stage finalize", async () => {

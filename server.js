@@ -17786,7 +17786,7 @@ app.post("/api/users/recommendations/learn-next/ai-fallback/adopt", rateLimit("u
 // générique, natural_key comme knowledge_id, batching par position) reste
 // indépendant de la source, prêt pour les autres imports plus tard.
 const NOES_CONFIG = {
-  pipelineVersion: process.env.NOES_PIPELINE_VERSION || "coeus-items-v1",
+  pipelineVersion: process.env.NOES_PIPELINE_VERSION || "coeus-items-v2-captions",
   // Valeurs fixées par le worker lui-même (cf. coeus-serverless/handler.py :
   // KOKORO_VOICE="ff_siwis", COEUS_STAGING_AVATAR=coeusfemme2) — recopiées ici
   // UNIQUEMENT pour entrer dans video_hash, jamais envoyées au worker comme
@@ -17978,6 +17978,7 @@ app.post("/api/noes/videos", rateLimit("noes", 20), async (req, res) => {
       videoId: video.id,
       status: video.status,
       outputUrl: video.status === "ready" ? video.output_path : null,
+      subtitleCues: video.status === "ready" ? video.subtitle_cues : null,
       errorStage: video.status === "failed" ? video.error_stage : null,
       configurationIssue: video.status === "failed" && video.error_stage === "configuration"
         ? getNoesConfigurationIssue()
@@ -18011,6 +18012,7 @@ app.get("/api/noes/videos/:id/status", rateLimit("noes-status", 60), async (req,
       ok: true,
       status: video.status,
       outputUrl: video.status === "ready" ? video.output_path : null,
+      subtitleCues: video.status === "ready" ? video.subtitle_cues : null,
       errorStage: video.status === "failed" ? video.error_stage : null,
       configurationIssue: video.status === "failed" && video.error_stage === "configuration"
         ? getNoesConfigurationIssue()

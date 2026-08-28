@@ -5812,14 +5812,45 @@
     openFicheOverlay(buildFicheModalHtml('fa-clapperboard', 'Noès', q.label || 'Cette fiche', { meta: null, sections: [] }, bodyHtml));
     requestNoesVideo(q, document.getElementById('qcm-noes-body'));
   }
-  function showNoesVideo(bodyEl, url) {
+  function formatNoesVttTime(seconds) {
+    var totalMs = Math.max(0, Math.round(Number(seconds) * 1000));
+    var hours = Math.floor(totalMs / 3600000);
+    var minutes = Math.floor((totalMs % 3600000) / 60000);
+    var secs = Math.floor((totalMs % 60000) / 1000);
+    var ms = totalMs % 1000;
+    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' +
+      String(secs).padStart(2, '0') + '.' + String(ms).padStart(3, '0');
+  }
+  function buildNoesVttUrl(cues) {
+    if (!Array.isArray(cues) || !cues.length || typeof Blob !== 'function' || !window.URL?.createObjectURL) return null;
+    var lines = ['WEBVTT', ''];
+    cues.forEach(function (cue, index) {
+      var start = Number(cue && cue.start);
+      var end = Number(cue && cue.end);
+      var text = String(cue && cue.text || '').trim().replace(/-->/g, '→');
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !text) return;
+      lines.push(String(index + 1), formatNoesVttTime(start) + ' --> ' + formatNoesVttTime(end), text, '');
+    });
+    if (lines.length <= 2) return null;
+    return URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/vtt;charset=utf-8' }));
+  }
+  function showNoesVideo(bodyEl, url, subtitleCues) {
     if (!bodyEl || !document.body.contains(bodyEl)) return;
     // playsinline + preload="metadata" : même stratégie mobile que le
     // lecteur natif déjà en place pour les vidéos de débat (cf.
     // views/debate.html) — autoplay volontairement absent, l'utilisateur
     // vient d'ouvrir la modale exprès pour regarder, un clic sur "lire" est
     // attendu, pas un déclenchement automatique.
-    bodyEl.innerHTML = '<video src="' + escapeHtml(url) + '" controls playsinline preload="metadata" class="qcm-noes-video"></video>';
+    var vttUrl = buildNoesVttUrl(subtitleCues);
+    bodyEl.innerHTML = '<video src="' + escapeHtml(url) + '" controls playsinline preload="metadata" class="qcm-noes-video">' +
+      (vttUrl ? '<track kind="subtitles" srclang="fr" label="Français" src="' + escapeHtml(vttUrl) + '" default>' : '') +
+      '</video>';
+    var video = bodyEl.querySelector('video');
+    if (video && vttUrl) {
+      video.addEventListener('loadedmetadata', function () {
+        if (video.textTracks && video.textTracks[0]) video.textTracks[0].mode = 'showing';
+      }, { once: true });
+    }
   }
   function showNoesError(bodyEl, message) {
     if (!bodyEl || !document.body.contains(bodyEl)) return;
@@ -5850,7 +5881,7 @@
       .then(function (data) {
         if (!bodyEl || !document.body.contains(bodyEl)) return;
         if (!data.ok) { showNoesError(bodyEl, data.error); return; }
-        if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
+        if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl, data.subtitleCues); return; }
         if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
         setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl); }, NOES_POLL_INTERVAL_MS);
       })
@@ -5868,7 +5899,7 @@
       .then(function (data) {
         if (!bodyEl || !document.body.contains(bodyEl)) return;
         if (!data.ok) { showNoesError(bodyEl, data.error); return; }
-        if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
+        if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl, data.subtitleCues); return; }
         if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
         pollNoesVideoStatus(data.videoId, bodyEl);
       })
