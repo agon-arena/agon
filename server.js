@@ -13970,8 +13970,8 @@ async function qualityControlRawQuestions({
       if (rejectionCodes.has("DOUBLE_NEGATION")) {
         targetedConstraints.push("- DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe. N’utilise aucun assemblage de négations (ne/n’, pas, plus, jamais, aucun/aucune, ni). Ne te contente pas de retirer un seul mot.");
       }
-      if (rejectionCodes.has("INVALID_ORDER_COUNT")) {
-        targetedConstraints.push("- INVALID_ORDER_COUNT : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide.");
+      if (["INVALID_ORDER_COUNT", "invalidOrderCount"].some((code) => rejectionCodes.has(code))) {
+        targetedConstraints.push("- INVALID_ORDER_COUNT / invalidOrderCount : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide.");
       }
       if (["incorrectCorrectAnswer", "missingCorrectAnswerIndex", "noCorrectAnswerMarked"].some((code) => rejectionCodes.has(code))) {
         targetedConstraints.push("- RÉPONSE CORRECTE MAL IDENTIFIÉE : remplace la question par un qcm simple avec exactement 4 options distinctes. Fournis un unique correctIndex entier entre 0 et 3, vérifie que l’option à cet index est factuellement la bonne réponse, et explique explicitement pourquoi elle est correcte.");
