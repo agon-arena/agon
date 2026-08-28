@@ -2,7 +2,7 @@
 // l'accueil antérieure au bouton « Plein écran » de Ma mémoire, y compris après un reload
 // ordinaire en PWA/desktop. Changer cette version active le nouveau worker, supprime ce cache
 // HTML obsolète et laisse la navigation récupérer le balisage actuel.
-const SW_VERSION = "20260828-memory-fullpage-button-v181";
+const SW_VERSION = "20260828-learning-bottom-band-v186";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

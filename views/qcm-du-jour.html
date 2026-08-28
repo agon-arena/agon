@@ -62,6 +62,29 @@
       background-position: center;
       background-repeat: no-repeat;
     }
+    /* Bandeau bas blanc de la page Apprentissage. Fixé au viewport mais placé derrière le
+       contenu : l'important padding-bottom déjà réservé au scroll reste inchangé et aucune
+       commande du QCM n'est masquée. */
+    body.page-qcm-du-jour::after {
+      content: '';
+      position: fixed;
+      z-index: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: calc(72px + env(safe-area-inset-bottom, 0px));
+      background: #ffffff;
+      pointer-events: none;
+    }
+    body.page-qcm-du-jour .qcm-page-shell {
+      position: relative;
+      z-index: 1;
+    }
+    @media (max-width: 768px) {
+      body.page-qcm-du-jour::after {
+        height: calc(78px + env(safe-area-inset-bottom, 0px));
+      }
+    }
     /* html.in-iframe (pas body.in-iframe) : la classe est posée sur
        <html> de façon synchrone dès l'exécution de ce script (ligne ~21),
        avant même que <body> existe — alors que body.in-iframe n'est ajoutée
