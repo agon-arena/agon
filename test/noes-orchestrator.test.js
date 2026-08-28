@@ -28,7 +28,12 @@ const noesRepositoryForTest = require("../lib/coeus/noes-repository");
 // "chaque écriture a un timestamp différent" sans laquelle
 // claimNoesVideoForFinalization/claimPendingNoesVideoForSubmission ne
 // peuvent pas être testés pour de vrai.
-let _fakeClockMs = Date.parse("2026-08-27T00:00:00.000Z");
+// Garder les écritures factices dans la journée UTC réellement testée : le
+// quota journalier de production calcule sa fenêtre à partir de Date.now().
+// Une date figée rendrait ce test silencieusement caduc dès le lendemain.
+const _todayUtc = new Date();
+_todayUtc.setUTCHours(0, 0, 0, 0);
+let _fakeClockMs = _todayUtc.getTime();
 function nowIso() {
   _fakeClockMs += 1;
   return new Date(_fakeClockMs).toISOString();
@@ -277,7 +282,27 @@ test("deux requêtes concurrentes pour le même contenu -> un seul job RunPod so
 // ── Quota (nouvelles générations uniquement) ────────────────────────────────
 test("quota quotidien : bloque une NOUVELLE génération, jamais le rejouage d'une vidéo déjà demandée", async () => {
   const runpod = fakeRunpodClient();
-  const deps = baseDeps({ getRunpodClients: () => ({ runpodClient: runpod }), config: { maxVideosPerDay: 1 } });
+  const deps = baseDeps({
+    getRunpodClients: () => ({ runpodClient: runpod }),
+    config: { maxVideosPerDay: 1 },
+    callOpenAI: async (messages) => {
+      const prompt = messages?.[0]?.content || "";
+      if (prompt.includes("Une autre connaissance")) {
+        return JSON.stringify({
+          items: [
+            { index: 1, question: "Quelle est cette autre connaissance ?", answer: "Une autre connaissance." },
+            { index: 2, question: "Quelle connaissance supplémentaire faut-il retenir ?", answer: "Encore une autre." }
+          ]
+        });
+      }
+      return JSON.stringify({
+        items: [
+          { index: 1, question: "En quelle année Constantinople tombe-t-elle ?", answer: "1453." },
+          { index: 2, question: "Quel est le plus grand océan ?", answer: "Le Pacifique." }
+        ]
+      });
+    }
+  });
 
   const video1 = await requestNoesVideo(deps, { ...BASE_REQUEST, questions: fakeQuestions() });
   assert.equal(runpod.calls.submit.length, 1);
@@ -330,6 +355,29 @@ test("RunPod non configuré : statut failed avec error_stage configuration, pas 
   const video = await requestNoesVideo(deps, { ...BASE_REQUEST, questions: fakeQuestions() });
   assert.equal(video.status, "failed");
   assert.equal(video.error_stage, "configuration");
+});
+
+test("un ancien échec configuration est repris une seule fois après configuration du serveur", async () => {
+  const supabase = createSupabase();
+  const runpod = fakeRunpodClient();
+  let configured = false;
+  const deps = baseDeps({
+    supabase,
+    getRunpodClients: () => configured ? { runpodClient: runpod } : null
+  });
+
+  const failed = await requestNoesVideo(deps, { ...BASE_REQUEST, questions: fakeQuestions() });
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.error_stage, "configuration");
+  assert.equal(runpod.calls.submit.length, 0);
+
+  configured = true;
+  const [retried, concurrent] = await Promise.all([
+    requestNoesVideo(deps, { ...BASE_REQUEST, questions: fakeQuestions() }),
+    requestNoesVideo(deps, { ...BASE_REQUEST, userId: "user-2", questions: fakeQuestions() })
+  ]);
+  assert.equal(runpod.calls.submit.length, 1);
+  assert.ok([retried.status, concurrent.status].includes("processing"));
 });
 
 // ── Finalisation (GET /status) ──────────────────────────────────────────────
