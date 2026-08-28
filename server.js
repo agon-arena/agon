@@ -17823,6 +17823,26 @@ const NOES_CONFIG = {
 // local, par ex.) ne doit jamais empêcher le serveur de démarrer, seulement
 // faire échouer proprement les routes Noès avec un message clair.
 let _noesRunpodClients = null;
+function getNoesConfigurationIssue() {
+  const required = [
+    ["RUNPOD_NOES_ENDPOINT_ID", /^[A-Za-z0-9_-]+$/],
+    ["RUNPOD_API_KEY", /\S+/],
+    ["RUNPOD_VOLUME_S3_ACCESS_KEY", /\S+/],
+    ["RUNPOD_VOLUME_S3_SECRET_KEY", /\S+/],
+    ["RUNPOD_VOLUME_S3_BUCKET", /^[A-Za-z0-9][A-Za-z0-9._-]*$/]
+  ];
+  for (const [name, pattern] of required) {
+    const value = String(process.env[name] || "").trim();
+    if (!value) return `${name} est absente`;
+    if (!pattern.test(value)) return `${name} est invalide`;
+  }
+  const s3Endpoint = String(process.env.RUNPOD_VOLUME_S3_ENDPOINT || "").trim();
+  if (!s3Endpoint) return "RUNPOD_VOLUME_S3_ENDPOINT est absente";
+  if (s3Endpoint !== "https://s3api-eur-is-1.runpod.io/") {
+    return "RUNPOD_VOLUME_S3_ENDPOINT est invalide";
+  }
+  return null;
+}
 function getNoesRunpodClients() {
   if (_noesRunpodClients) return _noesRunpodClients;
   // Vérification explicite plutôt que de laisser createCoeusRunpodClient
@@ -17831,8 +17851,9 @@ function getNoesRunpodClients() {
   // service.js, un seul endpoint) et retomberait silencieusement sur
   // l'ancien endpoint si RUNPOD_NOES_ENDPOINT_ID venait à manquer — exactement
   // le repli qu'on veut exclure pour Noès (cf. commentaire au-dessus).
-  if (!String(process.env.RUNPOD_NOES_ENDPOINT_ID || "").trim()) {
-    console.error("[noes] configuration RunPod/volume manquante : RUNPOD_NOES_ENDPOINT_ID est absente.");
+  const configurationIssue = getNoesConfigurationIssue();
+  if (configurationIssue) {
+    console.error("[noes] configuration RunPod/volume manquante :", configurationIssue);
     return null;
   }
   try {
@@ -17957,7 +17978,10 @@ app.post("/api/noes/videos", rateLimit("noes", 20), async (req, res) => {
       videoId: video.id,
       status: video.status,
       outputUrl: video.status === "ready" ? video.output_path : null,
-      errorStage: video.status === "failed" ? video.error_stage : null
+      errorStage: video.status === "failed" ? video.error_stage : null,
+      configurationIssue: video.status === "failed" && video.error_stage === "configuration"
+        ? getNoesConfigurationIssue()
+        : null
     });
   } catch (error) {
     if (error instanceof NoesRequestError) {
@@ -17987,7 +18011,10 @@ app.get("/api/noes/videos/:id/status", rateLimit("noes-status", 60), async (req,
       ok: true,
       status: video.status,
       outputUrl: video.status === "ready" ? video.output_path : null,
-      errorStage: video.status === "failed" ? video.error_stage : null
+      errorStage: video.status === "failed" ? video.error_stage : null,
+      configurationIssue: video.status === "failed" && video.error_stage === "configuration"
+        ? getNoesConfigurationIssue()
+        : null
     });
   } catch (error) {
     console.error("[noes] statut vidéo :", error.message);

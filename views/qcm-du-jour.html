@@ -5839,7 +5839,7 @@
     bodyEl.innerHTML = '<p class="qcm-noes-status qcm-noes-status-error"><i class="fa-solid fa-triangle-exclamation"></i> ' +
       escapeHtml(message || "Noès n'est pas disponible pour le moment.") + '</p>';
   }
-  function noesFailureMessage(errorStage) {
+  function noesFailureMessage(errorStage, configurationIssue) {
     var messages = {
       configuration: "Noès n'est pas configuré sur le serveur pour le moment.",
       submit: "Le service vidéo Noès n'a pas accepté la génération.",
@@ -5847,6 +5847,9 @@
       finalize: "La vidéo a été générée mais n'a pas pu être récupérée.",
       timeout: "La génération vidéo Noès a dépassé le délai prévu."
     };
+    if (errorStage === 'configuration' && configurationIssue) {
+      return "Configuration Noès à corriger dans Render : " + configurationIssue + ".";
+    }
     return messages[errorStage] || "Noès n'est pas disponible pour le moment.";
   }
   function pollNoesVideoStatus(videoId, bodyEl) {
@@ -5861,7 +5864,7 @@
         if (!bodyEl || !document.body.contains(bodyEl)) return;
         if (!data.ok) { showNoesError(bodyEl, data.error); return; }
         if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
-        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage)); return; }
+        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
         setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl); }, NOES_POLL_INTERVAL_MS);
       })
       .catch(function () {
@@ -5879,7 +5882,7 @@
         if (!bodyEl || !document.body.contains(bodyEl)) return;
         if (!data.ok) { showNoesError(bodyEl, data.error); return; }
         if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl); return; }
-        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage)); return; }
+        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
         pollNoesVideoStatus(data.videoId, bodyEl);
       })
       .catch(function () {
