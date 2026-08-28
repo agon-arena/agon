@@ -22,6 +22,7 @@ const learnNextConfig = require("./lib/learn-next/config");
 const learnNextScoring = require("./lib/learn-next/scoring");
 const learnNextRepository = require("./lib/learn-next/repository");
 const { computeLearnNextRecommendations } = require("./lib/learn-next/engine");
+const learnNextAiFallback = require("./lib/learn-next/ai-fallback");
 const noesRepository = require("./lib/coeus/noes-repository");
 const { requestNoesVideo, pollAndFinalizeNoesVideo, NoesRequestError } = require("./lib/coeus/noes-orchestrator");
 const { createCoeusRunpodClient } = require("./lib/coeus/runpod-client");
@@ -63,6 +64,11 @@ const {
 const { findEquivalentCustomTopic, parseCustomTopicSlotLevel } = require("./lib/topic-dedup");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
 const { truncateAtTextBoundary } = require("./lib/text-boundaries");
+const {
+  classifyAiError,
+  generationFailure,
+  publicGenerationError
+} = require("./lib/custom-topic-generation-errors");
 const {
   ACCEPTED_PHOTO_MIME_TYPES,
   buildAnalysisDataUrl,
@@ -307,7 +313,17 @@ const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:contact@mnoriaarena.org";
 
-app.use(express.json({ limit: "100kb" }));
+// La photo est volontairement redimensionnée côté navigateur puis reçue par
+// /api/photo-knowledge/analyze avec sa propre limite de 14 Mo. Si le parseur
+// global de 100 Ko la lit d'abord, il rejette nécessairement le data URL
+// avant que le parseur spécialisé de la route puisse intervenir. On ne
+// contourne le parseur global que pour cet endpoint précis ; toutes les
+// autres routes conservent leur plafond historique de 100 Ko.
+const defaultJsonParser = express.json({ limit: "100kb" });
+app.use((req, res, next) => {
+  if (req.method === "POST" && req.path === "/api/photo-knowledge/analyze") return next();
+  return defaultJsonParser(req, res, next);
+});
 app.use(express.static("public", { maxAge: "2m" }));
 
 const { createHistoricalEventsRouter } = require("./routes/historical-events");
@@ -14037,21 +14053,47 @@ function parseFicheAndKnowledgeCandidates(parsed, fallbackName, levelConfig) {
 async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, requireValidation) {
   const { target, instruction, max, min } = levelConfig;
   const timeoutMs = Math.min(120_000, 45_000 + target * 3_000);
+  // Une réponse HTTP OpenAI réussie peut malgré tout contenir un JSON
+  // tronqué ou une structure qui ne respecte pas le contrat demandé.
+  // _callOpenAI retente déjà les erreurs réseau/429/5xx ; ces deux essais
+  // couvrent uniquement les échecs de forme, sans jamais relâcher les
+  // validateurs pédagogiques et factuels ci-dessous.
+  const contentAttempts = 2;
 
   let parsed;
-  try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildFicheAndKnowledgeAdmissionPrompt(subject, contextHint, levelConfig, requireValidation) }], {
-      model: DAILY_QUIZ_NARRATIVE_MODEL,
-      temperature: 0.4,
-      responseFormat: { type: "json_object" },
-      timeoutMs,
-      feature: "knowledge_generation"
-    });
-    parsed = JSON.parse(content);
-  } catch (error) {
-    console.error(`[notion-quiz:${id}] fiche + admission :`, error.message);
-    return { error: "failed" };
+  for (let attempt = 1; attempt <= contentAttempts; attempt++) {
+    let content;
+    try {
+      content = await _callOpenAI(apiKey, [{ role: "user", content: buildFicheAndKnowledgeAdmissionPrompt(subject, contextHint, levelConfig, requireValidation) }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" },
+        timeoutMs,
+        feature: "knowledge_generation"
+      });
+    } catch (error) {
+      const code = classifyAiError(error);
+      console.error(`[notion-quiz:${id}] stage=fiche_generation code=${code} :`, error.message);
+      return generationFailure(code, "fiche_generation");
+    }
+    try {
+      const candidate = JSON.parse(content);
+      // Un refus explicite est une réponse valide et ne doit jamais être
+      // rejoué pour essayer d'obtenir artificiellement une acceptation.
+      if (requireValidation && candidate?.valid === false) {
+        parsed = candidate;
+        break;
+      }
+      if (parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig)) {
+        parsed = candidate;
+        break;
+      }
+      console.warn(`[notion-quiz:${id}] fiche non conforme (tentative ${attempt}/${contentAttempts}).`);
+    } catch (error) {
+      console.warn(`[notion-quiz:${id}] JSON fiche invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
+    }
   }
+  if (!parsed) return generationFailure("CONTENT_UNUSABLE", "fiche_parsing");
   if (requireValidation && parsed?.valid === false) {
     const reason = String(parsed?.reason || "").trim().slice(0, 300);
     return { error: "rejected", reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
@@ -14060,7 +14102,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   const ficheResult = parseFicheAndKnowledgeCandidates(parsed, subject, levelConfig);
   if (!ficheResult) {
     console.warn(`[notion-quiz:${id}] fiche invalide.`);
-    return { error: "failed" };
+    return generationFailure("CONTENT_UNUSABLE", "fiche_validation");
   }
   const { sourceName, sourceDetail, candidates, imageSearchQuery } = ficheResult;
   // Cas normal (cf. §26 du cahier des charges), jamais une erreur en soi :
@@ -14068,7 +14110,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   // JAMAIS enchaîner sur une génération de questions dans ce cas.
   if (!candidates.length) {
     console.warn(`[notion-quiz:${id}] aucune connaissance candidate après admission.`);
-    return { error: "failed", reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." };
+    return generationFailure("KNOWLEDGE_REJECTED", "knowledge_admission", { reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." });
   }
 
   // Recherche d'image (cf. lib/knowledge-image-search.js) menée EN PARALLÈLE
@@ -14080,34 +14122,49 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   // charges — jamais bloquant pour la génération principale).
   let accepted;
   let resolvedImage = null;
-  try {
-    const [verifyContent, imageResult] = await Promise.all([
-      _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(candidates, sourceName) }], {
+  const imagePromise = imageSearchQuery
+    ? searchKnowledgeImage(imageSearchQuery, { logLabel: `${id}:${sourceName}` }).catch((error) => {
+        console.warn(`[notion-quiz:${id}] recherche image :`, error.message);
+        return null;
+      })
+    : Promise.resolve(null);
+  for (let attempt = 1; attempt <= contentAttempts; attempt++) {
+    let verifyContent;
+    try {
+      verifyContent = await _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(candidates, sourceName) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
         feature: "knowledge_verification"
-      }),
-      imageSearchQuery
-        ? searchKnowledgeImage(imageSearchQuery, { logLabel: `${id}:${sourceName}` }).catch((error) => {
-            console.warn(`[notion-quiz:${id}] recherche image :`, error.message);
-            return null;
-          })
-        : Promise.resolve(null)
-    ]);
-    accepted = applyKnowledgeVerificationDecisions(candidates, JSON.parse(verifyContent)?.decisions);
-    resolvedImage = imageResult;
-  } catch (error) {
-    // Passe de vérification indisponible : conservateur par défaut, on
-    // n'admet RIEN plutôt que de se rabattre sur les candidats non
-    // vérifiés (jamais de repli qui contournerait le contrôle demandé).
-    console.error(`[notion-quiz:${id}] vérification indépendante :`, error.message);
-    return { error: "failed" };
+      });
+    } catch (error) {
+      const code = classifyAiError(error);
+      console.error(`[notion-quiz:${id}] stage=knowledge_verification code=${code} :`, error.message);
+      return generationFailure(code, "knowledge_verification");
+    }
+    try {
+      const decisions = JSON.parse(verifyContent)?.decisions;
+      const indexes = Array.isArray(decisions) ? decisions.map((d) => Number(d?.index)) : [];
+      const complete = Array.isArray(decisions)
+        && decisions.length === candidates.length
+        && decisions.every((d) => Number.isInteger(Number(d?.index)) && typeof d?.accept === "boolean")
+        && new Set(indexes).size === candidates.length
+        && indexes.every((index) => index >= 0 && index < candidates.length);
+      if (complete) {
+        accepted = applyKnowledgeVerificationDecisions(candidates, decisions);
+        break;
+      }
+      console.warn(`[notion-quiz:${id}] vérification non conforme (tentative ${attempt}/${contentAttempts}).`);
+    } catch (error) {
+      console.warn(`[notion-quiz:${id}] JSON vérification invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
+    }
   }
+  resolvedImage = await imagePromise;
   sourceDetail.image = resolvedImage;
+  if (!accepted) return generationFailure("CONTENT_UNUSABLE", "knowledge_verification_parsing");
   if (!accepted.length) {
     console.warn(`[notion-quiz:${id}] aucune connaissance n'a passé la vérification indépendante (${candidates.length} candidate(s)).`);
-    return { error: "failed", reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." };
+    return generationFailure("KNOWLEDGE_REJECTED", "knowledge_verification", { reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." });
   }
 
   let validated = [];
@@ -14151,15 +14208,18 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       // Une erreur HTTP/réseau a déjà épuisé les trois tentatives internes de
       // _callOpenAI : ne jamais empiler une nouvelle série de requêtes.
       if (error?.status) {
-        console.error(`[notion-quiz:${id}] génération des questions :`, error.message);
-        return { error: "failed" };
+        const code = classifyAiError(error);
+        console.error(`[notion-quiz:${id}] stage=question_generation code=${code} :`, error.message);
+        return generationFailure(code, "question_generation");
       }
       console.warn(`[notion-quiz:${id}] JSON questions invalide (tentative ${attempt}/${questionAttempts}) :`, error.message);
     }
   }
   if (validated.length < min) {
     console.warn(`[notion-quiz:${id}] seulement ${validated.length} question(s) valide(s) et traçable(s) sur ${accepted.length} connaissance(s) acceptée(s).`);
-    return { error: "failed" };
+    return generationFailure("QCM_UNUSABLE", "question_validation", {
+      diagnostics: { acceptedKnowledgeCount: accepted.length, validQuestionCount: validated.length }
+    });
   }
 
   return { sourceName, sourceDetail, validated };
@@ -14784,7 +14844,7 @@ async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceNa
 // (cf. POST /api/users/notion-quizzes/custom, buildLeveledFicheAndQuizPrompt).
 async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return { error: "failed" };
+  if (!apiKey) return generationFailure("AI_CONFIG_MISSING", "configuration");
   const levelConfig = resolveNotionQuizLevel(rawLevel);
   const { level } = levelConfig;
 
@@ -14817,7 +14877,7 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
     // reason (cf. son repli "Génération de la fiche impossible..." sinon) —
     // notamment le message précis "aucune connaissance suffisamment fiable"
     // (cf. generateNotionLevelQuiz), plus utile qu'un message générique.
-    console.warn(`[notion-quizzes:custom:${id}] ${result.error} : ${result.reason || "fiche ou QCM invalide."}`);
+    console.warn(`[notion-quizzes:custom:${id}] stage=${result.stage || "subject_validation"} code=${result.code || result.error} : ${result.reason || "échec contrôlé."}`);
     return result;
   }
   const { sourceName, sourceDetail, validated } = result;
@@ -16887,8 +16947,10 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
       } else {
         const result = await buildCustomTopicQuiz(topic, id, level, user.id);
         if (result.error) {
-          const status = result.error === "rejected" ? 422 : 502;
-          return res.status(status).json({ ok: false, error: result.reason || "Génération de la fiche impossible pour le moment." });
+          const code = result.code || (result.error === "rejected" ? "CONTENT_UNUSABLE" : "INTERNAL_ERROR");
+          const publicError = publicGenerationError(code, result.reason);
+          console.warn(`[notion-quizzes:custom:${id}] response stage=${result.stage || "subject_validation"} code=${publicError.body.code}`);
+          return res.status(publicError.status).json(publicError.body);
         }
         // searchTopic : l'intitulé exact tapé par le créateur dans la barre de
         // recherche, distinct de sourceName (repris/reformulé par l'IA, cf.
@@ -16929,9 +16991,18 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     if (linkError) throw new Error(linkError.message);
 
     res.json({ ok: true, slot: effectiveSlot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length, reused });
+
+    // Premier instant où les deux prérequis sont garantis : le QCM existe
+    // dans daily_quiz et son lien utilisateur dans user_notion_quizzes.
+    // La réponse HTTP est déjà envoyée ; Noès travaille en arrière-plan.
+    triggerAutomaticNoesVideo({ userId: user.id, slot: effectiveSlot, quizDate, questions });
   } catch (error) {
-    console.error("[notion-quizzes] création (recherche libre) :", error.message);
-    res.status(500).json({ ok: false, error: error.message });
+    // Hors des appels IA, cette route ne dépend que de Supabase (résolution
+    // utilisateur, lecture/insertion du QCM et rattachement). Le détail brut
+    // reste dans les logs et n'est jamais renvoyé au navigateur.
+    const publicError = publicGenerationError("STORAGE_TEMPORARY");
+    console.error("[notion-quizzes] création (recherche libre) stage=storage code=STORAGE_TEMPORARY :", error.message);
+    res.status(publicError.status).json(publicError.body);
   }
 });
 
@@ -17470,6 +17541,189 @@ app.post("/api/users/recommendations/learn-next/events", rateLimit("users", 60),
   }
 });
 
+// ── V2 : fallback IA "À apprendre ensuite" (mission du 27/08/2026) ─────────
+// Couche COMPLÉMENTAIRE à la V1 ci-dessus, jamais un remplacement : ne
+// s'active que si le catalogue Mnoria n'offre pas assez de bons candidats
+// connectés au graphe de l'utilisateur (cf. engine.js qualitySignal). Route
+// SÉPARÉE du GET V1 (jamais dans le même aller-retour) : le GET normal doit
+// rester rapide (section 16 de la mission) — le frontend l'appelle
+// systématiquement APRÈS avoir déjà affiché les recommandations V1
+// (fetchAndAppendAiFallbackProposals, qcm-du-jour.html), jamais avant.
+// Chaque étape est instrumentée via lib/ai-usage-log.js (recordAiUsage),
+// réutilisé tel quel — aucune nouvelle table de métriques (section 13).
+app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 15), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+    if (validation.error) return res.status(400).json({ proposals: [] });
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    const limit = Math.min(
+      learnNextConfig.MAX_RECOMMENDATION_LIMIT,
+      Math.max(1, parseInt(req.query?.limit, 10) || learnNextConfig.DEFAULT_RECOMMENDATION_LIMIT)
+    );
+
+    // Recalcule (ou relit le cache V1, quasi gratuit si le GET normal vient
+    // d'être appelé pour ce même utilisateur, cf. learnNextRecommendationsCache)
+    // uniquement pour lire qualitySignal — jamais pour re-servir ces
+    // recommandations elles-mêmes ici.
+    const v1Result = await computeLearnNextRecommendations(
+      { supabase, fetchAllSupabaseRowsIn, computeRetrievability },
+      { userId: user.id, limit }
+    );
+
+    if (!learnNextAiFallback.shouldTriggerFallback(
+      { qualitySignal: v1Result.qualitySignal, coldStart: v1Result.coldStart },
+      learnNextConfig
+    )) {
+      return res.json({ proposals: [], triggered: false });
+    }
+    recordAiUsage(supabase, { feature: "learn_next_ai_fallback_triggered", success: true });
+
+    // Contexte compact (section 3) : jamais un dump de mémoire, jamais de
+    // legacyKey/userId dedans (section 12) — reconstruit ici à partir de
+    // lectures déjà bornées par utilisateur, jamais un scan.
+    const acquisitions = await learnNextRepository.fetchUserAcquiredEclairages(supabase, user.id);
+    const shareableAcquisitions = acquisitions.filter((a) => learnNextConfig.SHAREABLE_KNOWLEDGE_TYPES.includes(a.type));
+    if (!shareableAcquisitions.length) return res.json({ proposals: [], triggered: false });
+
+    const [masteryByKey, solarNamesById] = await Promise.all([
+      learnNextRepository.fetchUserSubjectMasteryByKey(supabase, user.id, computeRetrievability, new Date()),
+      learnNextRepository.fetchSolarSystemNames(supabase, [...new Set(shareableAcquisitions.map((a) => a.solarSystemId).filter(Boolean))])
+    ]);
+
+    const seedTopics = learnNextAiFallback.selectSeedTopics(shareableAcquisitions, masteryByKey, solarNamesById, learnNextConfig);
+    if (!seedTopics.length) return res.json({ proposals: [], triggered: false });
+    const dominantBranches = learnNextAiFallback.selectDominantBranches(shareableAcquisitions, solarNamesById, learnNextConfig);
+    const gapSignature = learnNextAiFallback.computeGapSignature(seedTopics);
+
+    let proposals = await learnNextRepository.fetchCachedGapProposals(supabase, gapSignature, learnNextConfig);
+    if (proposals) {
+      recordAiUsage(supabase, { feature: "learn_next_ai_fallback_cache_hit", success: true });
+    } else {
+      // Anti-concurrence (section 14) : une seule requête à la fois calcule
+      // une signature donnée. Si quelqu'un d'autre la calcule déjà, cette
+      // requête n'appelle PAS l'IA une deuxième fois — V1 reste suffisante
+      // pour cette réponse-ci, la prochaine tentative (rafraîchissement,
+      // autre utilisateur) retrouvera le résultat une fois prêt.
+      const claimed = await learnNextRepository.claimGapProposalSlot(supabase, gapSignature, learnNextConfig);
+      if (!claimed) {
+        recordAiUsage(supabase, { feature: "learn_next_ai_fallback_concurrent_skip", success: true });
+        return res.json({ proposals: [], triggered: true, pending: true });
+      }
+
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        await learnNextRepository.markGapProposalFailed(supabase, gapSignature);
+        return res.json({ proposals: [], triggered: true });
+      }
+
+      const context = learnNextAiFallback.buildFallbackContext(
+        { seedTopics, dominantBranches, existingCandidateNames: v1Result.qualitySignal.topCandidateNames },
+        learnNextConfig
+      );
+      const prompt = learnNextAiFallback.buildFallbackPrompt(context, learnNextConfig);
+
+      let rawContent = "";
+      try {
+        // fetchGpt5JsonContentWithRetry loggue déjà lui-même tokens/coût/latence
+        // via recordAiUsage (feature ci-dessous) — c'est le SEUL appel réseau
+        // de toute cette route, jamais dupliqué.
+        rawContent = await fetchGpt5JsonContentWithRetry(
+          apiKey, learnNextConfig.AI_FALLBACK_MODEL, prompt, "[learn-next ai-fallback]",
+          { feature: "learn_next_ai_fallback_request", reasoningEffort: "low", initialBudget: 700 }
+        );
+      } catch (error) {
+        console.warn("[learn-next ai-fallback] appel IA échoué (best-effort, V1 reste fonctionnelle) :", error.message);
+        await learnNextRepository.markGapProposalFailed(supabase, gapSignature);
+        return res.json({ proposals: [], triggered: true });
+      }
+
+      const parsed = learnNextAiFallback.parseFallbackProposals(rawContent, context, learnNextConfig);
+      if (!parsed.length) {
+        await learnNextRepository.markGapProposalFailed(supabase, gapSignature);
+        return res.json({ proposals: [], triggered: true });
+      }
+      await learnNextRepository.saveGapProposalsReady(supabase, gapSignature, {
+        proposals: parsed, model: learnNextConfig.AI_FALLBACK_MODEL, seedTopicCount: seedTopics.length
+      });
+      proposals = parsed;
+    }
+
+    // Déduplication contre le catalogue existant (section 6), à CHAQUE
+    // lecture (y compris sur un cache-hit) : le catalogue peut avoir changé
+    // depuis le calcul initial de cette signature (quelqu'un d'autre a
+    // depuis créé ce sujet) — jamais proposer "Créer" pour quelque chose qui
+    // existe déjà. Une seule lecture bornée (même requête que
+    // findEquivalentGeneratedCustomTopic), jamais une par proposition.
+    const existingTopics = await learnNextRepository.fetchGeneratedCustomTopics(supabase);
+    const resolved = learnNextAiFallback.resolveProposalsAgainstCatalog(proposals, existingTopics);
+    if (resolved.some((p) => !p.isNew)) {
+      recordAiUsage(supabase, { feature: "learn_next_ai_fallback_deduplicated", success: true });
+    }
+
+    const payload = resolved.map((p) => {
+      if (p.isNew) {
+        return {
+          isAiProposal: true,
+          gapSignature,
+          title: p.title,
+          reason: p.reason,
+          relatedKnownTopics: p.relatedKnownTopics,
+          suggestedTheme: p.suggestedTheme,
+          difficulty: p.difficulty,
+          recommendationType: p.proposalType
+        };
+      }
+      // Sujet équivalent déjà généré (par un autre visiteur, ou par un appel
+      // précédent) : se comporte exactement comme un item V1 normal — même
+      // action "Apprendre", même ouverture de fiche, jamais de génération.
+      const existingId = p.existingSlot && p.existingSlot.startsWith("notion:custom:")
+        ? p.existingSlot.slice("notion:custom:".length, "notion:custom:".length + 16)
+        : null;
+      return existingId ? {
+        isAiProposal: false,
+        subjectType: "custom",
+        subjectSourceId: existingId,
+        name: p.existingName || p.title,
+        reasonText: p.reason,
+        recommendationType: p.proposalType
+      } : null;
+    }).filter(Boolean);
+
+    res.json({ proposals: payload, triggered: true });
+  } catch (error) {
+    // Best-effort strict (section 15) : la V2 ne doit JAMAIS casser "À
+    // apprendre ensuite" — une erreur ici dégrade silencieusement vers
+    // "aucune proposition supplémentaire", jamais une erreur générale.
+    console.error("[learn-next ai-fallback]", error.message);
+    res.json({ proposals: [], triggered: false });
+  }
+});
+
+// Marque une proposition IA comme adoptée (section 9) — appelée par le
+// frontend juste après la création réussie du sujet via le pipeline existant
+// POST /api/users/notion-quizzes/custom (jamais un deuxième format de
+// connaissance, cf. adoptAiLearnNextProposal, qcm-du-jour.html). Best-effort :
+// un échec ici ne remet jamais en cause la création déjà réussie.
+app.post("/api/users/recommendations/learn-next/ai-fallback/adopt", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false });
+    const gapSignature = String(req.body?.gapSignature || "").trim();
+    const title = String(req.body?.title || "").trim().slice(0, learnNextConfig.AI_FALLBACK_MAX_TITLE_LENGTH);
+    if (!gapSignature || !title) return res.status(400).json({ ok: false });
+
+    await learnNextRepository.markGapProposalAdopted(supabase, gapSignature, title);
+    recordAiUsage(supabase, { feature: "learn_next_ai_fallback_adopted", success: true });
+    invalidateLearnNextRecommendations(validation.legacyKey);
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[learn-next ai-fallback] adopt :", error.message);
+    res.json({ ok: false });
+  }
+});
+
 // ── Intégration Noès (mission du 26/08/2026, finalisée le 27/08/2026) ──────
 // Vidéo avatar : Noès pose une question, marque une pause, donne la réponse
 // — jusqu'à 5 connaissances par vidéo. Toute la logique métier (cache
@@ -17563,6 +17817,50 @@ const noesDeps = {
   inFlightMap: _noesVideoSubmissionInFlight,
   config: NOES_CONFIG
 };
+
+// Un suivi en arrière-plan par vidéo suffit. Il rend l'automatisation
+// complète même lorsque NOES_SWEEPER_ENABLED n'est pas actif : dès que
+// RunPod termine, pollAndFinalizeNoesVideo publie le MP4 dans le stockage
+// Mnoria. Les verrous optimistes de l'orchestrateur restent le dernier filet
+// si le polling HTTP utilisateur ou une autre instance finalise en parallèle.
+const _noesAutomaticFinalizationInFlight = new Map();
+function monitorAutomaticNoesVideo(video) {
+  if (!video?.id || video.status !== "processing" || _noesAutomaticFinalizationInFlight.has(video.id)) return;
+  const monitoring = (async () => {
+    let current = video;
+    while (current?.status === "processing") {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      current = await pollAndFinalizeNoesVideo(noesDeps, current);
+    }
+    return current;
+  })();
+  _noesAutomaticFinalizationInFlight.set(video.id, monitoring);
+  monitoring
+    .catch((error) => console.warn("[noes] suivi automatique interrompu :", error.message))
+    .finally(() => _noesAutomaticFinalizationInFlight.delete(video.id));
+}
+
+// Lance la préparation Noès dès qu'un QCM libre est durablement créé et
+// rattaché à l'utilisateur. Ce travail reste volontairement asynchrone : la
+// création du QCM ne doit jamais échouer ni attendre RunPod si Noès est
+// indisponible. requestNoesVideo conserve les protections existantes
+// (video_hash, verrou de soumission, cache partagé et quota quotidien), donc
+// ouvrir ensuite « Regarder Noès » retrouve le même job ou la même vidéo au
+// lieu d'en soumettre une seconde.
+function triggerAutomaticNoesVideo({ userId, slot, quizDate, questions }) {
+  if (!slot.startsWith("notion:custom:") || !Array.isArray(questions) || !questions.length) return;
+  void requestNoesVideo(noesDeps, {
+    userId,
+    slot,
+    quizDate,
+    batchIndex: 0,
+    questions
+  })
+    .then(monitorAutomaticNoesVideo)
+    .catch((error) => {
+      console.warn("[noes] lancement automatique ignoré :", error.message);
+    });
+}
 
 // POST /api/noes/videos : soumet (ou retrouve en cache) la vidéo Noès d'un
 // lot de connaissances. RÉPOND IMMÉDIATEMENT après confirmation RunPod que

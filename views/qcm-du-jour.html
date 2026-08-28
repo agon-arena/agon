@@ -443,6 +443,11 @@
     .qcm-mes-acquis-btn {
       display: inline-flex;
       align-items: center;
+      /* Espacement icône/texte contrôlé par gap (comme .mnoria-universal-menu-item,
+         header-score-widget.js) plutôt qu'un espace texte brut entre </i> et le libellé — sa
+         largeur dépend de la taille de police du bouton et devenait donc incohérente selon le
+         viewport (demande du 27/08/2026, cf. <span> ajouté autour du libellé ci-dessous). */
+      gap: 6px;
       /* Même padding que .qcm-slot-btn (dont le padding-bottom:8px laisse la place au liseret actif
          ::after ci-dessous, demande du 26/08/2026) plutôt que 2px 4px. */
       padding: 4px 2px 8px;
@@ -463,6 +468,16 @@
       text-transform: uppercase;
       letter-spacing: 0.03em;
       cursor: pointer;
+    }
+    /* Même taille que les onglets voisins Découvrir/Ancrer/Relier (.qcm-slot-btn, cf. son
+       propre @media plus haut) sur mobile. Placée ICI, APRÈS la règle de base ci-dessus plutôt
+       que dans le @media (max-width: 480px) de .qcm-slot-btn plus haut dans le fichier : à
+       spécificité égale, l'ordre du fichier décide, et un override mobile placé avant la règle
+       de base se faisait donc écraser par elle même sur petit écran (constaté le 27/08/2026). */
+    @media (max-width: 480px) {
+      .qcm-mes-acquis-btn {
+        font-size: 14px;
+      }
     }
     .qcm-mes-acquis-btn i {
       font-size: 11px;
@@ -1693,6 +1708,26 @@
       color: #6b7280;
       line-height: 1.35;
     }
+    .qcm-learn-next-card-cta {
+      margin-top: 2px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #34505f;
+    }
+    /* Proposition IA (demande du 27/08/2026, V2 "À apprendre ensuite") : reste
+       discret, un simple liseré + badge distinct — jamais un habillage lourd
+       qui la ferait ressortir comme "expérimentale" ou "différente en mal". */
+    .qcm-learn-next-card.is-ai-proposal {
+      border-color: #e7d9c2;
+      background: #fffaf2;
+    }
+    .qcm-learn-next-card-badge.is-ai-proposal {
+      background: #f4e4c1;
+      color: #7a5a1e;
+    }
+    .qcm-learn-next-card.is-ai-proposal .qcm-learn-next-card-cta {
+      color: #7a5a1e;
+    }
     /* Corrigé des questions dans la fiche "Mes QCM" (cf.
        renderFicheQuestionCorrige) — lecture seule, jamais interactif : la
        bonne réponse est directement mise en évidence, contrairement au vrai
@@ -2574,7 +2609,7 @@
     <div class="qcm-category-group">
       <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
       <div class="qcm-mes-acquis-row">
-        <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><i class="fa-solid fa-award" aria-hidden="true"></i> Mes acquis</button>
+        <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><i class="fa-solid fa-award" aria-hidden="true"></i><span>Mes acquis</span></button>
       </div>
     </div>
     <!-- Jauge de charge d'apprentissage (demande du 17/08/2026, repositionnée
@@ -2694,19 +2729,29 @@
     if (!knowledgeAddMenu || knowledgeAddMenu.hidden) return;
     knowledgeAddMenu.hidden = true;
     knowledgeAddToggle.setAttribute('aria-expanded', 'false');
+    // Le bouton de fermeture appartient au document parent : aucun z-index
+    // interne à cette iframe ne peut placer le menu devant lui. On le remet
+    // donc seulement une fois le panneau refermé.
+    setParentIframeCloseVisible(true);
     if (options && options.restoreFocus) knowledgeAddToggle.focus();
   }
   if (knowledgeAddToggle && knowledgeAddMenu) {
     knowledgeAddToggle.addEventListener('click', function () {
       var willOpen = knowledgeAddMenu.hidden;
-      knowledgeAddMenu.hidden = !willOpen;
-      knowledgeAddToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      if (!willOpen) {
+        closeKnowledgeAddMenu();
+        return;
+      }
+      knowledgeAddMenu.hidden = false;
+      knowledgeAddToggle.setAttribute('aria-expanded', 'true');
+      setParentIframeCloseVisible(false);
     });
     knowledgeAddToggle.addEventListener('keydown', function (event) {
       if (event.key !== 'ArrowDown') return;
       event.preventDefault();
       knowledgeAddMenu.hidden = false;
       knowledgeAddToggle.setAttribute('aria-expanded', 'true');
+      setParentIframeCloseVisible(false);
       knowledgeAddMenu.querySelector('a, button')?.focus();
     });
     document.addEventListener('click', function (event) {
@@ -3960,6 +4005,18 @@
       practiceMode = false;
       if (currentSlot) window.history.replaceState({}, '', window.location.pathname);
       loadMesQcm();
+      // « Terminé » remplace immédiatement le score par la page Découvrir.
+      // Repartir explicitement de son sommet dans les trois parcours
+      // (Découvrir, Ancrer et Relier), y compris sur les navigateurs mobiles
+      // qui peuvent conserver la position après le remplacement du contenu.
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      requestAnimationFrame(function () {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      });
     };
   }
 
@@ -4301,13 +4358,13 @@
   // directement le QCM tout juste créé via loadSlot.
   // Niveau d'approfondissement toujours demandé avant génération (cf.
   // showNotionQuizLevelPicker, public/script.js — demande du 12/08/2026).
-  function submitCustomTopic(e) {
-    e.preventDefault();
-    var topic = (customSearchInput.value || '').trim();
-    if (topic.length < 3) {
-      setCustomSearchStatus('Décris le sujet en au moins 3 caractères.', true);
-      return;
-    }
+  // Extrait du corps de submitCustomTopic (demande du 27/08/2026, "Créer cet
+  // apprentissage" sur une proposition IA de la V2 doit réutiliser EXACTEMENT
+  // ce même pipeline plutôt qu'un deuxième chemin de génération) — même
+  // comportement strict qu'avant pour submitCustomTopic (onCreated est
+  // simplement absent dans son cas), niveau toujours choisi par l'utilisateur
+  // via le sélecteur existant, jamais présélectionné automatiquement.
+  function startCustomTopicGeneration(topic, onCreated) {
     if (!voterKey) {
       setCustomSearchStatus('Identifiant introuvable, recharge la page et réessaie.', true);
       return;
@@ -4329,34 +4386,67 @@
         );
         startPieSpinner();
 
+        function customGenerationErrorMessage(code, fallback) {
+          var messages = {
+            AI_CONFIG_MISSING: 'Le service IA n’est pas configuré pour le moment.',
+            AI_UNAVAILABLE: 'Le service IA est temporairement indisponible. Réessaie dans quelques instants.',
+            AI_TIMEOUT: 'La génération a pris trop de temps. Réessaie dans quelques instants.',
+            CONTENT_UNUSABLE: 'Le contenu généré n’a pas pu être exploité. Essaie de préciser le sujet.',
+            KNOWLEDGE_REJECTED: 'Aucune connaissance suffisamment fiable et importante n’a été trouvée sur ce sujet.',
+            QCM_UNUSABLE: 'La fiche a été créée, mais ses questions n’ont pas pu être validées. Réessaie ou précise le sujet.',
+            STORAGE_TEMPORARY: 'L’apprentissage n’a pas pu être enregistré pour le moment. Réessaie dans quelques instants.'
+          };
+          return messages[code] || fallback || 'Une erreur inattendue a interrompu la génération. Réessaie dans quelques instants.';
+        }
+
         fetch('/api/users/notion-quizzes/custom', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ legacyKey: voterKey, topic: topic, level: level })
         })
-          .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+          .then(function (res) {
+            return res.text().then(function (body) {
+              var data = null;
+              try { data = body ? JSON.parse(body) : null; } catch (_) {}
+              return { status: res.status, data: data, invalidJson: !data };
+            });
+          })
           .then(function (result) {
             customSearchGenerationActive = false;
             stopPieSpinner();
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
+            if (result.invalidJson) {
+              setCustomSearchStatus('Le service a renvoyé une réponse illisible. Réessaie dans quelques instants.', true);
+              return;
+            }
             if (!result.data.ok) {
-              setCustomSearchStatus(result.data.error || 'Génération impossible pour le moment.', true);
+              setCustomSearchStatus(customGenerationErrorMessage(result.data.code, result.data.error), true);
               return;
             }
             customSearchInput.value = '';
             setCustomSearchStatus('', false);
             loadSlot(result.data.slot, result.data.quizDate, result.data.label);
+            if (typeof onCreated === 'function') onCreated(result.data);
           })
           .catch(function () {
             customSearchGenerationActive = false;
             stopPieSpinner();
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
-            setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
+            setCustomSearchStatus('Connexion interrompue. Vérifie ton réseau puis réessaie.', true);
           });
         });
     });
+  }
+  function submitCustomTopic(e) {
+    e.preventDefault();
+    var topic = (customSearchInput.value || '').trim();
+    if (topic.length < 3) {
+      setCustomSearchStatus('Décris le sujet en au moins 3 caractères.', true);
+      return;
+    }
+    startCustomTopicGeneration(topic);
   }
   customSearchForm.addEventListener('submit', submitCustomTopic);
   // <textarea> plutôt qu'un <input> (cf. 12/08/2026) : Entrée y insère une
@@ -4733,6 +4823,11 @@
     discovery: { label: 'Découverte', badgeClass: 'is-discovery' },
     continuity: { label: 'Suite logique', badgeClass: '' }
   };
+  // V2 (demande du 27/08/2026) : une proposition IA réellement nouvelle
+  // (isAiProposal=true, cf. GET .../ai-fallback) reste discrète — jamais
+  // "IA"/"score"/"algorithme" affiché, juste "Mnoria pense que ça vaut le
+  // coup" (section 10 de la mission).
+  var LEARN_NEXT_AI_PROPOSAL_BADGE = { label: '✨ Proposition pour toi', badgeClass: 'is-ai-proposal' };
   function sendLearnNextEvent(item, eventType) {
     if (!voterKey) return;
     fetch('/api/users/recommendations/learn-next/events', {
@@ -4751,6 +4846,30 @@
       })
     }).catch(function () {});
   }
+  // Clic sur "Créer cet apprentissage" (proposition IA réellement nouvelle,
+  // jamais encore une fiche/QCM générée à ce stade, cf. section 8 de la
+  // mission) : réutilise EXACTEMENT le pipeline "Générer avec l'IA" existant
+  // (startCustomTopicGeneration) — même sélecteur de niveau, même génération,
+  // même ouverture du QCM au clic. Rend visible la barre de recherche (avec
+  // son statut/spinner) le temps de la génération, comme pour une recherche
+  // manuelle.
+  function adoptAiLearnNextProposal(item) {
+    closeMesQcmLearnNextModal();
+    aiFormExpanded = true;
+    updateCustomSearchVisibility();
+    if (customSearchInput) customSearchInput.value = item.title;
+    startCustomTopicGeneration(item.title, function () {
+      // Best-effort : marque la proposition adoptée (jamais reproposée telle
+      // quelle, cf. section 9) et invalide le cache de recommandations côté
+      // serveur — un échec ici ne remet jamais en cause la création déjà
+      // réussie ci-dessus.
+      fetch('/api/users/recommendations/learn-next/ai-fallback/adopt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legacyKey: voterKey, gapSignature: item.gapSignature, title: item.title })
+      }).catch(function () {});
+    });
+  }
   var mesQcmLearnNextModalEls = null;
   function closeMesQcmLearnNextModal() {
     if (!mesQcmLearnNextModalEls) return;
@@ -4765,23 +4884,51 @@
       return;
     }
     listEl.innerHTML = items.map(function (item, i) {
-      var meta = LEARN_NEXT_TYPE_META[item.recommendationType] || LEARN_NEXT_TYPE_META.continuity;
+      var meta = item.isAiProposal
+        ? LEARN_NEXT_AI_PROPOSAL_BADGE
+        : (LEARN_NEXT_TYPE_META[item.recommendationType] || LEARN_NEXT_TYPE_META.continuity);
       var badge = meta.label ? '<span class="qcm-learn-next-card-badge ' + meta.badgeClass + '">' + escapeHtml(meta.label) + '</span>' : '';
-      return '<button type="button" class="qcm-learn-next-card" data-index="' + i + '">' +
+      var reasonText = item.isAiProposal ? (item.reason || '') : (item.reasonText || '');
+      var ctaText = item.isAiProposal ? 'Créer cet apprentissage' : 'Apprendre';
+      return '<button type="button" class="qcm-learn-next-card' + (item.isAiProposal ? ' is-ai-proposal' : '') + '" data-index="' + i + '">' +
         badge +
-        '<span class="qcm-learn-next-card-name">' + escapeHtml(item.name || 'Connaissance') + '</span>' +
-        '<span class="qcm-learn-next-card-reason">' + escapeHtml(item.reasonText || '') + '</span>' +
+        '<span class="qcm-learn-next-card-name">' + escapeHtml(item.name || item.title || 'Connaissance') + '</span>' +
+        '<span class="qcm-learn-next-card-reason">' + escapeHtml(reasonText) + '</span>' +
+        '<span class="qcm-learn-next-card-cta">' + escapeHtml(ctaText) + '</span>' +
       '</button>';
     }).join('');
     listEl.querySelectorAll('.qcm-learn-next-card').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var item = items[parseInt(btn.getAttribute('data-index'), 10)];
         if (!item) return;
+        if (item.isAiProposal) {
+          adoptAiLearnNextProposal(item);
+          return;
+        }
         sendLearnNextEvent(item, 'opened');
         closeMesQcmLearnNextModal();
         openMesQcmFicheByLink(item.subjectType, item.subjectSourceId, item.name);
       });
     });
+  }
+  // Récupère (best-effort, jamais bloquant, cf. section 16 de la mission) les
+  // propositions IA éventuelles APRÈS avoir déjà affiché les recommandations
+  // V1 — jamais avant : l'utilisateur voit toujours immédiatement de bonnes
+  // recommandations existantes, une proposition supplémentaire n'apparaît
+  // qu'ensuite si le catalogue Mnoria ne suffisait pas. Ré-affiche la liste
+  // complète (V1 + proposition) plutôt qu'un ajout incrémental, plus simple
+  // et sans risque d'index désynchronisés.
+  function fetchAndAppendAiFallbackProposals(listEl, currentItems) {
+    if (!voterKey) return;
+    fetch('/api/users/recommendations/learn-next/ai-fallback?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.ok ? res.json() : { proposals: [] }; })
+      .then(function (data) {
+        if (!listEl.isConnected) return; // modal refermé entre-temps
+        var proposals = Array.isArray(data && data.proposals) ? data.proposals : [];
+        if (!proposals.length) return;
+        renderLearnNextModalList(listEl, currentItems.concat(proposals));
+      })
+      .catch(function () {});
   }
   function openMesQcmLearnNextModal() {
     closeMesQcmActionModal();
@@ -4828,6 +4975,7 @@
       .then(function (data) {
         var items = Array.isArray(data && data.recommendations) ? data.recommendations : [];
         renderLearnNextModalList(listEl, items);
+        fetchAndAppendAiFallbackProposals(listEl, items);
       })
       .catch(function () {
         listEl.innerHTML = '<p class="qcm-state-message">Impossible de charger les préconisations pour le moment.</p>';

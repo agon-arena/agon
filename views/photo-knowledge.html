@@ -9,7 +9,13 @@
 <style>
   /* Page volontairement autonome (pas de dépendance à public/script.js) :
      flux court, isolé, pas encore relié au reste de l'interface mémoire. */
+  html {
+    min-height: 100%;
+    background: #f3f4f6;
+  }
   body.page-photo-knowledge {
+    min-height: 100vh;
+    box-sizing: border-box;
     max-width: 640px;
     margin: 0 auto;
     padding: 24px 16px 64px;
@@ -47,7 +53,28 @@
     cursor: pointer;
   }
   .pk-btn.secondary { background: #eef2f4; color: #243038; }
+  .pk-btn.discreet {
+    padding: 6px 11px;
+    border: 1px solid #dfe6ea;
+    background: transparent;
+    color: #6b7280;
+    font-size: 0.78rem;
+  }
+  .pk-btn.discreet:hover { border-color: #b8c4cc; background: #f8fafb; color: #3f4d57; }
   .pk-btn:disabled { opacity: 0.5; cursor: default; }
+  .pk-file-picker-btn { position: relative; margin-top: 10px; }
+  .pk-file-picker-btn:focus-within { outline: 2px solid #647984; outline-offset: 2px; }
+  .pk-file-input-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .pk-preview { max-width: 100%; max-height: 280px; border-radius: 8px; margin: 12px 0; display: none; }
   .pk-state { display: none; }
   .pk-state.active { display: block; }
@@ -69,10 +96,10 @@
   .pk-url-compose { display: grid; gap: 12px; }
   .pk-knowledge-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 10px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
     align-items: start;
-    padding: 12px 0;
+    padding: 18px 0;
     border-bottom: 1px solid #eef2f4;
   }
   .pk-knowledge-item:last-child { border-bottom: none; }
@@ -81,6 +108,7 @@
     min-height: 68px;
     box-sizing: border-box;
     resize: vertical;
+    overflow-y: hidden;
     border: 1px solid #d8e0e5;
     border-radius: 8px;
     padding: 9px 10px;
@@ -92,6 +120,7 @@
   }
   .pk-knowledge-text:focus { outline: none; border-color: #647984; background: #fff; }
   .pk-delete-btn {
+    justify-self: center;
     border: 0;
     background: transparent;
     color: #7a8a96;
@@ -100,7 +129,7 @@
     font-size: 0.82rem;
   }
   .pk-delete-btn:hover { color: #b3261e; }
-  .pk-evidence { grid-column: 1; font-size: 0.8rem; color: #7a8a96; margin-top: -3px; font-style: italic; }
+  .pk-evidence { font-size: 0.8rem; color: #7a8a96; margin-top: -3px; font-style: italic; }
   .pk-source-title { font-weight: 600; margin-bottom: 12px; }
   .pk-manual-title-wrap { display: block; margin-bottom: 18px; font-size: 0.9rem; font-weight: 600; }
   .pk-manual-title-input {
@@ -117,6 +146,30 @@
   }
   .pk-manual-title-input:focus { outline: none; border-color: #647984; background: #fff; }
   .pk-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  #pk-state-pick > .pk-actions,
+  #pk-state-results > .pk-actions { justify-content: center; }
+  .pk-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(17, 24, 39, 0.55);
+  }
+  .pk-confirm-modal {
+    width: min(100%, 400px);
+    box-sizing: border-box;
+    padding: 20px;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 20px 45px rgba(17, 24, 39, 0.25);
+    text-align: center;
+  }
+  .pk-confirm-title { margin: 0 0 8px; color: #111827; font-size: 1.12rem; }
+  .pk-confirm-text { margin: 0; color: #5a6b78; font-size: 0.92rem; line-height: 1.45; }
+  .pk-confirm-actions { display: flex; justify-content: center; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
   .pk-spinner {
     width: 22px; height: 22px; border-radius: 50%;
     border: 3px solid #dfe6ea; border-top-color: #243038;
@@ -133,8 +186,11 @@
   <!-- État 1 : import -->
   <div id="pk-state-pick" class="pk-card pk-state active">
     <div class="pk-dropzone">
-      <p id="pk-picker-help">Choisis une image (JPEG, PNG ou WEBP, 10 Mo maximum).</p>
-      <input type="file" id="pk-file-input" accept="image/jpeg,image/png,image/webp" capture="environment" style="margin-top:10px;">
+      <p id="pk-picker-help">Prends une photo ou choisis une image existante dans tes photos ou tes fichiers (JPEG, PNG ou WEBP, 40 Mo maximum).</p>
+      <label class="pk-btn pk-file-picker-btn" for="pk-file-input">
+        <span id="pk-file-picker-label">Choisir une photo ou un fichier</span>
+        <input type="file" id="pk-file-input" class="pk-file-input-hidden" accept="image/jpeg,image/png,image/webp">
+      </label>
     </div>
     <div id="pk-text-compose" class="pk-text-compose" hidden>
       <label>Titre / thème <span style="font-weight:400; color:#7a8a96;">(facultatif)</span>
@@ -195,22 +251,41 @@
       Titre / thème <span style="font-weight:400; color:#7a8a96;">(facultatif)</span>
       <input id="pk-manual-title-input" class="pk-manual-title-input" type="text" maxlength="160" placeholder="Ex. Révolution française">
     </label>
-    <p id="pk-editor-instruction">Sélectionne les connaissances que tu veux mémoriser.</p>
+    <p id="pk-editor-instruction">Supprime simplement les connaissances que tu ne veux pas mémoriser.</p>
     <p id="pk-count" class="pk-count" hidden></p>
     <ul id="pk-knowledge-list" class="pk-knowledge-list"></ul>
     <div class="pk-actions">
       <button class="pk-btn secondary" id="pk-add-row-btn" type="button">+ Ajouter une connaissance</button>
       <button class="pk-btn" id="pk-add-btn">Ajouter à ma mémoire</button>
-      <button class="pk-btn secondary" id="pk-results-choose-other-btn">Choisir une autre image</button>
+      <button class="pk-btn discreet" id="pk-results-choose-other-btn">Analyser une autre photo</button>
     </div>
     <p id="pk-add-status" class="pk-info" role="status" style="display:none; margin-top:12px;"></p>
+  </div>
+
+  <div class="pk-confirm-overlay" id="pk-reset-confirm" role="dialog" aria-modal="true" aria-labelledby="pk-reset-confirm-title" hidden>
+    <div class="pk-confirm-modal">
+      <h2 class="pk-confirm-title" id="pk-reset-confirm-title">Analyser une autre photo ?</h2>
+      <p class="pk-confirm-text">Toutes les connaissances affichées et tes modifications seront perdues.</p>
+      <div class="pk-confirm-actions">
+        <button class="pk-btn secondary" id="pk-reset-cancel-btn" type="button">Annuler</button>
+        <button class="pk-btn" id="pk-reset-confirm-btn" type="button">Continuer</button>
+      </div>
+    </div>
   </div>
 
 <script>
 (function () {
   "use strict";
 
-  var MAX_BYTES = 10 * 1024 * 1024;
+  // 40 Mo (demande du 27/08/2026, "toujours trop volumineux") : le fichier
+  // photo d'origine est maintenant redimensionné/compressé côté client avant
+  // envoi (cf. resizeImageFileToDataUrl plus bas), donc sa taille de départ
+  // n'a plus grand-chose à voir avec ce qui part réellement au serveur — les
+  // 10 Mo précédents bloquaient encore des photos de téléphone récent
+  // (souvent 10-20 Mo) avant même d'atteindre la compression. Reste un
+  // plafond raisonnable pour éviter de charger un fichier énorme en mémoire
+  // (l'image d'origine, pas le résultat compressé) juste pour la redimensionner.
+  var MAX_BYTES = 40 * 1024 * 1024;
   var ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
   var isManualMode = window.location.pathname === "/manual-knowledge";
   var isPdfMode = window.location.pathname === "/pdf-knowledge";
@@ -228,6 +303,9 @@
     states.forEach(function (s) {
       document.getElementById("pk-state-" + s).classList.toggle("active", s === name);
     });
+    if (name === "results") {
+      requestAnimationFrame(resizeAllKnowledgeTextareas);
+    }
   }
 
   var fileInput = document.getElementById("pk-file-input");
@@ -279,22 +357,56 @@
   // divisée par 5 à 10 en général. PDF non concerné (traité tel quel).
   var PHOTO_KNOWLEDGE_MAX_DIMENSION_PX = 2200;
   var PHOTO_KNOWLEDGE_JPEG_QUALITY = 0.85;
+  // Marge confortable sous la limite du corps JSON côté serveur (14 Mo,
+  // /api/photo-knowledge/analyze) : la longueur d'un data URL base64 = à peu
+  // près sa taille en octets (caractères ASCII), donc directement comparable
+  // sans calcul supplémentaire.
+  var PHOTO_KNOWLEDGE_TARGET_DATA_URL_LENGTH = 6 * 1024 * 1024;
   function resizeImageFileToDataUrl(file, maxDimension, quality) {
     return new Promise(function (resolve, reject) {
       var objectUrl = URL.createObjectURL(file);
       var img = new Image();
       img.onload = function () {
         URL.revokeObjectURL(objectUrl);
-        var scale = Math.min(1, maxDimension / Math.max(img.naturalWidth, img.naturalHeight));
-        var width = Math.max(1, Math.round(img.naturalWidth * scale));
-        var height = Math.max(1, Math.round(img.naturalHeight * scale));
-        var canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        var ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("Redimensionnement indisponible sur cet appareil.")); return; }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
+        try {
+          // Un seul passage ne suffisait pas toujours (demande du 27/08/2026,
+          // "toujours/encore trop volumineux" malgré une première compression
+          // fixe à 2200px/0.85) : on redescend ici progressivement en
+          // dimension ET en qualité jusqu'à repasser sous la cible, plutôt que
+          // de parier sur un seul réglage — la taille réelle après compression
+          // JPEG dépend beaucoup du contenu de la photo (netteté, détails),
+          // pas seulement de ses dimensions d'origine.
+          var attempts = [
+            { dim: maxDimension, q: quality },
+            { dim: maxDimension, q: 0.6 },
+            { dim: 1600, q: 0.6 },
+            { dim: 1200, q: 0.5 },
+            { dim: 900, q: 0.45 }
+          ];
+          var lastDataUrl = null;
+          for (var i = 0; i < attempts.length; i++) {
+            var scale = Math.min(1, attempts[i].dim / Math.max(img.naturalWidth, img.naturalHeight));
+            var width = Math.max(1, Math.round(img.naturalWidth * scale));
+            var height = Math.max(1, Math.round(img.naturalHeight * scale));
+            var canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            var ctx = canvas.getContext("2d");
+            if (!ctx) { reject(new Error("Redimensionnement indisponible sur cet appareil.")); return; }
+            ctx.drawImage(img, 0, 0, width, height);
+            lastDataUrl = canvas.toDataURL("image/jpeg", attempts[i].q);
+            if (lastDataUrl.length <= PHOTO_KNOWLEDGE_TARGET_DATA_URL_LENGTH) {
+              resolve(lastDataUrl);
+              return;
+            }
+          }
+          // Dernier essai (le plus compressé) malgré tout, plutôt que
+          // d'échouer — la limite serveur (14 Mo) garde une marge au-dessus
+          // de la cible visée ici (6 Mo).
+          resolve(lastDataUrl);
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error("Impossible de traiter cette image."));
+        }
       };
       img.onerror = function () {
         URL.revokeObjectURL(objectUrl);
@@ -313,7 +425,7 @@
       return;
     }
     if (file.size > MAX_BYTES) {
-      showError(isPdfMode ? "Fichier trop lourd (20 Mo maximum)." : "Fichier trop lourd (10 Mo maximum).");
+      showError(isPdfMode ? "Fichier trop lourd (20 Mo maximum)." : "Fichier trop lourd (40 Mo maximum).");
       return;
     }
 
@@ -336,7 +448,18 @@
       reader.readAsDataURL(file);
     } else {
       resizeImageFileToDataUrl(file, PHOTO_KNOWLEDGE_MAX_DIMENSION_PX, PHOTO_KNOWLEDGE_JPEG_QUALITY)
-        .then(function (dataUrl) { onFileReady(dataUrl, "image/jpeg"); })
+        .then(function (dataUrl) {
+          // Filet de sécurité (demande du 27/08/2026) : même après compression
+          // dégressive, si le résultat dépasse encore largement la cible visée,
+          // prévenir tout de suite plutôt que de laisser partir une requête vouée
+          // à échouer côté serveur (limite du corps JSON, 14 Mo) — message
+          // distinct pour repérer facilement ce cas s'il se reproduit.
+          if (dataUrl.length > 13 * 1024 * 1024) {
+            showError("Cette photo reste trop volumineuse même compressée. Essaie une autre photo ou une capture d'écran du document.");
+            return;
+          }
+          onFileReady(dataUrl, "image/jpeg");
+        })
         .catch(function (error) { showError(error.message || "Impossible de lire ce fichier."); });
     }
   });
@@ -379,6 +502,18 @@
     if (isPdfMode || isTextMode || isUrlMode || isYoutubeMode) countEl.textContent = count + " connaissance" + (count > 1 ? "s" : "") + " proposée" + (count > 1 ? "s" : "") + " — maximum " + currentMaxKnowledge;
   }
 
+  function resizeKnowledgeTextarea(textarea) {
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = Math.max(68, textarea.scrollHeight + 2) + "px";
+  }
+
+  function resizeAllKnowledgeTextareas() {
+    document.querySelectorAll("#pk-knowledge-list .pk-knowledge-text").forEach(resizeKnowledgeTextarea);
+  }
+
+  window.addEventListener("resize", resizeAllKnowledgeTextareas);
+
   function appendKnowledgeRow(item) {
     var list = document.getElementById("pk-knowledge-list");
     var rowId = "pk-knowledge-text-" + nextKnowledgeRowId++;
@@ -392,6 +527,9 @@
     textEl.rows = 2;
     textEl.setAttribute("aria-label", "Texte de la connaissance");
     textEl.value = item && item.knowledge ? String(item.knowledge) : "";
+    textEl.addEventListener("input", function () {
+      resizeKnowledgeTextarea(textEl);
+    });
 
     var deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -412,6 +550,7 @@
       li.appendChild(evidenceEl);
     }
     list.appendChild(li);
+    resizeKnowledgeTextarea(textEl);
     updateEditorActions();
     return textEl;
   }
@@ -486,7 +625,32 @@
   document.getElementById("pk-retake-btn").addEventListener("click", resetPicker);
   document.getElementById("pk-choose-other-btn").addEventListener("click", resetPicker);
   document.getElementById("pk-empty-choose-other-btn").addEventListener("click", resetPicker);
-  document.getElementById("pk-results-choose-other-btn").addEventListener("click", resetPicker);
+  var resultsChooseOtherBtn = document.getElementById("pk-results-choose-other-btn");
+  var resetConfirm = document.getElementById("pk-reset-confirm");
+  var resetCancelBtn = document.getElementById("pk-reset-cancel-btn");
+  var resetConfirmBtn = document.getElementById("pk-reset-confirm-btn");
+
+  function closeResetConfirmation() {
+    resetConfirm.hidden = true;
+    resultsChooseOtherBtn.focus();
+  }
+
+  resultsChooseOtherBtn.addEventListener("click", function () {
+    resetConfirm.hidden = false;
+    resetCancelBtn.focus();
+  });
+  resetCancelBtn.addEventListener("click", closeResetConfirmation);
+  resetConfirmBtn.addEventListener("click", function () {
+    resetConfirm.hidden = true;
+    resetPicker();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  resetConfirm.addEventListener("click", function (event) {
+    if (event.target === resetConfirm) closeResetConfirmation();
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !resetConfirm.hidden) closeResetConfirmation();
+  });
 
   function getLegacyKey() {
     var key = null;
@@ -618,6 +782,7 @@
     document.getElementById("pk-page-title").textContent = "Importer des connaissances depuis un PDF";
     document.getElementById("pk-page-subtitle").textContent = "Choisis un PDF contenant du texte. Les connaissances proposées ne seront mémorisées qu'après ta validation.";
     document.getElementById("pk-picker-help").textContent = "Choisis un PDF texte (20 Mo et 100 pages maximum).";
+    document.getElementById("pk-file-picker-label").textContent = "Choisir un PDF";
     fileInput.accept = "application/pdf";
     fileInput.removeAttribute("capture");
     analyzeBtn.textContent = "Analyser le PDF";
