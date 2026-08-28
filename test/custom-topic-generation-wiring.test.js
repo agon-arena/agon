@@ -16,6 +16,8 @@ test("la panne reproduite après création de fiche est identifiée comme QCM_UN
   assert.match(server, /reasonCounts: questionQualityMetrics\?\.reasonCounts/);
   assert.match(server, /diagnostics=\$\{JSON\.stringify\(safeDiagnostics\)\}/);
   assert.match(view, /\[qcm-generation-diagnostics\]/);
+  assert.match(view, /Référence diagnostic/);
+  assert.match(view, /reasonCounts/);
 });
 
 test("les échecs IA, parsing, admission et stockage ont des codes distincts", () => {

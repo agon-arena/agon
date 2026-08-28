@@ -4464,6 +4464,21 @@
           return messages[code] || fallback || 'Une erreur inattendue a interrompu la génération. Réessaie dans quelques instants.';
         }
 
+        function customGenerationDiagnosticMessage(diagnostics) {
+          if (!diagnostics || typeof diagnostics !== 'object') return '';
+          var reasons = diagnostics.reasonCounts && typeof diagnostics.reasonCounts === 'object'
+            ? Object.keys(diagnostics.reasonCounts).sort().map(function (code) {
+                return code + '×' + Number(diagnostics.reasonCounts[code] || 0);
+              }).filter(function (value) { return !/×0$/.test(value); })
+            : [];
+          if (diagnostics.criticErrorCode) reasons.push(String(diagnostics.criticErrorCode));
+          if (!reasons.length) {
+            reasons.push('générées=' + Number(diagnostics.generatedQuestionCount || 0));
+            reasons.push('validées=' + Number(diagnostics.finalQualityAcceptedCount || 0));
+          }
+          return reasons.length ? ' Référence diagnostic : ' + reasons.join(', ') + '.' : '';
+        }
+
         fetch('/api/users/notion-quizzes/custom', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4493,7 +4508,10 @@
               if (result.data.diagnostics) {
                 console.warn('[qcm-generation-diagnostics]', result.data.code, result.data.diagnostics);
               }
-              setCustomSearchStatus(customGenerationErrorMessage(result.data.code, result.data.error), true);
+              setCustomSearchStatus(
+                customGenerationErrorMessage(result.data.code, result.data.error) + customGenerationDiagnosticMessage(result.data.diagnostics),
+                true
+              );
               return;
             }
             customTopicGenerationLabel = '';
