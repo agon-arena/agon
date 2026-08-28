@@ -62,28 +62,10 @@
       background-position: center;
       background-repeat: no-repeat;
     }
-    /* Bandeau bas blanc de la page Apprentissage. Fixé au viewport mais placé derrière le
-       contenu : l'important padding-bottom déjà réservé au scroll reste inchangé et aucune
-       commande du QCM n'est masquée. */
-    body.page-qcm-du-jour::after {
-      content: '';
-      position: fixed;
-      z-index: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: calc(72px + env(safe-area-inset-bottom, 0px));
-      background: #ffffff;
-      pointer-events: none;
-    }
-    body.page-qcm-du-jour .qcm-page-shell {
-      position: relative;
-      z-index: 1;
-    }
-    @media (max-width: 768px) {
-      body.page-qcm-du-jour::after {
-        height: calc(78px + env(safe-area-inset-bottom, 0px));
-      }
+    /* Apprentissage reprend le véritable bandeau de navigation d'index. */
+    body.page-qcm-du-jour .qcm-home-bottom-nav {
+      z-index: 10020;
+      padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
     }
     /* html.in-iframe (pas body.in-iframe) : la classe est posée sur
        <html> de façon synchrone dès l'exécution de ce script (ligne ~21),
@@ -6214,6 +6196,43 @@
     attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.qcm-panel' });
   }
 })();
+</script>
+<nav class="home-bottom-nav qcm-home-bottom-nav" aria-label="Navigation principale">
+  <button type="button" class="home-bottom-nav-item" aria-label="Explorer" onclick="qcmBottomNavHome()">
+    <i class="fa-regular fa-compass" aria-hidden="true"></i><span>Explorer</span>
+  </button>
+  <button type="button" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="qcmBottomNavOpen('/create')">
+    <i class="fa-solid fa-plus" aria-hidden="true"></i><span>Ouvrir</span>
+  </button>
+  <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
+    <i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>Actualiser</span>
+  </button>
+  <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="qcmBottomNavHome()">
+    <i class="fa-solid fa-house" aria-hidden="true"></i><span>Accueil</span>
+  </button>
+  <button type="button" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="qcmBottomNavOpen('/notifications')">
+    <i class="fa-regular fa-bell" aria-hidden="true"></i><span>Alertes</span>
+  </button>
+</nav>
+<script>
+function qcmBottomNavOpen(path) {
+  try {
+    if (window.parent && window.parent !== window && typeof window.parent.openDebateIframeModal === 'function') {
+      window.parent.openDebateIframeModal(path);
+      return;
+    }
+  } catch (error) {}
+  window.location.href = path;
+}
+function qcmBottomNavHome() {
+  try {
+    if (window.parent && window.parent !== window && typeof window.parent.closeDebateIframeModal === 'function') {
+      window.parent.closeDebateIframeModal({ skipReturnLoader: true });
+      return;
+    }
+  } catch (error) {}
+  window.location.href = '/?skipStartup=1';
+}
 </script>
 </body>
 </html>
