@@ -62,6 +62,22 @@
       background-position: center;
       background-repeat: no-repeat;
     }
+    /* Sur desktop, la marge basse du contenu peut appartenir au canevas de
+       <html> plutôt qu'aux pixels peints par <body>. Le fond racine bleu
+       pétrole devenait alors visible en fin de défilement. Peindre la même
+       texture sur les deux surfaces garantit un fond neuronal continu. */
+    @media (min-width: 769px) {
+      html:has(body.page-qcm-du-jour.qcm-learning-background),
+      body.page-qcm-du-jour.qcm-learning-background {
+        background-image:
+          linear-gradient(rgba(16, 24, 32, 0.72), rgba(16, 24, 32, 0.72)),
+          url('/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+      }
+    }
     /* Apprentissage reprend le véritable bandeau de navigation d'index. */
     body.page-qcm-du-jour .qcm-home-bottom-nav {
       z-index: 10020;
@@ -181,6 +197,13 @@
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
     }
+    /* À la première arrivée seulement, le panneau conserve sa place mais ne
+       peint aucun enfant avant que données, jauge, rubriques et police soient
+       toutes prêtes. La classe est retirée une seule fois par
+       signalIframeReady : aucun affichage successif bouton -> jauge -> liste. */
+    .qcm-panel.qcm-panel-awaiting-content {
+      visibility: hidden;
+    }
     .qcm-panel-close {
       position: absolute;
       top: 9px;
@@ -255,9 +278,9 @@
     }
     /* Charge de mémorisation (demande du 17/08/2026, remplacée le 27/08/2026
        par une barre de progression horizontale — l'ancien cadran à aiguille
-       jugé trop massif). chargePercent = min(gauge.ratio*100, 100), cf.
-       renderLoadGauge ; gauge.ratio/niveau/seuils viennent du serveur
-       (lib/spaced-repetition/learning-load.js), non modifiés ici. */
+       jugé trop massif). L'échelle visuelle atteint désormais 100 % au rythme
+       idéal de 12 questions ; gauge.ratio/niveau/seuils restent calculés par
+       le serveur (lib/spaced-repetition/learning-load.js), sans modification. */
     .qcm-load-gauge {
       display: none;
       flex-direction: column;
@@ -350,16 +373,15 @@
     .qcm-load-gauge-bar-fill-busy { --gauge-color-start: #ffad62; --gauge-color-end: #e45d16; }
     .qcm-load-gauge-bar-fill-overloaded { --gauge-color-start: #fa8585; --gauge-color-end: #d83232; }
     /* Repère "Idéal" (demande du 17/08/2026, repositionné en barre le
-       27/08/2026) : position fixe à gauche = LOAD_GAUGE_IDEAL_QUESTIONS /
-       LOAD_GAUGE_DAILY_CAP (60 %), posée une seule fois en JS
-       (initLoadGaugeIdealMarker) — indépendante de la charge réelle. Trait
+       27/08/2026) : placé à l'extrémité des 100 %, qui représentent désormais
+       les 12 questions du rythme idéal. Sa position reste indépendante de la charge réelle. Trait
        sombre et court, chevauchant la barre pour rester lisible quelle que
        soit la couleur du remplissage dessous. */
     .qcm-load-gauge-ideal-marker {
       position: absolute;
       z-index: 2;
       top: -6px;
-      left: 60%;
+      left: 100%;
       width: 2px;
       height: 40px;
       background: #111827;
@@ -382,11 +404,11 @@
     }
     .qcm-load-gauge-ideal-label {
       display: block;
-      width: 0;
+      width: max-content;
       margin: 7px 0 0;
-      left: 60%;
+      left: 100%;
       position: relative;
-      transform: translateX(-50%);
+      transform: translateX(-100%);
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 10px;
       font-weight: 700;
@@ -2755,7 +2777,7 @@
   </button>
 </header>
 <main class="qcm-page-shell">
-  <section class="qcm-panel" id="qcm-panel" aria-live="polite">
+  <section class="qcm-panel qcm-panel-awaiting-content" id="qcm-panel" aria-live="polite">
     <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Retourner aux apprentissages" title="Retourner aux apprentissages">
       <i class="fa-solid fa-xmark" aria-hidden="true"></i>
     </button>
@@ -3120,19 +3142,29 @@
   function signalIframeReady() {
     if (iframeReadySignaled) return;
     iframeReadySignaled = true;
-    // En page autonome (lien direct, nouvel onglet, lancement PWA), il n'y a
-    // pas de parent à qui poster ce message : on signale directement au voile
-    // de la page elle-même (cf. markPageArrivalLoadingOverlayReady dans
-    // script.js, désormais bloqué en attente explicite pour /apprentissage)
-    // que le vrai contenu est affiché, au lieu de le laisser disparaître au
-    // bout d'un délai générique déconnecté du fetch réel.
-    if (window.self === window.top) {
-      if (typeof markPageArrivalLoadingOverlayReady === 'function') markPageArrivalLoadingOverlayReady();
-      return;
-    }
-    try {
-      window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
-    } catch (e) {}
+    // Les quatre onglets attendent document.fonts.ready (cf.
+    // revealCategoryGroupWhenStable). Attendre cette même promesse garantit
+    // qu'ils apparaissent dans la même peinture que la jauge, le bouton et
+    // les rubriques, sans saut ni arrivée tardive d'un élément.
+    Promise.resolve(categoryLayoutReadyPromise).then(function () {
+      var panel = document.getElementById('qcm-panel');
+      if (panel) panel.classList.remove('qcm-panel-awaiting-content');
+      requestAnimationFrame(function () {
+        // En page autonome (lien direct, nouvel onglet, lancement PWA), il n'y a
+        // pas de parent à qui poster ce message : on signale directement au voile
+        // de la page elle-même (cf. markPageArrivalLoadingOverlayReady dans
+        // script.js, désormais bloqué en attente explicite pour /apprentissage)
+        // que le vrai contenu est affiché, au lieu de le laisser disparaître au
+        // bout d'un délai générique déconnecté du fetch réel.
+        if (window.self === window.top) {
+          if (typeof markPageArrivalLoadingOverlayReady === 'function') markPageArrivalLoadingOverlayReady();
+          return;
+        }
+        try {
+          window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
+        } catch (e) {}
+      });
+    });
   }
 
   // Deux onglets de haut niveau : "Mes apprentissages" (les notions choisies
@@ -5068,27 +5100,20 @@
   };
   var LOAD_GAUGE_LEVEL_ORDER = ['calm', 'moderate', 'busy', 'overloaded'];
 
-  // Repère "Idéal" sur le cadran (demande du 17/08/2026) : un rythme
-  // confortable de repasses/jour, pas un seuil d'alerte — 12 tombe dans la
-  // zone "modérée" (cf. LOAD_GAUGE_LEVEL_META), bien avant que le plafond
-  // quotidien (LOAD_GAUGE_DAILY_CAP, dupliqué de
-  // DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY côté serveur, même logique que les
-  // seuils déjà dupliqués ici) ne bascule la jauge en "élevée". Fixe : ne
-  // dépend jamais de la charge réelle affichée par l'aiguille.
-  var LOAD_GAUGE_DAILY_CAP = 20;
+  // Repère "Idéal" : un rythme confortable de 12 repasses/jour, pas un seuil
+  // d'alerte. Les niveaux calme/modéré/élevé/surchargé continuent d'utiliser
+  // le plafond technique de 20 côté serveur ; seule l'échelle visuelle du
+  // pourcentage est recalée ici sur le rythme idéal demandé.
   var LOAD_GAUGE_IDEAL_QUESTIONS = 12;
 
   // Repère "Idéal" (demande du 27/08/2026, nouvelle barre horizontale) :
-  // position fixe en % de la largeur = LOAD_GAUGE_IDEAL_QUESTIONS /
-  // LOAD_GAUGE_DAILY_CAP, indépendante de la charge réelle affichée par la
-  // barre — remplace l'ancien calcul d'angle (ratioToGaugeAngleDeg), le
-  // cadran à aiguille n'existe plus. Posée une seule fois, jamais recalculée
-  // au fil des rendus (12/20 = 60 %, ne dépend d'aucune donnée serveur).
+  // position fixe à 100 %, indépendante de la charge réelle affichée par la
+  // barre. Posée une seule fois, jamais recalculée au fil des rendus.
   (function initLoadGaugeIdealMarker() {
     var marker = document.getElementById('qcm-load-gauge-ideal-marker');
     var label = document.getElementById('qcm-load-gauge-ideal-label');
     if (!marker && !label) return;
-    var idealPercent = Math.min((LOAD_GAUGE_IDEAL_QUESTIONS / LOAD_GAUGE_DAILY_CAP) * 100, 100);
+    var idealPercent = 100;
     if (marker) marker.style.left = idealPercent + '%';
     if (label) label.style.left = idealPercent + '%';
   })();
@@ -5109,13 +5134,12 @@
     if (!loadGaugeEl || !gauge) return;
     loadGaugeEl.hidden = false;
     var meta = LOAD_GAUGE_LEVEL_META[gauge.level] || LOAD_GAUGE_LEVEL_META.calm;
-    // Pourcentage affiché (demande du 27/08/2026) : gauge.ratio est déjà le
-    // nombre de questions prévues rapporté à LOAD_GAUGE_DAILY_CAP (20) — cf.
-    // le repère "Idéal" ci-dessus, LOAD_GAUGE_IDEAL_QUESTIONS/LOAD_GAUGE_DAILY_CAP,
-    // qui utilise le même rapport. Simple mise en pourcentage arrondi et
-    // plafonné à 100, sans toucher au calcul de gauge.ratio lui-même (fait
-    // côté serveur, lib/spaced-repetition/learning-load.js).
-    var chargePercent = Math.round(Math.min(gauge.ratio * 100, 100));
+    // Le pourcentage visible exprime l'avancement vers le rythme idéal :
+    // 12 questions prévues = 100 %. Au-delà, la barre reste pleine et sa
+    // couleur/son libellé continuent de refléter le niveau calculé côté
+    // serveur. Aucun calcul FSRS ni seuil métier n'est modifié.
+    var peakLoad = Math.max(0, Number(gauge.peakLoad) || 0);
+    var chargePercent = Math.round(Math.min((peakLoad / LOAD_GAUGE_IDEAL_QUESTIONS) * 100, 100));
     if (loadGaugePercent) loadGaugePercent.textContent = chargePercent + ' %';
     if (loadGaugeBarFill) {
       loadGaugeBarFill.className = 'qcm-load-gauge-bar-fill qcm-load-gauge-bar-fill-' + gauge.level;

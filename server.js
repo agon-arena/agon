@@ -18,6 +18,10 @@ const { mapMnoriaReviewToFsrsRating } = require("./lib/spaced-repetition/rating-
 const { resolveQuestionVariantLabel, resolveActiveQuestionVariant } = require("./lib/spaced-repetition/question-variant");
 const { HELP_LEVELS, deriveHelpLevel } = require("./lib/spaced-repetition/help-level");
 const { DEFAULT_PROJECTION_DAYS, computeLearningLoadGauge } = require("./lib/spaced-repetition/learning-load");
+const {
+  buildCultureGeneraleReviewQuestionId,
+  parseCultureGeneraleReviewRef
+} = require("./lib/spaced-repetition/review-question-id");
 const learnNextConfig = require("./lib/learn-next/config");
 const learnNextScoring = require("./lib/learn-next/scoring");
 const learnNextRepository = require("./lib/learn-next/repository");
@@ -15114,16 +15118,11 @@ app.get("/api/debates/:id/notions", rateLimit("debate-notions-read", 240), async
   }
 });
 
-// Décode l'id d'une repasse de répétition espacée ("cgreview-{questionId}"
-// depuis le 10/08/2026, auparavant "cgreview-{sourceDebateId}" — cf.
-// fetchCultureGeneraleReviewInjectionForToday) pour retrouver la référence
-// d'origine (générique : peu importe pour ce parseur ce que la référence
-// désigne réellement).
-function parseCultureGeneraleReviewRef(questionId) {
-  const m = /^cgreview-(.+)$/.exec(String(questionId || ""));
-  return m ? m[1] : null;
-}
-
+// Décode l'id d'une repasse de répétition espacée. Les nouveaux ids portent
+// le numéro de passage FSRS ("cgreview-{questionId}::r{reps}") afin qu'une
+// question ratée puis resservie le même jour soit une vraie nouvelle réponse,
+// jamais verrouillée par la ligne daily_quiz_answers du passage précédent.
+// Les anciens ids "cgreview-{questionId}" restent entièrement compatibles.
 // Historique complet des réponses de ce visiteur aux questions de culture
 // générale — premières fois (culture_generale-qN historique, notion:... QCM
 // de notion) et repasses de répétition espacée (cgreview-{questionId})
@@ -15317,8 +15316,10 @@ function computeCultureGeneraleStreaks(events) {
 // (demande du 03/08/2026). Les questions en retard mais laissées de côté par
 // le plafond restent dues (pas de recalcul de date ici) : elles repasseront
 // au prochain appel tant qu'elles n'auront pas été répondues. Id
-// "cgreview-{questionId}" — jamais persistées dans daily_quiz, recalculées à
-// chaque appel (pas de cache, cf. getDailyQuizQuestions).
+// "cgreview-{questionId}::r{reps}" — jamais persistées dans daily_quiz,
+// recalculées à chaque appel (pas de cache, cf. getDailyQuizQuestions). Le
+// suffixe change à chaque passage FSRS et permet donc une nouvelle tentative
+// le même jour après un échec.
 const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 20;
 
 // Questions qu'un visiteur a explicitement écartées de ses futures repasses
@@ -15405,7 +15406,7 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
     if (!question) continue; // contenu hors fenêtre de rétention (cas des anciens slots hors "notion:%", jamais backfillés)
     due.push({
       ...resolveActiveQuestionVariant(question, reps),
-      id: `cgreview-${memoryItem.question_id}`,
+      id: buildCultureGeneraleReviewQuestionId(memoryItem.question_id, reps),
       // helpLevel : distinct de resolveActiveQuestionVariant (variant =
       // quelle formulation, helpLevel = combien d'aide) — jamais fusionné
       // dans son calcul, jamais lu par selectVariantIndex.
@@ -20214,7 +20215,8 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
     // sujet libre déjà généré, cf. POST /api/users/notion-quizzes/custom) :
     // en usage normal un (slot, question_id) donné n'a qu'un seul memory_item,
     // ce choix ne s'applique qu'au cas rare d'une régénération de sujet libre.
-    const ref = questionId.slice("cgreview-".length);
+    const ref = parseCultureGeneraleReviewRef(questionId);
+    if (!ref) return;
     const { data, error } = await supabase.from("memory_items")
       .select("id, slot, quiz_date, question_id")
       .eq("question_id", ref)
