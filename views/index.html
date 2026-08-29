@@ -1431,26 +1431,6 @@ window.addEventListener("pageshow", function() {
 
 </main>
 
-<button
-  type="button"
-  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-up"
-  onclick="(function(){var now=Date.now();if(window._lastScrollUp&&now-window._lastScrollUp<400){window.scrollTo({top:0,behavior:'smooth'});window._lastScrollUp=0;}else{scrollToAdjacentSection('up');window._lastScrollUp=now;}})()"
-  title="Défiler vers le haut"
-  aria-label="Défiler vers le haut"
->
-  <i class="fa-solid fa-chevron-up"></i>
-</button>
-
-<button
-  type="button"
-  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-down"
-  onclick="scrollToAdjacentSection('down')"
-  title="Défiler vers le bas"
-  aria-label="Défiler vers le bas"
->
-  <i class="fa-solid fa-chevron-down"></i>
-</button>
-
 <script>
 /* Restaure la position des flèches calculée à la visite précédente
    (syncIndexFloatingScrollButtonsWithBottomNav la mémorise en sessionStorage)
@@ -1525,6 +1505,30 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
+  <!-- Ma mémoire et les scores/contributions restent accessibles depuis le menu supérieur. -->
+  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
+    <i class="fa-solid fa-list-check"></i>
+    <span>Apprentissages</span>
+  </a>
+
+  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="event.preventDefault(); openDebateIframeModal('/create')">
+    <i class="fa-solid fa-plus"></i>
+    <span>Ouvrir</span>
+  </a>
+
+  <!-- forceFullPageRefresh recrée immédiatement le véritable loader (logo +
+       slogan), puis navigue seulement après sa première peinture. Aucun voile
+       bleu intermédiaire et aucune frame des bulles ne doivent rester visibles. -->
+  <button
+    type="button"
+    class="home-bottom-nav-item index-bottom-refresh-btn"
+    onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(this) : window.location.reload()"
+    aria-label="Actualiser la page"
+  >
+    <i class="fa-solid fa-rotate-right"></i>
+    <span>Actualiser</span>
+  </button>
+
   <div class="home-bottom-nav-item-wrap">
     <button
       type="button"
@@ -1567,30 +1571,6 @@ window.addEventListener("pageshow", function() {
      </div>
     </div>
   </div>
-
-  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="event.preventDefault(); openDebateIframeModal('/create')">
-    <i class="fa-solid fa-plus"></i>
-    <span>Ouvrir</span>
-  </a>
-
-  <!-- forceFullPageRefresh recrée immédiatement le véritable loader (logo +
-       slogan), puis navigue seulement après sa première peinture. Aucun voile
-       bleu intermédiaire et aucune frame des bulles ne doivent rester visibles. -->
-  <button
-    type="button"
-    class="home-bottom-nav-item index-bottom-refresh-btn"
-    onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(this) : window.location.reload()"
-    aria-label="Actualiser la page"
-  >
-    <i class="fa-solid fa-rotate-right"></i>
-    <span>Actualiser</span>
-  </button>
-
-  <!-- Ma mémoire et les scores/contributions restent accessibles depuis le menu supérieur. -->
-  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
-    <i class="fa-solid fa-list-check"></i>
-    <span>Apprentissages</span>
-  </a>
   <a href="/notifications" id="notifications-bell-bottom" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
     <i class="fa-regular fa-bell"></i>
     <span>Alertes</span>
@@ -1854,7 +1834,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260829-public-pages-top-level-v3" defer></script>
+<script src="/script.min.js?v=20260829-stable-memory-first-paint-v2" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
