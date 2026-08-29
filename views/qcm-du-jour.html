@@ -175,43 +175,6 @@
     body.qcm-learning-background .qcm-panel {
       background: rgba(255, 255, 255, 0.8);
     }
-    /* Croix de fermeture du cadre — visible sur Découvrir/Ancrer/Relier (cf.
-       setPanelCloseVisible). Demande du 17/08/2026 : rester APPARENTE même
-       en scrollant, alors que .qcm-panel n'a pas de scroll propre (c'est la
-       page qui défile). Même motif que .qcm-fiche-close (sticky) plus haut,
-       adapté ici : un ancre position:sticky, hauteur 0 (ne pousse aucun
-       contenu, contrairement à un sticky "plein" qui réserverait sa propre
-       ligne), qui épingle son bord haut au défilement — le bouton, positionné
-       en absolute PAR RAPPORT À CETTE ANCRE, reste donc toujours à la même
-       distance de son bord haut, que l'ancre soit encore à sa position
-       naturelle (haut du cadre) ou déjà épinglée en haut du viewport. */
-    .qcm-panel-close-anchor {
-      position: sticky;
-      top: var(--qcm-topbar-height, 0px);
-      height: 0;
-      overflow: visible;
-      z-index: 5;
-    }
-    .qcm-panel-close {
-      display: none;
-      position: absolute;
-      top: -20px;
-      right: -12px;
-      width: 28px;
-      height: 28px;
-      align-items: center;
-      justify-content: center;
-      border: none;
-      border-radius: 999px;
-      background: #eef3f6;
-      color: #243038;
-      font-size: 14px;
-      cursor: pointer;
-      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.18);
-    }
-    .qcm-panel-close.visible {
-      display: flex;
-    }
     .qcm-panel h1 {
       margin: 0 0 4px;
       font-family: "Barlow Condensed", Arial, sans-serif;
@@ -2660,38 +2623,8 @@
     <i class="fa-solid fa-power-off" aria-hidden="true"></i>
   </button>
 </header>
-<script>
-  // Hauteur réelle du bandeau .topbar (sticky, z-index 20, cf. style.css) —
-  // mesurée plutôt que recopiée en dur : elle varie selon le breakpoint et
-  // grandit avec env(safe-area-inset-top) en PWA standalone sur encoche.
-  // .qcm-panel-close-anchor (juste plus bas) s'épingle à cette hauteur
-  // plutôt qu'à 0, sinon la croix du cadre se retrouverait masquée SOUS le
-  // bandeau une fois les deux épinglés au même point pendant le scroll
-  // (demande du 17/08/2026, "reste apparent même en scrollant").
-  (function () {
-    // +20px de marge (demande du 17/08/2026 : la croix passe à top:-20px sur
-    // .qcm-panel-close — assez haute pour rester lisible à côté du titre,
-    // mais sans déborder du cadre, cf. réajustement du même jour) : sans
-    // cette marge supplémentaire ici, une fois épinglée sous le bandeau
-    // pendant le scroll, ce même décalage négatif ferait remonter la croix
-    // SOUS le bandeau lui-même (chevauchement) plutôt que juste sous son
-    // bord — cf. .qcm-panel-close-anchor plus bas, qui s'épingle à cette
-    // hauteur.
-    var QCM_PANEL_CLOSE_TOP_MARGIN_PX = 20;
-    function syncTopbarHeightVar() {
-      var topbar = document.querySelector('.topbar');
-      var height = (topbar ? topbar.getBoundingClientRect().height : 0) + QCM_PANEL_CLOSE_TOP_MARGIN_PX;
-      document.documentElement.style.setProperty('--qcm-topbar-height', height + 'px');
-    }
-    syncTopbarHeightVar();
-    window.addEventListener('resize', syncTopbarHeightVar, { passive: true });
-  })();
-</script>
 <main class="qcm-page-shell">
   <section class="qcm-panel" id="qcm-panel" aria-live="polite">
-    <div class="qcm-panel-close-anchor">
-      <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
-    </div>
     <h1 class="qcm-page-heading-hidden" aria-hidden="true"><span id="qcm-title-text">Découvrir</span></h1>
     <p class="qcm-subtitle qcm-page-heading-hidden" id="qcm-subtitle-text" aria-hidden="true"></p>
     <div class="qcm-category-group">
@@ -3209,7 +3142,8 @@
     var btn = document.getElementById('qcm-panel-close');
     if (btn) btn.classList.toggle('visible', visible);
   }
-  document.getElementById('qcm-panel-close').onclick = function () {
+  var qcmPanelCloseButton = document.getElementById('qcm-panel-close');
+  if (qcmPanelCloseButton) qcmPanelCloseButton.onclick = function () {
     // Sur la liste "Découvrir" elle-même (currentCategory === 'mesqcm' sans
     // currentSlot précis, cf. loadMesQcm) : "revenir à Découvrir" n'aurait
     // aucun sens, on y est déjà — ferme directement l'iframe (demande du

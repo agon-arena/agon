@@ -54,6 +54,9 @@
     document.body.appendChild(nav);
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
-  else mount();
+  // Ce script est placé en fin de <body> : le corps existe déjà, donc le
+  // bandeau peut être monté sans attendre DOMContentLoaded ni les autres
+  // scripts différés de la page.
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount, { once: true });
 })();

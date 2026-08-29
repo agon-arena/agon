@@ -86,28 +86,16 @@
   goHomeIfStale();
 })();
 </script>
-  <link rel="stylesheet" href="/style.min.css?v=20260828-bottom-nav-unified">
+  <link rel="stylesheet" href="/style.min.css?v=20260829-standalone-bottom-nav-v3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
-  <link id="mnoria-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <noscript>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   </noscript>
-  <script>
-    (function () {
-      function swap(link) { if (!link || link.rel === 'stylesheet') return; link.rel = 'stylesheet'; }
-      ['mnoria-fa-preload'].forEach(function (id) {
-        var link = document.getElementById(id);
-        if (!link) return;
-        link.addEventListener('load', function () { swap(link); }, { once: true });
-        setTimeout(function () { swap(link); }, 3000);
-      });
-    })();
-  </script>
-
   <style>
     body.create-publish-overlay-open {
       overflow: hidden;
@@ -733,16 +721,6 @@
 
   </main>
 
-<button
-  type="button"
-  class="app-floating-refresh-btn"
-  onclick="typeof forceFullPageRefresh === 'function' ? forceFullPageRefresh(this) : window.location.reload()"
-  title="Actualiser"
-  aria-label="Actualiser la page"
->
-  <i class="fa-solid fa-rotate-right"></i>
-</button>
-
   <div id="create-publish-overlay" class="create-publish-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:#ffffff; align-items:center; justify-content:center; padding:24px; box-sizing:border-box;">
     <div class="create-publish-overlay-inner" style="width:min(100%, 600px); margin:0 auto; padding:0; box-sizing:border-box; text-align:center; display:flex; flex-direction:column; gap:18px; align-items:center; justify-content:center;">
       <div class="create-publish-hourglass" aria-hidden="true"><img src="/sablier-96.png" alt=""></div>
@@ -773,9 +751,9 @@
     <span>Explorer</span>
   </button>
 
-  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
-    <i class="fa-solid fa-plus"></i>
-    <span>Ouvrir</span>
+  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages">
+    <i class="fa-solid fa-list-check"></i>
+    <span>Apprentissages</span>
   </a>
 
   <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
@@ -852,7 +830,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260826-blur-bottom-nav" defer></script>
+<script src="/script.min.js?v=20260829-create-without-scroll-hint" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

@@ -76,10 +76,11 @@
   <!-- style.min.css et Google Fonts restent bloquants sur l'accueil : sinon
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
-       cache du service worker. Font Awesome peut rester non bloquant. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260828-standalone-modal-bottom-zero-v4">
+       cache du service worker. Font Awesome est également chargé ici sans
+       délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
+  <link rel="stylesheet" href="/style.min.css?v=20260829-stable-memory-first-paint-v1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
-  <link id="mnoria-fa-preload" rel="preload" as="style" href="/vendor/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
        ça le navigateur doit télécharger + parser le CSS avant de découvrir l'URL de la police,
        laissant les icônes (ex: chevrons haut/bas flottants) invisibles pendant ce temps. Servie
@@ -90,20 +91,6 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   </noscript>
-  <script>
-    (function () {
-      function swap(link) {
-        if (!link || link.rel === 'stylesheet') return;
-        link.rel = 'stylesheet';
-      }
-      ['mnoria-fa-preload'].forEach(function (id) {
-        var link = document.getElementById(id);
-        if (!link) return;
-        link.addEventListener('load', function () { swap(link); }, { once: true });
-        setTimeout(function () { swap(link); }, 3000);
-      });
-    })();
-  </script>
   <style>
     html:not(.admin-ui-ready) [data-admin] {
       display: none !important;
@@ -341,12 +328,8 @@
       from { opacity: 0; }
       to { opacity: 1; }
     }
-    /* Bande basse pendant l'intro : sur iPhone en PWA, WebKit peint en retard le
-       loader fixed dans les derniers ~60px de l'écran — le dock et la pastille
-       "Autres actus" y apparaissent sous l'animation. On les masque tant que
-       l'intro joue : la bande montre alors le fond sombre du body, toujours
-       peint correctement. Classe retirée par tryHide() dans script.js. */
-    html.mnoria-startup-active .home-bottom-nav,
+    /* Pendant l'intro, seules les actions flottantes secondaires sont masquées.
+       Le bandeau principal reste visible et utilisable dès le premier rendu. */
     html.mnoria-startup-active .mnoria-tribunes-btn,
     html.mnoria-startup-active .app-floating-refresh-btn {
       visibility: hidden !important;
@@ -1027,7 +1010,11 @@
   </div>
 </div>
 
-<section id="mnoria-tag-trends-section" class="mnoria-tag-trends-section" hidden>
+<!-- Ma mémoire est le mode initial de l'accueil : la section doit être dans le
+     flux dès le HTML initial afin que sa hauteur finale soit mesurable avant
+     la première peinture. Les données restent chargées progressivement dans
+     le cadre, mais le cadre lui-même ne part plus d'un état hidden trop court. -->
+<section id="mnoria-tag-trends-section" class="mnoria-tag-trends-section" style="visibility:hidden">
   <!-- Embed "Ma mémoire" (demande du 08/08/2026 : bulles directement sur l'accueil, pas une
        page à part) : réutilise #mnoria-tag-trends-cloud juste en dessous comme conteneur de
        bulles (mon-univers.js retombe dessus si #mnoria-universe-cloud n'existe pas sur la page,
@@ -1481,7 +1468,22 @@ window.addEventListener("pageshow", function() {
     if (down && s.down) down.style.left = s.down;
     var back = document.querySelector(".tribunes-mobile-back-button");
     if (back && s.back) back.style.left = s.back;
-  } catch (e) {}
+  } catch (e) {
+  } finally {
+    // Le navigateur peut peindre pendant qu'il analyse encore le bas du HTML.
+    // Sur desktop cette mesure est déjà définitive. En mobile, surtout dans
+    // l'app standalone, la safe-area et le bandeau bas se stabilisent encore
+    // après le premier rendu : syncMobileCloudFrameHeight révélera la section
+    // seulement après sa seconde mesure fiable.
+    var sizedSection = document.getElementById('mnoria-tag-trends-section');
+    if (sizedSection && window.innerWidth > 768) sizedSection.style.visibility = 'visible';
+    if (sizedSection && window.innerWidth <= 768) {
+      // Filet de sécurité uniquement si le script principal ne démarre pas.
+      window.setTimeout(function () {
+        if (sizedSection.style.visibility === 'hidden') sizedSection.style.visibility = 'visible';
+      }, 2000);
+    }
+  }
 })();
 
 /* Même principe pour le cadre du nuage en standalone : la marge d'alignement
@@ -1596,7 +1598,67 @@ window.addEventListener("pageshow", function() {
   </a>
 </nav>
 
+<script>
+/* Dimensionne le cadre principal dès que son bandeau inférieur existe dans le
+   DOM, avant l'exécution différée de script.min.js. Lors d'une première visite
+   aucune hauteur n'est encore mémorisée en sessionStorage : le cadre partait
+   alors de son min-height CSS puis grandissait visiblement vers le bas. Ce
+   calcul reprend strictement la formule de syncCloudSectionHeight(). */
+(function () {
+  try {
+    var section = document.getElementById('mnoria-tag-trends-section');
+    var cloud = document.getElementById('mnoria-tag-trends-cloud');
+    var bottomNav = document.querySelector('.home-bottom-nav');
+    if (!section || !cloud || !bottomNav || section.hidden) return;
 
+    if (window.innerWidth <= 768) {
+      var isStandaloneMobile = document.body.classList.contains('is-standalone');
+      var header = document.querySelector('.topbar.topbar--mnoria-uniform');
+      var headerBottom = header ? header.offsetHeight : 0;
+      var bottomBarTop = bottomNav.getBoundingClientRect().top;
+      var desiredFrameTop = headerBottom - 8;
+      var desiredFrameBottom = bottomBarTop - 25;
+
+      section.style.marginTop = '0px';
+      var scrollYAtMeasure = window.scrollY || document.documentElement.scrollTop || 0;
+      var naturalTop = section.getBoundingClientRect().top + scrollYAtMeasure;
+      var boxTop = desiredFrameTop - 55;
+      if (isStandaloneMobile) {
+        section.style.setProperty('margin-top', (boxTop - naturalTop) + 'px', 'important');
+        section.style.setProperty('min-height', 'auto', 'important');
+      } else {
+        section.style.marginTop = (boxTop - naturalTop) + 'px';
+      }
+
+      var mobileHeight = Math.max(200, (desiredFrameBottom + 78) - boxTop);
+      cloud.style.height = mobileHeight + 'px';
+      cloud.style.minHeight = mobileHeight + 'px';
+      if (isStandaloneMobile) cloud.style.setProperty('margin-top', '0px', 'important');
+      cloud.dataset.prepaintHeight = String(mobileHeight);
+      window.__mnoriaInitialMobileCloudFrameHeight = mobileHeight;
+      return;
+    }
+
+    var docTop = section.getBoundingClientRect().top + window.scrollY;
+    var isStandaloneDesktop = document.body.classList.contains('is-standalone');
+    var standaloneBelowFoldGap = Math.round(Math.min(52, Math.max(28, window.innerHeight * 0.045)));
+    var bottomBarHeight = isStandaloneDesktop
+      ? -standaloneBelowFoldGap
+      : Math.max(
+          window.innerHeight - bottomNav.getBoundingClientRect().top,
+          bottomNav.getBoundingClientRect().height,
+          bottomNav.offsetHeight,
+          bottomNav.clientHeight
+        );
+    var baseHeight = Math.max(300, window.innerHeight - docTop - bottomBarHeight);
+
+    cloud.style.flex = '0 0 auto';
+    cloud.style.height = baseHeight + 'px';
+    cloud.dataset.prepaintHeight = String(baseHeight);
+    window.__mnoriaInitialCloudBaseHeight = baseHeight;
+  } catch (e) {}
+})();
+</script>
 
 <script>
 (function(){
@@ -1792,7 +1854,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260828-public-pages-top-level" defer></script>
+<script src="/script.min.js?v=20260829-public-pages-top-level-v3" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

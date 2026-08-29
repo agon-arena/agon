@@ -11585,12 +11585,10 @@ body.is-standalone .mnoria-tag-trends-section {
   align-items: center;
   justify-content: center;
   padding-bottom: 70px;
-  /* 100dvh (et parfois env(safe-area-inset-bottom)) peut mettre un instant à se
-     stabiliser après une navigation standalone mobile — sans transition, le
-     cadre du nuage (centré via justify-content) saute brutalement de sa
-     hauteur initiale à sa hauteur définitive. La transition lisse ce
-     changement en un mouvement fluide plutôt qu'un saut visible. */
-  transition: min-height 0.25s ease;
+  /* Le cadre est désormais dimensionné avant sa première peinture dans
+     index.html. Une transition ici réintroduirait précisément l'agrandissement
+     visible au retour sur l'accueil lorsque 100dvh se stabilise. */
+  transition: none;
 }
 
 /* Standalone : la légende "Les tendances de l'actualité…" est sortie du flux
@@ -27476,6 +27474,27 @@ html body .home-bottom-nav .home-bottom-nav-item span {
   html body .home-bottom-nav > .home-bottom-nav-item-wrap {
     flex: 0 0 min(18.5vw, 72px) !important;
     width: min(18.5vw, 72px) !important;
+  }
+}
+
+/* iOS standalone : les pages secondaires peuvent exposer une safe-area basse
+   à 0 px alors que l'écran conserve encore sa zone physique inférieure. On
+   prolonge leur bandeau comme celui de l'accueil, sans déplacer sa rangée de
+   boutons ni affecter Safari classique ou le desktop. */
+@media (display-mode: standalone) and (max-width: 768px) {
+  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile):not(.page-memory-only) {
+    /* Même scroll racine que l'accueil : overflow-x:hidden fait calculer
+       overflow-y:auto sur WebKit et stabilise immédiatement le viewport des
+       éléments fixed, sans attendre le premier geste vertical. */
+    overflow-x: hidden;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
+    .home-bottom-nav {
+    bottom: calc(0px - max(36px, env(safe-area-inset-bottom, 0px))) !important;
+    padding-bottom: calc(3px + max(36px, env(safe-area-inset-bottom, 0px))) !important;
   }
 }
 

@@ -14,12 +14,20 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260828-bottom-nav-unified" />
+<link rel="stylesheet" href="/style.min.css?v=20260829-standalone-bottom-nav-v3" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-  <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
+  <script>
+    if (window.self !== window.top) {
+      try {
+        window.top.location.replace(window.location.href);
+      } catch (error) {
+        window.top.location.href = window.location.href;
+      }
+    }
+  </script>
   <style>
     /* La page autonome est elle-même la surface d'exploration : un glissement tactile déplace
        la mémoire. Cette surcharge ne s'applique jamais à la mémoire intégrée à l'accueil, qui
@@ -693,23 +701,6 @@
 
     <div class="home-brand-block">
       <img src="/mnoria-logo-dark.png?v=20260815-visible-v2" alt="Logo mnoria" class="home-logo home-logo--mnoria" width="2172" height="724">
-    </div>
-
-    <div class="topbar-actions">
-      <div class="back-notifications-stack">
-        <button
-          type="button"
-          class="mobile-back-button"
-          onclick="window.location.href='/?skipStartup=1'; return false;"
-          aria-label="Revenir à la page précédente"
-        >
-          <i class="fa-solid fa-arrow-left"></i>
-        </button>
-
-        <div class="debate-nav-row">
-          <a href="/" class="back-link" onclick="window.location.href='/?skipStartup=1'; return false;">← Retour</a>
-        </div>
-      </div>
     </div>
 
   </div>
@@ -1409,7 +1400,7 @@ function contributionsBottomNavHome() {
 }
 </script>
 
-<script src="/script.min.js?v=20260828-hide-notifications-floating-controls" defer></script>
+<script src="/script.min.js?v=20260829-remove-page-scroll-hints" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
     import("/mon-univers.js?v=20260828-fullpage-button");

@@ -5263,7 +5263,10 @@ function setDebateIframeModalCloseButtonVisible(isVisible) {
 }
 
 function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
-  return false;
+  const safePathname = String(pathname || "");
+  return safePathname === "/notifications" ||
+    safePathname === "/contributions" ||
+    safePathname === "/mon-univers";
 }
 
 function syncDebateIframeModalPageClass(pathname = "") {
@@ -5832,7 +5835,8 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.mon-univers-frame-open #debate-iframe-modal-refresh {
       display: none !important;
     }
-    #debate-iframe-modal.notifications-frame-open #debate-iframe-modal-close {
+    #debate-iframe-modal.notifications-frame-open #debate-iframe-modal-close,
+    #debate-iframe-modal.mon-univers-frame-open #debate-iframe-modal-close {
       display: none !important;
     }
     /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
@@ -33749,17 +33753,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (location.pathname === "/create") {
     initCreate();
-    attachPageScrollFadeHint('#f3f4f6');
   }
   if (location.pathname === "/mon-univers") {
     attachPageScrollFadeHint('#f3f4f6');
   }
-  if (location.pathname === "/contributions") {
-    attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: '#scores-contributions-page' });
-  }
-  if (location.pathname === "/meilleures-idees") {
-    attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: 'main.container.home-page' });
-  }
+  // Scores et contributions ainsi que Meilleures idées utilisent une page
+  // autonome : aucun voile flou ni indicateur « suite » ne doit recouvrir
+  // leur contenu.
   if (location.pathname === "/notifications") {
     attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: 'main.container.home-page' });
   }
@@ -36475,7 +36475,12 @@ window.addEventListener('pageshow', (event) => {
 // ===== CLOUD SECTION — PLEIN ÉCRAN DESKTOP =====
 // Donne à .mnoria-tag-trends-section exactement la hauteur disponible sous son bord supérieur.
 // Le cloud (flex:1) remplit la section ; les bulles se repositionnent via ResizeObserver.
-var _cloudSectionBaseHeight = null;
+// La page d'accueil calcule cette valeur inline dès que son bandeau inférieur
+// est parsé, avant le premier rendu. On la réutilise ici afin que le moteur ne
+// reparte pas d'une seconde mesure légèrement différente au chargement.
+var _cloudSectionBaseHeight = Number.isFinite(Number(window.__mnoriaInitialCloudBaseHeight))
+  ? Number(window.__mnoriaInitialCloudBaseHeight)
+  : null;
 // ===== CLOUD FRAME — HAUTEUR DYNAMIQUE MOBILE NAVIGATEUR =====
 // Contrairement au calc(100dvh - ...) statique essayé d'abord (estimation de la hauteur du
 // bandeau bas fausse en pratique, cadre soit tronqué sous le bandeau soit trop court), on
@@ -36501,11 +36506,17 @@ var _mobileCloudFrameLocked = false;
 // la normale et RESTE ainsi, verrouillé, même une fois la barre d'adresse redépliée (demande du
 // 26/08/2026, "cadre devenu trop long verticalement"). Plafonner sur cette première mesure de
 // confiance élimine la dérive sans réintroduire de recalcul continu.
-var _mobileCloudFrameTrustedHeight = null;
+var _mobileCloudFrameTrustedHeight = Number.isFinite(Number(window.__mnoriaInitialMobileCloudFrameHeight))
+  ? Number(window.__mnoriaInitialMobileCloudFrameHeight)
+  : null;
 // Sentinelle distincte du timestamp numérique que requestAnimationFrame passe à cette
 // fonction quand elle lui est donnée directement en callback (cf. syncCloudSectionHeight) :
 // une comparaison stricte évite qu'un appel rAF normal soit pris pour la revérification.
 var MOBILE_CLOUD_FRAME_RECHECK = 'recheck';
+function revealStableMobileCloudFrame() {
+  var section = document.getElementById('mnoria-tag-trends-section');
+  if (section) section.style.visibility = 'visible';
+}
 function syncMobileCloudFrameHeight(recheckToken) {
   if (_mobileCloudFrameLocked) {
     return;
@@ -36626,8 +36637,15 @@ function syncMobileCloudFrameHeight(recheckToken) {
       if (Math.abs(headerBottomNow - headerBottomAtLock) > 1 || Math.abs(bottomBarTopNow - bottomBarTopAtLock) > 1) {
         _mobileCloudFrameLocked = false;
         syncMobileCloudFrameHeight(MOBILE_CLOUD_FRAME_RECHECK);
+        return;
       }
+      revealStableMobileCloudFrame();
     }, 400);
+  } else {
+    // Mobile navigateur : waitForMobileViewportHeightStable a déjà précédé
+    // cette mesure. Standalone en revérification : les safe-areas et le
+    // bandeau inférieur viennent d'être confirmés une seconde fois.
+    revealStableMobileCloudFrame();
   }
 }
 

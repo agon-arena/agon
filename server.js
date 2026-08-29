@@ -4654,13 +4654,13 @@ app.get("/create", (req, res) => {
 });
 
 app.get("/notifications", (req, res) => {
-  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/notifications.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/notifications.html"));
 });
 
 // Page autonome des scores et contributions. Elle partage le gabarit de Ma mémoire,
 // mais son mode de page masque entièrement l'univers neuronal.
 app.get("/contributions", (req, res) => {
-  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/mon-univers.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/mon-univers.html"));
 });
 
 // Classement global "Les meilleures idées", extrait de /mon-univers vers sa
@@ -20448,7 +20448,7 @@ app.get("/qcm-du-jour", (req, res) => {
 // Univers intellectuel personnel — page autonome (cf. views/mon-univers.html), même modèle
 // exact que /qcm-du-jour et /parallele-historique ci-dessous.
 app.get("/mon-univers", (req, res) => {
-  res.set("Cache-Control", "public, max-age=300").sendFile(path.join(__dirname, "views/mon-univers.html"));
+  res.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "views/mon-univers.html"));
 });
 
 // Parallèle historique du jour — page autonome (cf. views/parallele-historique.html).

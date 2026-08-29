@@ -2,7 +2,7 @@
 // l'accueil antérieure au bouton « Plein écran » de Ma mémoire, y compris après un reload
 // ordinaire en PWA/desktop. Changer cette version active le nouveau worker, supprime ce cache
 // HTML obsolète et laisse la navigation récupérer le balisage actuel.
-const SW_VERSION = "20260828-public-pages-top-level-v214";
+const SW_VERSION = "20260829-memory-frame-after-safe-area-v229";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -15,6 +15,12 @@ function isCacheableStaticAsset(url) {
 }
 
 function isMutableStaticAsset(url) {
+  const parsedUrl = new URL(url);
+  // Les feuilles et scripts portant une version explicite sont immuables :
+  // leur servir immédiatement la copie locale évite jusqu'à 8 s d'attente
+  // avant l'apparition du bandeau. Toute modification change ?v=..., donc ne
+  // peut pas réutiliser silencieusement une ancienne ressource.
+  if (parsedUrl.searchParams.has("v")) return false;
   return /\.(?:css|js)(?:\?.*)?$/i.test(url);
 }
 
@@ -168,6 +174,13 @@ self.addEventListener("fetch", (event) => {
     // consulteront jamais.
     const requestUrl = new URL(request.url);
     const forcedFresh = requestUrl.searchParams.has("_swrefresh");
+    const navigationNetworkFirst = [
+      "/apprentissage",
+      "/create",
+      "/notifications",
+      "/contributions",
+      "/mon-univers"
+    ].includes(requestUrl.pathname);
     let cacheKeyRequest = request;
     if (forcedFresh) {
       requestUrl.searchParams.delete("_swrefresh");
@@ -176,7 +189,12 @@ self.addEventListener("fetch", (event) => {
 
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
-        const cachedResponse = forcedFresh ? null : await cache.match(cacheKeyRequest);
+        const cachedFallback = !forcedFresh && navigationNetworkFirst
+          ? await cache.match(cacheKeyRequest)
+          : null;
+        const cachedResponse = forcedFresh || navigationNetworkFirst
+          ? null
+          : await cache.match(cacheKeyRequest);
 
         if (cachedResponse) {
           // Revalidation arrière-plan sans limite de temps : rien n'attend
@@ -212,7 +230,7 @@ self.addEventListener("fetch", (event) => {
         return fetch(request, { cache: "no-store", signal: controller.signal }).then((response) => {
           clearTimeout(timeoutId);
           if (response && response.status >= 500) {
-            return buildRecoveryResponse(request.url);
+            return cachedFallback || buildRecoveryResponse(request.url);
           }
           if (response && response.ok) {
             cache.put(cacheKeyRequest, response.clone());
@@ -220,7 +238,7 @@ self.addEventListener("fetch", (event) => {
           return response;
         }).catch(() => {
           clearTimeout(timeoutId);
-          return buildRecoveryResponse(request.url);
+          return cachedFallback || buildRecoveryResponse(request.url);
         });
       })
     );
