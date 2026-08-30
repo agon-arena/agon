@@ -182,7 +182,8 @@ test("aucun appel réseau/IA nécessaire pour classer les recommandations (garan
 test("confidentialité : un import personnel ou un quiz 'comprendre' n'est JAMAIS recommandé à un autre utilisateur, même très bien scoré", async () => {
   const supabase = createSupabaseMock({
     user_article_acquisitions: [
-      { user_id: "u1", eclairage_type: "concept", eclairage_source_id: "entropie", eclairage_name: "Entropie", solar_system_id: 1, star_id: null, acquired_at: "2026-01-01" }
+      { user_id: "u1", eclairage_type: "concept", eclairage_source_id: "entropie", eclairage_name: "Entropie", solar_system_id: 1, star_id: null, acquired_at: "2026-01-01" },
+      { user_id: "u1", eclairage_type: "concept", eclairage_source_id: "energie", eclairage_name: "Énergie", solar_system_id: 1, star_id: null, acquired_at: "2026-01-02" }
     ],
     user_solar_activations: [{ user_id: "u1", solar_system_id: 1 }],
     culture_generale_notion_links: [
@@ -190,10 +191,20 @@ test("confidentialité : un import personnel ou un quiz 'comprendre' n'est JAMAI
       // jamais devenir un candidat, quelle que soit sa pertinence apparente.
       { id: 1, type_a: "concept", source_id_a: "entropie", name_a: "Entropie", type_b: "photo_import", source_id_b: "secret-doc", name_b: "Mes notes de cours privées", label: "Illustre ce concept" },
       // Lien vers un quiz "comprendre" (dérivé, jamais une connaissance autonome).
-      { id: 2, type_a: "concept", source_id_a: "entropie", name_a: "Entropie", type_b: "comprendre", source_id_b: "pair-hash", name_b: "Entropie ↔ Autre chose", label: "Lien pédagogique" }
+      { id: 2, type_a: "concept", source_id_a: "entropie", name_a: "Entropie", type_b: "comprendre", source_id_b: "pair-hash", name_b: "Entropie ↔ Autre chose", label: "Lien pédagogique" },
+      // Candidat de découverte légitime, réellement connecté à DEUX acquis
+      // (pas seulement "du même niveau de score" dans l'abstrait — revue du
+      // 30/08/2026, le seuil de pertinence est désormais réellement appliqué
+      // à la liste retournée, donc ce contrôle a besoin d'un candidat qui le
+      // franchit confortablement, pas d'un score au pile) pour vérifier que
+      // le filtre ne bloque QUE les types non partageables, jamais un
+      // candidat partageable correctement scoré.
+      { id: 3, type_a: "concept", source_id_a: "entropie", name_a: "Entropie", type_b: "citation", source_id_b: "libre", name_b: "Citation légitime", label: "Illustre le concept" },
+      { id: 4, type_a: "concept", source_id_a: "energie", name_a: "Énergie", type_b: "citation", source_id_b: "libre", name_b: "Citation légitime", label: "Illustre le concept" }
     ],
     memory_item_fsrs_states: [
-      { user_id: "u1", state: "Review", stability: 60, last_review_at: new Date().toISOString(), memory_items: { subject_type: "concept", subject_source_id: "entropie" } }
+      { user_id: "u1", state: "Review", stability: 60, last_review_at: new Date().toISOString(), memory_items: { subject_type: "concept", subject_source_id: "entropie" } },
+      { user_id: "u1", state: "Review", stability: 60, last_review_at: new Date().toISOString(), memory_items: { subject_type: "concept", subject_source_id: "energie" } }
     ],
     recommendation_events: [],
     knowledge_nodes: [
@@ -201,9 +212,7 @@ test("confidentialité : un import personnel ou un quiz 'comprendre' n'est JAMAI
       // type les exclut, jamais un hasard de scoring.
       { subject_type: "photo_import", subject_source_id: "secret-doc", display_name: "Mes notes de cours privées", solar_system_id: 2, star_id: null, link_degree: 10, acquisition_count: 500, importance_score: 1, importance_tier: "fondamental" },
       { subject_type: "comprendre", subject_source_id: "pair-hash", display_name: "Entropie ↔ Autre chose", solar_system_id: 3, star_id: null, link_degree: 10, acquisition_count: 500, importance_score: 1, importance_tier: "fondamental" },
-      // Candidat de découverte légitime, du même acabit, pour vérifier que le
-      // filtre ne bloque QUE les types non partageables.
-      { subject_type: "citation", subject_source_id: "libre", display_name: "Citation légitime", solar_system_id: 4, star_id: null, link_degree: 2, acquisition_count: 50, importance_score: 0.5, importance_tier: "structurant" }
+      { subject_type: "citation", subject_source_id: "libre", display_name: "Citation légitime", solar_system_id: 4, star_id: null, link_degree: 3, acquisition_count: 50, importance_score: 0.8, importance_tier: "fondamental" }
     ],
     solar_systems: [{ id: 1, name: "Sciences" }, { id: 2, name: "Perso" }, { id: 3, name: "Perso" }, { id: 4, name: "Culture" }]
   });
@@ -217,16 +226,29 @@ test("confidentialité : un import personnel ou un quiz 'comprendre' n'est JAMAI
 test("dégradation propre : acquis existants mais aucun état FSRS exploitable -> pas de crash, poids de maîtrise prudent par défaut", () => {
   const run = async () => {
     const supabase = createSupabaseMock({
+      // Deux acquis de la même branche (revue du 30/08/2026) : avec le poids
+      // de maîtrise neutre par défaut (NEUTRAL_NEIGHBOR_MASTERY=0.5, faute de
+      // FSRS exploitable), la readiness d'un candidat relié reste TOUJOURS
+      // exactement 0.5, quel que soit le nombre de voisins — un seul acquis
+      // suffirait pour la readiness, mais deux sont nécessaires pour que
+      // l'intérêt/la connexion réunis franchissent aussi le score plancher
+      // (le test porte sur la dégradation FSRS, pas sur la présence d'un
+      // knowledge_node populaire — sans un minimum de signal réel, la
+      // readiness neutre seule ne suffirait de toute façon jamais).
       user_article_acquisitions: [
-        { user_id: "u1", eclairage_type: "histoire", eclairage_source_id: "empire", eclairage_name: "Empire romain", solar_system_id: 1, star_id: null, acquired_at: "2026-01-01" }
+        { user_id: "u1", eclairage_type: "histoire", eclairage_source_id: "empire", eclairage_name: "Empire romain", solar_system_id: 1, star_id: null, acquired_at: "2026-01-01" },
+        { user_id: "u1", eclairage_type: "histoire", eclairage_source_id: "colisee", eclairage_name: "Colisée", solar_system_id: 1, star_id: null, acquired_at: "2026-01-02" }
       ],
       user_solar_activations: [{ user_id: "u1", solar_system_id: 1 }],
       culture_generale_notion_links: [
-        { id: 1, type_a: "histoire", source_id_a: "empire", name_a: "Empire romain", type_b: "histoire", source_id_b: "pantheon", name_b: "Panthéon de Rome", label: "Monument emblématique" }
+        { id: 1, type_a: "histoire", source_id_a: "empire", name_a: "Empire romain", type_b: "histoire", source_id_b: "pantheon", name_b: "Panthéon de Rome", label: "Monument emblématique" },
+        { id: 2, type_a: "histoire", source_id_a: "colisee", name_a: "Colisée", type_b: "histoire", source_id_b: "pantheon", name_b: "Panthéon de Rome", label: "Monument emblématique" }
       ],
       memory_item_fsrs_states: [], // aucun historique de révision exploitable
       recommendation_events: [],
-      knowledge_nodes: [],
+      knowledge_nodes: [
+        { subject_type: "histoire", subject_source_id: "pantheon", display_name: "Panthéon de Rome", solar_system_id: 1, star_id: null, link_degree: 1, acquisition_count: 50, importance_score: 0.9, importance_tier: "fondamental" }
+      ],
       solar_systems: [{ id: 1, name: "Antiquité romaine" }]
     });
     return computeLearnNextRecommendations({ supabase, ...BASE_DEPS }, { userId: "u1", limit: 10 });

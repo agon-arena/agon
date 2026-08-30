@@ -107,10 +107,9 @@ test("addValidatedKnowledgeImport : la génération est découpée en lots de NO
   assert.match(body, /buildImportedKnowledgeQuestionsBatch\(/);
   // Le plafond de sélection (maxKnowledge, jusqu'à 100 pour PDF/YouTube, cf.
   // knowledgeLimitForYoutube/knowledgeLimitForPageCount) dépasse le plafond
-  // de fiabilité d'un seul appel IA (20, même raison que
-  // generateEnumerableQuizQuestions) : sans ce découpage, un import de 100
-  // connaissances tenterait un seul appel de 100 questions, hors de la zone
-  // jugée fiable ailleurs dans ce même fichier.
+  // de fiabilité d'un seul appel IA (20) : sans ce découpage, un import de
+  // 100 connaissances tenterait un seul appel de 100 questions, hors de la
+  // zone jugée fiable ailleurs dans ce même fichier.
 });
 
 test("addValidatedKnowledgeImport : repli ciblé UNIQUEMENT sur les connaissances manquantes du lot, jamais tout le lot", () => {

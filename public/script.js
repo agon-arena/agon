@@ -25601,16 +25601,17 @@ function showDebateNotionMemorizeExplainer(notionName, isGenerating = false) {
 // Niveaux d'approfondissement proposés avant toute génération de QCM de
 // notion (débat ou sujet libre, cf. server.js NOTION_QUIZ_LEVELS) — demande
 // du 12/08/2026 : toujours demander le niveau avant de lancer l'appel IA,
-// jamais de génération silencieuse à un niveau devinné. 4e niveau ajouté le
-// 13/08/2026 : "expert" redevient un palier normal (~20 questions), seul
-// "exhaustif" déclenche désormais la couverture complète d'une liste
-// énumérable (jusqu'à NOTION_QUIZ_ENUMERABLE_MAX_ITEMS côté serveur).
+// jamais de génération silencieuse à un niveau devinné. 4e niveau "Exhaustif"
+// (couverture complète d'une liste énumérable, capitales/vocabulaire...)
+// retiré le 30/08/2026 : trop coûteux et lent en pratique — au-delà d'une
+// vingtaine d'éléments, l'utilisateur est invité (cf. NOTION_LEVEL_PICKER_HINT
+// ci-dessous) à diviser son sujet en plusieurs créations plus précises.
 const NOTION_QUIZ_LEVEL_OPTIONS = [
   { level: "elementaire", name: "Élémentaire", desc: "3 à 6 questions" },
   { level: "avance", name: "Avancé", desc: "8 à 12 questions" },
-  { level: "expert", name: "Expert", desc: "Une vingtaine de questions" },
-  { level: "exhaustif", name: "Exhaustif", desc: "Couvre la liste en entier si le sujet s'y prête (capitales, vocabulaire...), bien plus de questions" }
+  { level: "expert", name: "Expert", desc: "Une vingtaine de questions" }
 ];
+const NOTION_LEVEL_PICKER_HINT = "Pour mémoriser plus de 20 éléments, fais plusieurs créations plutôt qu'une seule — ex. les capitales d'Europe de l'Ouest, d'Europe de l'Est, d'Afrique du Nord, etc.";
 
 // Modale de choix de niveau — `onSelect(level)` n'est appelé que si
 // l'utilisateur choisit effectivement un niveau (jamais sur simple
@@ -25630,6 +25631,10 @@ function showNotionQuizLevelPicker(onSelect) {
   title.className = "notion-level-picker-title";
   title.textContent = "Quel niveau d'approfondissement ?";
   modal.appendChild(title);
+  const hint = document.createElement("p");
+  hint.className = "notion-level-picker-hint";
+  hint.textContent = NOTION_LEVEL_PICKER_HINT;
+  modal.appendChild(hint);
 
   NOTION_QUIZ_LEVEL_OPTIONS.forEach(({ level, name, desc }) => {
     const optionBtn = document.createElement("button");

@@ -7,11 +7,11 @@ const fs = require("fs");
 const serverSource = fs.readFileSync(require.resolve("../server.js"), "utf8");
 const formatsSource = fs.readFileSync(require.resolve("../lib/question-formats.js"), "utf8");
 
-test("les six parcours générateurs passent par la chaîne V2", () => {
-  for (const route of ["free_search", "notion_", "knowledge_import", "knowledge_import_batch", "free_search_enumerable", "comprendre"]) {
+test("les cinq parcours générateurs passent par la chaîne V2", () => {
+  for (const route of ["free_search", "notion_", "knowledge_import", "knowledge_import_batch", "comprendre"]) {
     assert.match(serverSource, new RegExp(`route:\\s*[\`\"']${route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   }
-  assert.equal((serverSource.match(/qualityControlRawQuestions\s*\(/g) || []).length, 7, "une définition et six branchements attendus");
+  assert.equal((serverSource.match(/qualityControlRawQuestions\s*\(/g) || []).length, 6, "une définition et cinq branchements attendus");
 });
 
 test("la critique est faite avant validateNarrativeQuizQuestions/shuffle", () => {

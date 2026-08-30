@@ -13025,9 +13025,8 @@ async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnow
     // ── PASSE 2 : génération, batchée par lots de NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE ──
     // Un seul appel IA pour tout un lot au lieu d'un appel par connaissance —
     // le gros bloc fixe décrivant les formats de question n'est ainsi payé
-    // qu'une fois par lot. Plafond de lot identique et pour la même raison
-    // que generateEnumerableQuizQuestions (au-delà, un seul appel IA ne tient
-    // pas de façon fiable). Fiche documentaire commune générée paresseusement
+    // qu'une fois par lot (au-delà, un seul appel IA ne tient pas de façon
+    // fiable). Fiche documentaire commune générée paresseusement
     // ici, une seule fois pour tout l'import — inchangé par rapport à avant.
     const generatedQuestionsById = new Map(); // item.id -> [question] (même forme qu'avant)
 
@@ -13381,13 +13380,9 @@ const DAILY_QUIZ_FORMAT_ROTATION_POOL = [
 ];
 
 // `excludeTypes` (demande du 13/08/2026, étendu le 16/08/2026) : retire un
-// ou plusieurs formats de la rotation — utilisé pour bannir "intrus" des QCM
-// sur liste énumérable (cf. buildEnumerableQuizChunkPrompt), où il dérive
-// systématiquement en "lequel de ces éléments ne fait PAS partie de la
-// liste ?" — injouable dès que la liste complète peut monter jusqu'à
-// NOTION_QUIZ_ENUMERABLE_MAX_ITEMS (200) éléments, que le lecteur n'a
-// évidemment jamais tous en tête ; et pour bannir "ordre"/"association"/
-// "qcm_multi" du même contexte (audit pédagogique du 16/08/2026), où ils
+// ou plusieurs formats de la rotation — utilisé pour bannir "ordre"/
+// "association"/"qcm_multi" de certains contextes (audit pédagogique du
+// 16/08/2026), où ils
 // dérivaient vers des exercices artificiels (tri alphabétique, appariements
 // sans rapport réel) faute de relation entre les éléments testés un par un.
 function buildFormatAssignments(count, excludeTypes) {
@@ -13467,14 +13462,6 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     "La question doit être claire et autonome sans relire la fiche. La difficulté doit venir du savoir testé, jamais d'une formulation confuse. Avant de répondre, vérifie silencieusement la cohérence entre correctIndex/correctIndexes, le texte de la ou des bonnes options et l'explication.",
     "Respecte strictement knowledgeTarget. Si le format suggéré ne convient pas naturellement, abandonne-le au profit d'un QCM simple solide plutôt que de forcer une association, un ordre, un intrus ou un choix multiple artificiel.",
     "",
-    // "intrus" banni (cf. excludeTypes) : rappel explicite plutôt que de
-    // compter sur sa seule absence ci-dessus — sans cette ligne, rien
-    // n'empêche l'IA de choisir "intrus" quand même en se référant au nom
-    // du format qu'elle connaît par ailleurs.
-    ...(excludeTypes && excludeTypes.includes("intrus") ? [
-      "Le format \"intrus\" est INTERDIT pour ce quiz : n'demande jamais lequel de ces éléments ne fait PAS partie de la liste globale du sujet — la liste complète peut compter jusqu'à " + NOTION_QUIZ_ENUMERABLE_MAX_ITEMS + " éléments, le lecteur ne peut objectivement pas le savoir sans l'avoir mémorisée en entier. Injouable, donc jamais posé.",
-      ""
-    ] : []),
     "=== Format suggéré, question par question (dans l'ordre) ===",
     "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions" + (includeVariants ? " (uniquement pour variants[0], la variante principale — n'influence pas le choix des variantes suivantes, cf. plus bas)" : "") + " :",
     assignments.map((f, i) => (i + 1) + ". " + f).join(" · "),
@@ -13631,22 +13618,6 @@ const NOTION_QUIZ_LEVELS = {
     instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet (origine, mécanismes précis, controverses ou nuances, chiffres et exemples précis, conséquences, comparaisons) pour vérifier une maîtrise fine et complète — chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée.",
     sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
     lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
-  },
-  // 4e niveau (demande du 13/08/2026) : seul celui-ci déclenche la détection
-  // de sujet énumérable et le quiz par lots jusqu'à
-  // NOTION_QUIZ_ENUMERABLE_MAX_ITEMS (cf. scopeCustomTopic/
-  // fetchEnumerableItems/buildEnumerableCustomTopicQuiz, gardés sur
-  // level === "exhaustif" désormais, plus "expert") — "expert" redevient un
-  // palier normal borné à une vingtaine de questions. Pour un sujet non
-  // énumérable (repli sur le flux standard), mêmes chiffres qu'"expert" :
-  // la vraie différence de ce niveau est la couverture complète d'une liste,
-  // pas un nombre de questions plus élevé par défaut sur un sujet narratif.
-  exhaustif: {
-    label: "Exhaustif",
-    target: 20, max: 22, min: 1,
-    instruction: "Niveau exhaustif : vise la couverture la plus complète possible du sujet — s'il s'agit d'une vraie liste d'éléments à mémoriser un par un, couvre-la en entier ; sinon, couvre un maximum de facettes et de détails précis et vérifiables du sujet, sans jamais sacrifier l'exactitude à la quantité.",
-    sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
-    lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
   }
 };
 // Comportement historique (clic "Mémoriser" sur Éclairages / Ce jour dans
@@ -13664,41 +13635,15 @@ const NOTION_QUIZ_LEGACY_LEVEL_CONFIG = {
   lengthHint: "couvre l'essentiel à retenir sur ce sujet."
 };
 
-// Sujet libre "énumérable" en niveau Expert (demande du 12/08/2026 : capitales
-// du monde, verbes irréguliers, vocabulaire d'une langue... — une vraie liste
-// finie d'éléments à mémoriser un par un, où le plafond expert normal
-// (NOTION_QUIZ_LEVELS.expert.max) est trop restrictif). Détecté par
-// scopeCustomTopic ; si détecté, la fiche liste directement les éléments
-// (jamais reformulés par l'IA) et le quiz est généré par lots successifs
-// (un seul appel IA ne tient pas de façon fiable au-delà d'une vingtaine de
-// questions) plutôt que par le flux standard buildLeveledFicheAndQuizPrompt.
-const NOTION_QUIZ_ENUMERABLE_MAX_ITEMS = 200;
+// Taille de lot pour la génération groupée des questions d'un import photo
+// multi-connaissances (cf. buildImportedKnowledgeQuestionsBatch) — un seul
+// appel IA au-delà de cette taille ne tient pas de façon fiable (troncature,
+// qualité qui se dégrade). Le mode "exhaustif" (sujet libre énumérable,
+// capitales/verbes irréguliers...) qui utilisait aussi cette taille de lot a
+// été retiré (demande du 30/08/2026) : au-delà d'une vingtaine d'éléments à
+// mémoriser, l'utilisateur est désormais invité à diviser son sujet en
+// plusieurs créations plus précises (cf. showNotionQuizLevelPicker, public/script.js).
 const NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE = 20;
-// Volontairement PAS ramené à 1 comme NOTION_QUIZ_LEVELS.*.min (demande du
-// 17/08/2026, audit du pipeline mnésique) : ce seuil ne mesure pas
-// l'importance de connaissances sélectionnées mais la complétude technique
-// d'une énumération déjà reconnue comme une vraie liste finie (capitales,
-// verbes irréguliers...) — 10/200 capitales renvoyées à cause d'erreurs de
-// lots successifs est un échec de génération, pas un choix qualité légitime
-// à respecter. Reste donc un garde-fou de fiabilité, hors périmètre de ce
-// correctif (cf. rapport final, section quotas).
-const NOTION_QUIZ_ENUMERABLE_MIN_VALID = 10;
-// Plafond dur du nombre de lots d'énumération (fetchEnumerableItems) — borne
-// le coût en appels IA même sur un sujet mal classé "bounded" : au-delà, on
-// s'arrête avec ce qu'on a plutôt que de continuer indéfiniment (demande du
-// 12/08/2026 : le vrai garde-fou de coût reste le tri "bounded"/"unbounded"
-// à la source, cf. buildTopicScopePrompt, mais ce plafond protège aussi
-// contre une mauvaise classification).
-const NOTION_QUIZ_ENUMERABLE_MAX_ROUNDS = Math.ceil(NOTION_QUIZ_ENUMERABLE_MAX_ITEMS / NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) + 3;
-// Second garde-fou de coût (demande du 12/08/2026), en amont du premier :
-// un sujet "bounded" dont l'IA estime elle-même le compte d'éléments
-// au-delà de ce seuil est bloqué dès le petit appel de repérage — avant de
-// dépenser les ~20 appels IA d'énumération puis de génération — plutôt que
-// d'attendre le plafond dur ci-dessus après coup. Fixé au-dessus des plus
-// gros exemples validés (ex. "Os du corps humain" ~206) pour ne pas les
-// bloquer, mais sous NOTION_QUIZ_ENUMERABLE_MAX_ITEMS pour agir avant que la
-// troncature silencieuse n'entre en jeu.
-const NOTION_QUIZ_ENUMERABLE_ESTIMATE_BLOCK_THRESHOLD = 250;
 
 function resolveNotionQuizLevel(rawLevel) {
   const level = String(rawLevel || "").trim();
@@ -14564,9 +14509,8 @@ async function buildImportedKnowledgeQuestions(knowledge, id, userId, sharedSour
 // Génère en UN SEUL appel IA les questions de plusieurs connaissances d'un
 // même import (audit coût import photo, 24/08/2026) — au lieu d'un appel par
 // connaissance. `items` : jusqu'à NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE à la
-// fois (même plafond que generateEnumerableQuizQuestions, et pour la même
-// raison documentée là-bas : au-delà, un seul appel IA ne tient pas de façon
-// fiable — troncature, qualité qui se dégrade). L'appelant (addValidatedKnowledgeImport)
+// fois — au-delà, un seul appel IA ne tient pas de façon fiable (troncature,
+// qualité qui se dégrade). L'appelant (addValidatedKnowledgeImport)
 // est responsable de découper en lots de cette taille.
 //
 // Chaque connaissance porte ici son propre id, jamais un id partagé (cf.
@@ -14652,242 +14596,6 @@ async function buildImportedKnowledgeQuestionsBatch(items, documentImportId) {
   }
 }
 
-// Détermine, avant toute génération, si un sujet libre en niveau Expert
-// désigne une vraie liste énumérable (cf. NOTION_QUIZ_ENUMERABLE_MAX_ITEMS).
-// Ne demande PAS la liste elle-même ici (voir fetchEnumerableItems) : un
-// essai réel a montré qu'un unique appel réclamant jusqu'à 200 éléments d'un
-// coup (ex. verbes irréguliers anglais) se fait régulièrement tronquer en
-// cours de génération par le filtre de contenu d'OpenAI (finish_reason:
-// "content_filter", déclenché sur un mot totalement anodin comme "shoot"
-// dans une liste de verbes) — la réponse devient alors du JSON invalide.
-// Un échec de cet appel (ou une réponse mal formée) n'est jamais bloquant :
-// il retombe silencieusement sur le flux standard (enumerable:false), jamais
-// sur une erreur affichée à l'utilisateur pour ce seul appel de repérage.
-function buildTopicScopePrompt(topic) {
-  return [
-    `Un visiteur veut mémoriser ce sujet, tapé librement dans une barre de recherche : "${topic}".`,
-    "",
-    "Étape 1 : vérifie que ce sujet désigne bien un sujet de connaissance réel et sérieux (fait historique, scientifique, culturel, géographique, technique, etc.) sur lequel on peut écrire une fiche factuelle vérifiable. Refuse (valid:false) s'il est vide, absurde, injurieux, dangereux, illégal, à caractère sexuel, ou trop vague/générique pour donner une fiche précise (ex. \"tout\", \"la vie\").",
-    "Si le sujet n'est pas valide, réponds uniquement : {\"valid\":false,\"reason\":\"phrase courte en français expliquant pourquoi, destinée à être affichée à l'utilisateur\"}",
-    "",
-    "Étape 2 : classe ce sujet dans une de ces trois catégories (champ \"scope\") :",
-    `- "bounded" : une VÉRITABLE liste finie et raisonnablement bornée d'éléments distincts à mémoriser un par un, dont tu peux estimer un nombre total réaliste et non arbitraire (ex. les capitales du monde ~195, les pays de l'Union européenne ~27, les verbes irréguliers anglais courants, les éléments chimiques, les présidents d'un pays, les départements français, les drapeaux). Ajoute alors un champ "estimatedCount" : ton estimation du nombre total réel d'éléments (un entier, ta meilleure estimation même approximative).`,
-    `- "unbounded" : un sujet en apparence énumérable mais SANS liste naturellement complète ou bornée — il faudrait piocher arbitrairement dans un ensemble bien plus vaste que ce qu'on peut raisonnablement couvrir, sans qu'un sous-ensemble précis s'impose de lui-même (ex. "le vocabulaire italien" seul, "les mots anglais", "des expressions en espagnol"). Choisis "unbounded" plutôt que d'inventer une sélection arbitraire.`,
-    `- "narrative" : un sujet narratif, conceptuel ou événementiel (ex. la Révolution française, la photosynthèse, un mécanisme, une notion, un événement historique précis), même s'il comporte de nombreuses dates ou de nombreux faits — pas une liste d'éléments à énumérer.`,
-    "Si \"unbounded\", ajoute un champ \"reason\" : une phrase courte en français expliquant que le sujet est trop large et suggérant comment le préciser (ex. un thème, une catégorie, une sous-liste), destinée à être affichée telle quelle à l'utilisateur.",
-    "",
-    "\"sourceName\" : nom court et correctement capitalisé du sujet (ex. \"Capitales du monde\", \"Verbes irréguliers anglais\") — reformule si la saisie de départ est une question ou une phrase, jamais recopiée telle quelle dans ce cas.",
-    "",
-    "Réponds uniquement en JSON strict, sans aucun texte autour, sous l'une de ces formes exactement :",
-    "- Sujet refusé : {\"valid\":false,\"reason\":\"...\"}",
-    "- Sujet trop large : {\"valid\":true,\"scope\":\"unbounded\",\"reason\":\"...\",\"sourceName\":\"...\"}",
-    "- Sujet borné : {\"valid\":true,\"scope\":\"bounded\",\"estimatedCount\":123,\"sourceName\":\"...\"}",
-    "- Sujet narratif : {\"valid\":true,\"scope\":\"narrative\",\"sourceName\":\"...\"}"
-  ].join("\n");
-}
-
-async function scopeCustomTopic(apiKey, topic) {
-  try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildTopicScopePrompt(topic) }], {
-      model: DAILY_QUIZ_NARRATIVE_MODEL,
-      temperature: 0.3,
-      responseFormat: { type: "json_object" },
-      feature: "knowledge_topic_scope"
-    });
-    const parsed = JSON.parse(content);
-    if (!parsed || parsed.valid === false) {
-      const reason = String(parsed?.reason || "").trim().slice(0, 300);
-      return { rejected: true, reason: reason || "Ce sujet ne peut pas être transformé en fiche de révision." };
-    }
-    const sourceName = capitalizeFirstLetter(String(parsed.sourceName || topic).trim()).slice(0, 120);
-    if (parsed.scope === "unbounded") {
-      const reason = String(parsed?.reason || "").trim().slice(0, 300);
-      return { rejected: true, reason: reason || "Ce sujet est trop large pour être couvert de façon exhaustive — essaie de le préciser (un thème, une catégorie, une sous-liste)." };
-    }
-    // Second garde-fou de coût (cf. NOTION_QUIZ_ENUMERABLE_ESTIMATE_BLOCK_THRESHOLD) :
-    // un sujet borné mais dont l'IA elle-même estime le compte très au-delà
-    // du plafond technique est bloqué ici, avant de dépenser les ~20 appels
-    // d'énumération puis de génération pour un sujet qu'on sait déjà trop
-    // volumineux. Estimation absente ou non numérique : jamais bloquant (le
-    // plafond dur de fetchEnumerableItems/NOTION_QUIZ_ENUMERABLE_MAX_ITEMS
-    // protège de toute façon en aval).
-    const estimatedCount = Number(parsed.estimatedCount);
-    if (parsed.scope === "bounded" && Number.isFinite(estimatedCount) && estimatedCount > NOTION_QUIZ_ENUMERABLE_ESTIMATE_BLOCK_THRESHOLD) {
-      return {
-        rejected: true,
-        reason: `Ce sujet compte environ ${estimatedCount} éléments, trop pour une liste complète — essaie de le diviser en plusieurs sujets plus précis.`
-      };
-    }
-    return { rejected: false, enumerable: parsed.scope === "bounded", sourceName };
-  } catch (error) {
-    console.warn("[notion-quizzes:custom] repérage IA du sujet échoué, repli sur le flux standard :", error.message);
-    return { rejected: false, enumerable: false, sourceName: null };
-  }
-}
-
-// Récupère la liste réelle des éléments d'un sujet énumérable, lot par lot
-// (jamais en un seul appel géant, cf. buildTopicScopePrompt) : chaque lot
-// demande les prochains éléments encore non couverts, jusqu'à
-// NOTION_QUIZ_ENUMERABLE_MAX_ITEMS ou jusqu'à ce que l'IA indique ne plus
-// avoir d'élément distinct à ajouter ("exhausted":true). Un lot en échec ne
-// bloque pas les suivants (le lot suivant redemande simplement "la suite").
-function buildEnumerableItemsChunkPrompt(subject, alreadyCovered, count) {
-  const lines = [`Sujet : "${subject}" — une vraie liste finie d'éléments à mémoriser un par un (ex. capitales, verbes irréguliers, vocabulaire d'une langue...).`];
-  if (alreadyCovered.length) {
-    lines.push("Éléments déjà couverts dans les lots précédents (ne les reprends JAMAIS) :");
-    lines.push(alreadyCovered.map((it) => `- ${it}`).join("\n"));
-  } else {
-    lines.push("Aucun élément couvert pour l'instant : c'est le premier lot.");
-  }
-  lines.push("");
-  lines.push(`Donne ${count} éléments NOUVEAUX et DISTINCTS de cette liste (jamais déjà couverts ci-dessus), chacun sous une forme courte et autonome qui donne à la fois l'élément ET sa réponse (ex. "France – Paris", "go – went – gone", "la mela – la pomme").`);
-  lines.push("Priorise les éléments les plus utiles/représentatifs/couramment enseignés du sujet (ex. les capitales les plus connues avant les plus rares, les verbes irréguliers les plus fréquents avant les plus rares) — utile en culture générale, jamais un choix arbitraire ou anecdotique quand plusieurs éléments restent possibles pour ce lot.");
-  lines.push("Chaque élément doit être réellement exact et vérifiable — en cas de doute réel sur un élément précis (orthographe, forme, association), écarte-le plutôt que de l'inclure avec une réponse incertaine.");
-  lines.push("Si le sujet ne compte plus assez d'éléments réellement distincts et non déjà couverts pour ce lot, donne-en le maximum possible sans jamais répéter ou inventer, et indique \"exhausted\":true.");
-  lines.push("");
-  lines.push("Réponds uniquement en JSON strict, sous la forme {\"exhausted\":false,\"items\":[\"...\",\"...\"]}.");
-  return lines.join("\n");
-}
-
-async function fetchEnumerableItems(apiKey, subject) {
-  const items = [];
-  const seen = new Set();
-  for (let round = 0; round < NOTION_QUIZ_ENUMERABLE_MAX_ROUNDS && items.length < NOTION_QUIZ_ENUMERABLE_MAX_ITEMS; round++) {
-    const askCount = Math.min(NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE, NOTION_QUIZ_ENUMERABLE_MAX_ITEMS - items.length);
-    try {
-      const content = await _callOpenAI(apiKey, [{ role: "user", content: buildEnumerableItemsChunkPrompt(subject, items, askCount) }], {
-        model: DAILY_QUIZ_NARRATIVE_MODEL,
-        temperature: 0.4,
-        responseFormat: { type: "json_object" },
-        feature: "knowledge_enumerable_items"
-      });
-      const parsed = JSON.parse(content);
-      const newItems = Array.isArray(parsed?.items) ? parsed.items.map((it) => String(it || "").trim()).filter(Boolean) : [];
-      let addedAny = false;
-      for (const it of newItems) {
-        const key = it.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        items.push(it);
-        addedAny = true;
-        if (items.length >= NOTION_QUIZ_ENUMERABLE_MAX_ITEMS) break;
-      }
-      if (parsed?.exhausted || !addedAny) break;
-    } catch (error) {
-      console.warn(`[notion-quizzes:custom] énumération lot ${round + 1} échouée, on tente la suite :`, error.message);
-    }
-  }
-  return items;
-}
-
-// Fiche d'un sujet énumérable : construite directement à partir de la liste
-// réelle d'éléments plutôt que reformulée par l'IA — garantit qu'elle
-// contient exactement les mêmes faits que les questions générées, sans
-// risque de divergence ni d'invention (demande du 12/08/2026 : la fiche doit
-// contenir les réponses).
-function buildEnumerableFicheSections(items) {
-  const chunkSize = 25;
-  const sections = [];
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    sections.push({ label: `Éléments ${i + 1} à ${Math.min(i + chunkSize, items.length)}`, text: chunk.join(" · ") });
-  }
-  return sections;
-}
-
-function buildEnumerableQuizChunkPrompt(subject, itemsChunk, id) {
-  const count = itemsChunk.length;
-  // "intrus" banni ici (demande du 13/08/2026) : sur une liste énumérable
-  // (jusqu'à NOTION_QUIZ_ENUMERABLE_MAX_ITEMS éléments), il dérivait
-  // systématiquement en "lequel de ces éléments ne fait pas partie de la
-  // liste ?" — injouable, personne ne mémorise 200 éléments comme un tout.
-  //
-  // "ordre"/"association"/"qcm_multi" bannis ici aussi (audit pédagogique du
-  // 16/08/2026) : la consigne juste en dessous génère UNE question par
-  // ÉLÉMENT INDIVIDUEL de la liste (ex. "capitale du Sénégal ?"), il n'existe
-  // donc structurellement aucune relation entre plusieurs éléments à
-  // apparier/ordonner/regrouper dans ce contexte. Forcés quand même, ces
-  // formats produisaient des exercices artificiels sans vraie base de
-  // connaissance — constaté en pratique : "ordre" dérivait vers un simple tri
-  // alphabétique des capitales (ne teste que l'orthographe), et
-  // "association"/"qcm_multi" bricolaient un regroupement de 3-4 éléments
-  // choisis au hasard dans la liste plutôt qu'un ensemble réellement
-  // cohérent. Ce contexte reste "qcm"/"texte_a_trous" — les formats qui
-  // testent honnêtement UN élément à la fois.
-  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", count, true, ["intrus", "ordre", "association", "qcm_multi"]).slice(0, -1);
-  return [
-    `Tu écris un quiz de mémorisation en français sur : "${subject}".`,
-    "Éléments à couvrir dans ce lot (base-toi UNIQUEMENT sur ceux-ci, ne les modifie pas, n'en invente aucun autre) :",
-    itemsChunk.map((it) => `- ${it}`).join("\n"),
-    "",
-    `Génère exactement ${count} question(s), une par élément ci-dessus (dans l'ordre), permettant de vérifier que cet élément précis est bien mémorisé (ex. donner un pays et demander sa capitale, donner l'infinitif d'un verbe irrégulier et demander son prétérit et son participe passé, donner un mot dans la langue cible et demander sa traduction, ou l'inverse) — jamais une question sur un élément hors de cette liste.`,
-    ...formatBlock,
-    "",
-    `Pour chaque question, le champ "sourceId" doit valoir exactement la chaîne : "${id}".`,
-    "Réponds uniquement en JSON strict, sous la forme {\"questions\":[{...}]}."
-  ].join("\n");
-}
-
-// Lots successifs plutôt qu'un seul appel : au-delà d'une vingtaine de
-// questions, un seul appel IA ne tient pas de façon fiable (troncature,
-// qualité qui se dégrade). Un lot en échec ne bloque jamais les autres — un
-// sujet à 200 éléments reste utile avec 180 questions plutôt que 0.
-async function generateEnumerableQuizQuestions(apiKey, subject, items, id) {
-  const all = [];
-  for (let start = 0; start < items.length; start += NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) {
-    const chunk = items.slice(start, start + NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE);
-    try {
-      const questionPrompt = buildEnumerableQuizChunkPrompt(subject, chunk, id);
-      const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
-        model: DAILY_QUIZ_NARRATIVE_MODEL,
-        temperature: 0.4,
-        responseFormat: { type: "json_object" },
-        timeoutMs: Math.min(120_000, 45_000 + chunk.length * 3_000),
-        feature: "question_generation"
-      });
-      const parsedChunk = JSON.parse(content);
-      const qualityApproved = await qualityControlRawQuestions({
-        apiKey,
-        rawQuestions: parsedChunk?.questions,
-        basePrompt: questionPrompt,
-        route: "free_search_enumerable",
-        timeoutMs: Math.min(120_000, 45_000 + chunk.length * 3_000),
-        context: { hasIndependentSource: false }
-      });
-      all.push(...validateNarrativeQuizQuestions(qualityApproved, [id], chunk.length, chunk.length));
-    } catch (error) {
-      console.warn(`[notion-quizzes:custom:${id}] lot ${start + 1}-${start + chunk.length} échoué :`, error.message);
-    }
-  }
-  return all;
-}
-
-async function buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, sourceName, userId) {
-  const finalSourceName = sourceName || capitalizeFirstLetter(topic);
-  const sourceDetail = { meta: `${items.length} éléments à mémoriser`, sections: buildEnumerableFicheSections(items), image: null };
-
-  const validated = await generateEnumerableQuizQuestions(apiKey, finalSourceName, items, id);
-  if (validated.length < NOTION_QUIZ_ENUMERABLE_MIN_VALID) {
-    console.warn(`[notion-quizzes:custom:${id}] sujet énumérable : seulement ${validated.length} question(s) valide(s).`);
-    return { error: "failed" };
-  }
-  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", finalSourceName, sourceDetail, userId, id);
-  const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
-  const questions = validated.map((q, index) => ({
-    id: `notion:custom:${id}-exhaustif-q${index + 1}`,
-    ...q,
-    sourceType: "custom",
-    sourceScope: null,
-    sourceName: finalSourceName,
-    sourceDetail,
-    sourceThemes,
-    sourcePlacement,
-    level: "exhaustif",
-    sourceDebateId: id
-  }));
-  return { questions };
-}
-
 // Générée à la demande au clic sur "Générer" de la barre de recherche libre
 // (cf. POST /api/users/notion-quizzes/custom, buildLeveledFicheAndQuizPrompt).
 async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
@@ -14895,24 +14603,6 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   if (!apiKey) return generationFailure("AI_CONFIG_MISSING", "configuration");
   const levelConfig = resolveNotionQuizLevel(rawLevel);
   const { level } = levelConfig;
-
-  // Niveau Exhaustif : un sujet qui désigne une véritable liste énumérable
-  // (capitales, verbes irréguliers, vocabulaire...) mérite un quiz qui
-  // couvre chaque élément plutôt que d'être plafonné à une vingtaine de
-  // questions comme "expert" (demande du 12/08/2026, "expert" redevenu un
-  // palier normal le 13/08/2026 lors de l'ajout de ce 4e niveau) — détecté
-  // par un appel IA de repérage avant de partir sur la génération standard
-  // sinon.
-  if (level === "exhaustif") {
-    const scope = await scopeCustomTopic(apiKey, topic);
-    if (scope.rejected) return { error: "rejected", reason: scope.reason };
-    if (scope.enumerable) {
-      const items = await fetchEnumerableItems(apiKey, scope.sourceName || topic);
-      if (items.length > levelConfig.max) {
-        return buildEnumerableCustomTopicQuiz(apiKey, topic, id, items, scope.sourceName, userId);
-      }
-    }
-  }
 
   // generateNotionLevelQuiz (demande du 17/08/2026, audit du pipeline
   // mnésique) : fiche + admission des connaissances → vérification
@@ -17122,12 +16812,17 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
   }
 });
 
-// Clic sur un QCM existant dans "Explorer les apprentissages disponibles" :
-// rattache le QCM déjà généré (daily_quiz) à la liste personnelle du
-// visiteur, sans jamais rappeler l'IA — seul le nom "custom" (jamais un
-// sujet Éclairages/Histoire, déjà accessibles par leur propre flux) est
-// autorisé ici, à la fois par cohérence avec l'explorateur et comme
-// garde-fou contre un slot arbitraire.
+// Clic sur un QCM existant dans "Explorer les apprentissages disponibles" OU
+// sur une préconisation catalogue de "Sujets proposés" (revue du 30/08/2026,
+// cf. adoptCatalogRecommendation dans qcm-du-jour.html) : rattache le QCM déjà
+// généré (daily_quiz) à la liste personnelle du visiteur, sans jamais rappeler
+// l'IA. Slot "notion:" générique (élargi du 30/08/2026 — auparavant
+// "notion:custom:" seul, car unique appelant à l'époque) : reste un
+// garde-fou contre un slot totalement arbitraire (même préfixe que celui déjà
+// accepté par GET .../fiche), la vraie protection étant la vérification
+// ci-dessous que la ligne (slot, quizDate) existe réellement dans daily_quiz —
+// jamais de fabrication de contenu, uniquement l'adoption d'un QCM partagé
+// déjà existant, quel que soit son type (custom, histoire, concept...).
 app.post("/api/users/notion-quizzes/adopt", rateLimit("users", 30), async (req, res) => {
   try {
     const validation = validateLegacyKey(req.body?.legacyKey);
@@ -17135,7 +16830,7 @@ app.post("/api/users/notion-quizzes/adopt", rateLimit("users", 30), async (req, 
 
     const slot = String(req.body?.slot || "").trim();
     const quizDate = String(req.body?.quizDate || "").trim();
-    if (!slot.startsWith("notion:custom:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
+    if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
       return res.status(400).json({ ok: false, error: "Requête invalide." });
     }
 
@@ -17469,6 +17164,13 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
         ? first.sourceDetail.documentTitle
         : (first.sourceName || null),
       sourceType: first.sourceType || null,
+      // Niveau choisi à la génération (elementaire/avance/expert, cf.
+      // NOTION_QUIZ_LEVELS) — absent (null) pour le flux historique
+      // Éclairages/Ce jour dans l'Histoire, qui n'a jamais proposé ce choix
+      // (cf. NOTION_QUIZ_LEGACY_LEVEL_CONFIG). Affiché sous le titre de la
+      // fiche avec questionCount, cf. views/qcm-du-jour.html.
+      level: first.level || null,
+      questionCount: questions.length,
       themes: primaryTheme ? [primaryTheme] : [],
       sourceDetail: first.sourceDetail || null,
       links,
@@ -17647,12 +17349,15 @@ app.post("/api/users/recommendations/learn-next/events", rateLimit("users", 60),
   }
 });
 
-// ── V2 : fallback IA "À apprendre ensuite" (mission du 27/08/2026) ─────────
-// Couche COMPLÉMENTAIRE à la V1 ci-dessus, jamais un remplacement : ne
-// s'active que si le catalogue Mnoria n'offre pas assez de bons candidats
-// connectés au graphe de l'utilisateur (cf. engine.js qualitySignal). Route
-// SÉPARÉE du GET V1 (jamais dans le même aller-retour) : le GET normal doit
-// rester rapide (section 16 de la mission) — le frontend l'appelle
+// ── V2 : fallback IA "À apprendre ensuite" (mission du 27/08/2026, revue du
+// 30/08/2026 : "toujours 3 préconisations") ─────────────────────────────────
+// Couche COMPLÉMENTAIRE à la V1 ci-dessus, jamais un remplacement : le
+// catalogue Mnoria garde la priorité, l'IA ne comble que le nombre EXACT de
+// places qu'un vrai seuil de pertinence (isGoodCandidate, engine.js) laisse
+// vides pour atteindre DEFAULT_RECOMMENDATION_LIMIT (cf. neededCount
+// ci-dessous) — jamais un remplissage artificiel, jamais plus d'un appel IA.
+// Route SÉPARÉE du GET V1 (jamais dans le même aller-retour) : le GET normal
+// doit rester rapide (section 16 de la mission) — le frontend l'appelle
 // systématiquement APRÈS avoir déjà affiché les recommandations V1
 // (fetchAndAppendAiFallbackProposals, qcm-du-jour.html), jamais avant.
 // Chaque étape est instrumentée via lib/ai-usage-log.js (recordAiUsage),
@@ -17670,15 +17375,18 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
 
     // Recalcule (ou relit le cache V1, quasi gratuit si le GET normal vient
     // d'être appelé pour ce même utilisateur, cf. learnNextRecommendationsCache)
-    // uniquement pour lire qualitySignal — jamais pour re-servir ces
-    // recommandations elles-mêmes ici.
+    // pour savoir précisément COMBIEN de places le catalogue a déjà remplies
+    // avec des candidats réellement pertinents (recommendations.length, déjà
+    // filtré par engine.js avant assemblage — cf. revue du 30/08/2026) —
+    // jamais pour re-servir ces recommandations elles-mêmes ici.
     const v1Result = await computeLearnNextRecommendations(
       { supabase, fetchAllSupabaseRowsIn, computeRetrievability },
       { userId: user.id, limit }
     );
+    const neededCount = Math.max(0, limit - v1Result.recommendations.length);
 
     if (!learnNextAiFallback.shouldTriggerFallback(
-      { qualitySignal: v1Result.qualitySignal, coldStart: v1Result.coldStart },
+      { neededCount, coldStart: v1Result.coldStart },
       learnNextConfig
     )) {
       return res.json({ proposals: [], triggered: false });
@@ -17762,10 +17470,18 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
     // existe déjà. Une seule lecture bornée (même requête que
     // findEquivalentGeneratedCustomTopic), jamais une par proposition.
     const existingTopics = await learnNextRepository.fetchGeneratedCustomTopics(supabase);
-    const resolved = learnNextAiFallback.resolveProposalsAgainstCatalog(proposals, existingTopics);
+    let resolved = learnNextAiFallback.resolveProposalsAgainstCatalog(proposals, existingTopics);
     if (resolved.some((p) => !p.isNew)) {
       recordAiUsage(supabase, { feature: "learn_next_ai_fallback_deduplicated", success: true });
     }
+
+    // Filet de sécurité final (point 5 de la revue du 30/08/2026) : jamais un
+    // sujet déjà présent parmi les préconisations catalogue de CETTE réponse
+    // précise, puis troncature au nombre EXACT de places qu'il reste à
+    // combler — un seul appel IA par signature (cache mutualisé ci-dessus,
+    // inchangé), la troncature ne se fait qu'ici, jamais dans le prompt.
+    resolved = learnNextAiFallback.excludeAlreadyPicked(resolved, v1Result.recommendations.map((r) => r.name));
+    resolved = resolved.slice(0, neededCount);
 
     const payload = resolved.map((p) => {
       if (p.isNew) {

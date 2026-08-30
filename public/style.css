@@ -5221,6 +5221,16 @@ body.page-debate #score-b {
   line-height:1.4;
   font-weight:700;
 }
+/* Rappel affiché sous le titre (demande du 30/08/2026, suppression du mode
+   Exhaustif) : au-delà d'une vingtaine d'éléments à mémoriser, invite à
+   diviser le sujet en plusieurs créations plutôt qu'à chercher un niveau
+   plus poussé qui n'existe plus. */
+.notion-level-picker-hint{
+  margin:-8px 0 16px;
+  color:#6b7280;
+  font-size:12.5px;
+  line-height:1.5;
+}
 .notion-level-picker-option{
   display:flex;
   flex-direction:column;
@@ -19998,6 +20008,18 @@ body.page-home #debates-list .theme-row-section:first-child {
      rendant inertes malgré un gestionnaire de clic pourtant correct (demande du 09/08/2026,
      "rien n'est cliquable là"). */
   z-index: 140;
+  /* pointer-events:none sur le conteneur + auto seulement sur les vrais items cliquables :
+     la nav (display:flex, donc pleine largeur du conteneur) s'étend au-dessus du bouton
+     "Plein écran" (#mnoria-memory-fullpage-btn, ancré en haut à droite du cadre juste en
+     dessous) sans que ses items ne remplissent toute cette largeur. Sans ce découpage, la
+     bande vide du fil d'Ariane (au-dessus du z-index:130 du cadre, cf. commentaire ci-dessus)
+     interceptait les clics sur la majeure partie du bouton, qui ne restait cliquable que sur
+     sa toute dernière frange visible dépassant en dessous (demande du 30/08/2026, "il faut
+     que je mette la souris vraiment en bas du bouton"). */
+  pointer-events: none;
+}
+#mnoria-memoire-embed-before .universe-breadcrumb__item {
+  pointer-events: auto;
 }
 
 @media (min-width: 769px) {
@@ -22058,7 +22080,21 @@ body.page-debate .debate-side-focus-btn-right {
   }
 }
 
-/* App mobile : bouton connexion aligne a droite du bandeau blanc */
+/* App mobile : bouton connexion aligné à droite du bandeau blanc, sur la
+   même ligne que le logo et le hamburger — les trois sont des items de la
+   même première ligne de la grille .topbar-inner.topbar-home ("actions
+   brand spacer", cf. sa règle), donc déjà alignés verticalement par
+   align-self:center une fois placé dans grid-area:spacer.
+   Une correction ultérieure était passée en position:absolute + top:50%
+   pour "vraiment" coller ce bouton au bord droit — mais top:50% s'y calcule
+   sur la hauteur de TOUT .topbar-inner.topbar-home (qui a une 2e ligne de
+   grille "social", même vide), pas sur la seule 1re ligne où vivent logo et
+   hamburger : ça désaligne le bouton du logo dès que quoi que ce soit change
+   la hauteur totale (constaté le 30/08/2026, "il faut remonter le bouton
+   hamburger et le bouton on/off"). Retirée : justify-self:end sur une
+   colonne de grille dédiée (44px, symétrique à la colonne "actions" du
+   hamburger) suffit à coller le bouton au bord droit sans jamais dépendre
+   d'un calcul de hauteur. */
 @media (max-width: 768px) {
   body.is-standalone.page-home-mobile .home-topbar-login-icon {
     grid-area: spacer;
@@ -22072,23 +22108,6 @@ body.page-debate .debate-side-focus-btn-right {
 
   body.is-standalone.page-home-mobile .topbar-actions {
     justify-content: flex-start !important;
-  }
-}
-
-/* Correction app mobile : connexion vraiment au bord droit du bandeau */
-@media (max-width: 768px) {
-  body.is-standalone.page-home-mobile .topbar-inner.topbar-home {
-    position: relative !important;
-  }
-
-  body.is-standalone.page-home-mobile .home-topbar-login-icon {
-    position: absolute !important;
-    top: 50% !important;
-    right: 10px !important;
-    left: auto !important;
-    transform: translateY(-50%) !important;
-    margin: 0 !important;
-    z-index: 10005 !important;
   }
 }
 

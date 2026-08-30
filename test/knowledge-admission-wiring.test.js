@@ -14,7 +14,7 @@
 // exécuté), que le SEUL changement réel de ce ticket — quels appelants
 // passent includeVariants:true vs false à buildQuestionFormatsPromptBlock —
 // est bien celui attendu, et que les pipelines qui ne devaient PAS changer
-// (Comprendre, énumérable) sont restés identiques. Un test fragile aux
+// (Comprendre) sont restés identiques. Un test fragile aux
 // réagencements cosmétiques du code, mais qui verrouille exactement la
 // régression qui compte ici : que la généralisation soit bien appliquée là
 // où demandée, et nulle part ailleurs.
@@ -50,13 +50,6 @@ test("Comprendre les liens reste intact : includeVariants:false, intrus/ordre to
   assert.match(
     SERVER_SOURCE,
     /buildQuestionFormatsPromptBlock\("sourceId", COMPREHENSION_QUIZ_MAX_QUESTIONS, false, \["intrus", "ordre"\]\)/
-  );
-});
-
-test("le flux énumérable (sujet libre \"Exhaustif\") reste intact : includeVariants:true, formats composites exclus", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /buildQuestionFormatsPromptBlock\("sourceId", count, true, \["intrus", "ordre", "association", "qcm_multi"\]\)\.slice\(0, -1\)/
   );
 });
 
