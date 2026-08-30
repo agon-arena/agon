@@ -16800,10 +16800,24 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
       // alors rien plutôt qu'une ligne identique au titre juste au-dessus.
       searchTopic: row.questions?.[0]?.searchTopic || null,
       questionCount: Array.isArray(row.questions) ? row.questions.length : 0,
-      userCount: userCountBySlot.get(row.slot) || 0
+      userCount: userCountBySlot.get(row.slot) || 0,
+      // Même thématique que "Ma mémoire" (demande du 30/08/2026, "classés par
+      // thématique, la même que Ma mémoire") : getPrimaryNotionQuizTheme lit
+      // sourcePlacement.category (ou repli sourceThemes), déjà la source
+      // utilisée pour la galaxie de Ma mémoire (cf. GET /notion-quizzes).
+      theme: getPrimaryNotionQuizTheme(row.questions?.[0])
     }));
     if (searchQuery) items = items.filter((item) => item.label.toLowerCase().includes(searchQuery));
-    items.sort((a, b) => b.userCount - a.userCount || a.label.localeCompare(b.label));
+    // Groupées par thématique (sujets sans thématique en dernier), puis même
+    // ordre qu'avant (popularité, puis alphabétique) au sein d'un groupe.
+    items.sort((a, b) => {
+      if (a.theme !== b.theme) {
+        if (!a.theme) return 1;
+        if (!b.theme) return -1;
+        return a.theme.localeCompare(b.theme);
+      }
+      return b.userCount - a.userCount || a.label.localeCompare(b.label);
+    });
 
     res.json({ ok: true, items });
   } catch (error) {

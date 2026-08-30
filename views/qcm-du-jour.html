@@ -191,10 +191,17 @@
          fond à deviner derrière en dehors d'une question (demande du
          27/08/2026). */
       background: #ffffff;
-      border: 1px solid #e5e7eb;
+      border: 2px solid #111827;
       border-radius: 8px;
       padding: 24px;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+      /* Très léger liseret blanc à l'extérieur du noir (demande du
+         30/08/2026 — l'essai précédent en `outline` rendait mal, cf.
+         "tu l'as mis à l'intérieur") : box-shadow avec spread, toujours
+         dessiné à l'extérieur de la bordure et fidèle au border-radius dans
+         tous les navigateurs, contrairement à outline. */
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.85),
+        0 12px 30px rgba(0, 0, 0, 0.18);
       font-family: Arial, Helvetica, sans-serif;
     }
     /* À la première arrivée seulement, le panneau conserve sa place mais ne
@@ -268,13 +275,23 @@
     body.qcm-in-session .qcm-panel h1.qcm-page-heading-hidden {
       display: block !important;
       max-width: 680px;
-      margin: 0 auto 24px;
+      margin: 0 auto 8px;
       padding: 0 34px;
       color: #17212a;
       font-size: clamp(28px, 4.5vw, 34px);
       line-height: 1.15;
       text-align: center;
       text-wrap: balance;
+    }
+    /* Petit liseret noir sous le titre du QCM pendant la séance (demande du
+       30/08/2026). */
+    body.qcm-in-session .qcm-panel h1.qcm-page-heading-hidden::after {
+      content: '';
+      display: block;
+      width: 40px;
+      height: 3px;
+      margin: 12px auto 0;
+      background: #111827;
     }
     /* Charge de mémorisation (demande du 17/08/2026, remplacée le 27/08/2026
        par une barre de progression horizontale — l'ancien cadran à aiguille
@@ -965,6 +982,12 @@
       border-color: #516776;
       background: #ffffff;
     }
+    /* Un peu plus large que le gabarit par défaut (480px), demande du
+       30/08/2026 — davantage de place pour les sujets groupés par
+       thématique. */
+    .qcm-explore-modal {
+      max-width: 620px;
+    }
     /* position:relative (jamais fixed, contrairement à .qcm-fiche-overlay) :
        porte le dégradé "suite" générique (.scroll-fade-hint, cf. style.css,
        position:absolute) directement en enfant — la contrainte iOS Safari
@@ -978,7 +1001,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      max-height: 50vh;
+      max-height: 70vh;
       overflow-y: auto;
     }
     .qcm-explore-item {
@@ -1029,6 +1052,21 @@
       font-weight: 400;
       font-style: italic;
       color: #6b7280;
+    }
+    /* Intitulé de groupe par thématique (demande du 30/08/2026, "classés par
+       thématique, la même que Ma mémoire") : même caractère typographique que
+       .qcm-mesqcm-theme-toggle (thématiques de "Mes apprentissages"), en
+       simple étiquette sans carte/fond ici — la liste "Explorer" reste plate,
+       jamais repliable. */
+    .qcm-explore-theme-heading {
+      margin: 14px 0 2px;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #111827;
+    }
+    .qcm-explore-theme-heading:first-child {
+      margin-top: 0;
     }
     /* Confirmation avant génération IA (demande du 13/08/2026) : reprend le
        sujet + niveau choisis, pour éviter une génération lancée par erreur
@@ -1127,7 +1165,7 @@
       width: 100%;
       max-width: 680px;
       height: 20px;
-      margin: 0 auto 26px;
+      margin: 0 auto 8px;
       border-radius: 999px;
       background: #e3ddd2;
       border: 1px solid rgba(15, 23, 42, 0.06);
@@ -1496,6 +1534,15 @@
         linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top    / 100% 5px no-repeat,
         linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat;
       z-index: -1;
+    }
+    /* "Tous mes apprentissages" (Mes acquis) : premier bandeau juste après
+       les onglets Découvrir/Ancrer/Relier, sans jauge/bouton "Mémoriser"
+       entre les deux comme sur Découvrir — remonté pour ne pas hériter du
+       même espace, prévu pour ce contenu intermédiaire absent ici (demande
+       du 30/08/2026). Scopé à .qcm-mesqcm-group--all (le conteneur de ce
+       titre précis) pour ne pas toucher aux autres bandeaux de rubrique. */
+    .qcm-mesqcm-group--all > .qcm-mesqcm-group-title {
+      margin-top: -14px;
     }
     .qcm-mesqcm-theme-group + .qcm-mesqcm-theme-group {
       margin-top: 10px;
@@ -3597,9 +3644,27 @@
       closeAiGenerateModal();
       closeKnowledgeRouteModal();
     }
+    // Masquage immédiat en quittant Découvrir, mais JAMAIS d'affichage
+    // synchrone ici (demande du 30/08/2026, "le bouton cliquer ici apparaît
+    // en premier") : révélé uniquement par revealDiscoverActions, appelé
+    // depuis loadMesQcm une fois les données (rubriques + jauge) réellement
+    // peintes — sinon ce bouton, seul sans gating de données contrairement
+    // au reste du panneau (cf. signalIframeReady/refreshLearnNextInlineVisibility
+    // ci-dessous), apparaissait seul avant tout le reste.
+    if (!visible) {
+      if (knowledgeAddToggle) knowledgeAddToggle.hidden = true;
+      exploreBtn.hidden = true;
+    }
+    refreshLearnNextInlineVisibility();
+  }
+
+  // Révèle "Cliquer ici pour commencer…" et "Explorer" — appelé uniquement
+  // une fois le contenu réel de Découvrir affiché (succès, liste vide sans
+  // voterKey, ou erreur), jamais avant, cf. commentaire ci-dessus.
+  function revealDiscoverActions() {
+    var visible = currentCategory === 'mesqcm' && !currentSlot;
     if (knowledgeAddToggle) knowledgeAddToggle.hidden = !visible;
     exploreBtn.hidden = !visible;
-    refreshLearnNextInlineVisibility();
   }
 
   function renderCategorySwitcher() {
@@ -5267,6 +5332,7 @@
   function closeMesQcmExploreModal() {
     if (!mesQcmExploreModalEls) return;
     mesQcmExploreModalEls.overlay.remove();
+    if (mesQcmExploreModalEls.closeResizeObserver) mesQcmExploreModalEls.closeResizeObserver.disconnect();
     document.removeEventListener('keydown', mesQcmExploreModalEls.onKeydown);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     mesQcmExploreModalEls = null;
@@ -5289,6 +5355,17 @@
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
     positionFicheClose(overlay);
+    // La carte change de hauteur à chaque étape (sablier -> liste, recherche
+    // filtrée qui raccourcit/allonge le nombre de résultats...) : un seul
+    // calcul à l'ouverture laissait la croix décrochée du coin réel de la
+    // carte dès que son contenu changeait (demande du 30/08/2026, "elle peut
+    // apparaître au milieu du cadre").
+    var exploreCloseResizeObserver = null;
+    if (typeof ResizeObserver === 'function') {
+      var exploreCardEl = overlay.querySelector('.qcm-fiche-modal');
+      exploreCloseResizeObserver = new ResizeObserver(function () { positionFicheClose(overlay); });
+      exploreCloseResizeObserver.observe(exploreCardEl);
+    }
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function onKeydown(e) { if (e.key === 'Escape') closeMesQcmExploreModal(); }
@@ -5297,7 +5374,7 @@
     });
     document.addEventListener('keydown', onKeydown);
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeMesQcmExploreModal);
-    mesQcmExploreModalEls = { overlay: overlay, onKeydown: onKeydown };
+    mesQcmExploreModalEls = { overlay: overlay, onKeydown: onKeydown, closeResizeObserver: exploreCloseResizeObserver };
 
     var searchInput = overlay.querySelector('#qcm-explore-search-input');
     var listWrapEl = overlay.querySelector('.qcm-explore-list-wrap');
@@ -5334,13 +5411,26 @@
         updateExploreFadeHint();
         return;
       }
+      // Classés par thématique (demande du 30/08/2026, "la même que Ma
+      // mémoire") : items déjà groupés par item.theme côté serveur (cf. GET
+      // .../explore) — on insère juste un intitulé de groupe à chaque
+      // changement de thématique, jamais de logique de tri ici.
+      var lastTheme;
+      var hasSeenTheme = false;
       listEl.innerHTML = items.map(function (item) {
+        var themeHeadingHtml = '';
+        if (!hasSeenTheme || item.theme !== lastTheme) {
+          themeHeadingHtml = '<p class="qcm-explore-theme-heading">' + escapeHtml(item.theme || 'Autres sujets') + '</p>';
+          lastTheme = item.theme;
+          hasSeenTheme = true;
+        }
         var already = !!ownedSlots[item.slot];
         var metaText = already ? 'Déjà dans ta liste' : (item.userCount + ' visiteur' + (item.userCount > 1 ? 's' : ''));
         var count = Number(item.questionCount) || 0;
         var countText = count + ' question' + (count > 1 ? 's' : '');
         var queryHtml = item.searchTopic ? '<span class="qcm-explore-item-query">' + escapeHtml(item.searchTopic) + '</span>' : '';
-        return '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '"' + (already ? ' disabled' : '') + '>' +
+        return themeHeadingHtml +
+          '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '"' + (already ? ' disabled' : '') + '>' +
           '<span class="qcm-explore-item-label">' + escapeHtml(item.label) + '<span class="qcm-explore-item-count">' + escapeHtml(countText) + '</span>' + queryHtml + '</span>' +
           '<span class="qcm-explore-item-meta">' + escapeHtml(metaText) + '</span>' +
         '</button>';
@@ -5836,6 +5926,7 @@
     if (!voterKey) {
       renderMesQcmEmpty();
       updateMesAcquisAvailability([]);
+      revealDiscoverActions();
       return;
     }
     renderMessage('Chargement de tes QCM…');
@@ -5859,11 +5950,13 @@
         else hideLoadGauge();
         renderMesQcmList(quizzes);
         updateMesAcquisAvailability(quizzes);
+        revealDiscoverActions();
       })
       .catch(function () {
         if (myToken === loadToken) {
           hideLoadGauge();
           renderMessage('Impossible de charger tes QCM pour le moment.');
+          revealDiscoverActions();
         }
       });
   }
