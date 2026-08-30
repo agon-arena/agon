@@ -169,7 +169,13 @@
       ".mnoria-universal-menu-item{display:flex;align-items:center;gap:7px;width:100%;padding:6px 9px;border:0;border-radius:9px;background:#fff;color:#1f2937;font:inherit;font-size:13px;font-weight:700;line-height:1.15;text-align:left;text-decoration:none;cursor:pointer;box-sizing:border-box}" +
       ".mnoria-universal-menu-item:hover,.mnoria-universal-menu-item:focus-visible{background:#f3f4f6;outline:none}" +
       ".mnoria-universal-menu-item i{width:16px;flex:0 0 16px;text-align:center;font-size:14px}" +
-      "@media(display-mode:standalone) and (max-width:768px){.mnoria-universal-menu-wrap{top:calc(49px + env(safe-area-inset-top,0px))}}" +
+      // Aligné en haut de la ligne du logo, pas centré sur toute la hauteur utile du bandeau
+      // (49px + safe visait son centre — trop bas par rapport au haut du mot-symbole "mnoria",
+      // constaté le 30/08/2026, même correctif que .standalone-header-power/index) : top:4px
+      // reproduit le petit espace entre le haut du bandeau et le haut du logo (66px de haut
+      // dans une ligne de 72px), transform annulé pour que top vise directement le bord haut
+      // du bouton plutôt que son centre.
+      "@media(display-mode:standalone) and (max-width:768px){.mnoria-universal-menu-wrap{top:calc(4px + env(safe-area-inset-top,0px));transform:none}}" +
       "body.mnoria-universal-menu-open .topbar{z-index:300000!important;overflow:visible!important}";
     document.head.appendChild(style);
   }

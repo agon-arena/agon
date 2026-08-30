@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v2">
+  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -1246,7 +1246,7 @@
       100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); filter: blur(4px); }
     }
     .qcm-question {
-      margin: 0 0 4px;
+      margin: 0 0 18px;
       font-size: 19px;
       font-weight: 600;
       color: #111827;
@@ -1917,21 +1917,29 @@
       color: #6b7280;
       line-height: 1.4;
     }
-    .qcm-mesqcm-action-menu-item-danger {
-      border-color: #fde3e3;
-      background: #fef7f7;
+    /* "Supprimer" (demande du 30/08/2026, "beaucoup plus discrète") : un
+       simple lien texte centré sous les deux cartes d'action, pas une carte
+       de même poids visuel — évite qu'une action destructive attire autant
+       l'œil que "Consulter la fiche"/"Faire le QCM". */
+    .qcm-mesqcm-action-menu-delete-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      margin: 4px 0 0;
+      padding: 6px;
+      border: none;
+      background: none;
+      font: inherit;
+      font-size: 12.5px;
+      color: #9ca3af;
+      cursor: pointer;
     }
-    .qcm-mesqcm-action-menu-item-danger .qcm-mesqcm-action-menu-item-icon {
-      background: #fef2f2;
+    .qcm-mesqcm-action-menu-delete-link:hover,
+    .qcm-mesqcm-action-menu-delete-link:focus-visible {
       color: #dc2626;
-    }
-    .qcm-mesqcm-action-menu-item-danger .qcm-mesqcm-action-menu-item-title {
-      color: #dc2626;
-    }
-    .qcm-mesqcm-action-menu-item-danger:hover,
-    .qcm-mesqcm-action-menu-item-danger:focus-visible {
-      border-color: #fca5a5;
-      background: #fef2f2;
+      text-decoration: underline;
     }
     /* Noès (intégration du 26/08/2026, fusionné dans la fiche le 30/08/2026) :
        conteneur inséré directement dans buildFicheWithNoesModalHtml — état
@@ -2277,6 +2285,11 @@
       gap: 10px;
       margin-bottom: 10px;
     }
+    /* Bandeau haut vide de contenu en flux (croix seule, position:fixed) —
+       pas de marge à réserver en dessous. */
+    .qcm-fiche-head-no-rubric {
+      margin-bottom: 0;
+    }
     .qcm-fiche-rubric {
       display: flex;
       align-items: center;
@@ -2439,23 +2452,6 @@
       font-weight: 700;
       letter-spacing: 0.03em;
       text-transform: uppercase;
-    }
-    /* Badge d'origine (actu / culture générale) : distingue une question
-       actualité d'une question culture générale une fois mélangées dans la
-       même session (cf. fusion QCM actu + Culture Générale) — seules ces
-       dernières alimentent Mon univers. */
-    .qcm-origin-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      margin: 4px 0 8px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      background: #e9f1fb;
-      color: #1e3a5f;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
     }
     /* Boutons Facile/Moyen/Difficile (cf. wireDifficultyButtons, demande du
        13/08/2026) : remplacent "Valider" — valider et noter la difficulté
@@ -2716,8 +2712,8 @@
     body:not(.qcm-in-session) #qcm-body {
       max-width: none;
     }
-    .qcm-origin-badge,
     .qcm-type-badge {
+      margin-bottom: 12px;
       padding: 0;
       background: transparent;
       color: #8a97a3;
@@ -2725,15 +2721,9 @@
       font-weight: 600;
       letter-spacing: 0.06em;
     }
-    .qcm-type-badge {
-      margin-bottom: 12px;
-    }
-    .qcm-origin-badge {
-      margin: 4px 0 28px;
-    }
     .qcm-question {
       max-width: 680px;
-      margin: 4px auto 6px;
+      margin: 4px auto 28px;
       color: #17212a;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: clamp(21px, 2.7vw, 26px);
@@ -2938,12 +2928,9 @@
         margin-right: -16px;
       }
       .qcm-question {
-        margin-bottom: 4px;
+        margin-bottom: 22px;
         font-size: clamp(20px, 5.8vw, 24px);
         line-height: 1.25;
-      }
-      .qcm-origin-badge {
-        margin-bottom: 22px;
       }
       .qcm-option-btn {
         min-height: 56px;
@@ -2994,7 +2981,7 @@
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260819-mnoria-rebrand" defer></script>
+  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v3" defer></script>
 </head>
 <body class="page-qcm-du-jour qcm-learning-background">
 <header class="topbar topbar--mnoria-uniform">
@@ -3744,22 +3731,6 @@
     return label ? '<span class="qcm-type-badge">' + escapeHtml(label) + '</span>' : '';
   }
 
-  // Badge d'origine (actu / culture générale) affiché au-dessus de chaque
-  // question, une fois les deux mélangées dans la même session (cf.
-  // question.origin/sourceType renvoyés par server.js stripQuestionForClient) :
-  // réutilise les icônes de rubrique (ACQUIS_SOURCE_TYPE_META) pour la
-  // culture générale, un badge générique pour l'actu.
-  function renderOriginBadge(question) {
-    if (question.origin === 'comprendre') {
-      return '<span class="qcm-origin-badge"><i class="fa-solid fa-link"></i>Comprendre</span>';
-    }
-    if (question.origin === 'culture_generale') {
-      var meta = ACQUIS_SOURCE_TYPE_META[question.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
-      return '<span class="qcm-origin-badge"><i class="fa-solid ' + meta.icon + '"></i>' + escapeHtml(meta.label) + '</span>';
-    }
-    return '<span class="qcm-origin-badge"><i class="fa-solid fa-newspaper"></i>Actualité</span>';
-  }
-
   // Retirer une question de ses futures repasses ("Renforcement") — l'utilisateur
   // la connaît déjà ou n'est plus intéressé (demande du 12/08/2026). N'affecte
   // jamais la session en cours (chaque question n'apparaît qu'une fois par
@@ -4057,7 +4028,6 @@
     html += renderProgressIndicatorHtml();
     html += renderTypeBadge(type);
     html += '<p class="qcm-question">' + questionHtml + '</p>';
-    html += renderOriginBadge(question);
     var gated = needsRevealGate(type, answer, question);
     if (gated) html += renderRevealGateHtml(question.helpLevel);
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
@@ -4155,7 +4125,6 @@
     html += renderProgressIndicatorHtml();
     html += renderTypeBadge('association');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
-    html += renderOriginBadge(question);
     html += '<div id="qcm-assoc-rows"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += renderDifficultyButtonsHtml('qcm-assoc', false);
@@ -4286,7 +4255,6 @@
     html += renderProgressIndicatorHtml();
     html += renderTypeBadge('qcm_multi');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
-    html += renderOriginBadge(question);
     var gated = needsRevealGate('qcm_multi', answer, question);
     if (gated) html += renderRevealGateHtml(question.helpLevel);
     html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
@@ -4382,7 +4350,6 @@
     html += renderProgressIndicatorHtml();
     html += renderTypeBadge('ordre');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
-    html += renderOriginBadge(question);
     html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
     html += '<div class="qcm-order-chosen" id="qcm-order-chosen"></div>';
     html += '<div class="qcm-order-pool" id="qcm-order-pool"></div>';
@@ -6437,15 +6404,30 @@
 
     var modalHtml =
       '<div class="qcm-fiche-modal qcm-mesqcm-action-modal">' +
-        '<div class="qcm-fiche-head">' +
-          '<p class="qcm-fiche-rubric"><i class="fa-solid ' + meta.icon + '"></i> ' + escapeHtml(meta.label) + '</p>' +
+        // Plus de libellé de type ("Sujet recherché", "Ce jour dans
+        // l'Histoire"...) en haut de ce popup précis (demande du 30/08/2026,
+        // "enlève le message du type sujet recherché") : seule la croix
+        // reste dans le bandeau haut, gardé pour sa logique de positionnement
+        // fixe (cf. positionFicheClose) — jamais retiré ailleurs (fiche
+        // complète, "Commencer un nouvel apprentissage").
+        '<div class="qcm-fiche-head qcm-fiche-head-no-rubric">' +
           '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
         '<p class="qcm-mesqcm-action-modal-name">' + escapeHtml(q.label || meta.label) + '</p>' +
         '<div class="qcm-mesqcm-action-menu-info"><span>Ancrage</span>' + ancrageBadgeHtml + '</div>' +
-        actionCardHtml('fiche', 'fa-file-lines', 'Consulter la fiche', 'Revoir le résumé, l’image et le corrigé complet des questions.') +
+        // Rempli une fois chargée (cf. fetch juste après l'ouverture de
+        // l'overlay ci-dessous, demande du 30/08/2026 "l'image associée au
+        // qcm apparaisse aussi ici sous Ancrage") : vide si la notion n'a
+        // pas d'image, jamais d'espace réservé visible dans ce cas.
+        '<div class="qcm-mesqcm-action-image-slot" id="qcm-mesqcm-action-image-slot"></div>' +
+        actionCardHtml('fiche', 'fa-file-lines', 'Consulter le parcours d\'apprentissage', 'Voir les connaissances, l’image et le corrigé complet des questions.') +
         actionCardHtml('quiz', 'fa-play', doLabel, doDesc) +
-        actionCardHtml('delete', 'fa-trash-can', 'Supprimer', 'Retire définitivement cet apprentissage de ta liste « Mes apprentissages ».', 'qcm-mesqcm-action-menu-item-danger') +
+        // Discret à dessein (demande du 30/08/2026, "rend l'option supprimer
+        // beaucoup plus discrète") : simple lien texte sous les deux cartes
+        // d'action, plus une carte de même poids visuel qu'elles.
+        '<button type="button" class="qcm-mesqcm-action-menu-delete-link" data-action="delete">' +
+          '<i class="fa-solid fa-trash-can"></i> Supprimer cet apprentissage' +
+        '</button>' +
       '</div>';
 
     var overlay = document.createElement('div');
@@ -6479,6 +6461,29 @@
     });
 
     mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown };
+
+    // Image de la notion (demande du 30/08/2026) : même source que la fiche
+    // complète (GET .../notion-quizzes/fiche), chargée à part pour ne pas
+    // retarder l'ouverture du popup. Vérifie que ce popup précis est
+    // toujours ouvert avant d'injecter (mesQcmActionModalEls a pu changer
+    // entre-temps si fermé/rouvert vite).
+    fetch('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(q.slot) + '&date=' + encodeURIComponent(q.quizDate) + '&legacyKey=' + encodeURIComponent(voterKey || ''), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!mesQcmActionModalEls || mesQcmActionModalEls.overlay !== overlay) return;
+        var img = data && data.sourceDetail && data.sourceDetail.image;
+        if (!img || !img.url) return;
+        var imageSlot = overlay.querySelector('#qcm-mesqcm-action-image-slot');
+        if (!imageSlot) return;
+        var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia')));
+        imageSlot.innerHTML = '<figure class="qcm-fiche-image">' +
+          '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(q.label || meta.label) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
+          (img.pageUrl
+            ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+            : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+          '</figure>';
+      })
+      .catch(function () {});
   }
 
   // Noès (intégration du 26/08/2026, fusionné dans la fiche le 30/08/2026) :

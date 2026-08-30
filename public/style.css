@@ -27424,22 +27424,39 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .pag
   transform: translateY(-50%) !important;
 }
 
-/* Sur iPhone installé, le bouton est enfant direct du bandeau : top:50%
-   incluait donc la zone sûre supérieure et le plaçait plus haut que celui de
-   l'index, qui est centré dans les 96px utiles sous cette zone. 49px + safe
-   reproduit exactement le centre de ce contenu utile. */
-@media (display-mode: standalone) and (max-width: 768px) {
-  body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
-    .topbar--mnoria-uniform > .standalone-header-power {
-    top: calc(49px + env(safe-area-inset-top, 0px)) !important;
-  }
-}
-
 body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
   .topbar--mnoria-uniform > .standalone-header-power:hover,
 body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
   .topbar--mnoria-uniform > .standalone-header-power:focus-visible {
   transform: translateY(-50%) !important;
+}
+
+/* Sur iPhone installé, le bouton est enfant direct du bandeau : top:50%
+   le centrait sur toute la hauteur utile du bandeau (padding de zone sûre
+   exclu), pas sur le logo lui-même — plus bas que le haut du mot-symbole
+   "mnoria" (66px de haut dans une ligne de 72px, quasiment plaquée en haut),
+   d'où un bouton visiblement "trop bas" par rapport au logo (constaté le
+   30/08/2026, même bug que .home-topbar-login-icon/index, cf. son
+   commentaire). Un premier correctif visait 49px + safe comme CENTRE de
+   cette hauteur utile — toujours décentré du haut réel du logo. top:4px +
+   safe (haut du bouton, transform annulé) reproduit à la place le petit
+   espace entre le haut du bandeau et le haut du logo. Placée APRÈS la règle
+   :hover/:focus-visible générale ci-dessus pour la gagner en cascade (même
+   spécificité, toutes deux !important — seul l'ordre dans le fichier
+   tranche). */
+@media (display-mode: standalone) and (max-width: 768px) {
+  body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
+    .topbar--mnoria-uniform > .standalone-header-power {
+    top: calc(4px + env(safe-area-inset-top, 0px)) !important;
+    transform: none !important;
+  }
+
+  body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
+    .topbar--mnoria-uniform > .standalone-header-power:hover,
+  body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
+    .topbar--mnoria-uniform > .standalone-header-power:focus-visible {
+    transform: none !important;
+  }
 }
 
 /* Bandeau inférieur unifié — mêmes dimensions et mêmes espacements sur toutes les pages. */

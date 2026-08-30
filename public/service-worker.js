@@ -1,10 +1,10 @@
-// Invalidation du 30/08/2026 : le bandeau blanc du haut (alignement hamburger/logo/bouton
-// on-off en standalone) a été corrigé côté HTML/CSS, mais la home ("/") est servie cache-first
-// en navigation (cf. plus bas) — l'app déjà installée continuait donc d'afficher l'ancien
-// balisage/CSS malgré le correctif serveur. Changer cette version active le nouveau worker,
-// vide l'ancien cache statique (HTML + assets ?v=...) et laisse la navigation suivante
-// récupérer la version corrigée.
-const SW_VERSION = "20260830-topbar-align-fix-v232";
+// Invalidation du 30/08/2026 (v233) : le vrai bug du bandeau blanc du haut sur Apprentissage/
+// Ouvrir/Notifications n'était PAS dans le même CSS que l'index (.home-topbar-login-icon) mais
+// dans .standalone-header-power (public/style.css) et le hamburger injecté par
+// header-score-widget.js (.mnoria-universal-menu-wrap) — deux mécanismes séparés, non touchés
+// par le correctif précédent (v232). Changer cette version vide l'ancien cache statique (HTML +
+// assets ?v=...) et laisse la navigation suivante récupérer la version corrigée.
+const SW_VERSION = "20260830-topbar-align-fix-v233";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
