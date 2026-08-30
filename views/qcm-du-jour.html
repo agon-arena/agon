@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v4">
+  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v5">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -2306,6 +2306,14 @@
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }
+    /* Variante posée sous la ligne thème/niveau/questions plutôt que dans le
+       bandeau haut (demande du 30/08/2026) : centrée comme .qcm-fiche-name et
+       .qcm-fiche-level-info juste au-dessus, au lieu de suivre le fil du
+       bandeau haut (croix seule désormais, cf. .qcm-fiche-head-no-rubric). */
+    .qcm-fiche-rubric-below {
+      justify-content: center;
+      margin: 0 0 14px;
+    }
     /* position:fixed (demande du 30/08/2026, "la croix doit rester visible
        même en scrollant") : un essai précédent de sticky (13/08/2026) a été
        abandonné pour fixed pour la raison inverse — mais sticky s'est révélé
@@ -2986,7 +2994,7 @@
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v4" defer></script>
+  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v5" defer></script>
 </head>
 <body class="page-qcm-du-jour qcm-learning-background">
 <header class="topbar topbar--mnoria-uniform">
@@ -3179,6 +3187,10 @@
           '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
         '<div id="qcm-knowledge-add-window-slot"></div>' +
+        // Bouton retour en bas de la fenêtre (demande du 30/08/2026, "tout en
+        // bas de la fenêtre") — même style/gabarit que le "Fermer" des fiches
+        // (.qcm-fiche-bottom-close), en plus de la croix déjà en haut.
+        '<button type="button" class="qcm-fiche-bottom-close" id="qcm-knowledge-add-return-btn">Retour aux apprentissages</button>' +
       '</div>';
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
@@ -3192,6 +3204,9 @@
     knowledgeAddDialog = overlay;
     setParentIframeCloseVisible(false);
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', function () {
+      closeKnowledgeAddMenu({ restoreFocus: true });
+    });
+    overlay.querySelector('#qcm-knowledge-add-return-btn').addEventListener('click', function () {
       closeKnowledgeAddMenu({ restoreFocus: true });
     });
     overlay.addEventListener('click', function (event) {
@@ -4577,12 +4592,12 @@
   function buildFicheModalHtml(iconClass, rubricLabel, name, detail, extraHtml, themes, links, level, questionCount) {
     var html =
       '<div class="qcm-fiche-modal">' +
-      '<div class="qcm-fiche-head">' +
-      '<p class="qcm-fiche-rubric"><i class="fa-solid ' + iconClass + '"></i> ' + escapeHtml(rubricLabel) + '</p>' +
+      '<div class="qcm-fiche-head qcm-fiche-head-no-rubric">' +
       '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
       '</div>' +
       '<p class="qcm-fiche-name">' + escapeHtml(name) + '</p>' +
-      renderFicheLevelInfo(themes, level, questionCount);
+      renderFicheLevelInfo(themes, level, questionCount) +
+      '<p class="qcm-fiche-rubric qcm-fiche-rubric-below"><i class="fa-solid ' + iconClass + '"></i> ' + escapeHtml(rubricLabel) + '</p>';
     if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
     if (/^https?:\/\//i.test(String(detail.sourceUrl || ''))) {
       html += '<p class="qcm-fiche-meta"><a href="' + escapeHtml(detail.sourceUrl) + '" target="_blank" rel="noopener noreferrer">Voir la page source</a></p>';
@@ -4629,12 +4644,12 @@
     var restSections = sections.slice(1);
     var html =
       '<div class="qcm-fiche-modal">' +
-      '<div class="qcm-fiche-head">' +
-      '<p class="qcm-fiche-rubric"><i class="fa-solid ' + iconClass + '"></i> ' + escapeHtml(rubricLabel) + '</p>' +
+      '<div class="qcm-fiche-head qcm-fiche-head-no-rubric">' +
       '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
       '</div>' +
       '<p class="qcm-fiche-name">' + escapeHtml(name) + '</p>' +
-      renderFicheLevelInfo(themes, level, questionCount);
+      renderFicheLevelInfo(themes, level, questionCount) +
+      '<p class="qcm-fiche-rubric qcm-fiche-rubric-below"><i class="fa-solid ' + iconClass + '"></i> ' + escapeHtml(rubricLabel) + '</p>';
     if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
     html += '<div class="qcm-noes-body" id="' + escapeHtml(noesBodyId) + '">' +
       '<p class="qcm-noes-status"><i class="fa-solid fa-spinner fa-spin"></i> Noès prépare cette séance…</p>' +
@@ -4691,6 +4706,52 @@
     closeBtn.style.right = Math.max(0, window.innerWidth - rect.right) + 'px';
   }
 
+  // Dégradé "suite ↓" (extrait d'openFicheOverlay le 30/08/2026 pour être
+  // réutilisable, notamment par le menu d'action "Consulter la fiche/Faire le
+  // QCM/Supprimer") : position:fixed direct sur <body>, pas un enfant
+  // position:absolute de l'overlay (position:fixed + overflow-y:auto) — sur
+  // iOS Safari, un tel enfant ne reste pas fiablement épinglé pendant le
+  // défilement. bottom: env(safe-area-inset-bottom) (cf. .qcm-fiche-fade-hint)
+  // le tient déjà correctement au-dessus de la zone morte des ~44 derniers px
+  // du bas en PWA standalone sur iPhone à encoche — aucune logique
+  // supplémentaire à écrire ici pour ce cas.
+  function attachFicheFadeHint(overlay, cardEl) {
+    if (!cardEl) return null;
+    var hint = document.createElement('div');
+    hint.className = 'scroll-fade-hint qcm-fiche-fade-hint is-hidden';
+    hint.style.setProperty('--scroll-fade-color', '#ffffff');
+    hint.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
+    document.body.appendChild(hint);
+    hint.querySelector('.scroll-fade-hint-text').addEventListener('click', function (e) {
+      e.stopPropagation();
+      overlay.scrollBy({ top: overlay.clientHeight * 0.8, behavior: 'smooth' });
+    });
+    function update() {
+      var rect = cardEl.getBoundingClientRect();
+      hint.classList.toggle('is-hidden', rect.bottom <= window.innerHeight + 4);
+    }
+    overlay.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update, { passive: true });
+    requestAnimationFrame(update);
+    // Un seul rAF au moment de l'ouverture ne suffit pas : une image chargée
+    // en lazy ou les polices peuvent encore agrandir la carte après ce
+    // premier calcul, laissant le dégradé dans le mauvais état jusqu'au
+    // prochain scroll.
+    var resizeObserver = null;
+    if (typeof ResizeObserver === 'function') {
+      resizeObserver = new ResizeObserver(update);
+      resizeObserver.observe(cardEl);
+    }
+    return {
+      update: update,
+      destroy: function () {
+        hint.remove();
+        window.removeEventListener('resize', update);
+        if (resizeObserver) resizeObserver.disconnect();
+      }
+    };
+  }
+
   // Ouvre une fiche à partir de son HTML intérieur déjà construit (cf.
   // buildFicheModalHtml) : overlay, dégradé "suite ↓", fermeture (croix, clic
   // hors modale, Échap, bouton du bas).
@@ -4703,51 +4764,15 @@
     // Pas attachScrollFadeHint (générique) : il se base sur le bas de TOUTE la
     // zone de scroll, qui inclut ici .qcm-fiche-scroll-spacer (sombre, sous la
     // fiche) — le dégradé blanc y jurait sur le fond sombre et restait visible
-    // bien après la fin du vrai contenu. On se base plutôt sur le bas réel de
-    // .qcm-fiche-modal (la carte blanche) par rapport au viewport.
-    var ficheModalEl = overlay.querySelector('.qcm-fiche-modal');
-    var ficheFadeHint, updateFicheFadeHint, ficheFadeResizeObserver;
-    if (ficheModalEl) {
-      ficheFadeHint = document.createElement('div');
-      // qcm-fiche-fade-hint : position:fixed direct sur <body>, pas un enfant
-      // position:absolute de .qcm-fiche-overlay (position:fixed + overflow-y:
-      // auto). Sur iOS Safari, un enfant absolute d'un conteneur fixed qui
-      // scroll ne reste pas fiablement épinglé pendant le défilement — il
-      // "scrolle avec" le contenu et finit ailleurs à l'écran (constaté :
-      // "suite" coincé au milieu du texte au lieu du bas de l'écran).
-      ficheFadeHint.className = 'scroll-fade-hint qcm-fiche-fade-hint is-hidden';
-      ficheFadeHint.style.setProperty('--scroll-fade-color', '#ffffff');
-      ficheFadeHint.innerHTML = '<span class="scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
-      document.body.appendChild(ficheFadeHint);
-      ficheFadeHint.querySelector('.scroll-fade-hint-text').addEventListener('click', function (e) {
-        e.stopPropagation();
-        overlay.scrollBy({ top: overlay.clientHeight * 0.8, behavior: 'smooth' });
-      });
-      updateFicheFadeHint = function () {
-        var rect = ficheModalEl.getBoundingClientRect();
-        ficheFadeHint.classList.toggle('is-hidden', rect.bottom <= window.innerHeight + 4);
-      };
-      overlay.addEventListener('scroll', updateFicheFadeHint, { passive: true });
-      window.addEventListener('resize', updateFicheFadeHint, { passive: true });
-      requestAnimationFrame(updateFicheFadeHint);
-      // Un seul rAF au moment de l'ouverture ne suffit pas : l'image de la
-      // fiche (chargée en lazy) ou les polices peuvent encore agrandir la
-      // fiche après ce premier calcul, laissant le dégradé dans le mauvais
-      // état (affiché/masqué à tort) jusqu'au prochain scroll. Un
-      // ResizeObserver sur la fiche elle-même le retient à jour à chaque
-      // changement de sa hauteur réelle.
-      if (typeof ResizeObserver === 'function') {
-        ficheFadeResizeObserver = new ResizeObserver(updateFicheFadeHint);
-        ficheFadeResizeObserver.observe(ficheModalEl);
-      }
-    }
+    // bien après la fin du vrai contenu. attachFicheFadeHint se base plutôt
+    // sur le bas réel de .qcm-fiche-modal (la carte blanche) par rapport au
+    // viewport.
+    var ficheFade = attachFicheFadeHint(overlay, overlay.querySelector('.qcm-fiche-modal'));
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
     function close() {
       overlay.remove();
-      if (ficheFadeHint) ficheFadeHint.remove();
+      if (ficheFade) ficheFade.destroy();
       document.removeEventListener('keydown', onKeydown);
-      if (typeof updateFicheFadeHint === 'function') window.removeEventListener('resize', updateFicheFadeHint);
-      if (ficheFadeResizeObserver) ficheFadeResizeObserver.disconnect();
       try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     }
     function onKeydown(e) {
@@ -6389,6 +6414,7 @@
   function closeMesQcmActionModal() {
     if (!mesQcmActionModalEls) return;
     mesQcmActionModalEls.overlay.remove();
+    if (mesQcmActionModalEls.fade) mesQcmActionModalEls.fade.destroy();
     document.removeEventListener('keydown', mesQcmActionModalEls.onKeydown);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     mesQcmActionModalEls = null;
@@ -6463,6 +6489,7 @@
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
     positionFicheClose(overlay);
+    var actionModalFade = attachFicheFadeHint(overlay, overlay.querySelector('.qcm-fiche-modal'));
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionModal(); }
@@ -6492,7 +6519,7 @@
       returnToLearningOverview();
     });
 
-    mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown };
+    mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown, fade: actionModalFade };
 
     // Image de la notion (demande du 30/08/2026) : même source que la fiche
     // complète (GET .../notion-quizzes/fiche), chargée à part pour ne pas
@@ -6514,6 +6541,18 @@
             ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
             : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
           '</figure>';
+        // La carte grandit (donc se recentre verticalement) une fois l'image
+        // insérée, puis une seconde fois une fois l'image réellement chargée
+        // (hauteur inconnue jusque-là, cf. .qcm-fiche-image img { height:
+        // auto }) : sans ces deux recalculs, la croix restait figée à la
+        // position mesurée avant l'image et finissait décrochée du coin réel
+        // de la carte, comme "flottante" (demande du 30/08/2026).
+        positionFicheClose(overlay);
+        var insertedImg = imageSlot.querySelector('img');
+        if (insertedImg) {
+          if (insertedImg.complete) positionFicheClose(overlay);
+          else insertedImg.addEventListener('load', function () { positionFicheClose(overlay); });
+        }
       })
       .catch(function () {});
   }
@@ -6630,12 +6669,45 @@
   // complet de ses questions — jamais filtré par ce que ce visiteur précis
   // a déjà répondu, la fiche sert de support de révision.
   var mesQcmFicheToken = 0;
+  var mesQcmFicheLoadingOverlay = null;
+  function closeMesQcmFicheLoadingOverlay() {
+    if (!mesQcmFicheLoadingOverlay) return;
+    mesQcmFicheLoadingOverlay.overlay.remove();
+    document.removeEventListener('keydown', mesQcmFicheLoadingOverlay.onKeydown);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    mesQcmFicheLoadingOverlay = null;
+  }
   function openMesQcmFicheFromUrl(url, fallbackLabel) {
     var myToken = ++mesQcmFicheToken;
+    closeMesQcmFicheLoadingOverlay();
+    // Sablier immédiat (demande du 30/08/2026) : sans lui, cliquer sur
+    // "Consulter le parcours d'apprentissage" ne montrait rien tant que le
+    // fetch ci-dessous n'avait pas résolu — comme si le clic n'avait rien
+    // fait. Fermable (croix hors-sujet ici, mais clic dehors/Échap) : le
+    // token incrémenté fait ignorer une réponse qui arriverait après coup.
+    var loadingOverlay = document.createElement('div');
+    loadingOverlay.className = 'qcm-fiche-overlay';
+    loadingOverlay.innerHTML = '<div class="qcm-fiche-overlay-inner"><div class="qcm-fiche-modal">' +
+      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement de la fiche…</p>' +
+      '</div></div>';
+    document.body.appendChild(loadingOverlay);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+    function cancelLoading() {
+      mesQcmFicheToken++;
+      closeMesQcmFicheLoadingOverlay();
+    }
+    function onLoadingKeydown(e) { if (e.key === 'Escape') cancelLoading(); }
+    loadingOverlay.addEventListener('click', function (e) {
+      if (e.target === loadingOverlay || e.target.classList.contains('qcm-fiche-overlay-inner')) cancelLoading();
+    });
+    document.addEventListener('keydown', onLoadingKeydown);
+    mesQcmFicheLoadingOverlay = { overlay: loadingOverlay, onKeydown: onLoadingKeydown };
+
     fetch(url, { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (myToken !== mesQcmFicheToken) return;
+        closeMesQcmFicheLoadingOverlay();
         if (data.error) throw new Error(data.error);
         var meta = ACQUIS_SOURCE_TYPE_META[data.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
         var detail = data.sourceDetail || { meta: null, sections: [] };
@@ -6659,6 +6731,7 @@
       })
       .catch(function () {
         if (myToken !== mesQcmFicheToken) return;
+        closeMesQcmFicheLoadingOverlay();
         openFicheOverlay(buildFicheModalHtml('fa-circle-exclamation', 'Fiche', fallbackLabel || 'Cette notion', { meta: null, sections: [{ label: null, text: 'Impossible de charger la fiche pour le moment.' }] }, ''));
       });
   }

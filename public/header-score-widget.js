@@ -176,7 +176,14 @@
       // haut du bandeau en standalone, cf. commentaire jumeau dans style.css) — 8px se rapproche
       // du haut du logo tout en restant "sur sa ligne", transform annulé pour que top vise
       // directement le bord haut du bouton plutôt que son centre.
-      "@media(display-mode:standalone) and (max-width:768px){.mnoria-universal-menu-wrap{top:calc(8px + env(safe-area-inset-top,0px));transform:none}}" +
+      // @media(max-width:768px) + sélecteur body.is-standalone (demande du 30/08/2026, "ça n'a
+      // rien changé" malgré un déploiement vérifié) plutôt que la media feature CSS
+      // display-mode:standalone utilisée avant : ce bouton n'a lui-même aucune classe de garde,
+      // donc body.is-standalone (posée en JS, cf. isStandaloneMode()/navigator.standalone,
+      // fiable) est indispensable ici pour ne pas repositionner ce hamburger chez tout visiteur
+      // mobile — la media feature display-mode, elle, pouvait ne jamais matcher en PWA iOS même
+      // avec body.is-standalone bien posée, laissant top:50% (règle de base) seul actif.
+      "@media(max-width:768px){body.is-standalone .mnoria-universal-menu-wrap{top:calc(8px + env(safe-area-inset-top,0px));transform:none}}" +
       "body.mnoria-universal-menu-open .topbar{z-index:300000!important;overflow:visible!important}";
     document.head.appendChild(style);
   }

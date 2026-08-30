@@ -27450,8 +27450,18 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .pag
    restant perceptiblement plus bas que l'essai à 4px. Placée APRÈS la règle
    :hover/:focus-visible générale ci-dessus pour la gagner en cascade (même
    spécificité, toutes deux !important — seul l'ordre dans le fichier
-   tranche). */
-@media (display-mode: standalone) and (max-width: 768px) {
+   tranche).
+   @media (max-width:768px) plutôt que (display-mode:standalone) and
+   (max-width:768px) (demande du 30/08/2026, "ça n'a rien changé" malgré un
+   déploiement vérifié) : le sélecteur porte déjà body.is-standalone (classe
+   JS, cf. isStandaloneMode()/navigator.standalone) — ajouter EN PLUS la
+   media feature CSS display-mode:standalone la rendait dépendante d'un
+   second signal, moins fiable en PWA iOS, qui pouvait ne jamais matcher
+   même quand body.is-standalone était bien posé : la règle top:50% de base
+   restait alors seule active, sans jamais appliquer ce correctif. Même
+   simplification que .home-topbar-login-icon/index (déjà en max-width
+   simple). */
+@media (max-width: 768px) {
   body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
     .topbar--mnoria-uniform > .standalone-header-power {
     top: calc(8px + env(safe-area-inset-top, 0px)) !important;
