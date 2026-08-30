@@ -4,7 +4,7 @@
 // header-score-widget.js (.mnoria-universal-menu-wrap) — deux mécanismes séparés, non touchés
 // par le correctif précédent (v232). Changer cette version vide l'ancien cache statique (HTML +
 // assets ?v=...) et laisse la navigation suivante récupérer la version corrigée.
-const SW_VERSION = "20260830-topbar-align-fix-v235";
+const SW_VERSION = "20260830-topbar-align-fix-v236-diag";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

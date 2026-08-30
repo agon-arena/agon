@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v5">
+  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v6-diag">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -536,7 +536,7 @@
     /* Retour secondaire placé après la question, tout en bas du cadre : il
        reste accessible sans concurrencer visuellement le contenu du QCM. */
     .qcm-learning-return-bottom {
-      margin: 30px auto 0;
+      margin: 8px auto 0;
       text-align: center;
     }
     .qcm-learning-return-btn {
@@ -874,6 +874,17 @@
     .qcm-knowledge-add-option:focus-visible {
       outline: none;
       background: #eef2f5;
+    }
+    /* Contre le survol fantôme (demande du 30/08/2026, "un coup texte, un
+       coup pdf" — option qui varie d'une ouverture à l'autre) : cette
+       fenêtre s'ouvre pile sous le curseur resté immobile après le clic
+       déclencheur, et sa liste d'options peut décaler verticalement selon
+       qu'"Explorer" est visible ou non — l'option qui atterrit sous le
+       curseur hérite alors d'un :hover que l'utilisateur n'a jamais
+       déclenché lui-même. Cf. openKnowledgeAddWindow : la classe est posée à
+       l'ouverture et retirée dès le premier vrai mouvement de souris/doigt. */
+    .qcm-suppress-hover .qcm-knowledge-add-option:hover {
+      background: transparent;
     }
     .qcm-knowledge-add-option i {
       grid-row: 1 / span 2;
@@ -1946,40 +1957,61 @@
       color: #dc2626;
       text-decoration: underline;
     }
-    /* Noès (intégration du 26/08/2026, fusionné dans la fiche le 30/08/2026) :
-       conteneur inséré directement dans buildFicheWithNoesModalHtml — état
-       "génération en cours" puis lecteur vidéo natif. */
+    /* Noès (intégration du 26/08/2026, fusionné dans la fiche le 30/08/2026,
+       repris tel quel dans le popup d'action d'une connaissance le
+       30/08/2026, cf. openMesQcmActionMenu) : conteneur inséré directement
+       dans buildFicheWithNoesModalHtml — état "génération en cours" puis
+       lecteur vidéo natif. */
     .qcm-noes-body {
-      margin-top: 12px;
+      margin: 12px 0 14px;
     }
-    .qcm-noes-status {
+    /* Cadre grand format dès le départ (demande du 30/08/2026, "je souhaite
+       qu'elle s'ouvre directement grande, quitte à mettre un sablier de
+       chargement") : même ratio pour l'état "en préparation", l'état
+       d'erreur et la vidéo une fois prête — plus de saut de taille petit
+       encart -> grand lecteur au chargement. Ratio 9:16 (portrait, demande
+       du 30/08/2026 "met la vidéo dans l'autre sens") : les vidéos Noès sont
+       verticales, jamais 16:9 — centré, largeur bridée pour ne pas s'étirer
+       en un cadre bien trop large pour un format vertical. */
+    .qcm-noes-frame {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 10px;
-      margin: 0;
-      padding: 14px 12px;
+      width: 100%;
+      max-width: 320px;
+      aspect-ratio: 9 / 16;
+      max-height: 70vh;
+      margin: 0 auto;
+      box-sizing: border-box;
+      padding: 14px 24px;
       border-radius: 10px;
-      background: #f3f4f6;
-      color: #374151;
+      background: #111827;
+      color: #e5e7eb;
       font-size: 14px;
       font-weight: 600;
+      text-align: center;
     }
-    .qcm-noes-status i {
-      color: #516776;
+    .qcm-noes-frame i {
+      color: #9ca3af;
     }
-    .qcm-noes-status-error {
+    .qcm-noes-frame.qcm-noes-status-error {
       background: #fef2f2;
       color: #b91c1c;
     }
-    .qcm-noes-status-error i {
+    .qcm-noes-frame.qcm-noes-status-error i {
       color: #dc2626;
     }
     .qcm-noes-video {
       display: block;
       width: 100%;
+      max-width: 320px;
+      aspect-ratio: 9 / 16;
       max-height: 70vh;
+      margin: 0 auto;
       border-radius: 10px;
       background: #000;
+      object-fit: contain;
     }
     /* Retrait d'un apprentissage (cf. server.js POST
        /api/users/notion-quizzes/remove) — ne supprime que la ligne
@@ -2309,10 +2341,17 @@
     /* Variante posée sous la ligne thème/niveau/questions plutôt que dans le
        bandeau haut (demande du 30/08/2026) : centrée comme .qcm-fiche-name et
        .qcm-fiche-level-info juste au-dessus, au lieu de suivre le fil du
-       bandeau haut (croix seule désormais, cf. .qcm-fiche-head-no-rubric). */
+       bandeau haut (croix seule désormais, cf. .qcm-fiche-head-no-rubric).
+       Plus petite/discrète que la variante bandeau (jamais en majuscule) et
+       rapprochée de la ligne du dessus (demande du 30/08/2026). */
     .qcm-fiche-rubric-below {
       justify-content: center;
       margin: 0 0 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: none;
+      letter-spacing: 0.02em;
     }
     /* position:fixed (demande du 30/08/2026, "la croix doit rester visible
        même en scrollant") : un essai précédent de sticky (13/08/2026) a été
@@ -2383,7 +2422,7 @@
        30/08/2026, cf. renderFicheLevelInfo) — centré comme .qcm-fiche-name
        juste au-dessus. */
     .qcm-fiche-level-info {
-      margin: 0 0 12px;
+      margin: 0 0 4px;
       font-size: 13px;
       font-weight: 700;
       color: #6b7280;
@@ -2393,7 +2432,7 @@
       margin: 0 0 12px;
       font-size: 13px;
       font-weight: 600;
-      color: #516776;
+      color: #111827;
     }
     .qcm-fiche-image {
       margin: 0 auto 14px;
@@ -2994,7 +3033,7 @@
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v5" defer></script>
+  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v6-diag" defer></script>
 </head>
 <body class="page-qcm-du-jour qcm-learning-background">
 <header class="topbar topbar--mnoria-uniform">
@@ -3182,15 +3221,25 @@
   function openKnowledgeAddWindow() {
     var modalHtml =
       '<div class="qcm-fiche-modal" role="dialog" aria-modal="true" aria-labelledby="qcm-knowledge-add-title">' +
+        // Plus de croix de fermeture en haut (demande du 30/08/2026, "enlève
+        // la petite croix fermable") : seul le bouton "Retour aux
+        // apprentissages" tout en bas ferme désormais cette fenêtre (plus le
+        // clic en dehors, inchangé). positionFicheClose gère déjà l'absence
+        // de .qcm-fiche-close (no-op silencieux) — rien à toucher côté JS.
         '<div class="qcm-fiche-head">' +
           '<p class="qcm-fiche-rubric" id="qcm-knowledge-add-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Commencer un nouvel apprentissage</p>' +
-          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
         '<div id="qcm-knowledge-add-window-slot"></div>' +
-        // Bouton retour en bas de la fenêtre (demande du 30/08/2026, "tout en
-        // bas de la fenêtre") — même style/gabarit que le "Fermer" des fiches
-        // (.qcm-fiche-bottom-close), en plus de la croix déjà en haut.
-        '<button type="button" class="qcm-fiche-bottom-close" id="qcm-knowledge-add-return-btn">Retour aux apprentissages</button>' +
+        // Même bouton/style que celui du popup d'une connaissance (cf.
+        // openMesQcmActionMenu, .qcm-learning-return-bottom) — demande du
+        // 30/08/2026, "doit être comme celui qu'il y a lorsque j'ouvre une
+        // connaissance".
+        '<div class="qcm-learning-return-bottom">' +
+          '<button type="button" class="qcm-learning-return-btn" id="qcm-knowledge-add-return-btn">' +
+            '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>' +
+            '<span>Retourner aux apprentissages</span>' +
+          '</button>' +
+        '</div>' +
       '</div>';
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
@@ -3203,9 +3252,13 @@
     knowledgeAddToggle.setAttribute('aria-expanded', 'true');
     knowledgeAddDialog = overlay;
     setParentIframeCloseVisible(false);
-    overlay.querySelector('.qcm-fiche-close').addEventListener('click', function () {
-      closeKnowledgeAddMenu({ restoreFocus: true });
-    });
+    // Survol fantôme (demande du 30/08/2026, cf. commentaire CSS
+    // .qcm-suppress-hover) : neutralise :hover sur les options tant que la
+    // souris/le doigt n'a pas réellement bougé depuis l'ouverture.
+    overlay.classList.add('qcm-suppress-hover');
+    var clearHoverSuppression = function () { overlay.classList.remove('qcm-suppress-hover'); };
+    overlay.addEventListener('mousemove', clearHoverSuppression, { once: true });
+    overlay.addEventListener('pointerdown', clearHoverSuppression, { once: true });
     overlay.querySelector('#qcm-knowledge-add-return-btn').addEventListener('click', function () {
       closeKnowledgeAddMenu({ restoreFocus: true });
     });
@@ -3214,7 +3267,11 @@
         closeKnowledgeAddMenu({ restoreFocus: true });
       }
     });
-    knowledgeAddMenu.querySelector('button, a')?.focus();
+    // Pas d'auto-focus sur la première option à l'ouverture (demande du
+    // 30/08/2026, "un bouton est souvent déjà grisé, comme préclique") :
+    // .qcm-knowledge-add-option:focus-visible partage le style de :hover,
+    // donc un focus() programmatique donnait l'impression qu'une option
+    // était pré-sélectionnée.
   }
   if (knowledgeAddToggle && knowledgeAddMenu) {
     knowledgeAddToggle.addEventListener('click', function () {
@@ -4652,7 +4709,7 @@
       '<p class="qcm-fiche-rubric qcm-fiche-rubric-below"><i class="fa-solid ' + iconClass + '"></i> ' + escapeHtml(rubricLabel) + '</p>';
     if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
     html += '<div class="qcm-noes-body" id="' + escapeHtml(noesBodyId) + '">' +
-      '<p class="qcm-noes-status"><i class="fa-solid fa-spinner fa-spin"></i> Noès prépare cette séance…</p>' +
+      '<p class="qcm-noes-frame"><i class="fa-solid fa-spinner fa-spin"></i> Noès prépare cette séance…</p>' +
       '</div>';
     if (introSection) {
       if (introSection.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(introSection.label) + '</h3>';
@@ -6419,8 +6476,44 @@
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     mesQcmActionModalEls = null;
   }
+  // Sablier plein cadre (demande du 30/08/2026, "sablier le temps que toute
+  // la fenêtre s'ouvre entièrement, avec l'image aussi... reprends le même
+  // visuel qu'ailleurs sur le site") : même texte/icône que le tout premier
+  // état de la page (#qcm-body statique en tête de fichier) — la fenêtre
+  // entière (nom, ancrage, image, actions) n'apparaît qu'une fois prête,
+  // jamais en deux temps (d'où l'image préchargée via new Image() plus bas
+  // avant d'ouvrir la vraie fenêtre, pas juste sa donnée JSON).
+  var mesQcmActionMenuToken = 0;
+  var mesQcmActionMenuLoadingOverlay = null;
+  function closeMesQcmActionMenuLoadingOverlay() {
+    if (!mesQcmActionMenuLoadingOverlay) return;
+    mesQcmActionMenuLoadingOverlay.overlay.remove();
+    document.removeEventListener('keydown', mesQcmActionMenuLoadingOverlay.onKeydown);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    mesQcmActionMenuLoadingOverlay = null;
+  }
   function openMesQcmActionMenu(btn, q, quizzes) {
     closeMesQcmActionModal();
+    closeMesQcmActionMenuLoadingOverlay();
+    var myToken = ++mesQcmActionMenuToken;
+    var loadingOverlay = document.createElement('div');
+    loadingOverlay.className = 'qcm-fiche-overlay';
+    loadingOverlay.innerHTML = '<div class="qcm-fiche-overlay-inner"><div class="qcm-fiche-modal">' +
+      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p>' +
+      '</div></div>';
+    document.body.appendChild(loadingOverlay);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+    function cancelLoading() {
+      mesQcmActionMenuToken++;
+      closeMesQcmActionMenuLoadingOverlay();
+    }
+    function onLoadingKeydown(e) { if (e.key === 'Escape') cancelLoading(); }
+    loadingOverlay.addEventListener('click', function (e) {
+      if (e.target === loadingOverlay || e.target.classList.contains('qcm-fiche-overlay-inner')) cancelLoading();
+    });
+    document.addEventListener('keydown', onLoadingKeydown);
+    mesQcmActionMenuLoadingOverlay = { overlay: loadingOverlay, onKeydown: onLoadingKeydown };
+
     var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
     var doLabel = q.realized ? 'Refaire le QCM' : (q.inProgress ? 'Continuer le QCM' : 'Faire le QCM');
     // Phrase d'explication par action (demande du 30/08/2026) : celle du QCM
@@ -6447,114 +6540,137 @@
         '</button>';
     }
 
-    var modalHtml =
-      '<div class="qcm-fiche-modal qcm-mesqcm-action-modal">' +
-        // Plus de libellé de type ("Sujet recherché", "Ce jour dans
-        // l'Histoire"...) en haut de ce popup précis (demande du 30/08/2026,
-        // "enlève le message du type sujet recherché") : seule la croix
-        // reste dans le bandeau haut, gardé pour sa logique de positionnement
-        // fixe (cf. positionFicheClose) — jamais retiré ailleurs (fiche
-        // complète, "Commencer un nouvel apprentissage").
-        '<div class="qcm-fiche-head qcm-fiche-head-no-rubric">' +
-          '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
-        '</div>' +
-        '<p class="qcm-mesqcm-action-modal-name">' + escapeHtml(q.label || meta.label) + '</p>' +
-        '<div class="qcm-mesqcm-action-menu-info"><span>Ancrage</span>' + ancrageBadgeHtml + '</div>' +
-        // Rempli une fois chargée (cf. fetch juste après l'ouverture de
-        // l'overlay ci-dessous, demande du 30/08/2026 "l'image associée au
-        // qcm apparaisse aussi ici sous Ancrage") : vide si la notion n'a
-        // pas d'image, jamais d'espace réservé visible dans ce cas.
-        '<div class="qcm-mesqcm-action-image-slot" id="qcm-mesqcm-action-image-slot"></div>' +
-        actionCardHtml('fiche', 'fa-file-lines', 'Consulter le parcours d\'apprentissage', 'Voir les connaissances, l’image et le corrigé complet des questions.') +
-        actionCardHtml('quiz', 'fa-play', doLabel, doDesc) +
-        // Discret à dessein (demande du 30/08/2026, "rend l'option supprimer
-        // beaucoup plus discrète") : simple lien texte sous les deux cartes
-        // d'action, plus une carte de même poids visuel qu'elles.
-        '<button type="button" class="qcm-mesqcm-action-menu-delete-link" data-action="delete">' +
-          '<i class="fa-solid fa-trash-can"></i> Supprimer cet apprentissage' +
-        '</button>' +
-        // Même bouton/style que celui du bas d'une séance QCM en cours (cf.
-        // .qcm-learning-return-bottom) : accès direct à la liste "Mes
-        // apprentissages" sans repasser par la croix (demande du 30/08/2026).
-        '<div class="qcm-learning-return-bottom">' +
-          '<button type="button" class="qcm-learning-return-btn" data-action="return">' +
-            '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>' +
-            '<span>Retourner aux apprentissages</span>' +
-          '</button>' +
-        '</div>' +
+    // Média sous "Ancrage" : Noès (vidéo générée) pour les fiches "recherche
+    // IA" (sourceType "custom", seule catégorie ouverte à Noès côté serveur,
+    // cf. POST /api/noes/videos), l'image de la notion pour toutes les
+    // autres (demande du 30/08/2026 : "noes devrait apparaître directement
+    // ici à la place de l'image"). Noès peut prendre du temps à générer
+    // (worker RunPod) : la fenêtre s'ouvre donc tout de suite avec le cadre
+    // "en préparation" (cf. .qcm-noes-frame, même mécanique que la fiche
+    // complète, jamais bloquée derrière le sablier de chargement) plutôt que
+    // d'attendre — contrairement à l'image, préchargée AVANT ouverture car
+    // quasi instantanée.
+    var isNoesEligible = q.sourceType === 'custom';
+
+    function buildAndShowModal(mediaHtml) {
+      if (myToken !== mesQcmActionMenuToken) return null;
+      closeMesQcmActionMenuLoadingOverlay();
+
+      var modalHtml =
+          '<div class="qcm-fiche-modal qcm-mesqcm-action-modal">' +
+            // Plus de libellé de type ("Sujet recherché", "Ce jour dans
+            // l'Histoire"...) en haut de ce popup précis (demande du
+            // 30/08/2026, "enlève le message du type sujet recherché") :
+            // seule la croix reste dans le bandeau haut, gardé pour sa
+            // logique de positionnement fixe (cf. positionFicheClose) —
+            // jamais retiré ailleurs (fiche complète, "Commencer un nouvel
+            // apprentissage").
+            '<div class="qcm-fiche-head qcm-fiche-head-no-rubric">' +
+              '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+            '</div>' +
+            '<p class="qcm-mesqcm-action-modal-name">' + escapeHtml(q.label || meta.label) + '</p>' +
+            '<div class="qcm-mesqcm-action-menu-info"><span>Ancrage</span>' + ancrageBadgeHtml + '</div>' +
+            mediaHtml +
+            actionCardHtml('fiche', 'fa-file-lines', 'Consulter le parcours d\'apprentissage', 'Voir les connaissances, l’image et le corrigé complet des questions.') +
+            actionCardHtml('quiz', 'fa-play', doLabel, doDesc) +
+            // Discret à dessein (demande du 30/08/2026, "rend l'option
+            // supprimer beaucoup plus discrète") : simple lien texte sous
+            // les deux cartes d'action, plus une carte de même poids visuel
+            // qu'elles.
+            '<button type="button" class="qcm-mesqcm-action-menu-delete-link" data-action="delete">' +
+              '<i class="fa-solid fa-trash-can"></i> Supprimer cet apprentissage' +
+            '</button>' +
+            // Même bouton/style que celui du bas d'une séance QCM en cours
+            // (cf. .qcm-learning-return-bottom) : accès direct à la liste
+            // "Mes apprentissages" sans repasser par la croix (demande du
+            // 30/08/2026).
+            '<div class="qcm-learning-return-bottom">' +
+              '<button type="button" class="qcm-learning-return-btn" data-action="return">' +
+                '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>' +
+                '<span>Retourner aux apprentissages</span>' +
+              '</button>' +
+            '</div>' +
+          '</div>';
+
+        var overlay = document.createElement('div');
+        overlay.className = 'qcm-fiche-overlay';
+        overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
+        document.body.appendChild(overlay);
+        positionFicheClose(overlay);
+        var actionModalFade = attachFicheFadeHint(overlay, overlay.querySelector('.qcm-fiche-modal'));
+        try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+        function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionModal(); }
+        overlay.addEventListener('click', function (e) {
+          if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) closeMesQcmActionModal();
+        });
+        document.addEventListener('keydown', onKeydown);
+        overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeMesQcmActionModal);
+        overlay.querySelector('[data-action="fiche"]').addEventListener('click', function () {
+          closeMesQcmActionModal();
+          openMesQcmFiche(q);
+        });
+        overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
+          closeMesQcmActionModal();
+          // Choix de l'ordre dès le premier lancement (demande du
+          // 13/08/2026, jusqu'ici réservé à "Refaire") — même popup, même
+          // style.
+          showQuizOrderPicker(function (shuffled) {
+            loadSlot(q.slot, q.quizDate, q.label, shuffled);
+          });
+        });
+        overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
+          closeMesQcmActionModal();
+          removeMesQcmItem(q, quizzes, btn);
+        });
+        overlay.querySelector('[data-action="return"]').addEventListener('click', function () {
+          closeMesQcmActionModal();
+          returnToLearningOverview();
+        });
+
+      mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown, fade: actionModalFade };
+      return overlay;
+    }
+
+    if (isNoesEligible) {
+      var noesBodyId = 'qcm-mesqcm-action-noes-body';
+      var noesMediaHtml = '<div class="qcm-noes-body" id="' + noesBodyId + '">' +
+        '<p class="qcm-noes-frame"><i class="fa-solid fa-spinner fa-spin"></i> Noès prépare cette séance…</p>' +
       '</div>';
+      buildAndShowModal(noesMediaHtml);
+      requestNoesVideo({ slot: q.slot, quizDate: q.quizDate }, document.getElementById(noesBodyId));
+      return;
+    }
 
-    var overlay = document.createElement('div');
-    overlay.className = 'qcm-fiche-overlay';
-    overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
-    document.body.appendChild(overlay);
-    positionFicheClose(overlay);
-    var actionModalFade = attachFicheFadeHint(overlay, overlay.querySelector('.qcm-fiche-modal'));
-    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
-
-    function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionModal(); }
-    overlay.addEventListener('click', function (e) {
-      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) closeMesQcmActionModal();
-    });
-    document.addEventListener('keydown', onKeydown);
-    overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeMesQcmActionModal);
-    overlay.querySelector('[data-action="fiche"]').addEventListener('click', function () {
-      closeMesQcmActionModal();
-      openMesQcmFiche(q);
-    });
-    overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
-      closeMesQcmActionModal();
-      // Choix de l'ordre dès le premier lancement (demande du 13/08/2026,
-      // jusqu'ici réservé à "Refaire") — même popup, même style.
-      showQuizOrderPicker(function (shuffled) {
-        loadSlot(q.slot, q.quizDate, q.label, shuffled);
-      });
-    });
-    overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
-      closeMesQcmActionModal();
-      removeMesQcmItem(q, quizzes, btn);
-    });
-    overlay.querySelector('[data-action="return"]').addEventListener('click', function () {
-      closeMesQcmActionModal();
-      returnToLearningOverview();
-    });
-
-    mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown, fade: actionModalFade };
-
-    // Image de la notion (demande du 30/08/2026) : même source que la fiche
-    // complète (GET .../notion-quizzes/fiche), chargée à part pour ne pas
-    // retarder l'ouverture du popup. Vérifie que ce popup précis est
-    // toujours ouvert avant d'injecter (mesQcmActionModalEls a pu changer
-    // entre-temps si fermé/rouvert vite).
+    // Image de la notion : préchargée (new Image(), pas juste sa donnée
+    // JSON) avant d'ouvrir la fenêtre, quasi instantanée contrairement à
+    // Noès — elle doit apparaître déjà là dès le premier rendu.
     fetch('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(q.slot) + '&date=' + encodeURIComponent(q.quizDate) + '&legacyKey=' + encodeURIComponent(voterKey || ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
-        if (!mesQcmActionModalEls || mesQcmActionModalEls.overlay !== overlay) return;
         var img = data && data.sourceDetail && data.sourceDetail.image;
-        if (!img || !img.url) return;
-        var imageSlot = overlay.querySelector('#qcm-mesqcm-action-image-slot');
-        if (!imageSlot) return;
-        var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia')));
-        imageSlot.innerHTML = '<figure class="qcm-fiche-image">' +
-          '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(q.label || meta.label) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
-          (img.pageUrl
-            ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
-            : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
-          '</figure>';
-        // La carte grandit (donc se recentre verticalement) une fois l'image
-        // insérée, puis une seconde fois une fois l'image réellement chargée
-        // (hauteur inconnue jusque-là, cf. .qcm-fiche-image img { height:
-        // auto }) : sans ces deux recalculs, la croix restait figée à la
-        // position mesurée avant l'image et finissait décrochée du coin réel
-        // de la carte, comme "flottante" (demande du 30/08/2026).
-        positionFicheClose(overlay);
-        var insertedImg = imageSlot.querySelector('img');
-        if (insertedImg) {
-          if (insertedImg.complete) positionFicheClose(overlay);
-          else insertedImg.addEventListener('load', function () { positionFicheClose(overlay); });
-        }
+        if (!img || !img.url) return null;
+        return new Promise(function (resolve) {
+          var preload = new Image();
+          preload.onload = function () { resolve(img); };
+          preload.onerror = function () { resolve(null); };
+          preload.src = img.url;
+        });
       })
-      .catch(function () {});
+      .catch(function () { return null; })
+      .then(function (img) {
+        var imageHtml = '';
+        if (img) {
+          var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia')));
+          imageHtml = '<figure class="qcm-fiche-image">' +
+            '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(q.label || meta.label) + '" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
+            (img.pageUrl
+              ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+              : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+            '</figure>';
+        }
+        buildAndShowModal(imageHtml);
+      });
   }
 
   // Noès (intégration du 26/08/2026, fusionné dans la fiche le 30/08/2026) :
@@ -6603,14 +6719,19 @@
       '</video>';
     var video = bodyEl.querySelector('video');
     if (video && vttUrl) {
-      video.addEventListener('loadedmetadata', function () {
+      // 'play' plutôt que 'loadedmetadata' (demande du 30/08/2026, "je ne
+      // devrais pas voir les sous-titres" avant que la vidéo soit lancée) :
+      // à loadedmetadata, la vidéo est déjà en pause sur sa première image
+      // avec currentTime à 0 — si le premier sous-titre démarre à/près de 0,
+      // il s'affichait par-dessus alors que rien n'est encore lancé.
+      video.addEventListener('play', function () {
         if (video.textTracks && video.textTracks[0]) video.textTracks[0].mode = 'showing';
       }, { once: true });
     }
   }
   function showNoesError(bodyEl, message) {
     if (!bodyEl || !document.body.contains(bodyEl)) return;
-    bodyEl.innerHTML = '<p class="qcm-noes-status qcm-noes-status-error"><i class="fa-solid fa-triangle-exclamation"></i> ' +
+    bodyEl.innerHTML = '<p class="qcm-noes-frame qcm-noes-status-error"><i class="fa-solid fa-triangle-exclamation"></i> ' +
       escapeHtml(message || "Noès n'est pas disponible pour le moment.") + '</p>';
   }
   function noesFailureMessage(errorStage, configurationIssue) {

@@ -27462,10 +27462,14 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .pag
    simplification que .home-topbar-login-icon/index (déjà en max-width
    simple). */
 @media (max-width: 768px) {
+  /* MARQUEUR DE DIAGNOSTIC TEMPORAIRE (30/08/2026) : fond rouge pour
+     vérifier sans ambiguïté si cette règle atteint bien l'appareil (à
+     retirer dès que confirmé). */
   body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
     .topbar--mnoria-uniform > .standalone-header-power {
     top: calc(8px + env(safe-area-inset-top, 0px)) !important;
     transform: none !important;
+    background: #ff0000 !important;
   }
 
   body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
