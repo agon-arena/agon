@@ -507,10 +507,10 @@
       display: none;
       visibility: hidden;
       width: calc(100% + 24px);
-      margin: 0 -12px 16px;
+      margin: 0 -12px 28px;
       justify-content: center;
       align-items: baseline;
-      gap: 12px;
+      gap: 9px;
     }
     /* Scopé à ".qcm-panel:not(.qcm-panel-awaiting-content)" (pas juste
        ".is-layout-ready" seul) : visibility:visible sur un enfant repasse au-dessus
@@ -571,7 +571,7 @@
          état :disabled, plus bas (demande du 26/08/2026). */
       color: #111827;
       font-family: "Barlow Condensed", Arial, sans-serif;
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 600;
       letter-spacing: 0.03em;
       text-transform: uppercase;
@@ -633,7 +633,8 @@
         gap: 8px;
       }
       .qcm-slot-btn {
-        font-size: 18px;
+        font-size: 20px;
+        letter-spacing: 0.005em;
       }
     }
     /* "Mes acquis" rejoint la même rangée que Découvrir/Ancrer/Relier : les
@@ -675,7 +676,7 @@
          font-family seul seul (26/08/2026) ne suffisait pas à rendre un aspect identique tant
          que la taille restait très inférieure (12.5px contre 16px). */
       font-family: "Barlow Condensed", Arial, sans-serif;
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 600;
       /* Majuscules, comme les onglets Découvrir/Ancrer/Relier voisins (.qcm-slot-btn) —
          demande du 26/08/2026. */
@@ -691,7 +692,8 @@
        de base se faisait donc écraser par elle même sur petit écran (constaté le 27/08/2026). */
     @media (max-width: 480px) {
       .qcm-mes-acquis-btn {
-        font-size: 18px;
+        font-size: 20px;
+        letter-spacing: 0.005em;
       }
     }
     @media (max-width: 360px) {
@@ -1465,14 +1467,35 @@
     .qcm-mesqcm-group + .qcm-mesqcm-group {
       margin-top: 22px;
     }
+    /* Bandeau blanc plein cadre (demande du 30/08/2026) : marges négatives
+       égales au padding horizontal de .qcm-panel (24px desktop, cf. override
+       mobile plus bas pour 16px) pour déborder jusqu'aux bords réels du
+       cadre — utile notamment sur body.qcm-learning-background, où le cadre
+       lui-même est translucide (background: rgba(255,255,255,0.8)). */
     .qcm-mesqcm-group-title {
-      margin: 0 0 10px;
-      padding: 0 4px 9px;
-      border-bottom: 3px solid #c9d3d8;
+      position: relative;
+      z-index: 0;
+      margin: 0 -24px 8px;
+      padding: 9px 24px;
+      background: #ffffff;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
+    }
+    /* Bandes horizontales dégradées au-dessus et en dessous (demande du
+       30/08/2026, "comme sur thématiques page index") : même recette que
+       .theme-row-title::before (style.css) — dégradé clair→foncé en haut,
+       foncé→clair en bas, posées en fond via deux calques sur un seul
+       pseudo-élément plutôt que deux. */
+    .qcm-mesqcm-group-title::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top    / 100% 5px no-repeat,
+        linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat;
+      z-index: -1;
     }
     .qcm-mesqcm-theme-group + .qcm-mesqcm-theme-group {
       margin-top: 10px;
@@ -1957,11 +1980,12 @@
       color: #dc2626;
       text-decoration: underline;
     }
-    /* Noès (intégration du 26/08/2026, fusionné dans la fiche le 30/08/2026,
-       repris tel quel dans le popup d'action d'une connaissance le
-       30/08/2026, cf. openMesQcmActionMenu) : conteneur inséré directement
-       dans buildFicheWithNoesModalHtml — état "génération en cours" puis
-       lecteur vidéo natif. */
+    /* Noès (intégration du 26/08/2026, retiré de la fiche complète le
+       30/08/2026 — cf. openMesQcmFicheFromUrl, revenue à l'image seule —
+       présent uniquement dans le popup d'action rapide d'une connaissance,
+       cf. openMesQcmActionMenu) : conteneur inséré directement dans le
+       markup du popup — état "génération en cours" puis lecteur vidéo
+       natif. */
     .qcm-noes-body {
       margin: 12px 0 14px;
     }
@@ -2086,38 +2110,45 @@
        reste de la page (.qcm-fiche-link-item, .qcm-knowledge-add-option),
        pas un style isolé. */
     .qcm-learn-next-inline {
-      margin: 0 0 20px;
+      margin: 0 0 30px;
     }
-    .qcm-learn-next-inline-title {
-      margin: 0 0 8px;
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: #8a97a0;
+    /* Même espace qu'en bas de la section (demande du 30/08/2026) : le titre
+       partagé .qcm-mesqcm-group-title garde 8px partout ailleurs, override
+       scopé à ce seul conteneur plutôt que touché globalement. */
+    .qcm-learn-next-inline .qcm-mesqcm-group-title {
+      margin-bottom: 30px;
     }
+    /* Juste le nom des sujets (demande du 30/08/2026) : flex-wrap +
+       justify-content:center pose naturellement 2 sujets par ligne centrés,
+       et le 3e (impair) seul sur sa propre ligne, centré lui aussi — sans
+       media query ni calcul de colonnes. row-gap réduit par rapport à
+       column-gap : l'espacement entre les deux lignes doit rester net.
+       Même visuel que .debate-notion-action-btn (notions à retenir en fin
+       d'arène, cf. style.css) — demande du 30/08/2026, "reprends visuel
+       identique". */
     .qcm-learn-next-inline-list {
       display: flex;
-      flex-direction: column;
-      gap: 6px;
+      flex-flow: row wrap;
+      justify-content: center;
+      row-gap: 6px;
+      column-gap: 8px;
     }
     .qcm-learn-next-inline-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      width: 100%;
-      padding: 9px 12px;
+      padding: 6px 14px;
       border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      background: #ffffff;
+      border-radius: 999px;
+      background: #f9fafb;
       font: inherit;
-      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      color: #243038;
+      text-align: center;
       cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
     .qcm-learn-next-inline-item:hover,
     .qcm-learn-next-inline-item:focus-visible {
-      border-color: #516776;
-      background: #f9fafb;
+      background: #f0f2f4;
     }
     /* Le temps de l'adoption (fiche + adopt, cf. adoptCatalogRecommendation) :
        même langage que .qcm-custom-search-btn:disabled ailleurs sur la page. */
@@ -2133,40 +2164,14 @@
       border-color: #e7d9c2;
       background: #fffaf2;
     }
-    .qcm-learn-next-inline-text {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-    .qcm-learn-next-inline-name {
-      font-size: 13px;
-      font-weight: 700;
-      color: #111827;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .qcm-learn-next-inline-reason {
-      font-size: 11px;
-      color: #6b7280;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .qcm-learn-next-inline-chevron {
-      flex: none;
-      font-size: 12px;
-      color: #9ca3af;
-    }
     /* État de chargement discret (demande du 30/08/2026) : 3 lignes grises qui
        pulsent doucement — jamais le sablier central utilisé ailleurs sur
        cette page, qui conviendrait à un remplacement plein-écran mais pas à
        une section secondaire sous le bouton principal. */
     .qcm-learn-next-inline-skeleton-row {
-      height: 40px;
-      border-radius: 10px;
+      width: 110px;
+      height: 27px;
+      border-radius: 999px;
       background: linear-gradient(90deg, #f1f3f5 25%, #e9ecef 37%, #f1f3f5 63%);
       background-size: 400% 100%;
       animation: qcmLearnNextInlineSkeletonPulse 1.4s ease infinite;
@@ -2968,6 +2973,10 @@
       .qcm-panel {
         padding: 20px 16px 24px;
       }
+      .qcm-mesqcm-group-title {
+        margin: 0 -16px 8px;
+        padding: 9px 16px;
+      }
       .qcm-mesqcm-group--creating > .qcm-mesqcm-table-shell {
         width: calc(100% + 32px);
         margin-left: -16px;
@@ -3132,7 +3141,7 @@
          ci-dessus, cf. refreshLearnNextInlineVisibility) ET seulement une fois
          un contenu réel obtenu (jamais un état vide/erreur affiché ici). -->
     <div class="qcm-learn-next-inline" id="qcm-learn-next-inline" hidden>
-      <p class="qcm-learn-next-inline-title">Sujets proposés</p>
+      <p class="qcm-mesqcm-group-title">Sujets proposés</p>
       <div class="qcm-learn-next-inline-list" id="qcm-learn-next-inline-list"></div>
     </div>
     <!-- Emplacement d'origine du formulaire IA (cf. openAiGenerateModal) : le
@@ -4683,65 +4692,6 @@
     return html;
   }
 
-  // Variante de buildFicheModalHtml pour une fiche "recherche IA" (sourceType
-  // "custom", seule catégorie ouverte à Noès, cf. noesButtonHtml plus bas
-  // avant fusion du 30/08/2026) : titre + sous-titre (meta) d'abord, puis
-  // Noès juste en dessous (demande du 30/08/2026, "pas après" l'explication),
-  // puis le reste de la fiche (explication, sections suivantes, liens),
-  // l'image en tout dernier juste avant le corrigé des questions — plus deux
-  // fenêtres séparées ("Consulter la fiche" / "Regarder Noès") mais une
-  // seule page.
-  // `noesBodyId` : id posé sur le conteneur Noès pour que l'appelant y
-  // injecte ensuite le lecteur vidéo (cf. requestNoesVideo).
-  // `level`/`questionCount` (demande du 30/08/2026) : juste sous le titre,
-  // cf. renderFicheLevelInfo.
-  function buildFicheWithNoesModalHtml(iconClass, rubricLabel, name, detail, corrigeHtml, themes, links, noesBodyId, level, questionCount) {
-    var sections = detail.sections || [];
-    var introSection = sections[0] || null;
-    var restSections = sections.slice(1);
-    var html =
-      '<div class="qcm-fiche-modal">' +
-      '<div class="qcm-fiche-head qcm-fiche-head-no-rubric">' +
-      '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
-      '</div>' +
-      '<p class="qcm-fiche-name">' + escapeHtml(name) + '</p>' +
-      renderFicheLevelInfo(themes, level, questionCount) +
-      '<p class="qcm-fiche-rubric qcm-fiche-rubric-below"><i class="fa-solid ' + iconClass + '"></i> ' + escapeHtml(rubricLabel) + '</p>';
-    if (detail.meta) html += '<p class="qcm-fiche-meta">' + escapeHtml(detail.meta) + '</p>';
-    html += '<div class="qcm-noes-body" id="' + escapeHtml(noesBodyId) + '">' +
-      '<p class="qcm-noes-frame"><i class="fa-solid fa-spinner fa-spin"></i> Noès prépare cette séance…</p>' +
-      '</div>';
-    if (introSection) {
-      if (introSection.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(introSection.label) + '</h3>';
-      html += '<p class="qcm-fiche-explanation">' + escapeHtml(introSection.text) + '</p>';
-    }
-    if (/^https?:\/\//i.test(String(detail.sourceUrl || ''))) {
-      html += '<p class="qcm-fiche-meta"><a href="' + escapeHtml(detail.sourceUrl) + '" target="_blank" rel="noopener noreferrer">Voir la page source</a></p>';
-    }
-    if (detail.sourceAuthor) {
-      html += '<p class="qcm-fiche-meta">Chaîne : ' + escapeHtml(detail.sourceAuthor) + (detail.durationSeconds ? ' · ' + Math.ceil(Number(detail.durationSeconds) / 60) + ' min' : '') + '</p>';
-    }
-    restSections.forEach(function (section) {
-      if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
-      html += '<p class="qcm-fiche-explanation">' + escapeHtml(section.text) + '</p>';
-    });
-    html += renderLinksSection(links);
-    if (detail.image && detail.image.url) {
-      var img = detail.image;
-      var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia')));
-      html += '<figure class="qcm-fiche-image">' +
-        '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(name) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
-        (img.pageUrl
-          ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
-          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
-        '</figure>';
-    }
-    if (corrigeHtml) html += corrigeHtml;
-    html += '<button type="button" class="qcm-fiche-bottom-close">Fermer</button>';
-    html += '</div>';
-    return html;
-  }
-
   // Aligne la croix de fermeture (.qcm-fiche-close, position:fixed pour
   // rester visible même en scrollant une fiche longue, cf. son commentaire
   // CSS) sur le coin haut-droit RÉEL de la carte affichée (.qcm-fiche-modal),
@@ -5785,14 +5735,13 @@
       return;
     }
     learnNextInlinePhase = 'has-content';
+    // Juste le nom (demande du 30/08/2026, "juste le nom des sujets") : plus
+    // de raison/chevron — 2 par ligne centrées, la 3e seule en dessous,
+    // centrée aussi (cf. .qcm-learn-next-inline-list flex-wrap + justify-
+    // content:center).
     learnNextInlineList.innerHTML = items.map(function (item, i) {
-      var reasonText = item.isAiProposal ? (item.reason || '') : (item.reasonText || '');
       return '<button type="button" class="qcm-learn-next-inline-item' + (item.isAiProposal ? ' is-ai-proposal' : '') + '" data-index="' + i + '">' +
-        '<span class="qcm-learn-next-inline-text">' +
-          '<span class="qcm-learn-next-inline-name">' + escapeHtml(item.name || item.title || 'Connaissance') + '</span>' +
-          (reasonText ? '<span class="qcm-learn-next-inline-reason">' + escapeHtml(reasonText) + '</span>' : '') +
-        '</span>' +
-        '<i class="fa-solid fa-chevron-right qcm-learn-next-inline-chevron" aria-hidden="true"></i>' +
+        escapeHtml(item.name || item.title || 'Connaissance') +
       '</button>';
     }).join('');
     learnNextInlineList.querySelectorAll('.qcm-learn-next-inline-item').forEach(function (btn) {
@@ -5920,7 +5869,7 @@
   }
 
   function renderMesQcmEmpty() {
-    renderMessage("Tu n'as encore mémorisé aucune notion — tape un sujet ci-dessus, ou clique sur « Mémoriser » n'importe où sur le site pour commencer.");
+    renderMessage('');
   }
 
   // Une seule pastille : la thématique principale qui pilote également le
@@ -6673,15 +6622,14 @@
       });
   }
 
-  // Noès (intégration du 26/08/2026, fusionné dans la fiche le 30/08/2026) :
-  // lecteur vidéo d'un lot d'au plus 5 connaissances de cette fiche
-  // (batchIndex 0 pour l'instant — pas encore de sélecteur de lot dans l'UI,
-  // cf. rapport d'audit section 10, "écart produit à trancher" ; une fiche
-  // "recherche IA" dépasse rarement 5 connaissances en pratique). N'ouvre
-  // plus sa propre fenêtre séparée — injecté directement dans la fiche
-  // "Consulter la fiche" pour les sources "custom" (cf.
-  // buildFicheWithNoesModalHtml/openMesQcmFicheFromUrl), qui appelle
-  // requestNoesVideo juste après avoir ouvert l'overlay.
+  // Noès (intégration du 26/08/2026 ; fusionné dans la fiche complète le
+  // 30/08/2026 puis retiré de celle-ci le même jour au profit du popup
+  // d'action rapide — cf. openMesQcmActionMenu) : lecteur vidéo d'un lot
+  // d'au plus 5 connaissances de cette fiche (batchIndex 0 pour l'instant —
+  // pas encore de sélecteur de lot dans l'UI, cf. rapport d'audit section
+  // 10, "écart produit à trancher" ; une fiche "recherche IA" dépasse
+  // rarement 5 connaissances en pratique). Injecté directement dans le
+  // popup d'action, qui appelle requestNoesVideo juste après l'avoir ouvert.
   var NOES_POLL_INTERVAL_MS = 3000;
   var NOES_BATCH_INDEX = 0;
   function formatNoesVttTime(seconds) {
@@ -6714,16 +6662,18 @@
     // vient d'ouvrir la modale exprès pour regarder, un clic sur "lire" est
     // attendu, pas un déclenchement automatique.
     var vttUrl = buildNoesVttUrl(subtitleCues);
+    // Pas d'attribut "default" sur <track> (retiré le 30/08/2026, "je vois les
+    // sous-titres alors que je n'ai même pas encore lancé la vidéo") : "default"
+    // fait passer la piste en mode "showing" nativement dès son chargement, bien
+    // avant tout événement 'play' — le seul écouteur JS ci-dessous (mode="showing"
+    // sur 'play') ne suffisait donc pas à empêcher cet affichage prématuré, le
+    // navigateur l'avait déjà activée de son côté. Sans "default", la piste reste
+    // "disabled" tant que ce script ne l'active pas lui-même.
     bodyEl.innerHTML = '<video src="' + escapeHtml(url) + '" controls playsinline preload="metadata" class="qcm-noes-video">' +
-      (vttUrl ? '<track kind="subtitles" srclang="fr" label="Français" src="' + escapeHtml(vttUrl) + '" default>' : '') +
+      (vttUrl ? '<track kind="subtitles" srclang="fr" label="Français" src="' + escapeHtml(vttUrl) + '">' : '') +
       '</video>';
     var video = bodyEl.querySelector('video');
     if (video && vttUrl) {
-      // 'play' plutôt que 'loadedmetadata' (demande du 30/08/2026, "je ne
-      // devrais pas voir les sous-titres" avant que la vidéo soit lancée) :
-      // à loadedmetadata, la vidéo est déjà en pause sur sa première image
-      // avec currentTime à 0 — si le premier sous-titre démarre à/près de 0,
-      // il s'affichait par-dessus alors que rien n'est encore lancé.
       video.addEventListener('play', function () {
         if (video.textTracks && video.textTracks[0]) video.textTracks[0].mode = 'showing';
       }, { once: true });
@@ -6835,20 +6785,13 @@
         var corrigeHtml = '<h3 class="qcm-fiche-section-label">Questions et réponses</h3>';
         (data.questions || []).forEach(function (q, i) { corrigeHtml += renderFicheQuestionCorrige(q, i); });
         var name = data.label || fallbackLabel || meta.label;
-        // Noès (cf. son commentaire plus haut) : uniquement pour les fiches
-        // "recherche IA" (sourceType "custom") — cf. server.js POST
-        // /api/noes/videos, même restriction de périmètre V1. Fusionné dans
-        // cette même fiche (demande du 30/08/2026) plutôt qu'une fenêtre à
-        // part : titre + brève explication d'abord, Noès juste en dessous,
-        // reste de la fiche ensuite (cf. buildFicheWithNoesModalHtml).
+        // Plus de Noès ici (demande du 30/08/2026, "supprime vidéo noes du
+        // coup, et remonte à sa place l'image") : Noès a désormais sa place
+        // dans le popup d'action rapide d'une connaissance (cf.
+        // openMesQcmActionMenu), cette fiche complète revient à l'image
+        // seule, déjà positionnée juste sous le titre par buildFicheModalHtml.
         var questionCount = (data.questions || []).length;
-        if (data.sourceType === 'custom') {
-          var noesBodyId = 'qcm-noes-body';
-          openFicheOverlay(buildFicheWithNoesModalHtml(meta.icon, meta.label, name, detail, corrigeHtml, data.themes, data.links, noesBodyId, data.level, questionCount));
-          requestNoesVideo({ slot: data.slot, quizDate: data.quizDate }, document.getElementById(noesBodyId));
-        } else {
-          openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, name, detail, corrigeHtml, data.themes, data.links, data.level, questionCount));
-        }
+        openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, name, detail, corrigeHtml, data.themes, data.links, data.level, questionCount));
       })
       .catch(function () {
         if (myToken !== mesQcmFicheToken) return;
