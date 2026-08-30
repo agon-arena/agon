@@ -171,11 +171,12 @@
       ".mnoria-universal-menu-item i{width:16px;flex:0 0 16px;text-align:center;font-size:14px}" +
       // Aligné en haut de la ligne du logo, pas centré sur toute la hauteur utile du bandeau
       // (49px + safe visait son centre — trop bas par rapport au haut du mot-symbole "mnoria",
-      // constaté le 30/08/2026, même correctif que .standalone-header-power/index) : top:4px
-      // reproduit le petit espace entre le haut du bandeau et le haut du logo (66px de haut
-      // dans une ligne de 72px), transform annulé pour que top vise directement le bord haut
-      // du bouton plutôt que son centre.
-      "@media(display-mode:standalone) and (max-width:768px){.mnoria-universal-menu-wrap{top:calc(4px + env(safe-area-inset-top,0px));transform:none}}" +
+      // constaté le 30/08/2026, même correctif que .standalone-header-power/index). Un premier
+      // essai à 4px s'est révélé trop haut (mesure précise : le haut réel du logo est à ~6px du
+      // haut du bandeau en standalone, cf. commentaire jumeau dans style.css) — 8px se rapproche
+      // du haut du logo tout en restant "sur sa ligne", transform annulé pour que top vise
+      // directement le bord haut du bouton plutôt que son centre.
+      "@media(display-mode:standalone) and (max-width:768px){.mnoria-universal-menu-wrap{top:calc(8px + env(safe-area-inset-top,0px));transform:none}}" +
       "body.mnoria-universal-menu-open .topbar{z-index:300000!important;overflow:visible!important}";
     document.head.appendChild(style);
   }

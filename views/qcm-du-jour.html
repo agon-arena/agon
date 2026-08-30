@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v3">
+  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v4">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -546,7 +546,7 @@
       gap: 6px;
       min-height: 32px;
       padding: 5px 8px;
-      border: none;
+      border: 1px solid #d1d5db;
       border-radius: 7px;
       background: transparent;
       color: #6b7280;
@@ -1836,9 +1836,13 @@
     /* Le bouton fermer (.qcm-fiche-close) suit le bord droit réel de la
        carte (cf. sa règle générale, formule 50% - (largeur/2 - 20px)) : 520px
        de large ⇒ 240px ici, override propre à cette variante plus large que
-       le gabarit par défaut (480px). */
+       le gabarit par défaut (480px). Le "40px" de la règle générale (carte
+       pleine largeur, cf. son commentaire : 20px de padding d'overlay + 20px
+       de padding de carte) devient ici 48px, cette variante ayant 28px de
+       padding propre au lieu de 20px — sans ce second nombre, la croix
+       débordait du coin réel de la carte sur mobile (demande du 30/08/2026). */
     .qcm-mesqcm-action-modal .qcm-fiche-close {
-      right: max(40px, calc(50% - 240px));
+      right: max(48px, calc(50% - 240px));
     }
     .qcm-mesqcm-action-modal-name {
       margin: 0 0 16px;
@@ -1846,6 +1850,7 @@
       font-weight: 800;
       color: #111827;
       line-height: 1.3;
+      text-align: center;
     }
     /* Taux d'ancrage (demande du 13/08/2026) : rappelé en tête de la fenêtre
        de choix plutôt que seulement dans la colonne du tableau, désormais
@@ -2981,7 +2986,7 @@
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v3" defer></script>
+  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v4" defer></script>
 </head>
 <body class="page-qcm-du-jour qcm-learning-background">
 <header class="topbar topbar--mnoria-uniform">
@@ -3928,6 +3933,20 @@
   // insuffisante, jamais comme acceptable par défaut — repli sûr sur la
   // texture plutôt qu'un pari sur une résolution qu'on ne connaît pas.
   var MIN_BACKGROUND_IMAGE_WIDTH = 1000;
+  // Lance le téléchargement de toutes les images du QCM dès que la liste de
+  // questions est connue (demande du 30/08/2026, "l'image met trop de temps
+  // à apparaître") : sans ça, chaque image ne commençait à charger qu'au
+  // moment précis où sa question devenait courante (cf. applyQuestionBackgroundImage
+  // posée depuis renderQuestion), d'où un délai visible à chaque changement de
+  // question au lieu d'un fond déjà prêt.
+  function preloadQuestionImages(list) {
+    (list || []).forEach(function (q) {
+      var img = q && q.image;
+      if (img && img.url && img.width >= MIN_BACKGROUND_IMAGE_WIDTH) {
+        new Image().src = img.url;
+      }
+    });
+  }
   function applyQuestionBackgroundImage(question) {
     var img = question && question.image;
     var imageUrl = (img && img.url && img.width >= MIN_BACKGROUND_IMAGE_WIDTH)
@@ -6428,6 +6447,15 @@
         '<button type="button" class="qcm-mesqcm-action-menu-delete-link" data-action="delete">' +
           '<i class="fa-solid fa-trash-can"></i> Supprimer cet apprentissage' +
         '</button>' +
+        // Même bouton/style que celui du bas d'une séance QCM en cours (cf.
+        // .qcm-learning-return-bottom) : accès direct à la liste "Mes
+        // apprentissages" sans repasser par la croix (demande du 30/08/2026).
+        '<div class="qcm-learning-return-bottom">' +
+          '<button type="button" class="qcm-learning-return-btn" data-action="return">' +
+            '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>' +
+            '<span>Retourner aux apprentissages</span>' +
+          '</button>' +
+        '</div>' +
       '</div>';
 
     var overlay = document.createElement('div');
@@ -6458,6 +6486,10 @@
     overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
       closeMesQcmActionModal();
       removeMesQcmItem(q, quizzes, btn);
+    });
+    overlay.querySelector('[data-action="return"]').addEventListener('click', function () {
+      closeMesQcmActionModal();
+      returnToLearningOverview();
     });
 
     mesQcmActionModalEls = { overlay: overlay, onKeydown: onKeydown };
@@ -6692,6 +6724,7 @@
         if (myToken !== loadToken) return;
         questions = Array.isArray(data.questions) ? data.questions : [];
         originalQuestions = questions.slice();
+        preloadQuestionImages(questions);
         if (shuffled) questions = shuffleArrayCopy(questions);
         if (data.label && !label) titleText.textContent = data.label;
         if (!questions.length) {
@@ -6703,15 +6736,18 @@
           return;
         }
         qcmSessionReady = true;
-        if (learningReturnBottom) learningReturnBottom.hidden = false;
         // Croix du cadre visible dès qu'un vrai QCM démarre (demande du
         // 13/08/2026, jusqu'ici réservée à "Refaire") — pas seulement en
         // pratique : quitter en cours de route doit être possible dès le
         // premier passage aussi.
         setPanelCloseVisible(true);
+        // "Retourner aux apprentissages" n'apparaît qu'avec la vraie question
+        // (jamais pendant le sablier "Chargement du QCM…", y compris le temps
+        // du fetch des réponses ci-dessous — demande du 30/08/2026).
         if (!voterKey) {
           currentIndex = 0;
           renderQuestion();
+          if (learningReturnBottom) learningReturnBottom.hidden = false;
           return;
         }
         fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey) + '&slot=' + encodeURIComponent(slotKey) + dateParam, { cache: 'no-store' })
@@ -6726,8 +6762,15 @@
               currentIndex = firstUnanswered;
               renderQuestion();
             }
+            if (learningReturnBottom) learningReturnBottom.hidden = false;
           })
-          .catch(function () { if (myToken === loadToken) { currentIndex = 0; renderQuestion(); } });
+          .catch(function () {
+            if (myToken === loadToken) {
+              currentIndex = 0;
+              renderQuestion();
+              if (learningReturnBottom) learningReturnBottom.hidden = false;
+            }
+          });
       })
       .catch(function () {
         if (myToken === loadToken) renderMessage('Impossible de charger ce QCM pour le moment.');

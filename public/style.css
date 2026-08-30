@@ -22100,13 +22100,17 @@ body.page-debate .debate-side-focus-btn-right {
    (38px) — les centrer sur toute cette hauteur les fait paraître "plus bas"
    que le texte du logo, dont le haut visuel est bien plus proche du haut de
    la ligne. Aligner les boutons en haut de la même ligne (comme le haut du
-   logo) plutôt qu'au centre de sa boîte règle ce décalage perçu. */
+   logo) plutôt qu'au centre de sa boîte règle ce décalage perçu.
+   margin-top:6px (pas 2px) : un premier essai à 2px s'est révélé trop haut
+   par rapport au haut réel du logo (retour utilisateur du 30/08/2026, même
+   correction que .standalone-header-power/Apprentissage — cf. son
+   commentaire pour la mesure précise). */
 @media (max-width: 768px) {
   body.is-standalone.page-home-mobile .home-topbar-login-icon {
     grid-area: spacer;
     justify-self: end;
     align-self: start;
-    margin: 2px 8px 0 0 !important;
+    margin: 6px 8px 0 0 !important;
     width: 38px;
     height: 38px;
     display: inline-flex !important;
@@ -22115,7 +22119,7 @@ body.page-debate .debate-side-focus-btn-right {
   body.is-standalone.page-home-mobile .topbar-actions {
     justify-content: flex-start !important;
     align-self: start !important;
-    margin-top: 2px;
+    margin-top: 6px;
   }
 }
 
@@ -27438,16 +27442,19 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .pag
    d'où un bouton visiblement "trop bas" par rapport au logo (constaté le
    30/08/2026, même bug que .home-topbar-login-icon/index, cf. son
    commentaire). Un premier correctif visait 49px + safe comme CENTRE de
-   cette hauteur utile — toujours décentré du haut réel du logo. top:4px +
-   safe (haut du bouton, transform annulé) reproduit à la place le petit
-   espace entre le haut du bandeau et le haut du logo. Placée APRÈS la règle
+   cette hauteur utile — toujours décentré du haut réel du logo. Un second
+   essai à top:4px+safe est allé trop loin dans l'autre sens ("trop haut",
+   retour utilisateur du 30/08/2026) : mesure précise (topbar padding-top
+   1px + logo centré dans les 72px de .topbar-inner) place le vrai haut du
+   logo à ~6px du haut du bandeau. top:8px+safe s'en rapproche tout en
+   restant perceptiblement plus bas que l'essai à 4px. Placée APRÈS la règle
    :hover/:focus-visible générale ci-dessus pour la gagner en cascade (même
    spécificité, toutes deux !important — seul l'ordre dans le fichier
    tranche). */
 @media (display-mode: standalone) and (max-width: 768px) {
   body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
     .topbar--mnoria-uniform > .standalone-header-power {
-    top: calc(4px + env(safe-area-inset-top, 0px)) !important;
+    top: calc(8px + env(safe-area-inset-top, 0px)) !important;
     transform: none !important;
   }
 
