@@ -1333,7 +1333,30 @@ function waitForContainerSizeStable(el, maxWaitMs = 400) {
   });
 }
 
+// Demande du 30/08/2026 ("page intermédiaire avec sablier... le temps que le cadre se
+// mette bien") : en standalone mobile à froid, --mnoria-home-trends-section-top (qui pilote
+// la hauteur du cadre "Ma mémoire", cf. style.css) met un instant à se commiter pour de bon
+// (script.js, syncMnoriaHomeTrendsSectionMinHeight — mesures provisoires documentées le
+// 12/08/2026). waitForContainerSizeStable seul pouvait déclarer le cadre "stable" sur ce
+// plateau transitoire (2 lectures identiques de clientWidth/Height) AVANT que ce commit n'ait
+// eu lieu, montant alors les bulles sur une taille qui allait encore changer. window.__mnoria
+// HomeTrendsSectionTopReady (posé par script.js, true par défaut hors standalone mobile) sert
+// de signal indépendant : le sablier reste affiché tant qu'il n'est pas passé à true.
+function waitForHomeTrendsSectionTopReady(maxWaitMs = 800) {
+  return new Promise((resolve) => {
+    if (window.__mnoriaHomeTrendsSectionTopReady) { resolve(); return; }
+    const startedAt = performance.now();
+    const check = () => {
+      if (window.__mnoriaHomeTrendsSectionTopReady || performance.now() - startedAt >= maxWaitMs) { resolve(); return; }
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+}
+
 async function mountUniverseAndHideSpinnerWhenReady(modeToken) {
+  await waitForHomeTrendsSectionTopReady();
+  if (modeToken !== window._mnoriaCloudModeToken) return;
   await waitForContainerSizeStable(cloudEl);
   if (modeToken !== window._mnoriaCloudModeToken) return;
   mountUniverse();
@@ -2193,7 +2216,7 @@ function showStatus(kind) {
       statusEl.hidden = true;
       return;
     }
-    statusEl.textContent = "Chargement de ton univers…";
+    statusEl.textContent = "Chargement de ta mémoire…";
   } else if (kind === "empty") {
     statusEl.hidden = true;
     const message = document.createElement("div");

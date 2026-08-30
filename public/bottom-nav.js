@@ -35,6 +35,13 @@
     var pathname = String(window.location.pathname || '');
     if (pathname === '/debate' || pathname.indexOf('/debates/') === 0 || pathname.indexOf('/admin') === 0) return;
     if (document.querySelector('.home-bottom-nav')) return;
+    // Fenêtres Photo/PDF/Texte/Lien/YouTube/Manuellement de la page
+    // Apprentissage (cf. openKnowledgeRouteModal, qcm-du-jour.html) : ces
+    // pages sont chargées en iframe dans une fenêtre déjà pourvue de sa
+    // propre croix de fermeture et de son propre bouton "Retourner aux
+    // apprentissages" — ce bandeau y apparaissait en double, à l'intérieur
+    // même de la fenêtre (demande du 30/08/2026).
+    if (/(?:^|[?&])noNav=1(?:&|$)/.test(window.location.search)) return;
 
     var spacer = document.createElement('div');
     spacer.className = 'mnoria-global-bottom-nav-spacer';

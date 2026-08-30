@@ -78,7 +78,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v6-diag">
+  <link rel="stylesheet" href="/style.min.css?v=20260830-memoire-frame-smooth-height">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -199,6 +199,62 @@
       z-index: 9998;
       pointer-events: none;
       background: radial-gradient(circle at 50% 50vh, #243038 0%, #101820 55%, #05070a 100%);
+    }
+    /* Cache plein écran pour "Ma mémoire" en standalone mobile (demande du 30/08/2026,
+       "à chaque fois que je reviens sur index, peu importe la page") : contrairement au
+       loader de démarrage ci-dessous (masqué par mnoria-skip-startup-once sur tout retour
+       interne à l'accueil, cf. html.mnoria-skip-startup-once .mnoria-startup-loader plus
+       haut — ce qui le rendait invisible précisément sur ce cas), ce cache-ci est TOUJOURS
+       peint dès le premier octet HTML dans ce contexte précis (scopé par sélecteur body,
+       jamais par une classe désactivable). Retiré par JS (cf. plus bas, même événement que
+       mountUniverseAndHideSpinnerWhenReady dans mon-univers.js) une fois
+       --mnoria-home-trends-section-top réellement stabilisé
+       (window.__mnoriaHomeTrendsSectionTopReady, script.js) — jamais avant, sans quoi le
+       cadre "Ma mémoire" pouvait encore visiblement changer de hauteur en dessous. Même
+       construction anti-WebKit que #mnoria-conn-retry-cover ci-dessus (débordement bas +
+       logo ancré depuis le haut, cf. son commentaire pour le détail). */
+    #mnoria-memoire-settle-cover {
+      display: none;
+    }
+    @media (max-width: 768px) {
+      body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
+        padding-bottom: calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
+        box-sizing: border-box;
+        z-index: 9600;
+        background: radial-gradient(circle at 50% 50vh, #243038, #101820 55%, #05070a);
+        opacity: 1;
+        transition: opacity 0.25s ease;
+      }
+      body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover.is-hiding {
+        opacity: 0;
+        pointer-events: none;
+      }
+      body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover img {
+        position: absolute;
+        left: 50%;
+        top: 50vh;
+        top: 50dvh;
+        transform: translate(-50%, -50%);
+        width: 64px;
+        height: 64px;
+        animation: pageArrivalLogoSpin 1s linear infinite;
+      }
+      @media (display-mode: standalone) {
+        body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover img {
+          top: 50vh;
+          top: 50lvh;
+        }
+      }
+    }
+    @keyframes pageArrivalLogoSpin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
     }
     .mnoria-startup-loader {
       position: fixed;
@@ -466,7 +522,7 @@
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v6-diag" defer></script>
+  <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
 </head>
 
 <body class="page-home page-home-mobile">
@@ -584,6 +640,40 @@
   window.addEventListener('mnoria:feed-ready', removeCover, { once: true });
   // Filet de sécurité si cet événement ne survient jamais.
   setTimeout(removeCover, 10000);
+})();
+</script>
+
+<!-- cf. commentaire CSS de #mnoria-memoire-settle-cover plus haut (demande du 30/08/2026,
+     "à chaque fois que je reviens sur index") : peint uniquement en standalone mobile
+     (sélecteur CSS body.is-standalone.page-home-mobile), retiré une fois le cadre "Ma
+     mémoire" réellement stabilisé. -->
+<div id="mnoria-memoire-settle-cover" aria-hidden="true">
+  <img src="/sablier-96.png" alt="">
+</div>
+<script>
+(function(){
+  var cover = document.getElementById('mnoria-memoire-settle-cover');
+  if (!cover) return;
+  // Rien à attendre hors du seul contexte concerné (le CSS ne le peint de toute façon
+  // que là, même condition) — vidé immédiatement pour ne jamais laisser un noeud DOM
+  // inerte traîner jusqu'au filet de sécurité de 3s plus bas.
+  if (!document.body || !document.body.classList.contains('is-standalone') || window.innerWidth > 768) {
+    cover.remove();
+    return;
+  }
+  var removed = false;
+  function removeCover() {
+    if (removed) return;
+    removed = true;
+    cover.classList.add('is-hiding');
+    setTimeout(function () { if (cover.parentNode) cover.parentNode.removeChild(cover); }, 260);
+  }
+  // Posé par script.js (markMnoriaHomeTrendsSectionTopReady), chargé en defer — l'écouteur
+  // ci-dessous est sans risque d'ordre : il fonctionne même posé avant que ce code n'existe.
+  window.addEventListener('mnoria:memoire-frame-ready', removeCover, { once: true });
+  // Filet de sécurité si cet événement ne survient jamais (ex. desktop élargi après coup,
+  // page hors du flux "Ma mémoire" par défaut).
+  setTimeout(removeCover, 3000);
 })();
 </script>
 
@@ -1841,7 +1931,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260830-remove-exhaustif-level" defer></script>
+<script src="/script.min.js?v=20260830-startup-loader-gate" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -770,6 +770,28 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   let contentReady = false;
   let fontsReady = false;
   let hidden = false;
+  // Condition standalone mobile (demande du 30/08/2026, "la page de chargement apparaît
+  // trop tard, elle doit apparaître immédiatement") : le cadre "Ma mémoire" (accueil, mode
+  // par défaut) peut mettre un instant à se stabiliser au lancement PWA à froid (cf.
+  // syncMnoriaHomeTrendsSectionMinHeight/mountUniverseAndHideSpinnerWhenReady, bien plus bas
+  // dans ce fichier — son propre flag window.__mnoriaHomeTrendsSectionTopReady n'existe pas
+  // encore à cet instant précoce, donc même vérification refaite ici plutôt que de dépendre
+  // d'un ordre d'exécution fragile entre deux zones du fichier). Ce loader de démarrage,
+  // déjà peint dans le HTML avant tout JS, reste donc affiché jusqu'à ce que CE cadre soit
+  // prêt lui aussi — jamais de fenêtre où il aurait déjà disparu pendant que le cadre bouge
+  // encore en dessous.
+  let memoireFrameReady = !(
+    document.body &&
+    document.body.classList.contains('is-standalone') &&
+    document.body.classList.contains('page-home-mobile') &&
+    window.innerWidth <= 768
+  );
+  if (!memoireFrameReady) {
+    window.addEventListener('mnoria:memoire-frame-ready', function() {
+      memoireFrameReady = true;
+      tryHide();
+    }, { once: true });
+  }
   const loaderShownAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   // Plancher de durée d'affichage garanti, quelle que soit la raison pour laquelle
   // les trois conditions ci-dessus sont devenues vraies plus vite que prévu (cache
@@ -780,7 +802,7 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   const MNORIA_STARTUP_MIN_DISPLAY_MS = 2200;
 
   function tryHide() {
-    if (hidden || !introSequenceDone || !contentReady || !fontsReady) return;
+    if (hidden || !introSequenceDone || !contentReady || !fontsReady || !memoireFrameReady) return;
     const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
     const elapsedSinceShown = now - loaderShownAt;
     if (elapsedSinceShown < MNORIA_STARTUP_MIN_DISPLAY_MS) {
@@ -917,6 +939,87 @@ function finishPendingNotionQuizGeneration(slot) {
 window.mnoriaGetPendingNotionQuizGenerations = readPendingNotionQuizGenerations;
 window.mnoriaStartPendingNotionQuizGeneration = startPendingNotionQuizGeneration;
 window.mnoriaFinishPendingNotionQuizGeneration = finishPendingNotionQuizGeneration;
+
+// Prévient automatiquement, où que soit l'utilisateur sur le site, une fois
+// qu'un parcours d'apprentissage lancé en arrière-plan (Éclairages, un débat,
+// ou /apprentissage lui-même) est prêt — sans ça, quitter la page qui a
+// démarré la génération faisait perdre toute notification de fin, seule la
+// ligne "En cours de création" disparaissait silencieusement à la prochaine
+// visite d'/apprentissage (demande du 30/08/2026). Même famille visuelle que
+// showDebateNotionMemorizeExplainer (cf. plus bas), en autonome : pas
+// d'instance d'appelant à mettre à jour ici, juste une nouvelle fenêtre.
+function showNotionQuizReadyAnnouncement(label) {
+  const overlay = document.createElement("div");
+  overlay.className = "ecl-memorize-explainer-overlay";
+  const modal = document.createElement("div");
+  modal.className = "ecl-memorize-explainer-modal";
+  const text = document.createElement("p");
+  text.className = "ecl-memorize-explainer-text";
+  text.textContent = `Le parcours d'apprentissage « ${label} » est prêt.`;
+  const qcmBtn = document.createElement("button");
+  qcmBtn.type = "button";
+  qcmBtn.className = "ecl-memorize-explainer-qcm";
+  qcmBtn.textContent = "Aller à l'apprentissage";
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "ecl-memorize-explainer-close";
+  closeBtn.textContent = "J’ai compris";
+  modal.appendChild(text);
+  modal.appendChild(qcmBtn);
+  modal.appendChild(closeBtn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+  }
+  function onKeydown(e) { if (e.key === "Escape") close(); }
+  document.addEventListener("keydown", onKeydown);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  closeBtn.addEventListener("click", close);
+  qcmBtn.addEventListener("click", () => {
+    close();
+    if (typeof openDebateIframeModal === "function") openDebateIframeModal("/apprentissage");
+    else window.location.href = "/apprentissage";
+  });
+}
+
+// Interrogation légère (localStorage seul, aucun réseau) tant qu'il n'y a
+// rien en attente ; un vrai appel serveur seulement si au moins une
+// génération suivie n'a pas encore de réponse.
+let notionQuizReadinessCheckInFlight = false;
+function checkPendingNotionQuizzesReadiness() {
+  if (notionQuizReadinessCheckInFlight) return;
+  const pending = readPendingNotionQuizGenerations();
+  if (!pending.length) return;
+  const voterKeyForReadinessCheck = typeof getKey === "function" ? getKey() : null;
+  if (!voterKeyForReadinessCheck) return;
+  notionQuizReadinessCheckInFlight = true;
+  const slotsParam = pending.map((item) => item.slot).join(",");
+  fetchJSON(`${API}/users/notion-quizzes/generation-status?legacyKey=${encodeURIComponent(voterKeyForReadinessCheck)}&slots=${encodeURIComponent(slotsParam)}`, { cache: "no-store" })
+    .then((data) => {
+      const readySlots = new Set((data.ready || []).map((row) => row.slot));
+      // Relu juste avant d'agir : le flux direct (recherche libre restée
+      // ouverte sur /apprentissage pendant toute la génération) peut avoir
+      // déjà traité ce même slot pendant cet appel réseau — ne jamais
+      // notifier deux fois le même parcours prêt.
+      const stillPending = readPendingNotionQuizGenerations();
+      pending.forEach((item) => {
+        if (!readySlots.has(item.slot)) return;
+        if (!stillPending.some((row) => row.slot === item.slot)) return;
+        finishPendingNotionQuizGeneration(item.slot);
+        showNotionQuizReadyAnnouncement(item.label);
+      });
+    })
+    .catch(() => {})
+    .finally(() => { notionQuizReadinessCheckInFlight = false; });
+}
+setInterval(checkPendingNotionQuizzesReadiness, 8000);
+checkPendingNotionQuizzesReadiness();
+window.addEventListener("storage", (event) => {
+  if (event.key === MNORIA_PENDING_NOTION_QUIZZES_KEY) checkPendingNotionQuizzesReadiness();
+});
 
 const PUSH_INVITE_LAST_SHOWN_KEY = "pushInviteLastShownAt";
 const PUSH_INVITE_DISMISSED_KEY = "pushInviteDismissed";
@@ -2785,8 +2888,14 @@ function isIframeDebateLoadingOverlayContext() {
 // par la page elle-même) plutôt que répétée à chaque appel. Apprentissage
 // affiche désormais immédiatement son propre fond neuronal et son cadre
 // translucide : le voile bleu pétrole du parent produisait précisément le
-// flash visuel que cet état initial cherche à supprimer.
-const MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/apprentissage"];
+// flash visuel que cet état initial cherche à supprimer. "Ma mémoire" plein
+// écran (/mon-univers, demande du 30/08/2026, "cadre blanc avec sablier qui
+// apparaît trop haut") rejoint la liste pour la même raison — le passage par
+// USING_PARENT_LOADING_ONLY (variante immersive au lieu du petit cadre
+// blanc) n'a rien changé, ce cadre disparaît donc complètement au lieu
+// d'être restylé : mon-univers.js affiche déjà son propre indicateur
+// ("Chargement de ton univers…", cf. #universe-status).
+const MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/apprentissage", "/mon-univers"];
 function isIframePageWithoutLoadingOverlay(pathname) {
   return MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
 }
@@ -3104,7 +3213,18 @@ function initPageArrivalLoadingOverlay() {
   // voile ajoutait en plus un cadre blanc (.page-arrival-loading-box)
   // redondant par-dessus — coupé ici sans toucher au bandeau du parent.
   const skipForParentLoadingOnlyPage = isIframePageUsingParentLoadingOnly(location.pathname) && window.self !== window.top;
-  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
+  // "Ma mémoire" plein écran (/mon-univers, demande du 30/08/2026, "cadre
+  // blanc avec sablier qui apparaît trop haut") : contrairement à
+  // Apprentissage/Éclairages ci-dessus, cette page s'ouvre le plus souvent en
+  // navigation directe (lien "Quitter le plein écran"/PWA/retour), pas
+  // seulement dans l'iframe modal — sans le "&& window.self !== window.top"
+  // des deux exclusions ci-dessus, ce cadre continuait donc d'apparaître,
+  // mal centré, même une fois /mon-univers ajouté à
+  // MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY. mon-univers.js affiche déjà
+  // son propre indicateur ("Chargement de ton univers…", cf.
+  // #universe-status), ce voile générique est donc coupé dans tous les cas.
+  const skipForFullscreenMemoryPage = location.pathname === "/mon-univers";
+  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && !skipForFullscreenMemoryPage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
     showPageArrivalLoadingOverlay("Chargement en cours");
@@ -19662,7 +19782,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260828-fullpage-button').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260830-frame-ready-gate').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -33759,9 +33879,11 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.pathname === "/create") {
     initCreate();
   }
-  if (location.pathname === "/mon-univers") {
-    attachPageScrollFadeHint('#f3f4f6');
-  }
+  // "Ma mémoire" plein écran (/mon-univers) n'a plus cet indicateur "suite ↓"
+  // (demande du 30/08/2026, "je n'en veux pas") : cette page est toujours en
+  // page-memory-only (fixed, overflow:hidden, jamais de vrai scroll de
+  // fenêtre — cf. mon-univers.html), ce hint de scroll de page n'y avait de
+  // toute façon aucun sens.
   // Scores et contributions ainsi que Meilleures idées utilisent une page
   // autonome : aucun voile flou ni indicateur « suite » ne doit recouvrir
   // leur contenu.
@@ -35460,9 +35582,38 @@ function __memoireFrameDiagLog(outcome, data) {
 // Ce jour dans l'histoire) : n'appliquer une mesure qu'une fois confirmée par 2 passages
 // consécutifs identiques, jamais la toute première lecture isolée.
 let __mnoriaTrendsSectionTopPending = null;
+// Exposé pour mon-univers.js (module séparé, cf. waitForHomeTrendsSectionTopReady
+// juste avant mountUniverseAndHideSpinnerWhenReady) : demande du 30/08/2026, "page
+// intermédiaire avec sablier... le temps que le cadre se mette bien" — le sablier
+// "Ma mémoire" ne doit disparaître (et les bulles se monter) qu'une fois la hauteur
+// standalone RÉELLEMENT commitée, jamais avant, sans quoi les bulles se plaçaient sur
+// un cadre encore à sa taille provisoire. Calculé une première fois ici (script.js est
+// chargé en defer, donc après que index.html ait déjà posé is-standalone/page-home-mobile
+// sur <body> via son script inline précoce) : false UNIQUEMENT dans le contexte concerné
+// (standalone mobile), true partout ailleurs pour ne jamais bloquer desktop/mobile
+// classique — la fonction ci-dessous garde ensuite cette valeur synchronisée.
+window.__mnoriaHomeTrendsSectionTopReady = !(
+  document.body &&
+  document.body.classList.contains('is-standalone') &&
+  document.body.classList.contains('page-home-mobile') &&
+  window.innerWidth <= 768
+);
+// Événement (plutôt qu'un simple flag lu une fois) : initMnoriaStartupLoader (tout en
+// haut de ce fichier, exécuté bien avant que ce flag n'existe) s'abonne dessus pour
+// garder SON PROPRE loader plein écran affiché — déjà peint dès le tout premier rendu,
+// contrairement à un cache créé après coup côté JS (demande du 30/08/2026, "la page de
+// chargement apparaît trop tard, elle doit apparaître immédiatement").
+function markMnoriaHomeTrendsSectionTopReady() {
+  if (window.__mnoriaHomeTrendsSectionTopReady === true) return;
+  window.__mnoriaHomeTrendsSectionTopReady = true;
+  window.dispatchEvent(new Event('mnoria:memoire-frame-ready'));
+}
 function syncMnoriaHomeTrendsSectionMinHeight() {
   const body = document.body;
-  if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) return;
+  if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
+    markMnoriaHomeTrendsSectionTopReady();
+    return;
+  }
   if (window.__mnoriaDebateModalOpen === true) return;
   const section = document.getElementById('mnoria-tag-trends-section');
   if (!section) return;
@@ -35502,6 +35653,7 @@ function syncMnoriaHomeTrendsSectionMinHeight() {
     return;
   }
   document.documentElement.style.setProperty('--mnoria-home-trends-section-top', `${sectionTop}px`);
+  markMnoriaHomeTrendsSectionTopReady();
   // Mesures supplémentaires (hauteur réellement rendue de la section, position du switch de
   // mode et des flèches flottantes de scroll) : la min-height n'est qu'un plancher, la valeur
   // mesurée peut donc être correcte tout en laissant le rendu final incohérent pour une autre

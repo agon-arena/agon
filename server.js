@@ -16490,9 +16490,11 @@ app.get("/api/daily-quiz/results", async (req, res) => {
     if (answersError) throw new Error(answersError.message);
 
     const answers = [];
+    const answeredQuestionIds = new Set();
     for (const row of answerRows || []) {
       const question = questionsById.get(row.question_id);
       if (!question) continue;
+      answeredQuestionIds.add(row.question_id);
       const { stats, total } = await getDailyQuizStats(quizDate, row.question_id);
       answers.push({
         questionId: row.question_id,
@@ -16508,6 +16510,20 @@ app.get("/api/daily-quiz/results", async (req, res) => {
         ...((question.type || "qcm") === "qcm_multi" ? { correctIndexes: question.correctIndexes } : {}),
         ...((question.type || "qcm") === "ordre" ? { items: question.items } : {})
       });
+    }
+    // Questions "passées" sur Découvrir (demande du 30/08/2026) : jamais
+    // vraiment répondues (pas de ligne daily_quiz_answers, donc jamais de
+    // memory_item/repasse future — invariant D de la refonte FSRS
+    // inchangé), mais persistées dans user_question_exclusions (même
+    // endpoint que "Ne plus me poser cette question", cf. POST
+    // /api/daily-quiz/exclude-question) pour que "Continuer le QCM" ne les
+    // repropose pas indéfiniment. Marqueur `skipped: true` sans
+    // optionIndex/correct : jamais compté comme une vraie réponse (cf.
+    // renderFinalScore côté client, qui ne lit que `.correct`).
+    const excludedQuestionIds = await fetchExcludedQuestionIds(voterKey);
+    for (const questionId of questionsById.keys()) {
+      if (answeredQuestionIds.has(questionId) || !excludedQuestionIds.has(questionId)) continue;
+      answers.push({ questionId, skipped: true });
     }
     res.json({ date: quizDate, answers });
   } catch (error) {
@@ -17055,6 +17071,15 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       stateByQuestionKey.set(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`, row);
     }
     const retrievabilityNow = new Date();
+    // Questions "passées" sur Découvrir (demande du 30/08/2026, "les qcm dans
+    // lesquels j'ai répondu et/ou passé toutes les questions est considéré
+    // comme réalisé") : jamais de memory_item (skip persisté à part, cf. POST
+    // /api/daily-quiz/exclude-question), donc jamais comptées ci-dessus —
+    // sans cet ajout, un QCM avec au moins une question passée restait
+    // "en cours" indéfiniment. N'affecte jamais progressPct (une question
+    // passée ne rapporte toujours aucun crédit de rétrivabilité, cohérent
+    // avec "pas mémorisée") ni le scheduler FSRS (invariant D inchangé).
+    const excludedQuestionIds = await fetchExcludedQuestionIds(validation.legacyKey);
 
     const quizzes = [];
     for (const link of links) {
@@ -17062,14 +17087,24 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       if (!questions || !questions.length) continue; // contenu introuvable (générateur en échec, cas limite) : jamais affiché
       let creditSum = 0;
       let answeredCount = 0;
+      // Distinct de answeredCount (qui inclut aussi les questions passées, cf.
+      // juste au-dessus) : sert uniquement à afficher "Réalisé (X/Y)" côté
+      // client (demande du 30/08/2026) — X = vraiment répondues, Y = total,
+      // pour distinguer d'un coup d'œil un QCM entièrement répondu d'un QCM
+      // réalisé avec des questions passées en route.
+      let trueAnsweredCount = 0;
       for (const q of questions) {
         const row = stateByQuestionKey.get(`${link.quiz_date}:${link.slot}:${q.id}`);
-        if (!row) continue;
-        creditSum += computeRetrievability(
-          { state: row.state, stability: row.stability, lastReviewAt: row.last_review_at },
-          retrievabilityNow
-        );
-        answeredCount += 1;
+        if (row) {
+          creditSum += computeRetrievability(
+            { state: row.state, stability: row.stability, lastReviewAt: row.last_review_at },
+            retrievabilityNow
+          );
+          answeredCount += 1;
+          trueAnsweredCount += 1;
+        } else if (excludedQuestionIds.has(q.id)) {
+          answeredCount += 1;
+        }
       }
       const progressPct = Math.round((creditSum / questions.length) * 100);
       const durableAcquisState = durableAcquisBySourceId.get(String(questions[0]?.sourceDebateId || ""));
@@ -17088,8 +17123,10 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         themes: primaryTheme ? [primaryTheme] : [],
         questionCount: questions.length,
         answeredCount,
+        trueAnsweredCount,
         // "Réalisé" seulement une fois TOUTES les questions répondues au moins
-        // une fois (juste ou fausse) — pas dès la première réponse (demande du
+        // une fois (juste ou fausse) OU passées (cf. answeredCount ci-dessus,
+        // demande du 30/08/2026) — pas dès la première réponse (demande du
         // 17/08/2026) : un QCM commencé puis abandonné en route doit rester
         // visible et repris depuis "Mes apprentissages en cours" (Découvrir),
         // pas disparaître prématurément dans "Mes acquis".
@@ -17947,6 +17984,12 @@ async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, {
 // inadaptée. Aucune de ces 10 galaxies restaurées n'a de Solar de départ
 // pré-semé (comme Arts/Politique déjà en usage réel) : la première
 // connaissance qui les atteint déclenche simplement une création normale.
+//
+// "Géographie" (demande du 30/08/2026) : 21e Galaxy, cette fois réellement
+// nouvelle (pas une restauration de l'ancien mécanisme ci-dessus). Sortie du
+// périmètre d'"International", qui ne couvre plus que l'actualité régionale
+// contemporaine — même logique de frontière explicite que les autres paires
+// proches (Arts/Histoire, Sciences sociales/Philosophie...).
 const KNOWLEDGE_GALAXY_DEFINITIONS = [
   { name: "Histoire", description: "Faits, événements, sociétés, États, civilisations, religions et croyances DU PASSÉ étudiés comme connaissance historique (qui, quand, quel contexte) — une religion ou une mythologie ancienne appartient ici en tant que fait de civilisation, même si elle a aussi une dimension religieuse ou artistique." },
   { name: "Arts", description: "La représentation esthétique ou artistique d'un sujet (peinture, sculpture, musique, littérature, cinéma, architecture) — ex. la façon dont une religion ou une mythologie ancienne est représentée DANS L'ART appartient ici, jamais la religion/mythologie elle-même comme fait historique." },
@@ -17956,7 +17999,8 @@ const KNOWLEDGE_GALAXY_DEFINITIONS = [
   { name: "Société - éducation", description: "École, enseignement, famille, démographie, immigration, religions et croyances CONTEMPORAINES, discriminations, genre — le pendant contemporain de ce que \"Histoire\" couvre pour le passé." },
   { name: "Économie - emploi", description: "Mécanismes économiques, monnaie, emploi, entreprises, finances publiques, commerce, immobilier." },
   { name: "Politique", description: "Institutions politiques, pouvoirs, régimes, partis, relations internationales contemporaines." },
-  { name: "International", description: "Régions, pays et zones géographiques du monde et leurs caractéristiques propres (géographie, culture locale)." },
+  { name: "International", description: "Régions, pays et zones géographiques du monde et leur actualité contemporaine (relations internationales, politique régionale, culture locale) — la géographie comme discipline (relief, climat, cartographie, population) appartient à Géographie, pas ici." },
+  { name: "Géographie", description: "La géographie en tant que discipline : relief, climats, cartographie, hydrographie, répartition et mouvements de population, phénomènes géographiques — jamais l'actualité politique ou culturelle d'une région ou d'un pays précis (cf. International)." },
   { name: "Justice - faits divers", description: "Système judiciaire, droit, criminalité, enquêtes policières, procédures." },
   { name: "Climat - environnement", description: "Climat, écosystèmes, ressources naturelles, biodiversité, enjeux environnementaux." },
   { name: "Culture", description: "Pratiques et objets culturels (traditions, gastronomie, mode, patrimoine) — hors œuvres d'art à proprement parler (cf. Arts) et hors faits historiques (cf. Histoire)." },
@@ -18351,7 +18395,8 @@ async function buildCultureGeneraleComprehensionQuiz(link) {
     "Chaque question doit mobiliser explicitement A ET B, ou demander la nature/la conséquence/le mécanisme du lien entre elles. Sont INTERDITES : une question portant seulement sur A ou seulement sur B ; une question sur une date, un lieu ou une personne secondaire périphérique ; une question de contexte général ou d'anecdote ; une question sur une information présente dans les fiches mais inutile pour comprendre CE lien précis ; une reformulation artificielle d'une question déjà posée sur le même angle.",
     "TEST OBLIGATOIRE avant de conserver chaque question : \"Si cette question était supprimée, perdrait-on une information importante pour comprendre pourquoi ces deux connaissances sont reliées ?\" Si la réponse est NON, ne génère pas cette question — le seul fait qu'il reste des informations disponibles dans les fiches n'est jamais, à lui seul, une justification suffisante.",
     "Les mauvaises réponses doivent représenter des liens plausibles mais faux, afin de vérifier la compréhension du rapprochement et non la simple reconnaissance d'un mot.",
-    "L'explication de chaque réponse doit nommer clairement les deux connaissances et expliciter leur relation en une ou deux phrases.",
+    `"A" et "B" ci-dessus ne servent qu'à structurer CE prompt : dans la question, les options de réponse ET l'explication, ne les nomme JAMAIS "connaissance A"/"connaissance B"/"A"/"B" — utilise toujours leur vrai nom ("${link.nameA}", "${link.nameB}") ou une reformulation naturelle (ex. "cette bataille", "ce traité"), jamais l'étiquette du prompt.`,
+    "L'explication de chaque réponse doit nommer clairement les deux connaissances (par leur vrai nom, jamais A/B) et expliciter leur relation en une ou deux phrases.",
     `Pour chaque question, sourceId doit valoir exactement "${pairHash}".`,
     "",
     ...formatBlock
@@ -18647,6 +18692,28 @@ async function fetchCultureGeneraleNotionLinks(sourceType, sourceId, userId = nu
 // avec ce libellé exact — sans ça, l'IA les réinventerait à chaque fois avec
 // une formulation potentiellement différente d'un appel à l'autre.
 const CULTURE_GENERALE_SEED_SOLAR_SYSTEMS = {
+  "Géographie": [
+    "Pays & États",
+    "Régions du monde",
+    "Villes & métropoles",
+    "Population & démographie",
+    "Migrations",
+    "Peuplement & habitat",
+    "Territoires & frontières",
+    "Géographie politique & géopolitique",
+    "Urbanisation & aménagement",
+    "Espaces ruraux & agriculture",
+    "Transports & mobilités",
+    "Mondialisation & échanges",
+    "Activités économiques & territoires",
+    "Développement & inégalités",
+    "Cartographie & géomatique",
+    "Reliefs & géomorphologie",
+    "Hydrographie",
+    "Littoraux & espaces maritimes",
+    "Tourisme & territoires",
+    "Géographie culturelle"
+  ],
   "International": [
     "Europe",
     "Maghreb",
@@ -18935,6 +19002,11 @@ const CULTURE_GENERALE_SEED_SOLAR_SYSTEMS = {
 // buildDomainSolarSystemPrompt. Une galaxie absente de cette liste garde le
 // critère strict habituel ("exactement la même notion").
 const CULTURE_GENERALE_DOMAIN_GALAXIES = {
+  "Géographie": {
+    unitLabel: "le sous-domaine géographique dont il relève",
+    matchExample: "ex. un contenu sur le relief d'une chaîne de montagnes correspond à \"Reliefs & géomorphologie\", un contenu sur la croissance d'une métropole correspond à \"Villes & métropoles\", un contenu sur un fleuve correspond à \"Hydrographie\"",
+    newExample: "le nom de ce sous-domaine géographique (2 à 4 mots, jamais une phrase)"
+  },
   "International": {
     unitLabel: "la région géographique internationale principalement concernée",
     matchExample: "ex. un contenu sur le Maroc correspond à \"Maghreb\", un contenu sur le Japon correspond à \"Asie de l’Est\", un contenu sur les Caraïbes correspond à \"Amérique centrale & Caraïbes\"",
@@ -19044,22 +19116,50 @@ async function ensureCultureGeneraleSeedSolarSystems() {
   // Court-circuit egress (audit du 26/08/2026) : cette fonction tournait en entier — ~250
   // lectures (une par nom, cf. resolveOrCreateSolarSystem) + ~20 UPDATE (un par galaxie) —
   // à CHAQUE démarrage du process, sans aucune garde, alors qu'elle est censée être un
-  // one-shot. Une fois tous les solars de départ créés en taxonomy_scope='knowledge', un
-  // simple COUNT suffit à savoir qu'il n'y a plus rien à faire ; on ne retombe dans la
-  // double boucle complète que si ce compte est encore insuffisant (première exécution,
-  // ou nouveaux noms ajoutés à CULTURE_GENERALE_SEED_SOLAR_SYSTEMS depuis).
-  const totalExpected = Object.values(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)
-    .reduce((sum, names) => sum + names.length, 0);
-  const { count, error: countError } = await supabase
+  // one-shot. Une fois tous les solars de départ créés en taxonomy_scope='knowledge', une
+  // lecture ciblée suffit à savoir qu'il n'y a plus rien à faire ; on ne retombe dans la
+  // création complète que pour les entrées encore manquantes (première exécution, ou
+  // nouveaux noms/galaxie ajoutés à CULTURE_GENERALE_SEED_SOLAR_SYSTEMS depuis).
+  //
+  // Correctif du 30/08/2026 ("corrige") : l'ancien court-circuit comparait un simple COUNT
+  // de TOUTES les lignes taxonomy_scope='knowledge' (socle + solars "connaissances" créés
+  // ailleurs à la volée, cf. leur commentaire plus haut) à totalExpected — ce compte global
+  // pouvait déjà dépasser totalExpected à cause de ces solars ad hoc, même quand une
+  // NOUVELLE galaxie venait tout juste d'être ajoutée ici (constaté sur "Géographie", ses 20
+  // solars n'ont pas été créés tout seuls au redémarrage suivant, il a fallu les insérer à la
+  // main). Lecture bornée aux seules galaxies du socle (toujours ~250 lignes max, pas toute
+  // la table) et comparaison précise entrée par entrée plutôt qu'un total global agrégé.
+  const seedGalaxies = Object.keys(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS);
+  const { data: existingSeedRows, error: existingSeedError } = await supabase
     .from("solar_systems")
-    .select("id", { count: "exact", head: true })
-    .eq("taxonomy_scope", "knowledge");
-  if (!countError && (count || 0) >= totalExpected) return;
-
+    .select("galaxy, normalized_name, taxonomy_scope")
+    .in("galaxy", seedGalaxies);
+  if (existingSeedError) {
+    console.warn("[culture-generale solar-system] lecture socle existant échouée :", existingSeedError.message);
+  }
+  // Lecture échouée : repli sûr sur la liste complète plutôt que de risquer de sauter la
+  // pré-création — resolveOrCreateSolarSystem vérifie de toute façon l'existence avant de
+  // créer, donc sans coût de doublon, juste moins optimal en egress le temps que la lecture
+  // remarche.
+  const existingKnowledgeKeys = existingSeedError
+    ? null
+    : new Set(
+        (existingSeedRows || [])
+          .filter((row) => row.taxonomy_scope === "knowledge")
+          .map((row) => `${row.galaxy}::${row.normalized_name}`)
+      );
+  const missingSeedEntries = [];
   for (const [galaxy, names] of Object.entries(CULTURE_GENERALE_SEED_SOLAR_SYSTEMS)) {
     for (const name of names) {
-      await resolveOrCreateSolarSystem(galaxy, name, normalizeSolarSystemName(name), { taxonomyScope: "knowledge" });
+      const normalizedName = normalizeSolarSystemName(name);
+      if (!existingKnowledgeKeys || !existingKnowledgeKeys.has(`${galaxy}::${normalizedName}`)) {
+        missingSeedEntries.push([galaxy, name, normalizedName]);
+      }
     }
+  }
+  if (!missingSeedEntries.length) return;
+  for (const [galaxy, name, normalizedName] of missingSeedEntries) {
+    await resolveOrCreateSolarSystem(galaxy, name, normalizedName, { taxonomyScope: "knowledge" });
   }
   // Backfill ciblé (jamais une reclassification massive) : corrige les
   // lignes de départ déjà créées AVANT ce correctif et restées 'unknown'

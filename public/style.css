@@ -25808,6 +25808,20 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 body.is-standalone.page-home-mobile #mnoria-tag-trends-cloud.mnoria-memoire-frame {
   height: max(636px, calc(100dvh - var(--mnoria-home-trends-section-top, 110px) - 73px - env(safe-area-inset-bottom, 0px) - 148px));
   min-height: max(636px, calc(100dvh - var(--mnoria-home-trends-section-top, 110px) - 73px - env(safe-area-inset-bottom, 0px) - 148px));
+  /* Au lancement PWA à froid, --mnoria-home-trends-section-top (et 100dvh
+     lui-même) mettent un instant à se stabiliser (cf. le commentaire détaillé
+     de syncMnoriaHomeTrendsSectionMinHeight, script.js — mesures provisoires
+     documentées le 12/08/2026, déjà atténuées par un double-passage stable
+     avant application, jamais éliminées : la mesure OS elle-même reste
+     transitoire quelques instants). Plutôt que de risquer d'accélérer cette
+     mesure (déjà ajustée une fois après un souci de valeurs aberrantes),
+     transition sur la hauteur elle-même : le cadre grandit/rétrécit en
+     douceur vers sa taille finale au lieu d'un saut brut (demande du
+     30/08/2026, "trop court puis se corrige"). Portée à ce seul contexte
+     (standalone mobile) — jamais sur .mnoria-memoire-frame en général, qui
+     n'a pas ce souci de mesure asynchrone.
+  */
+  transition: height 0.35s ease, min-height 0.35s ease;
 }
 
 /* Standalone : Bulles Actu/Mnoria rapprochent leur cadre du bandeau du haut via
@@ -27396,9 +27410,21 @@ body.universe-star-panel-open {
 }
 
 /* En standalone, la zone sûre iOS s'ajoute au-dessus des mêmes 72px de
-   contenu que sur l'index, sans réduire le logo ni provoquer de saut. */
-@media (display-mode: standalone) and (max-width: 768px) {
-  html body .topbar.topbar--mnoria-uniform {
+   contenu que sur l'index, sans réduire le logo ni provoquer de saut.
+   body.is-standalone (classe JS, cf. isStandaloneMode()/navigator.standalone)
+   plutôt que la media feature CSS display-mode:standalone (demande du
+   30/08/2026, "ça n'a rien changé" : le marqueur de diagnostic rouge posé sur
+   .standalone-header-power/le hamburger confirmait bien body.is-standalone
+   appliquée, mais le décalage haut/bas persistait identique malgré leurs
+   propres corrections — preuve que CE bandeau-ci, lui, ne recevait jamais
+   son propre agrandissement pour la zone sûre : sans cette hauteur/ce padding
+   réellement appliqués, logo ET boutons rendaient depuis un bandeau resté à
+   sa taille non-standalone, sous l'encoche/la barre de statut, quelle que
+   soit la valeur "top" déjà correcte de chacun des boutons pris isolément.
+   Même repli déjà utilisé par .standalone-header-power/le hamburger, cf.
+   leurs commentaires respectifs). */
+@media (max-width: 768px) {
+  html body.is-standalone .topbar.topbar--mnoria-uniform {
     height: calc(74px + env(safe-area-inset-top, 0px)) !important;
     min-height: calc(74px + env(safe-area-inset-top, 0px)) !important;
     max-height: calc(74px + env(safe-area-inset-top, 0px)) !important;
@@ -27462,14 +27488,10 @@ body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .pag
    simplification que .home-topbar-login-icon/index (déjà en max-width
    simple). */
 @media (max-width: 768px) {
-  /* MARQUEUR DE DIAGNOSTIC TEMPORAIRE (30/08/2026) : fond rouge pour
-     vérifier sans ambiguïté si cette règle atteint bien l'appareil (à
-     retirer dès que confirmé). */
   body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
     .topbar--mnoria-uniform > .standalone-header-power {
-    top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+    top: calc(21px + env(safe-area-inset-top, 0px)) !important;
     transform: none !important;
-    background: #ff0000 !important;
   }
 
   body.is-standalone:is(.page-qcm-du-jour, .page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)

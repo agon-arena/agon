@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v6-diag" />
+<link rel="stylesheet" href="/style.min.css?v=20260830-memoire-frame-smooth-height" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -122,7 +122,11 @@
       z-index: 220;
       top: max(18px, env(safe-area-inset-top, 0px));
       left: max(20px, env(safe-area-inset-left, 0px));
-      right: max(20px, env(safe-area-inset-right, 0px));
+      /* + espace réservé au bouton "Quitter le plein écran" (position:fixed,
+         même coin haut-droit, z-index bien plus élevé) : sans cette marge,
+         un fil d'Ariane suffisamment long (plusieurs niveaux imbriqués) le
+         faisait passer dessous, recouvert (demande du 30/08/2026). */
+      right: calc(max(20px, env(safe-area-inset-right, 0px)) + 145px);
       width: auto;
       margin: 0;
       pointer-events: none;
@@ -142,6 +146,12 @@
       inset: 50% auto auto 50%;
       transform: translate(-50%, -50%);
       margin: 0;
+    }
+    /* Bandeau dégradé "suite ↓" (fiche d'un astre/nœud de connaissance,
+       cf. mon-univers.js) : retiré en plein écran (demande du 30/08/2026,
+       "je n'en veux pas") — jamais affiché, même si la liste déborde. */
+    body.page-memory-only .universe-star-panel__scroll-hint {
+      display: none !important;
     }
     .universe-exit-fullscreen {
       display: none;
@@ -706,7 +716,7 @@
       justify-content: center;
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-topbar-align-fix-v6-diag" defer></script>
+  <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
 </head>
 <body class="page-mon-univers page-notifications page-notifications-mobile page-contributions">
 <script>
@@ -1420,10 +1430,10 @@ function contributionsBottomNavHome() {
 }
 </script>
 
-<script src="/script.min.js?v=20260830-remove-exhaustif-level" defer></script>
+<script src="/script.min.js?v=20260830-startup-loader-gate" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260828-fullpage-button");
+    import("/mon-univers.js?v=20260830-frame-ready-gate");
   }
 </script>
 </body>

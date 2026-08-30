@@ -183,10 +183,12 @@
       // fiable) est indispensable ici pour ne pas repositionner ce hamburger chez tout visiteur
       // mobile — la media feature display-mode, elle, pouvait ne jamais matcher en PWA iOS même
       // avec body.is-standalone bien posée, laissant top:50% (règle de base) seul actif.
-      // MARQUEUR DE DIAGNOSTIC TEMPORAIRE (30/08/2026) : contour rouge sur le bouton
-      // hamburger lui-même, pour vérifier sans ambiguïté si cette règle atteint bien
-      // l'appareil (à retirer dès que confirmé).
-      "@media(max-width:768px){body.is-standalone .mnoria-universal-menu-wrap{top:calc(8px + env(safe-area-inset-top,0px));transform:none}body.is-standalone .mnoria-universal-menu-toggle{border:3px solid #ff0000!important}}" +
+      // Contour rouge puis vert citron utilisés en diagnostic temporaire (30/08/2026)
+      // pour confirmer que ce fichier — jamais reconstruit par `npm run build`,
+      // contrairement à script.min.js/style.min.css — atteignait bien l'appareil une
+      // fois header-score-widget.min.js régénéré manuellement. Retirés une fois
+      // confirmé ; top affiné ensuite (15px, 25px, 22px) jusqu'à 21px, validé.
+      "@media(max-width:768px){body.is-standalone .mnoria-universal-menu-wrap{top:calc(21px + env(safe-area-inset-top,0px));transform:none}}" +
       "body.mnoria-universal-menu-open .topbar{z-index:300000!important;overflow:visible!important}";
     document.head.appendChild(style);
   }
