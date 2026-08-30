@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix">
+  <link rel="stylesheet" href="/style.min.css?v=20260830-topbar-align-fix-v2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -373,10 +373,13 @@
     .qcm-load-gauge-bar-fill-busy { --gauge-color-start: #ffad62; --gauge-color-end: #e45d16; }
     .qcm-load-gauge-bar-fill-overloaded { --gauge-color-start: #fa8585; --gauge-color-end: #d83232; }
     /* Repère "Idéal" (demande du 17/08/2026, repositionné en barre le
-       27/08/2026) : placé à l'extrémité des 100 %, qui représentent désormais
-       les 12 questions du rythme idéal. Sa position reste indépendante de la charge réelle. Trait
-       sombre et court, chevauchant la barre pour rester lisible quelle que
-       soit la couleur du remplissage dessous. */
+       27/08/2026, puis décalé aux 2/3 de la barre le 30/08/2026 pour laisser
+       un tiers de piste à la zone de surcharge au-delà des 100 % — la barre
+       continue donc désormais au-delà de l'idéal, cf. LOAD_GAUGE_IDEAL_
+       POSITION_PERCENT/LOAD_GAUGE_BAR_MAX_PERCENT en JS) : sa position reste
+       indépendante de la charge réelle. Trait sombre et court, chevauchant la
+       barre pour rester lisible quelle que soit la couleur du remplissage
+       dessous. */
     .qcm-load-gauge-ideal-marker {
       position: absolute;
       z-index: 2;
@@ -402,20 +405,74 @@
       box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
       transform: translateX(-50%);
     }
+    /* Repère "Surcharge" en bout de piste (demande du 30/08/2026) : même
+       trait + pastille que le repère "Idéal" ci-dessus, en rouge pour
+       reprendre la couleur du niveau "overloaded" existant. */
+    .qcm-load-gauge-overload-marker {
+      position: absolute;
+      z-index: 2;
+      top: -6px;
+      left: 100%;
+      width: 2px;
+      height: 40px;
+      background: #d83232;
+      border-radius: 999px;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+    .qcm-load-gauge-overload-marker::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: 50%;
+      width: 7px;
+      height: 7px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      background: #d83232;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
+      transform: translateX(-50%);
+    }
+    /* Repère textuel "Idéal" sous la barre, aux 2/3 (demande du 30/08/2026). */
+    .qcm-load-gauge-axis-labels {
+      position: relative;
+      width: 100%;
+      height: 12px;
+      margin: 11px 0 0;
+    }
     .qcm-load-gauge-ideal-label {
+      position: absolute;
+      top: 0;
+      left: 66.6667%;
+      transform: translateX(-50%);
       display: block;
       width: max-content;
-      margin: 7px 0 0;
-      left: 100%;
-      position: relative;
-      transform: translateX(-100%);
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.02em;
       text-transform: uppercase;
-      color: #111827;
       white-space: nowrap;
+      color: #111827;
+    }
+    /* "Surcharge" : sous la piste, en bout de piste (demande du 30/08/2026,
+       même ligne que "Idéal") — couleur reprise du niveau "overloaded"
+       existant (.qcm-load-gauge-bar-fill-overloaded), jamais une teinte
+       nouvelle. */
+    .qcm-load-gauge-overload-label {
+      position: absolute;
+      top: 0;
+      left: 100%;
+      transform: translateX(-80%);
+      display: block;
+      width: max-content;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: #d83232;
     }
     .qcm-load-gauge-caption {
       margin: 9px 0 0;
@@ -1055,21 +1112,99 @@
     .qcm-progress-bar {
       position: relative;
       width: 100%;
-      max-width: 620px;
-      height: 14px;
-      margin: 0 auto 22px;
+      max-width: 680px;
+      height: 20px;
+      margin: 0 auto 26px;
       border-radius: 999px;
       background: #e3ddd2;
-      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.14);
       overflow: visible;
     }
     .qcm-progress-bar-fill {
+      position: relative;
       height: 100%;
       border-radius: 999px;
-      background: linear-gradient(90deg, #c08a2d, #8f6118);
-      box-shadow: 0 0 8px rgba(143, 97, 24, 0.42);
+      background: linear-gradient(90deg, #5fc784, #2f7d4a);
+      box-shadow:
+        0 0 10px rgba(47, 125, 74, 0.5),
+        inset 0 1px 1px rgba(255, 255, 255, 0.35);
       transition: width 0.35s ease;
       overflow: hidden;
+      min-width: 20px;
+    }
+    /* Reflet glossy fixe en partie haute du remplissage. */
+    .qcm-progress-bar-fill::before {
+      content: "";
+      position: absolute;
+      inset: 1px 1px auto 1px;
+      height: 40%;
+      border-radius: 999px 999px 0 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
+      pointer-events: none;
+    }
+    /* Balayage lumineux qui traverse la barre en boucle. */
+    .qcm-progress-bar-fill::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        110deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0) 35%,
+        rgba(255, 255, 255, 0.55) 50%,
+        rgba(255, 255, 255, 0) 65%,
+        transparent 100%
+      );
+      background-size: 220% 100%;
+      animation: qcm-progress-shine 2.6s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes qcm-progress-shine {
+      0% { background-position: 140% 0; }
+      60%, 100% { background-position: -60% 0; }
+    }
+    /* Fumée verte à la jonction remplissage/piste, demande du 30/08/2026:
+       quelques volutes qui s'échappent vers le haut à chaque avancée de la
+       barre. Positionnée sur .qcm-progress-bar (overflow:visible), pas sur
+       .qcm-progress-bar-fill (overflow:hidden pour le balayage ci-dessus),
+       pour ne pas être rognée en s'élevant au-dessus de la barre. left:pct%
+       posé en inline par renderProgressIndicatorHtml, identique à la largeur
+       du remplissage : l'élément est donc toujours neuf à chaque rendu de
+       question (currentIndex change), ce qui relance l'animation CSS
+       automatiquement sans JS dédié. */
+    .qcm-progress-bar-smoke {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      width: 0;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .qcm-progress-bar-smoke-puff {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(94, 210, 138, 1) 0%, rgba(94, 210, 138, 0.55) 45%, rgba(94, 210, 138, 0) 75%);
+      filter: blur(1px);
+      opacity: 0;
+      animation: qcm-progress-smoke-rise 1500ms ease-out forwards;
+    }
+    .qcm-progress-bar-smoke-puff:nth-child(1) { width: 24px; height: 24px; --smoke-x: -11px; animation-delay: 0ms; }
+    .qcm-progress-bar-smoke-puff:nth-child(2) { width: 19px; height: 19px; --smoke-x: 8px; animation-delay: 140ms; }
+    .qcm-progress-bar-smoke-puff:nth-child(3) { width: 17px; height: 17px; --smoke-x: -6px; animation-delay: 280ms; }
+    .qcm-progress-bar-smoke-puff:nth-child(4) { width: 14px; height: 14px; --smoke-x: 13px; animation-delay: 420ms; }
+    .qcm-progress-bar-smoke-puff:nth-child(5) { width: 12px; height: 12px; --smoke-x: -15px; animation-delay: 560ms; }
+    @keyframes qcm-progress-smoke-rise {
+      0% { opacity: 0; transform: translate(calc(-50% + var(--smoke-x, 0px)), -50%) scale(0.4); }
+      16% { opacity: 1; }
+      55% { opacity: 0.65; }
+      100% {
+        opacity: 0;
+        transform: translate(calc(-50% + var(--smoke-x, 0px) * 3), calc(-50% - 56px)) scale(2.2);
+        filter: blur(4px);
+      }
     }
     /* +1 furtif au milieu de l'écran à chaque bonne réponse (Ancrer/Relier,
        demande du 17/08/2026, agrandi + halo flouté le même jour) : apparaît
@@ -1111,7 +1246,7 @@
       100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); filter: blur(4px); }
     }
     .qcm-question {
-      margin: 0 0 18px;
+      margin: 0 0 4px;
       font-size: 19px;
       font-weight: 600;
       color: #111827;
@@ -2313,7 +2448,7 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      margin: 0 6px 8px 0;
+      margin: 4px 0 8px;
       padding: 3px 10px;
       border-radius: 999px;
       background: #e9f1fb;
@@ -2583,7 +2718,6 @@
     }
     .qcm-origin-badge,
     .qcm-type-badge {
-      margin-bottom: 12px;
       padding: 0;
       background: transparent;
       color: #8a97a3;
@@ -2591,9 +2725,15 @@
       font-weight: 600;
       letter-spacing: 0.06em;
     }
+    .qcm-type-badge {
+      margin-bottom: 12px;
+    }
+    .qcm-origin-badge {
+      margin: 4px 0 28px;
+    }
     .qcm-question {
       max-width: 680px;
-      margin: 4px auto 28px;
+      margin: 4px auto 6px;
       color: #17212a;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: clamp(21px, 2.7vw, 26px);
@@ -2798,9 +2938,12 @@
         margin-right: -16px;
       }
       .qcm-question {
-        margin-bottom: 22px;
+        margin-bottom: 4px;
         font-size: clamp(20px, 5.8vw, 24px);
         line-height: 1.25;
+      }
+      .qcm-origin-badge {
+        margin-bottom: 22px;
       }
       .qcm-option-btn {
         min-height: 56px;
@@ -2837,7 +2980,9 @@
       .qcm-assoc-row,
       .qcm-order-chosen,
       .qcm-order-pool,
-      .qcm-progress-plus-one {
+      .qcm-progress-plus-one,
+      .qcm-progress-bar-fill::after,
+      .qcm-progress-bar-smoke-puff {
         animation: none !important;
       }
       .qcm-option-btn,
@@ -2900,8 +3045,12 @@
       <div class="qcm-load-gauge-bar-track" role="progressbar" aria-label="Charge de mémorisation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
         <div class="qcm-load-gauge-bar-fill" id="qcm-load-gauge-bar-fill" aria-hidden="true"></div>
         <div class="qcm-load-gauge-ideal-marker" id="qcm-load-gauge-ideal-marker"></div>
+        <div class="qcm-load-gauge-overload-marker"></div>
       </div>
-      <span class="qcm-load-gauge-ideal-label" id="qcm-load-gauge-ideal-label">Idéal</span>
+      <div class="qcm-load-gauge-axis-labels">
+        <span class="qcm-load-gauge-ideal-label" id="qcm-load-gauge-ideal-label">Idéal</span>
+        <span class="qcm-load-gauge-overload-label">Surcharge</span>
+      </div>
       <p class="qcm-load-gauge-caption" id="qcm-load-gauge-caption"></p>
     </div>
     <!-- Un seul bouton "Mémoriser" (demande du 27/08/2026, "alléger la page", puis
@@ -2913,7 +3062,7 @@
     <div class="qcm-knowledge-add" id="qcm-knowledge-add">
       <button type="button" class="qcm-memorize-toggle" id="qcm-memorize-toggle"
         aria-expanded="false" aria-controls="qcm-knowledge-add-menu" hidden>
-        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Commencer un nouvel apprentissage
+        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Cliquer ici pour commencer un nouvel apprentissage personnalisé
       </button>
       <div class="qcm-knowledge-add-menu" id="qcm-knowledge-add-menu" hidden>
         <!-- Chaque option ouvre désormais une fenêtre fermable, toujours la même
@@ -3043,6 +3192,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     overlay.querySelector('#qcm-knowledge-add-window-slot').appendChild(knowledgeAddMenu);
     knowledgeAddMenu.classList.add('qcm-knowledge-add-menu-dialog');
     knowledgeAddMenu.hidden = false;
@@ -3538,6 +3688,7 @@
     modal.appendChild(cancelBtn);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
 
     function close() {
       overlay.remove();
@@ -3578,6 +3729,13 @@
     var pct = questions.length ? Math.round(((currentIndex + 1) / questions.length) * 100) : 0;
     return '<div class="qcm-progress-bar" role="progressbar" aria-valuenow="' + (currentIndex + 1) + '" aria-valuemin="1" aria-valuemax="' + questions.length + '" aria-label="Progression du QCM">' +
       '<div class="qcm-progress-bar-fill" style="width:' + pct + '%"></div>' +
+      '<span class="qcm-progress-bar-smoke" style="left:' + pct + '%" aria-hidden="true">' +
+        '<span class="qcm-progress-bar-smoke-puff"></span>' +
+        '<span class="qcm-progress-bar-smoke-puff"></span>' +
+        '<span class="qcm-progress-bar-smoke-puff"></span>' +
+        '<span class="qcm-progress-bar-smoke-puff"></span>' +
+        '<span class="qcm-progress-bar-smoke-puff"></span>' +
+      '</span>' +
     '</div>';
   }
 
@@ -3897,8 +4055,9 @@
 
     var html = '';
     html += renderProgressIndicatorHtml();
-    html += renderOriginBadge(question) + renderTypeBadge(type);
+    html += renderTypeBadge(type);
     html += '<p class="qcm-question">' + questionHtml + '</p>';
+    html += renderOriginBadge(question);
     var gated = needsRevealGate(type, answer, question);
     if (gated) html += renderRevealGateHtml(question.helpLevel);
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
@@ -3994,8 +4153,9 @@
   function renderAssociationQuestion(question, answer) {
     var html = '';
     html += renderProgressIndicatorHtml();
-    html += renderOriginBadge(question) + renderTypeBadge('association');
+    html += renderTypeBadge('association');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += renderOriginBadge(question);
     html += '<div id="qcm-assoc-rows"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += renderDifficultyButtonsHtml('qcm-assoc', false);
@@ -4124,8 +4284,9 @@
   function renderMultiChoiceQuestion(question, answer) {
     var html = '';
     html += renderProgressIndicatorHtml();
-    html += renderOriginBadge(question) + renderTypeBadge('qcm_multi');
+    html += renderTypeBadge('qcm_multi');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += renderOriginBadge(question);
     var gated = needsRevealGate('qcm_multi', answer, question);
     if (gated) html += renderRevealGateHtml(question.helpLevel);
     html += '<p class="qcm-multi-hint">Plusieurs réponses sont correctes.</p>';
@@ -4219,8 +4380,9 @@
   function renderOrderQuestion(question, answer) {
     var html = '';
     html += renderProgressIndicatorHtml();
-    html += renderOriginBadge(question) + renderTypeBadge('ordre');
+    html += renderTypeBadge('ordre');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
+    html += renderOriginBadge(question);
     html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
     html += '<div class="qcm-order-chosen" id="qcm-order-chosen"></div>';
     html += '<div class="qcm-order-pool" id="qcm-order-pool"></div>';
@@ -4522,6 +4684,27 @@
     return html;
   }
 
+  // Aligne la croix de fermeture (.qcm-fiche-close, position:fixed pour
+  // rester visible même en scrollant une fiche longue, cf. son commentaire
+  // CSS) sur le coin haut-droit RÉEL de la carte affichée (.qcm-fiche-modal),
+  // plutôt que sur une formule statique supposant la carte collée en haut du
+  // viewport. Sans ça, une carte courte et verticalement centrée (ex. le menu
+  // d'action "Consulter la fiche/Faire le QCM/Supprimer") laissait la croix
+  // flotter tout en haut de l'écran, au-dessus même du bandeau du site
+  // (.topbar) — signalé le 30/08/2026, capture à l'appui. Mesurée UNE FOIS à
+  // l'ouverture (jamais un ResizeObserver ici — ces fenêtres ne survivent pas
+  // à un redimensionnement significatif côté utilisateur, même hypothèse que
+  // le reste du fichier) : correct quel que soit le contenu, la présence d'un
+  // bandeau, ou le mode iframe/top-level.
+  function positionFicheClose(overlay) {
+    var closeBtn = overlay.querySelector('.qcm-fiche-close');
+    var card = overlay.querySelector('.qcm-fiche-modal');
+    if (!closeBtn || !card) return;
+    var rect = card.getBoundingClientRect();
+    closeBtn.style.top = Math.max(0, rect.top) + 'px';
+    closeBtn.style.right = Math.max(0, window.innerWidth - rect.right) + 'px';
+  }
+
   // Ouvre une fiche à partir de son HTML intérieur déjà construit (cf.
   // buildFicheModalHtml) : overlay, dégradé "suite ↓", fermeture (croix, clic
   // hors modale, Échap, bouton du bas).
@@ -4530,6 +4713,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '<div class="qcm-fiche-scroll-spacer" aria-hidden="true"></div></div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     // Pas attachScrollFadeHint (générique) : il se base sur le bas de TOUTE la
     // zone de scroll, qui inclut ici .qcm-fiche-scroll-spacer (sombre, sous la
     // fiche) — le dégradé blanc y jurait sur le fond sombre et restait visible
@@ -4811,6 +4995,7 @@
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function close() {
@@ -4855,6 +5040,7 @@
         '</div>' +
       '</div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function close() {
@@ -5084,6 +5270,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function onKeydown(e) { if (e.key === 'Escape') closeMesQcmExploreModal(); }
@@ -5230,6 +5417,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     var slot = overlay.querySelector('#qcm-ai-generate-slot');
     slot.appendChild(customSearchForm);
     slot.appendChild(customSearchStatus);
@@ -5282,6 +5470,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function onKeydown(e) { if (e.key === 'Escape') closeKnowledgeRouteModal(); }
@@ -5330,16 +5519,25 @@
   // pourcentage est recalée ici sur le rythme idéal demandé.
   var LOAD_GAUGE_IDEAL_QUESTIONS = 12;
 
-  // Repère "Idéal" (demande du 27/08/2026, nouvelle barre horizontale) :
-  // position fixe à 100 %, indépendante de la charge réelle affichée par la
-  // barre. Posée une seule fois, jamais recalculée au fil des rendus.
+  // Repère "Idéal" placé aux 2/3 de la piste (demande du 30/08/2026) : le
+  // dernier tiers de la barre reste disponible pour visualiser la surcharge
+  // au-delà du rythme idéal (110 %, 120 %, 130 %… jusqu'à "Surcharge
+  // cognitive" en bout de piste). LOAD_GAUGE_BAR_MAX_PERCENT est donc le
+  // pourcentage de charge (base 12 questions = 100 %) qui correspond à
+  // l'extrémité droite de la barre : 100 / (2/3) = 150 %.
+  var LOAD_GAUGE_IDEAL_POSITION_PERCENT = 200 / 3;
+  var LOAD_GAUGE_BAR_MAX_PERCENT = 150;
+
+  // Repère "Idéal" (demande du 27/08/2026, nouvelle barre horizontale ;
+  // repositionné aux 2/3 le 30/08/2026) : position fixe, indépendante de la
+  // charge réelle affichée par la barre. Posée une seule fois, jamais
+  // recalculée au fil des rendus.
   (function initLoadGaugeIdealMarker() {
     var marker = document.getElementById('qcm-load-gauge-ideal-marker');
     var label = document.getElementById('qcm-load-gauge-ideal-label');
     if (!marker && !label) return;
-    var idealPercent = 100;
-    if (marker) marker.style.left = idealPercent + '%';
-    if (label) label.style.left = idealPercent + '%';
+    if (marker) marker.style.left = LOAD_GAUGE_IDEAL_POSITION_PERCENT + '%';
+    if (label) label.style.left = LOAD_GAUGE_IDEAL_POSITION_PERCENT + '%';
   })();
 
   function hideLoadGauge() {
@@ -5359,11 +5557,16 @@
     loadGaugeEl.hidden = false;
     var meta = LOAD_GAUGE_LEVEL_META[gauge.level] || LOAD_GAUGE_LEVEL_META.calm;
     // Le pourcentage visible exprime l'avancement vers le rythme idéal :
-    // 12 questions prévues = 100 %. Au-delà, la barre reste pleine et sa
-    // couleur/son libellé continuent de refléter le niveau calculé côté
-    // serveur. Aucun calcul FSRS ni seuil métier n'est modifié.
+    // 12 questions prévues = 100 %. Au-delà, il continue de grimper (110 %,
+    // 120 %, 130 %…, demande du 30/08/2026) au lieu d'être plafonné — seul le
+    // remplissage visuel de la barre est borné, sur une échelle qui va
+    // jusqu'à LOAD_GAUGE_BAR_MAX_PERCENT (150 %, l'extrémité de la piste,
+    // repère "Surcharge cognitive"). La couleur/le libellé continuent de
+    // refléter le niveau calculé côté serveur. Aucun calcul FSRS ni seuil
+    // métier n'est modifié.
     var peakLoad = Math.max(0, Number(gauge.peakLoad) || 0);
-    var chargePercent = Math.round(Math.min((peakLoad / LOAD_GAUGE_IDEAL_QUESTIONS) * 100, 100));
+    var chargePercent = Math.round((peakLoad / LOAD_GAUGE_IDEAL_QUESTIONS) * 100);
+    var barFillPercent = Math.min((chargePercent / LOAD_GAUGE_BAR_MAX_PERCENT) * 100, 100);
     if (loadGaugePercent) loadGaugePercent.textContent = chargePercent + ' %';
     if (loadGaugeBarFill) {
       loadGaugeBarFill.className = 'qcm-load-gauge-bar-fill qcm-load-gauge-bar-fill-' + gauge.level;
@@ -5380,14 +5583,17 @@
       Array.prototype.forEach.call(loadGaugeSegments, function (segment, index) {
         var segmentSize = 100 / loadGaugeSegmentCount;
         var segmentStart = index * segmentSize;
-        var segmentFill = Math.max(0, Math.min(100, ((chargePercent - segmentStart) / segmentSize) * 100));
+        var segmentFill = Math.max(0, Math.min(100, ((barFillPercent - segmentStart) / segmentSize) * 100));
         segment.style.setProperty('--segment-fill', segmentFill + '%');
         segment.classList.toggle('is-filled', segmentFill === 100);
         segment.classList.toggle('is-partial', segmentFill > 0 && segmentFill < 100);
-        segment.classList.toggle('is-current', segmentFill > 0 && (segmentFill < 100 || index === Math.ceil(chargePercent / segmentSize) - 1));
+        segment.classList.toggle('is-current', segmentFill > 0 && (segmentFill < 100 || index === Math.ceil(barFillPercent / segmentSize) - 1));
       });
       var loadGaugeTrack = loadGaugeBarFill.parentElement;
-      if (loadGaugeTrack) loadGaugeTrack.setAttribute('aria-valuenow', String(chargePercent));
+      if (loadGaugeTrack) {
+        loadGaugeTrack.setAttribute('aria-valuemax', String(LOAD_GAUGE_BAR_MAX_PERCENT));
+        loadGaugeTrack.setAttribute('aria-valuenow', String(Math.min(chargePercent, LOAD_GAUGE_BAR_MAX_PERCENT)));
+      }
     }
     if (loadGaugeLabel) loadGaugeLabel.textContent = meta.shortLabel || meta.label;
     if (loadGaugeCaption) {
@@ -6246,6 +6452,7 @@
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML = '<div class="qcm-fiche-overlay-inner">' + modalHtml + '</div>';
     document.body.appendChild(overlay);
+    positionFicheClose(overlay);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
 
     function onKeydown(e) { if (e.key === 'Escape') closeMesQcmActionModal(); }

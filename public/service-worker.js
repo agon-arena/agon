@@ -1,8 +1,10 @@
-// Invalidation du 28/08/2026 : l'ancien cache de navigation conservait une version de
-// l'accueil antérieure au bouton « Plein écran » de Ma mémoire, y compris après un reload
-// ordinaire en PWA/desktop. Changer cette version active le nouveau worker, supprime ce cache
-// HTML obsolète et laisse la navigation récupérer le balisage actuel.
-const SW_VERSION = "20260829-stable-memory-first-paint-v230";
+// Invalidation du 30/08/2026 : le bandeau blanc du haut (alignement hamburger/logo/bouton
+// on-off en standalone) a été corrigé côté HTML/CSS, mais la home ("/") est servie cache-first
+// en navigation (cf. plus bas) — l'app déjà installée continuait donc d'afficher l'ancien
+// balisage/CSS malgré le correctif serveur. Changer cette version active le nouveau worker,
+// vide l'ancien cache statique (HTML + assets ?v=...) et laisse la navigation suivante
+// récupérer la version corrigée.
+const SW_VERSION = "20260830-topbar-align-fix-v232";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
