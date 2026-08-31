@@ -576,7 +576,9 @@
 
       /* ── Visual refresh: calmer palette, richer hierarchy ── */
       .ada-wrap {
-        margin: 14px auto 6px;
+        /* 24px (au lieu de 6px) : plus d'espace sous "Regénérer"/"Générer rapport IA"
+           avant le contenu suivant (demande du 01/09/2026). */
+        margin: 14px auto 24px;
         width: min(100%, 920px);
       }
       .ada-trigger-btn {
@@ -1032,8 +1034,13 @@
         66%, 100% { transform: rotate(18deg) translateX(360%); opacity: 0; }
       }
       .ada-regen-btn {
-        border-color: rgba(36,48,56,.3);
-        color: #243038;
+        /* Même fond que .ada-trigger-btn ("Analyse et arbitrage IA", demande du 01/09/2026),
+           statique (sans le balayage animé, réservé au bouton principal). */
+        background: linear-gradient(120deg, #1a272e 0%, #2d4250 40%, #f4d18a 50%, #2d4250 60%, #1a272e 100%);
+        background-size: 300% 100%;
+        background-position: 100% 0;
+        border-color: rgba(244,198,107,.55);
+        color: #f3f6f4;
         border-radius: 8px;
         padding: 4px 9px;
         font-size: 11px;
@@ -2287,10 +2294,18 @@
   // ── Countdown ────────────────────────────────────────────────────────
   async function initCountdown(debateId) {
     const slot = document.getElementById('debate-ai-countdown-slot');
-    const progressSlot = document.getElementById('debate-ai-progress-slot') || slot;
+    // Jamais de repli sur `slot` (demande du 01/09/2026, "cette information continue
+    // d'apparaître sous le cadre avec titre flottant sticky") : #debate-ai-progress-slot est
+    // désormais créé dynamiquement sous le barème par renderEvaluationAxis (script.js), pas
+    // toujours déjà présent au moment où ce script (chargé séparément) s'exécute — avec le
+    // repli `|| slot`, le texte "Encore X contributions..." atterrissait alors dans le
+    // bandeau sticky du haut (#debate-ai-countdown-slot, juste sous le titre) au lieu d'être
+    // simplement sauté cette passe-ci (script.js le réécrit de toute façon peu après via
+    // scheduleDebateAiProgressInlineRender, avec ses propres tentatives différées).
+    const progressSlot = document.getElementById('debate-ai-progress-slot');
     if (!slot && !progressSlot) return;
     if (slot) slot.innerHTML = '';
-    if (progressSlot && progressSlot !== slot) progressSlot.innerHTML = '';
+    if (progressSlot) progressSlot.innerHTML = '';
 
     try {
       const { r, json } = await fetchStoredAnalysis(debateId);
@@ -2356,7 +2371,7 @@
       }
 
       if (slot) observeAnimated(slot);
-      if (progressSlot && progressSlot !== slot) observeAnimated(progressSlot);
+      if (progressSlot) observeAnimated(progressSlot);
     } catch (_) {}
   }
 

@@ -5896,10 +5896,6 @@ function ensureDebateIframeModal() {
       pointer-events: none;
       box-shadow: none;
     }
-    #debate-iframe-modal.loading #debate-iframe-modal-close {
-      opacity: 0;
-      pointer-events: none;
-    }
     #debate-iframe-modal-inner {
       position: relative;
       width: 100%;
@@ -5910,35 +5906,6 @@ function ensureDebateIframeModal() {
       background: #fff;
       display: flex;
       flex-direction: column;
-    }
-    #debate-iframe-modal-close {
-      position: fixed;
-      bottom: calc(5vh + 78px);
-      left: 26px;
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 10px 20px;
-      border-radius: 999px;
-      border-width: 3px;
-      border-color: transparent;
-      background:
-        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
-      color: #e5edf3;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s, color 0.15s;
-    }
-    #debate-iframe-modal-close:hover {
-      background:
-        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
-      color: #ffffff;
     }
     @media (max-width: 768px) {
       #debate-iframe-modal-refresh { display: none !important; }
@@ -5974,17 +5941,13 @@ function ensureDebateIframeModal() {
         linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
       color: #ffffff;
     }
-    #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.argument-form-open-in-child #debate-iframe-modal-refresh {
       filter: blur(4px);
       opacity: 0.45;
       pointer-events: none;
     }
-    #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.ai-score-modal-open-in-child #debate-iframe-modal-refresh,
-    #debate-iframe-modal.qcm-fiche-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.qcm-fiche-open-in-child #debate-iframe-modal-refresh,
-    #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-close,
     #debate-iframe-modal.ai-loading-animation-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.sort-menu-open-in-child #debate-iframe-modal-refresh,
     #debate-iframe-modal.tribunes-frame-open #debate-iframe-modal-refresh,
@@ -6002,19 +5965,6 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.about-frame-open #debate-iframe-modal-refresh,
     #debate-iframe-modal.mon-univers-frame-open #debate-iframe-modal-refresh {
       display: none !important;
-    }
-    #debate-iframe-modal.notifications-frame-open #debate-iframe-modal-close,
-    #debate-iframe-modal.mon-univers-frame-open #debate-iframe-modal-close {
-      display: none !important;
-    }
-    /* Sur /debate mobile, on montre .mobile-back-button (natif de la page,
-       même document que #voices-float-badge) plutôt que ce bouton du parent —
-       un seul document à positionner par rapport au bandeau bas au lieu de
-       synchroniser 2 documents (cf. initMnoriaDebateDockLineSync). */
-    @media (max-width: 768px) {
-      #debate-iframe-modal.debate-frame-open #debate-iframe-modal-close {
-        display: none !important;
-      }
     }
     #debate-iframe-modal.ai-loading-animation-open-in-child {
       inset: 0 !important;
@@ -6210,28 +6160,6 @@ function ensureDebateIframeModal() {
         height: 100%;
         border-radius: 0;
       }
-      #debate-iframe-modal-close {
-        bottom: 34px;
-        left: calc(20% - 13px);
-        right: auto;
-        width: 42px;
-        height: 42px;
-        padding: 0;
-        border-radius: 999px;
-      }
-      #debate-iframe-modal.open.qcm-frame-open #debate-iframe-modal-close,
-      #debate-iframe-modal.open.eclairages-frame-open #debate-iframe-modal-close,
-      #debate-iframe-modal.open.historical-events-frame-open #debate-iframe-modal-close {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        bottom: calc(34px + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
-        z-index: 10002 !important;
-      }
-      #debate-iframe-modal.open.qcm-frame-open.qcm-fiche-open-in-child #debate-iframe-modal-close {
-        display: none !important;
-      }
     }
     @media (min-width: 769px) {
       /* Même traitement plein écran qu'en mobile (cf. @media max-width:768px
@@ -6245,10 +6173,6 @@ function ensureDebateIframeModal() {
       #debate-iframe-modal-inner {
         height: 100vh;
         border-radius: 0;
-      }
-      #debate-iframe-modal-close {
-        bottom: 80px;
-        left: 26px;
       }
     }
     @supports (height: 100dvh) {
@@ -6288,7 +6212,6 @@ function ensureDebateIframeModal() {
   modal.setAttribute("aria-label", "Arène");
   modal.innerHTML = `
     <div id="debate-iframe-modal-inner">
-      <button id="debate-iframe-modal-close" type="button" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;"><polyline points="13,3 5,9 13,15" stroke="#e5edf3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="debate-iframe-modal-refresh" type="button" aria-label="Actualiser" title="Actualiser"><i class="fa-solid fa-rotate-right" style="font-size:18px;line-height:1;"></i></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
@@ -6303,13 +6226,10 @@ function ensureDebateIframeModal() {
     if (e.key === "Escape") closeDebateIframeModal();
   });
 
-  const debateIframeModalCloseButton = document.getElementById("debate-iframe-modal-close");
-  debateIframeModalCloseButton.addEventListener("click", closeDebateIframeModal);
   const debateIframeModalRefreshButton = document.getElementById("debate-iframe-modal-refresh");
   if (debateIframeModalRefreshButton) {
     debateIframeModalRefreshButton.addEventListener("click", reloadDebateIframeModalFrame);
   }
-  setDebateIframeModalCloseButtonVisible(true);
 
   // Écoute le postMessage envoyé par les flèches retour de la page débat
   window.addEventListener("message", (e) => {
@@ -8662,10 +8582,6 @@ function buildIndexCardFooterActionsHtml(debate) {
             onclick="event.stopPropagation(); toggleCardOptionsMenu(this)"
           >···</button>
           <div class="debate-card-options-menu" role="menu" onclick="event.stopPropagation()">
-            <div class="debate-card-options-share-row" onclick="event.stopPropagation()">
-              ${buildIndexCardShareActionsHtml(d)}
-            </div>
-            <div class="debate-card-options-divider"></div>
             <button
               class="debate-card-options-item report-button"
               type="button"
@@ -8856,6 +8772,34 @@ function syncIndexBubbleTrendBadges(root = document) {
   });
 }
 
+// Marque "déjà mémorisé" les boutons de notion des cartes accueil (demande
+// du 31/08/2026) : UN SEUL fetch /api/users/notion-quizzes pour toutes les
+// cartes du scope, jamais un par carte — même esprit que
+// syncIndexBubbleTrendBadges juste au-dessus, appelée aux mêmes points
+// d'hydratation (batch de carrousel, chargement initial...).
+function syncIndexCardNotionsMemorizedState(root = document) {
+  const scope = root?.querySelectorAll ? root : document;
+  const buttons = Array.from(scope.querySelectorAll('.index-card-notions-section .debate-notion-action-btn[data-memorized="false"]'));
+  if (!buttons.length) return;
+  const voterKey = typeof getKey === "function" ? getKey() : null;
+  if (!voterKey) return;
+
+  fetchJSON(`${API}/users/notion-quizzes?legacyKey=${encodeURIComponent(voterKey)}`, { cache: "no-store" })
+    .then((data) => {
+      const quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+      buttons.forEach((btn) => {
+        const debateId = btn.getAttribute("data-debate-id");
+        const slug = btn.getAttribute("data-notion-slug");
+        if (!debateId || !slug) return;
+        const slotPrefix = `notion:debat-notion:${debateId}-${slug}`;
+        if (!quizzes.some((q) => q.slot === slotPrefix || q.slot.startsWith(`${slotPrefix}:`))) return;
+        btn.setAttribute("data-memorized", "true");
+        btn.classList.add("is-active");
+      });
+    })
+    .catch(() => {});
+}
+
 function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const d = debate || {};
   const debateTypeLabel = isOpenDebate(d) ? "Arène libre" : "Arène à position";
@@ -8891,7 +8835,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   ` : "";
   const metaHtml = buildIndexCardMetaHtml(d, { mediaOutsideLink });
   const shareHtml = buildIndexCardShareActionsHtml(d);
-  const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml, episodeNavHtml);
+  const notionsHtml = buildIndexCardNotionsHtml(d);
+  const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml, episodeNavHtml, notionsHtml);
   const isNewDebate = isDebateNew(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
   const mnoriaBadgeHtml = getIndexCardTrendBadgeHtml(d);
@@ -10683,15 +10628,28 @@ function initMediaSwipeAutoScroll(scope = document) {
   });
 }
 
+// Remplace les 8 anciennes images (mnoria_optimisee_01..08.webp, cf. git blame) par les 15
+// visuels de public/visuels/fond mnoria (demande du 01/09/2026) — nom de fichier distinct
+// (mnoria-carte-fond-XX) plutôt que de réutiliser les anciens noms : évite qu'un cache
+// navigateur/CDN existant ne continue de servir l'ancien contenu sous la même URL. La
+// sélection reste déterministe par hash de l'id du débat (cf. getIndexDefaultFallbackImage
+// plus bas), donc automatiquement bien répartie sur les 15 entrées.
 const INDEX_DEFAULT_FALLBACK_IMAGES = [
-  "/visuels/mnoria_optimisee_01.webp",
-  "/visuels/mnoria_optimisee_02.webp",
-  "/visuels/mnoria_optimisee_03.webp",
-  "/visuels/mnoria_optimisee_04.webp",
-  "/visuels/mnoria_optimisee_05.webp",
-  "/visuels/mnoria_optimisee_06.webp",
-  "/visuels/mnoria_optimisee_07.webp",
-  "/visuels/mnoria_optimisee_08.webp"
+  "/visuels/mnoria-carte-fond-01.webp",
+  "/visuels/mnoria-carte-fond-02.webp",
+  "/visuels/mnoria-carte-fond-03.webp",
+  "/visuels/mnoria-carte-fond-04.webp",
+  "/visuels/mnoria-carte-fond-05.webp",
+  "/visuels/mnoria-carte-fond-06.webp",
+  "/visuels/mnoria-carte-fond-07.webp",
+  "/visuels/mnoria-carte-fond-08.webp",
+  "/visuels/mnoria-carte-fond-09.webp",
+  "/visuels/mnoria-carte-fond-10.webp",
+  "/visuels/mnoria-carte-fond-11.webp",
+  "/visuels/mnoria-carte-fond-12.webp",
+  "/visuels/mnoria-carte-fond-13.webp",
+  "/visuels/mnoria-carte-fond-14.webp",
+  "/visuels/mnoria-carte-fond-15.webp"
 ];
 
 function getIndexDefaultFallbackImage(debateId) {
@@ -16578,6 +16536,7 @@ function attachAdminButtons() {
           const newTrends = Array.isArray(cloudRes?.bubbles) ? cloudRes.bubbles : [];
           window.MNORIA_TAG_TRENDS = newTrends;
           syncIndexBubbleTrendBadges();
+          syncIndexCardNotionsMemorizedState();
           if (window._tagTrendCloudModule && newTrends.length) {
             const container = document.querySelector("#mnoria-tag-trends-cloud");
             if (container) window._tagTrendCloudModule.renderTagTrendCloud(container, newTrends);
@@ -18461,9 +18420,51 @@ function getIndexContextClosedPreviewText(text) {
   return firstLine || fullText;
 }
 
-function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", shareHtml = "", episodeNavHtml = "") {
+// "Notions à retenir" sur les cartes accueil (demande du 31/08/2026, même
+// visuel/logo que .debate-notions-section de la page débat) : contrairement
+// à cette dernière, jamais de fetch ici — topic_notions arrive déjà avec la
+// carte (cf. DEBATES_LIST_SELECT_COLUMNS côté serveur), affiché seulement
+// quand déjà prêt (topic_notions_status "ready"), sans jamais déclencher de
+// génération IA depuis un simple scroll de l'accueil. L'état "déjà
+// mémorisé" (data-memorized) est appliqué après coup, en un seul passage
+// pour toutes les cartes (cf. syncIndexCardNotionsMemorizedState), plutôt
+// qu'un fetch /api/users/notion-quizzes par carte.
+function buildIndexCardNotionsHtml(debate) {
+  const notions = (debate?.topic_notions_status === "ready" && Array.isArray(debate?.topic_notions))
+    ? debate.topic_notions
+    : [];
+  if (!notions.length) return "";
+
+  const debateId = escapeAttribute(String(debate?.id || ""));
+  const debateQuestion = escapeAttribute(String(debate?.question || ""));
+  const quizDate = escapeAttribute((String(debate?.created_at || "").match(/^\d{4}-\d{2}-\d{2}/) || [""])[0]);
+
+  const buttonsHtml = notions.map((notion) => `
+    <button
+      type="button"
+      class="debate-notion-action-btn"
+      data-notion-slug="${escapeAttribute(notion?.slug)}"
+      data-notion-name="${escapeAttribute(notion?.name)}"
+      data-notion-explanation="${escapeAttribute(notion?.explanation)}"
+      data-debate-question="${debateQuestion}"
+      data-debate-id="${debateId}"
+      data-quiz-date="${quizDate}"
+      data-memorized="false"
+      onclick="event.preventDefault(); event.stopPropagation(); activateIndexCardNotion(this)"
+    >${escapeHtml(notion?.name || "")}</button>
+  `).join("");
+
+  return `
+    <section class="debate-notions-section index-card-notions-section">
+      <div class="debate-notions-title"><i class="fa-solid fa-brain" aria-hidden="true"></i> Clique pour approfondir • Mémoriser</div>
+      <div class="debate-notions-list">${buttonsHtml}</div>
+    </section>
+  `;
+}
+
+function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", shareHtml = "", episodeNavHtml = "", notionsHtml = "") {
   const fullText = String(debate?.content || '').trim();
-  const hasExtra = !!(scoresHtml || metaHtml || shareHtml || episodeNavHtml);
+  const hasExtra = !!(scoresHtml || metaHtml || shareHtml || episodeNavHtml || notionsHtml);
   if (!fullText && !hasExtra) return "";
 
   const shortText = getIndexContextClosedPreviewText(fullText);
@@ -18491,6 +18492,7 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
       ><div class="context-text-clamp">${renderIndexContextPreviewText(shortText, false, isOpenDebate(debate))}</div></div>` : ""}
       ${needsToggle ? `
         <div class="debate-card-context-extra">
+          ${notionsHtml}
           ${scoresHtml}
           ${metaHtml}
           ${shareHtml ? `<div class="debate-card-actions">${shareHtml}</div>` : ""}
@@ -20195,6 +20197,7 @@ function hydrateLazyCarouselCards(inner, row) {
   initIndexEmbedUnloadObserver(inner);
   observeIndexCardsMissingSourcePreview(inner);
   syncIndexBubbleTrendBadges(inner);
+  syncIndexCardNotionsMemorizedState(inner);
   refreshAdminUI();
   requestAnimationFrame(() => syncIndexThemeRowHeight(row));
 }
@@ -21925,6 +21928,7 @@ function updateIndexTagTrends(items) {
   // disparition/réapparition causé par le double render (cache → API).
   if (cloudContainer?.querySelector(".mnoria-tag-bubble")) {
     syncIndexBubbleTrendBadges();
+    syncIndexCardNotionsMemorizedState();
     return;
   }
 
@@ -21971,6 +21975,7 @@ function updateIndexTagTrends(items) {
       }
 
       syncIndexBubbleTrendBadges();
+      syncIndexCardNotionsMemorizedState();
       if (cloudContainer?.querySelector(".mnoria-tag-bubble")) return;
       // sizeScale 1.12 : même valeur que setPoliticalCloudGroup (demande du 26/08/2026).
       cloudModule.renderTagTrendCloud(cloudContainer, tagTrends, () => {
@@ -22114,6 +22119,7 @@ function renderDebatesList(debates) {
   initIndexEmbedUnloadObserver(document);
   observeIndexCardsMissingSourcePreview(document);
   syncIndexBubbleTrendBadges(document);
+  syncIndexCardNotionsMemorizedState(document);
   setIndexInfiniteScrollLoadingState(indexInfiniteScrollLoading, indexInfiniteScrollLoading ? 'Chargement des arènes' : '');
   setupIndexInfiniteScroll();
   requestAnimationFrame(syncBubbleFrameTop);
@@ -23092,9 +23098,14 @@ function renderEvaluationAxis(debate) {
   el.id = 'debate-evaluation-axis';
   el.className = 'debate-evaluation-axis';
 
+  // Icône (demande du 31/08/2026, même esprit que .debate-notions-title
+  // "Clique pour approfondir • Mémoriser") : uniquement sur ce label par
+  // défaut, jamais sur les variantes "Barème personnalisé..." — labelText
+  // n'est jamais échappé plus bas (toujours une de ces chaînes fixes, jamais
+  // une entrée utilisateur), donc ce balisage brut reste sûr.
   const labelText = (isOpen && axis)
     ? 'Barème personnalisé de l\'arène — sur 100 points' + (ownerOnlyAxis ? ' (visible par toi seulement)' : '')
-    : (axisHidden ? 'Barème personnalisé de l\'arène' : 'Comment l\'IA évalue les contributions');
+    : (axisHidden ? 'Barème personnalisé de l\'arène' : '<i class="fa-solid fa-robot" aria-hidden="true"></i> Comment l\'IA évalue les contributions');
   const bodyText = (isOpen && axis) ? axis : (axisHidden ? hiddenText : (isOpen ? defaultOpenText : defaultDebateText));
   // Niveau de correction : toujours visible des participants, même si le
   // créateur a caché le texte du barème (cf. evaluation_axis_hidden ci-dessus).
@@ -25852,6 +25863,19 @@ function showNotionQuizLevelPicker(onSelect) {
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   cancelBtn.addEventListener("click", close);
   closeBtn.addEventListener("click", close);
+}
+
+// Enrobage pour les notions affichées sur une carte accueil (demande du
+// 31/08/2026, "aussi dans les cartes page index, même visuel que les
+// arènes") : le débat/date/id sont lus depuis des data-attributes plutôt
+// que passés en argument de l'attribut onclick (échappement de guillemets
+// fragile pour du texte libre) — activateDebateNotion elle-même n'a besoin
+// d'aucune adaptation, ni globale de type currentDebateCache.
+function activateIndexCardNotion(btn) {
+  const voterKey = typeof getKey === "function" ? getKey() : null;
+  const debateId = btn.getAttribute("data-debate-id") || "";
+  const quizDate = btn.getAttribute("data-quiz-date") || null;
+  activateDebateNotion(btn, voterKey, debateId, quizDate);
 }
 
 function activateDebateNotion(btn, voterKey, debateId, quizDate) {

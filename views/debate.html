@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260901-nbsp-italic" />
+<link rel="stylesheet" href="/style.min.css?v=20260831-badges-no-bg" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -159,24 +159,6 @@
     }
     body.page-debate .topbar-inner.topbar-home {
       grid-template-columns: 44px minmax(0, 1fr) 210px !important;
-    }
-    body.page-debate .topbar-app-icon--desktop {
-      width: 144px !important;
-      height: 144px !important;
-      border-radius: 18px !important;
-      margin: 0 !important;
-      transform: none !important;
-      align-self: center !important;
-      justify-self: center !important;
-      /* Fixe par rapport à la fenêtre plutôt qu'à la colonne de grille du
-         bandeau : un décalage négatif relatif à cette colonne (ancienne
-         approche) sortait carrément de l'écran sur les résolutions autour de
-         1024-1280px, en plus de pouvoir chevaucher le badge score (centré)
-         ou le logo selon la largeur. */
-      position: fixed !important;
-      top: 12px !important;
-      right: 0 !important;
-      z-index: 2 !important;
     }
   }
   @media (max-width: 768px) {
@@ -350,7 +332,6 @@ try {
     </button>
 
     <img src="/appmnoria-192.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
-    <img src="/appmnoriaordi.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
 
     <div class="admin-controls-row" data-admin style="display:none;">
       <div class="admin-topbar-menu" id="admin-topbar-menu">
@@ -948,45 +929,6 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 </div>
 
 
-<button
-  type="button"
-  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-up"
-  onclick="(function(){var now=Date.now();if(window._lastScrollUp&&now-window._lastScrollUp<400){window.scrollTo({top:0,behavior:'smooth'});window._lastScrollUp=0;}else{scrollDebatePageStep('up');window._lastScrollUp=now;}})()"
-  title="Défiler vers le haut"
-  aria-label="Défiler vers le haut"
->
-  <i class="fa-solid fa-chevron-up"></i>
-</button>
-
-<button
-  type="button"
-  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-down"
-  onclick="scrollDebatePageStep('down')"
-  title="Défiler vers le bas"
-  aria-label="Défiler vers le bas"
->
-  <i class="fa-solid fa-chevron-down"></i>
-</button>
-
-<script>
-/* Restaure la position des flèches calculée à la visite précédente
-   (syncIndexFloatingScrollButtonsWithBottomNav la mémorise en sessionStorage)
-   avant le premier rendu, pour éviter le saut depuis la position CSS de repli
-   le temps que script.min.js soit parsé. */
-(function () {
-  try {
-    var raw = sessionStorage.getItem("mnoriaFloatingScrollBtnPos:" + location.pathname);
-    if (!raw) return;
-    var s = JSON.parse(raw);
-    if (!s || s.w !== window.innerWidth) return;
-    var up = document.querySelector(".index-floating-scroll-up");
-    var down = document.querySelector(".index-floating-scroll-down");
-    if (up && s.up) up.style.left = s.up;
-    if (down && s.down) down.style.left = s.down;
-  } catch (e) {}
-})();
-</script>
-
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
   <a href="/" id="debate-bottom-nav-explorer" class="home-bottom-nav-item" aria-label="Explorer">
     <i class="fa-regular fa-compass"></i>
@@ -1053,7 +995,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260901-nbsp-italic" defer></script>
+	<script src="/script.min.js?v=20260831-remove-card-share-btn" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -1106,7 +1048,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom"></script>
-<script src="/admin-debate-analysis.js?v=20260820-hide-weak-scores"></script>
+<script src="/admin-debate-analysis.js?v=20260901-regen-btn-color"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

@@ -5095,7 +5095,7 @@ body.page-debate #score-b {
   flex-wrap:wrap;
   justify-content:center;
   gap:8px;
-  margin-top:8px;
+  margin-top:16px;
 }
 
 .debate-notion-action-btn{
@@ -5116,6 +5116,30 @@ body.page-debate #score-b {
   border-color:#f5b642;
   background:#fdf3dd;
   color:#8a6116;
+}
+
+/* Cartes accueil : mêmes éléments que sur la page arène mais réduits, la
+   version pleine taille est disproportionnée dans l'espace compact d'une
+   carte (demande du 31/08/2026). */
+.index-card-notions-section{
+  margin-top:14px;
+  margin-bottom:20px;
+  padding-top:14px;
+  padding-bottom:14px;
+  border-top:1px solid #e5e7eb;
+  border-bottom:1px solid #e5e7eb;
+}
+.index-card-notions-section .debate-notions-title{
+  font-size:11px;
+  gap:5px;
+}
+.index-card-notions-section .debate-notions-list{
+  gap:6px;
+  margin-top:9px;
+}
+.index-card-notions-section .debate-notion-action-btn{
+  padding:4px 10px;
+  font-size:11.5px;
 }
 
 /* Popup de confirmation "Mémoriser" — identique à celle d'Éclairages/Ce jour
@@ -10242,8 +10266,8 @@ padding:4px 14px 12px 14px;
   margin: 0 0 0 -1px;
   padding: 2px 8px;
   border-radius: 0;
-  background: rgba(255,255,255,0.72);
-  border: 1px solid rgba(17,24,39,0.14);
+  background: transparent;
+  border: none;
   color: #374151;
   font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   font-size: 12px;
@@ -10311,26 +10335,23 @@ padding:4px 14px 12px 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(36, 48, 56, 0.3);
-  background: #ededeb;
-  color: #6b7280;
-  font-size: 14px;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 999px;
+  background: #243038;
+  color: #ffffff;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
+  line-height: 1.2;
   cursor: pointer;
-  line-height: 1;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: background-color 0.15s ease;
   flex-shrink: 0;
 }
 
 .debate-card-options-btn:hover,
 .debate-card-options-btn[aria-expanded="true"] {
-  border-color: #9ca3af;
-  color: #374151;
-  background: #f3f4f6;
+  background: #2e3d47;
 }
 
 .debate-card-options-menu {
@@ -10350,41 +10371,6 @@ padding:4px 14px 12px 14px;
 
 .debate-card-options-menu.is-open {
   display: block;
-}
-
-.debate-card-options-share-row {
-  padding: 3px 3px 2px;
-}
-
-.debate-card-options-share-row .debate-card-share-actions {
-  justify-content: flex-start;
-  gap: 6px;
-  overflow: visible;
-}
-
-.debate-card-options-share-row .share-icon-button {
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.debate-card-options-share-row .index-share-btn {
-  background: #ffffff !important;
-  border-color: transparent !important;
-}
-.debate-card-options-share-row .share-icon-button.copy i { color: #2563eb; }
-.debate-card-options-share-row .share-icon-button.qrcode i { color: #6b7280; }
-.debate-card-options-share-row .share-icon-button.x i { color: #111827; }
-.debate-card-options-share-row .share-icon-button.email i { color: #ea4335; }
-
-.debate-card-options-divider {
-  height: 1px;
-  background: #e5e7eb;
-  margin: 4px 0;
 }
 
 .debate-card-options-item {
@@ -10899,14 +10885,27 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   padding: 10px 16px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
+/* Même style visuel que .debate-notions-title (demande du 31/08/2026,
+   "CLIQUE POUR APPROFONDIR" comme référence de taille) : taille, graisse,
+   letter-spacing et disposition (icône + texte en ligne) identiques. Couleur
+   volontairement PAS copiée à l'identique (#6b7280, prévu pour un fond
+   clair) : ce label vit dans .debate-hero, sur fond sombre — le blanc
+   translucide déjà en place y joue le même rôle "discret" que le gris sur
+   fond clair. */
 .debate-evaluation-axis-label {
-  display: block;
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
   color: rgba(255, 255, 255, 0.38);
   margin-bottom: 5px;
+}
+.debate-evaluation-axis-label i {
+  color: #f5b642;
 }
 .debate-evaluation-axis-text {
   margin: 0;
@@ -10927,7 +10926,12 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
    meme couleur... et meme police et meme taille aussi"), sans le border-top propre à ce
    dernier. */
 #debate-ai-progress-slot:not(:empty) {
-  margin: 8px auto 0;
+  /* Même margin (0) que .debate-evaluation-axis-text juste au-dessus (demande
+     du 31/08/2026) : les 8px précédents traitaient cette ligne comme un
+     paragraphe à part, avec un espace vertical en plus de l'interligne
+     naturel — ici elle s'enchaîne comme une simple ligne suivante du même
+     bloc, sans espace superflu. */
+  margin: 0 auto;
   max-width: 680px;
   text-align: center;
   font-size: 14px !important;
@@ -14712,7 +14716,8 @@ body.page-debate .debate-episode-nav {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 28px;
+  margin-bottom: 20px;
 }
 
 body.page-debate .debate-episode-link {
@@ -14797,7 +14802,8 @@ body.page-debate .debate-episode-link:hover {
 @media (max-width: 768px) {
   body.page-debate .debate-episode-nav {
     gap: 6px;
-    margin-top: 8px;
+    margin-top: 22px;
+    margin-bottom: 16px;
   }
 
   body.page-debate .debate-episode-link {
@@ -17977,7 +17983,15 @@ body.debate-embedded-frame .debate-floating-refresh-btn {
 
 /* Desktop : badge au-dessus de la nav bar */
 @media (min-width: 769px) {
-  #voices-float-badge { bottom: 78px !important; }
+  /* Centré (demande du 01/09/2026, "le bouton compteur de voix apparaît encore à droite, pas
+     au centre") : le centrage précédent (25505+) était scopé à max-width:768px (mobile) —
+     en desktop, le badge héritait encore du right:16px de base (debate.html, inline). */
+  #voices-float-badge {
+    bottom: 78px !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+  }
   #voices-panel {
     top: 0 !important;
     max-height: calc(100vh - 2px) !important;
@@ -19451,7 +19465,11 @@ body.page-home-mobile .debate-card-options-btn {
   opacity: 1 !important;
   background: #1A1F24 !important;
   border: 1.5px solid rgba(255,255,255,0.5) !important;
+  border-radius: 999px !important;
   color: #ffffff !important;
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  line-height: 1.05 !important;
 }
 
 body.page-home .debate-card-options-wrap,
@@ -21948,8 +21966,8 @@ body.page-home-mobile .debate-last-argument {
   margin: 0 !important;
   padding: 1px 5px !important;
   border-radius: 999px !important;
-  background: rgba(255, 255, 255, 0.58) !important;
-  border: 1px solid rgba(36, 48, 56, 0.1) !important;
+  background: transparent !important;
+  border: none !important;
   color: #111827 !important;
   font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif !important;
   font-size: 11px !important;
@@ -24115,7 +24133,7 @@ body.page-home .debate-card .debate-last-argument,
 body.page-home-mobile .debate-card .debate-last-argument {
   color: #1A1F24 !important;
   text-shadow: none !important;
-  background: #d1d5db !important;
+  background: transparent !important;
   padding: 2px 8px !important;
   border-radius: 999px !important;
   font-size: 11px !important;
@@ -25482,8 +25500,11 @@ body.page-create-mobile .create-card .create-submit-helper {
     transform: none !important;
   }
 
+  /* Centré (demande du 01/09/2026, "centre le bouton compteur de voix, au centre, juste
+     au-dessus du bandeau blanc du bas") : 50% au lieu de 80%, même transform:translateX(-50%)
+     déjà en place pour le centrage exact. */
   body.page-debate:not(.debate-embedded-frame) #voices-float-badge {
-    left: calc(80% - 3px) !important;
+    left: 50% !important;
     right: auto !important;
     bottom: 38px !important;
     height: 42px !important;
@@ -25496,7 +25517,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.debate-embedded-frame #voices-float-badge {
-    left: calc(80% - 3px) !important;
+    left: 50% !important;
     right: auto !important;
     bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 2px) !important;
     height: 42px !important;

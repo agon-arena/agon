@@ -397,3 +397,69 @@ test("groundingSources fourni : un nombre incorrect dans la bonne réponse est r
   assert.equal(result.accepted.length, 0);
   assert.equal(result.rejected[0].reasons[0].code, "GROUNDING_NUMERIC_CLAIM_NOT_SUPPORTED");
 });
+
+// ── Métriques de grounding (V3.1, 31/08/2026 — "observabilité") ───────────
+
+test("métriques : groundingEnabled reste false et tous les compteurs à 0 quand groundingSources n'est pas fourni (comportement neutre)", async () => {
+  const result = await runQuestionQualityPipeline([q()], { semanticReviewEnabled: false });
+  assert.equal(result.metrics.groundingEnabled, false);
+  assert.equal(result.metrics.groundingCandidatesFirstPass, 0);
+  assert.equal(result.metrics.groundingRejectedFirstPass, 0);
+  assert.equal(result.metrics.groundingAcceptedFirstPass, 0);
+  assert.equal(result.metrics.groundingRegenerationTriggerCount, 0);
+  assert.equal(result.metrics.groundingFailedFinal, 0);
+});
+
+test("métriques : premier passage entièrement accepté → groundingAcceptedFirstPass = candidats, aucun rejet", async () => {
+  const result = await runQuestionQualityPipeline([qGrounded(), qGrounded({ question: "Où siège le gouvernement fédéral canadien ?" })], {
+    semanticReviewEnabled: false,
+    groundingSources: CANADA_SOURCES
+  });
+  assert.equal(result.metrics.groundingEnabled, true);
+  assert.equal(result.metrics.groundingCandidatesFirstPass, 2);
+  assert.equal(result.metrics.groundingRejectedFirstPass, 0);
+  assert.equal(result.metrics.groundingAcceptedFirstPass, 2);
+  assert.equal(result.metrics.groundingRegenerationTriggerCount, 0);
+  assert.equal(result.metrics.groundingFailedFinal, 0);
+});
+
+test("métriques : rejet au premier passage puis régénération réussie → recovered dans groundingAcceptedAfterRegeneration, jamais dans failedFinal", async () => {
+  const bad = qGrounded({ source_ids: ["SOURCE_9"] }); // unknown_source
+  const fixed = qGrounded();
+  const result = await runQuestionQualityPipeline([bad], {
+    semanticReviewEnabled: false,
+    groundingSources: CANADA_SOURCES,
+    maxRetries: 1,
+    regenerate: async () => [fixed]
+  });
+  assert.equal(result.accepted.length, 1);
+  assert.equal(result.metrics.groundingRejectedFirstPass, 1);
+  assert.equal(result.metrics.groundingRegenerationTriggerCount, 1);
+  assert.equal(result.metrics.groundingFailedFinal, 0);
+  assert.equal(result.metrics.groundingAcceptedAfterRegeneration, 1);
+});
+
+test("métriques : rejet persistant après épuisement des cycles → groundingFailedFinal compte l'échec, jamais accepté", async () => {
+  const alwaysBad = qGrounded({ source_ids: ["SOURCE_9"] });
+  let regenCalls = 0;
+  const result = await runQuestionQualityPipeline([alwaysBad], {
+    semanticReviewEnabled: false,
+    groundingSources: CANADA_SOURCES,
+    maxRetries: 2,
+    regenerate: async () => { regenCalls += 1; return [qGrounded({ source_ids: ["SOURCE_9"] })]; }
+  });
+  assert.equal(result.accepted.length, 0);
+  assert.equal(regenCalls, 2);
+  assert.equal(result.metrics.groundingRegenerationTriggerCount, 2); // une fois par cycle où la régénération a été déclenchée
+  assert.equal(result.metrics.groundingFailedFinal, 1);
+  assert.equal(result.metrics.groundingAcceptedAfterRegeneration, 1); // 2 déclenchements - 1 échec final, cf. limite documentée (approximation par budget, pas par lignée exacte)
+});
+
+test("métriques : un rejet purement structurel (pas de grounding) n'incrémente jamais les compteurs grounding", async () => {
+  const structurallyBad = qGrounded({ options: ["Ottawa", "Ottawa", "Toronto", "Montréal"] }); // DUPLICATE_OPTIONS, avant même le contrôle grounding
+  const result = await runQuestionQualityPipeline([structurallyBad], { semanticReviewEnabled: false, groundingSources: CANADA_SOURCES, maxRetries: 0 });
+  assert.equal(result.rejected[0].reasons.some((r) => r.code === "DUPLICATE_OPTIONS"), true);
+  assert.equal(result.rejected[0].reasons.some((r) => r.code.startsWith("GROUNDING_")), false);
+  assert.equal(result.metrics.groundingCandidatesFirstPass, 0, "jamais soumis au contrôle grounding : déjà invalide avant");
+  assert.equal(result.metrics.groundingRejectedFirstPass, 0);
+});

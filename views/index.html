@@ -85,7 +85,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260901-nbsp-italic">
+  <link rel="stylesheet" href="/style.min.css?v=20260831-badges-no-bg">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -1266,8 +1266,8 @@
   top: auto !important;
   /* 50px (au lieu de 35px) en desktop : encore un peu trop bas (demande du 01/09/2026). */
   bottom: 50px !important;
-  /* 24px (au lieu de 12px) : décalé un peu plus à gauche (demande du 01/09/2026). */
-  right: 24px !important;
+  /* 40px (au lieu de 24px) : décalé encore un peu plus à gauche (demande du 01/09/2026). */
+  right: 40px !important;
   z-index: 1000 !important;
   /* Même taille que le bouton "Quitter le plein écran" (.universe-exit-fullscreen,
      mon-univers.html) en desktop (demande du 01/09/2026) : celui-ci n'impose pas de
@@ -2011,7 +2011,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260901-nbsp-italic" defer></script>
+<script src="/script.min.js?v=20260831-remove-card-share-btn" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

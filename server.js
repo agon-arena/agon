@@ -11,6 +11,7 @@ const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 const { recordAiUsage, extractUsage } = require("./lib/ai-usage-log");
+const { buildGroundingMetricsSummary, recordQcmGroundingMetrics } = require("./lib/qcm-grounding-metrics");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { buildMemoryItemNaturalKey } = require("./lib/spaced-repetition/memory-model");
 const { reviewMemoryItem, computeRetrievability } = require("./lib/spaced-repetition/fsrs-scheduler");
@@ -47,6 +48,7 @@ const {
   validateKnowledgeCandidates,
   filterQuestionsToAdmittedKnowledge,
   filterVariantsByKnowledgeConstraints,
+  normalizeFactText,
   reconcileKnowledgeBatchResults,
   isAssociationAnswerFullyCorrect,
   isQcmMultiAnswerFullyCorrect,
@@ -77,6 +79,7 @@ const {
   buildGroundingText,
   buildIdentifiedSources,
   formatIdentifiedSourcesBlock,
+  appendIdentifiedSources,
   WEB_SEARCH_RAW_RESULTS_COUNT
 } = require("./lib/web-search-grounding");
 const {
@@ -87,6 +90,13 @@ const {
   MIN_QUALITY_THRESHOLD
 } = require("./lib/source-scoring");
 const { validateExtractedSourceContent } = require("./lib/source-extraction-validation");
+const {
+  DOCUMENTARY_GROUNDING_REASON_CODES,
+  MAX_NEW_SOURCES_PER_EXPANSION,
+  shouldExpandGroundingSources,
+  buildSourceExpansionQuery
+} = require("./lib/grounding-source-expansion");
+const { extractGroundingReasonCounts } = require("./lib/qcm-grounding-metrics");
 const { truncateAtTextBoundary } = require("./lib/text-boundaries");
 const {
   classifyAiError,
@@ -2837,7 +2847,16 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "creator_key",
   "created_at",
   "bumped_at",
-  "political_group"
+  "political_group",
+  // "Notions à retenir" désormais aussi sur les cartes accueil (demande du
+  // 31/08/2026, même visuel que la page débat) : topic_notions est un petit
+  // tableau JSON (3 notions slug/nom/explication, quelques centaines
+  // d'octets par arène), sans commune mesure avec media_extras/ai_analysis
+  // déjà exclus ci-dessus pour l'egress — pas de génération déclenchée ici
+  // (topic_notions_status reste tel quel, jamais mis à jour par cette
+  // requête), seulement affiché quand déjà prêt.
+  "topic_notions",
+  "topic_notions_status"
 ].join(",");
 
 // Utilisée uniquement quand /api/debates doit balayer TOUTES les arènes
@@ -7707,6 +7726,39 @@ app.get("/api/debates", async (req, res) => {
     const debateIds = debateRows.map((d) => d.id);
     const sharedDebateIds = [...new Set(debateIds.map((id) => resolveSharedDebateId(id) || String(id)))];
 
+    // "Notions à retenir" (topic_notions) sont générées et persistées sur l'id
+    // canonique d'une arène partagée (cf. GET /api/debates/:id/notions), jamais sur
+    // ses alias — sans ce repli, une carte affichée sous un id alias (lien partagé)
+    // ne voit jamais les notions déjà générées côté canonique (bug constaté le
+    // 31/08/2026 : arène 3002/alias de 2994, notions prêtes sur 2994, jamais
+    // affichées sur la carte 3002). Requête supplémentaire seulement s'il y a
+    // effectivement des alias dans la page courante.
+    const canonicalNotionsById = new Map();
+    const aliasIdsNeedingCanonicalNotions = [...new Set(
+      debateRows
+        .filter((d) => d.topic_notions_status !== "ready")
+        .map((d) => resolveSharedDebateId(d.id))
+        .filter((canonicalId) => canonicalId)
+    )];
+    if (aliasIdsNeedingCanonicalNotions.length) {
+      const { data: canonicalNotionRows, error: canonicalNotionsError } = await fetchAllSupabaseRowsIn(
+        aliasIdsNeedingCanonicalNotions,
+        (idsChunk) => supabase.from("debates").select("id,topic_notions,topic_notions_status").in("id", idsChunk));
+      if (canonicalNotionsError) {
+        console.error("[topic_notions canonical fallback]", canonicalNotionsError.message);
+      } else {
+        for (const r of canonicalNotionRows || []) canonicalNotionsById.set(String(r.id), r);
+      }
+    }
+    const applyCanonicalNotions = (row) => {
+      if (row.topic_notions_status === "ready") return {};
+      const canonicalId = resolveSharedDebateId(row.id);
+      if (!canonicalId || String(canonicalId) === String(row.id)) return {};
+      const canonicalRow = canonicalNotionsById.get(String(canonicalId));
+      if (!canonicalRow || canonicalRow.topic_notions_status !== "ready") return {};
+      return { topic_notions: canonicalRow.topic_notions, topic_notions_status: canonicalRow.topic_notions_status };
+    };
+
     const { data: args, error: argsErr } = await fetchAllSupabaseRowsIn(sharedDebateIds, (idsChunk) =>
       supabase
         .from("arguments")
@@ -7994,7 +8046,7 @@ app.get("/api/debates", async (req, res) => {
         // complète (fenêtre de quelques millisecondes) — écartée plutôt que de renvoyer
         // une carte à moitié vide.
         if (!fullRow) return null;
-        return { ...enrichDebateWithStoredImage(fullRow), ...row };
+        return { ...enrichDebateWithStoredImage(fullRow), ...row, ...applyCanonicalNotions(fullRow) };
       })
       .filter(Boolean)
       .map((row) => {
@@ -12750,6 +12802,20 @@ if (ANALYSIS_SCHEDULER_ENABLED) {
 
 // (anciens prompts _buildAnalysisPrompt1 / _PROMPT2 / _buildPrompt3 déplacés dans lib/debate-analysis.js)
 
+// Modèles dont l'API Chat Completions rejette toute valeur de `temperature`
+// autre que la valeur par défaut (1) — cas réel rencontré le 31/08/2026 en
+// vérifiant la compatibilité de gpt-5.6-luna avant son passage en production
+// pour le pipeline QCM (DAILY_QUIZ_NARRATIVE_MODEL/DAILY_QUIZ_CRITIC_MODEL) :
+// erreur OpenAI 400 "Unsupported value: 'temperature' does not support 0.3
+// with this model. Only the default (1) value is supported." Liste explicite
+// (jamais une heuristique sur le nom du modèle) : un modèle non testé garde
+// le comportement actuel (temperature envoyée normalement) plutôt que de
+// deviner sa compatibilité. N'affecte AUCUN autre appelant de _callOpenAI :
+// seuls les appels qui passent explicitement un de ces modèles perdent leur
+// paramètre temperature ; tous les autres usages OpenAI de Mnoria (modèle
+// par défaut "gpt-4o-mini", gpt-4.1-mini, etc.) sont strictement inchangés.
+const MODELS_WITHOUT_CUSTOM_TEMPERATURE = new Set(["gpt-5.6-luna"]);
+
 async function _callOpenAI(apiKey, messages, opts = {}) {
   const MAX_ATTEMPTS = 3;
   // Configurable (opts.timeoutMs) depuis le 16/08/2026 : la génération
@@ -12778,7 +12844,7 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
         body:    JSON.stringify({
           model,
           messages,
-          temperature: opts.temperature ?? 0.3,
+          ...(MODELS_WITHOUT_CUSTOM_TEMPERATURE.has(model) ? {} : { temperature: opts.temperature ?? 0.3 }),
           ...(opts.responseFormat ? { response_format: opts.responseFormat } : {})
         }),
         signal:  AbortSignal.timeout(TIMEOUT_MS),
@@ -14262,6 +14328,211 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
   };
 }
 
+// ── Fallback d'enrichissement des sources (V3.2, demande du 31/08/2026,
+// "fallback d'enrichissement des sources lorsque le grounding est
+// insuffisant") ───────────────────────────────────────────────────────────
+// Réutilise ENTIÈREMENT le pipeline V1/V2 déjà en place (aucun second moteur
+// de scoring, section 8 de la demande) : même braveSearchRaw, même
+// filterCandidateSources/rankCandidates/filterByMinQuality
+// (lib/source-scoring.js), même buildSourceSelectionPrompt/
+// parseSourceSelectionResponse (IA de sélection, avec un plafond plus bas —
+// cf. MAX_NEW_SOURCES_PER_EXPANSION), même fetchPublicHtml/
+// extractReadableContent/validateExtractedSourceContent. Seule différence :
+// la requête (buildSourceExpansionQuery, jamais `subject` seul — section 7)
+// et l'exclusion explicite des domaines déjà présents dans le corpus
+// (`existingDomains`, section 11 : dédoublonnage avec le corpus existant).
+// Appelée AU PLUS UNE FOIS par génération (section 15, jamais de boucle) —
+// c'est l'appelant (expandGroundingAndRegenerateMissingQuestions) qui
+// garantit cet appel unique, jamais cette fonction elle-même.
+async function expandWebSearchGroundingSources(apiKey, subject, id, topicContext, existingDomains, documentaryReasonCodes) {
+  const braveKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!braveKey) return { extracted: [], braveCalls: 0 };
+
+  const query = buildSourceExpansionQuery(subject, { freshnessLikely: topicContext.freshnessLikely, documentaryReasonCodes });
+  const rawResults = await braveSearchRaw(query, braveKey, id);
+  const braveCalls = 1;
+
+  const candidates = filterCandidateSources(rawResults).filter((c) => !existingDomains.has(c.domain));
+  if (!candidates.length) {
+    console.info(`[web-search-grounding:${id}] expansion : aucun nouveau domaine candidat (requête="${query}").`);
+    return { extracted: [], braveCalls };
+  }
+
+  // Même scoring déterministe que la recherche initiale, sur le MÊME
+  // topicContext (calculé une seule fois sur `subject`, jamais recalculé par
+  // sous-requête) — un candidat d'expansion n'a donc jamais un traitement
+  // plus favorable qu'un candidat initial.
+  const ranked = rankCandidates(candidates, topicContext);
+  console.info(`[web-search-grounding:${id}] expansion classement (${ranked.length} candidat(s), requête="${query}") :`,
+    ranked.map((c) => `${c.domain}=${c.score.finalScore}`).join(", "));
+
+  const qualified = filterByMinQuality(ranked);
+  if (!qualified.length) {
+    console.warn(`[web-search-grounding:${id}] expansion : aucun candidat n'atteint le seuil minimal de qualité (${MIN_QUALITY_THRESHOLD}).`);
+    return { extracted: [], braveCalls };
+  }
+
+  let selected;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildSourceSelectionPrompt(subject, null, qualified, MAX_NEW_SOURCES_PER_EXPANSION) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.2,
+      responseFormat: { type: "json_object" },
+      feature: "web_search_source_selection_expansion"
+    });
+    selected = parseSourceSelectionResponse(content, qualified, MAX_NEW_SOURCES_PER_EXPANSION);
+  } catch (error) {
+    console.warn(`[web-search-grounding:${id}] expansion sélection IA :`, error.message);
+    return { extracted: [], braveCalls };
+  }
+  if (!selected.length) return { extracted: [], braveCalls };
+
+  const topicTokens = topicContext.subjectTokens;
+  const settled = await Promise.allSettled(selected.map(async (source) => {
+    const page = await fetchPublicHtml(source.url, { timeoutMs: WEB_SEARCH_PAGE_FETCH_TIMEOUT_MS });
+    const { sourceTitle, text } = extractReadableContent(page.html, page.finalUrl, { enforceMaxLength: false });
+    const validation = validateExtractedSourceContent({ text, extractedTitle: sourceTitle, originalTitle: source.title, subjectTokens: topicTokens });
+    return { ...source, url: page.finalUrl, title: sourceTitle || source.title, text, validation, sourceScore: source.score?.finalScore ?? null };
+  }));
+  settled.forEach((r, i) => {
+    const domain = selected[i]?.domain || "?";
+    const sourceScore = selected[i]?.score?.finalScore ?? null;
+    if (r.status === "rejected") {
+      console.info(`[web-search-grounding:${id}] expansion extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=fetch_failed detail="${r.reason?.message || ""}"`);
+    } else if (!r.value.validation.ok) {
+      console.info(`[web-search-grounding:${id}] expansion extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=${r.value.validation.reason} detail="${r.value.validation.detail}"`);
+    } else {
+      console.info(`[web-search-grounding:${id}] expansion extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=accepted contentLength=${r.value.validation.contentLength}`);
+    }
+  });
+
+  const extracted = settled
+    .filter((r) => r.status === "fulfilled" && r.value.validation.ok)
+    .map((r) => r.value)
+    .slice(0, MAX_NEW_SOURCES_PER_EXPANSION);
+  return { extracted, braveCalls };
+}
+
+// Orchestration du fallback complet (section 6 : sources initiales →
+// génération → validation V3.1 → régénération ciblée existante → validation
+// → [ICI, seulement si encore insuffisant ET documentaire] → expansion →
+// extraction → scoring V2 → validation extraction → régénération des SEULES
+// questions manquantes → validation V3.1, INCHANGÉE). Ne touche JAMAIS les
+// questions déjà acceptées (section 13) : `validated` reçu en entrée est
+// systématiquement conservé tel quel et seulement complété, jamais rejoué.
+// Toujours appelée au plus une fois par génération par son unique appelant
+// (generateNotionLevelQuiz) — c'est ce qui borne le fallback à une seule
+// tentative (section 15), jamais une boucle au sein de cette fonction.
+async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, id, instruction, timeoutMs, grounding, accepted, validated, questionQualityMetrics }) {
+  const sourceCountInitial = grounding?.identifiedSources?.length || 0;
+  const baseSummary = {
+    triggered: false,
+    reason: null,
+    sourceCountInitial,
+    sourceCountAdded: 0,
+    sourceCountFinal: sourceCountInitial,
+    braveCalls: 0,
+    questionsBeforeExpansion: validated.length,
+    questionsGeneratedAfterExpansion: null,
+    questionsAcceptedAfterExpansion: null
+  };
+
+  const decision = shouldExpandGroundingSources(questionQualityMetrics, { questionsRequested: accepted.length });
+  if (!decision.expand) {
+    return { validated, grounding, expansionSummary: { ...baseSummary, reason: decision.reason } };
+  }
+
+  // Connaissances admises n'ayant encore AUCUNE question valide (section 13 :
+  // jamais les 20 régénérées, seulement les manquantes) — même comparaison
+  // texte normalisé que filterQuestionsToAdmittedKnowledge/
+  // filterVariantsByKnowledgeConstraints (lib/question-formats.js), jamais
+  // une seconde logique de correspondance.
+  const missingKnowledge = accepted.filter((k) => !validated.some((v) => normalizeFactText(v.knowledgeTarget) === normalizeFactText(k.fact)));
+  if (!missingKnowledge.length) {
+    return { validated, grounding, expansionSummary: { ...baseSummary, reason: "no_missing_knowledge" } };
+  }
+
+  const topicContext = buildTopicContext(subject);
+  const groundingReasons = extractGroundingReasonCounts(questionQualityMetrics.unresolvedReasonCounts);
+  const documentaryReasonCodes = Object.keys(groundingReasons).filter((code) => DOCUMENTARY_GROUNDING_REASON_CODES.has(code));
+  const existingDomains = new Set((grounding.identifiedSources || []).map((s) => s.domain).filter(Boolean));
+
+  const expansionResult = await expandWebSearchGroundingSources(apiKey, subject, id, topicContext, existingDomains, documentaryReasonCodes);
+  if (!expansionResult.extracted.length) {
+    console.info(`[notion-quiz:${id}] expansion documentaire tentée sans succès (aucune nouvelle source exploitable) — rejet des questions manquantes conservé.`);
+    return {
+      validated,
+      grounding,
+      expansionSummary: { ...baseSummary, triggered: true, reason: "no_new_source_found", braveCalls: expansionResult.braveCalls }
+    };
+  }
+
+  // Identifiants stables (section 12) : appendIdentifiedSources ne touche
+  // JAMAIS les entrées déjà attribuées (SOURCE_1..N restent identiques),
+  // seules SOURCE_(N+1)... sont ajoutées.
+  const mergedIdentifiedSources = appendIdentifiedSources(grounding.identifiedSources, expansionResult.extracted);
+  const mergedSourcesBlock = formatIdentifiedSourcesBlock(mergedIdentifiedSources);
+  const mergedGroundingSourcesMap = new Map(mergedIdentifiedSources.map((s) => [s.sourceId, s]));
+  const mergedGrounding = { ...grounding, identifiedSources: mergedIdentifiedSources, identifiedSourcesBlock: mergedSourcesBlock };
+
+  // Régénération CIBLÉE (section 14) : le modèle reçoit le corpus complet
+  // (sources initiales + nouvelles, section 14 — jamais qu'il privilégie
+  // artificiellement les nouvelles) mais seulement les connaissances encore
+  // manquantes, jamais les 20 d'origine.
+  const formatBlock = buildQuestionFormatsPromptBlock("sourceId", missingKnowledge.length, true, undefined, mergedSourcesBlock);
+  const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, missingKnowledge, instruction, formatBlock);
+
+  let expansionValidated = [];
+  let expansionMetrics = null;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" },
+      timeoutMs,
+      feature: "question_generation_source_expansion"
+    });
+    const questionsParsed = JSON.parse(content);
+    // Même chaîne qualité que le premier passage — RIEN n'est assoupli ici :
+    // même runQuestionQualityPipeline, même validateQuestionGrounding V3.1,
+    // même régénération ciblée interne en cas de nouveau rejet.
+    const qualityApproved = await qualityControlRawQuestions({
+      apiKey,
+      rawQuestions: questionsParsed?.questions,
+      basePrompt: questionPrompt,
+      route: "free_search",
+      timeoutMs,
+      context: {
+        hasIndependentSource: true,
+        sourceExcerptFor: (_sourceId, q) => String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200)
+      },
+      groundingSources: mergedGroundingSourcesMap,
+      metricsSink: (metrics) => { expansionMetrics = metrics; }
+    });
+    const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], missingKnowledge.length, missingKnowledge.length);
+    const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, missingKnowledge);
+    expansionValidated = filterVariantsByKnowledgeConstraints(knowledgeMatched, missingKnowledge);
+  } catch (error) {
+    console.warn(`[notion-quiz:${id}] expansion documentaire : régénération ciblée échouée :`, error.message);
+  }
+
+  return {
+    validated: [...validated, ...expansionValidated],
+    grounding: mergedGrounding,
+    expansionSummary: {
+      triggered: true,
+      reason: decision.reason,
+      sourceCountInitial,
+      sourceCountAdded: expansionResult.extracted.length,
+      sourceCountFinal: mergedIdentifiedSources.length,
+      braveCalls: expansionResult.braveCalls,
+      questionsBeforeExpansion: validated.length,
+      questionsGeneratedAfterExpansion: expansionMetrics?.generated ?? 0,
+      questionsAcceptedAfterExpansion: expansionValidated.length
+    }
+  };
+}
+
 // ── Orchestration complète du sujet libre / notion de débat avec niveau
 // (demande du 17/08/2026) : fiche + candidats → vérification indépendante
 // batchée (EN PARALLÈLE d'une éventuelle recherche d'image, cf.
@@ -14291,7 +14562,15 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   // ci-dessous, donc séquentiel plutôt qu'en parallèle de la génération —
   // contrairement à la recherche d'image (imageSearchQuery), qui elle ne
   // conditionne rien en amont et peut donc rester parallèle plus bas.
-  const grounding = await resolveWebSearchGrounding(apiKey, subject, id);
+  // `let` (jamais `const`) : le fallback d'enrichissement des sources (V3.2,
+  // 31/08/2026) peut remplacer cette valeur par une version enrichie
+  // (identifiedSources complétées, SOURCE_1..N d'origine inchangées) — cf.
+  // expandGroundingAndRegenerateMissingQuestions plus bas. `sourceDetail.sources`
+  // (fiche affichée à l'utilisateur) est calculé AVANT toute expansion
+  // éventuelle et reste donc volontairement basé sur le grounding initial
+  // uniquement — l'enrichissement V3.2 ne concerne que les questions
+  // manquantes, jamais le contenu de la fiche elle-même.
+  let grounding = await resolveWebSearchGrounding(apiKey, subject, id);
 
   let parsed;
   for (let attempt = 1; attempt <= contentAttempts; attempt++) {
@@ -14463,6 +14742,47 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         questionQualityMetrics.postQualityStructuralCount = structurallyValid.length;
         questionQualityMetrics.postQualityKnowledgeMatchedCount = knowledgeMatched.length;
         questionQualityMetrics.postQualityConstraintCount = validated.length;
+      }
+
+      // Fallback d'enrichissement des sources (V3.2, 31/08/2026 —
+      // "fallback d'enrichissement des sources lorsque le grounding est
+      // insuffisant") : uniquement si un grounding web réel existe ET que
+      // shouldExpandGroundingSources juge le corpus documentaire probablement
+      // insuffisant — s'exécute TOUJOURS après la régénération ciblée déjà
+      // effectuée ci-dessus par la chaîne qualité V2 (jamais avant,
+      // section 6). Ne rejoue JAMAIS les questions déjà `validated` (section
+      // 13) : `grounding`/`validated` ne sont réassignés que si le fallback a
+      // effectivement trouvé et exploité de nouvelles sources.
+      let expansionSummary = null;
+      if (questionQualityMetrics && grounding?.identifiedSources?.length) {
+        const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions({
+          apiKey, subject, id, instruction, timeoutMs,
+          grounding, accepted, validated, questionQualityMetrics
+        });
+        validated = expansionOutcome.validated;
+        grounding = expansionOutcome.grounding;
+        expansionSummary = expansionOutcome.expansionSummary;
+      }
+
+      if (questionQualityMetrics) {
+        // Observabilité du grounding (V3.1/V3.2, 31/08/2026) : jamais awaité
+        // (même règle que recordAiUsage) — une panne de télémétrie ne doit
+        // jamais retarder ni faire échouer une génération réelle. `route`
+        // reprend exactement celui déjà loggé par [qcm-quality] ; `sourceType`
+        // réutilise requireValidation, déjà disponible ici sans coût
+        // supplémentaire (true = sujet libre, false = notion de débat avec
+        // niveau) — jamais une nouvelle classification. `expansion` (V3.2) :
+        // résumé du fallback ci-dessus, null quand il n'a jamais été évalué
+        // (aucun grounding initial) — buildGroundingMetricsSummary retombe
+        // alors sur ses valeurs neutres, comportement additif inchangé.
+        recordQcmGroundingMetrics(supabase, buildGroundingMetricsSummary(questionQualityMetrics, {
+          generationId: id,
+          route: "free_search",
+          level: levelConfig.level || null,
+          sourceType: requireValidation ? "custom" : "debate",
+          questionsRequested: accepted.length,
+          expansion: expansionSummary
+        }));
       }
       if (validated.length >= min) break;
       console.warn(`[notion-quiz:${id}] questions non conformes (tentative ${attempt}/${questionAttempts}, ${validated.length} valide(s)).`);

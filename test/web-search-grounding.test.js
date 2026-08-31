@@ -22,7 +22,8 @@ const {
   parseSourceSelectionResponse,
   buildGroundingText,
   buildIdentifiedSources,
-  formatIdentifiedSourcesBlock
+  formatIdentifiedSourcesBlock,
+  appendIdentifiedSources
 } = require("../lib/web-search-grounding");
 
 // ---- extractDomain ----
@@ -299,4 +300,82 @@ test("EXCLUDED_GROUNDING_DOMAINS : couvre les principaux réseaux sociaux/forums
   for (const domain of ["facebook.com", "twitter.com", "x.com", "reddit.com", "tiktok.com"]) {
     assert.ok(EXCLUDED_GROUNDING_DOMAINS.has(domain), `${domain} devrait être exclu`);
   }
+});
+
+// ---- maxSelected (V3.2, 31/08/2026 — "fallback d'enrichissement des
+// sources") : réutilisation du même prompt/parseur de sélection pour le
+// fallback documentaire, avec un plafond plus bas ----
+
+test("buildSourceSelectionPrompt : maxSelected par défaut reste WEB_SEARCH_MAX_SELECTED_SOURCES (comportement inchangé)", () => {
+  const candidates = [{ domain: "a.com", title: "A", description: "desc" }];
+  const prompt = buildSourceSelectionPrompt("Sujet", null, candidates);
+  assert.match(prompt, new RegExp(`maximum ${WEB_SEARCH_MAX_SELECTED_SOURCES} sources`));
+});
+
+test("buildSourceSelectionPrompt : maxSelected personnalisé (fallback d'expansion) apparaît dans la consigne", () => {
+  const candidates = [{ domain: "a.com", title: "A", description: "desc" }];
+  const prompt = buildSourceSelectionPrompt("Sujet", null, candidates, 2);
+  assert.match(prompt, /maximum 2 sources/);
+});
+
+test("parseSourceSelectionResponse : maxSelected par défaut plafonne à WEB_SEARCH_MAX_SELECTED_SOURCES (comportement inchangé)", () => {
+  const candidates = [{ domain: "a" }, { domain: "b" }, { domain: "c" }, { domain: "d" }];
+  const selection = { selected: [{ index: 0 }, { index: 1 }, { index: 2 }, { index: 3 }] };
+  const selected = parseSourceSelectionResponse(JSON.stringify(selection), candidates);
+  assert.equal(selected.length, WEB_SEARCH_MAX_SELECTED_SOURCES);
+});
+
+test("parseSourceSelectionResponse : maxSelected personnalisé plafonne strictement (jamais au-delà)", () => {
+  const candidates = [{ domain: "a" }, { domain: "b" }, { domain: "c" }];
+  const selection = { selected: [{ index: 0 }, { index: 1 }, { index: 2 }] };
+  const selected = parseSourceSelectionResponse(JSON.stringify(selection), candidates, 2);
+  assert.equal(selected.length, 2);
+  assert.deepEqual(selected, [candidates[0], candidates[1]]);
+});
+
+// ---- appendIdentifiedSources (V3.2) : identifiants SOURCE_N stables ----
+
+test("appendIdentifiedSources : les identifiants existants restent identiques au caractère près", () => {
+  const existing = buildIdentifiedSources([
+    { title: "A", url: "https://a.com", domain: "a.com", text: "Texte A." },
+    { title: "B", url: "https://b.com", domain: "b.com", text: "Texte B." }
+  ]);
+  const merged = appendIdentifiedSources(existing, [{ title: "C", url: "https://c.com", domain: "c.com", text: "Texte C." }]);
+  assert.deepEqual(merged[0], existing[0]);
+  assert.deepEqual(merged[1], existing[1]);
+});
+
+test("appendIdentifiedSources : les nouvelles sources reçoivent SOURCE_(N+1), SOURCE_(N+2)...", () => {
+  const existing = buildIdentifiedSources([
+    { title: "A", url: "https://a.com", domain: "a.com", text: "Texte A." },
+    { title: "B", url: "https://b.com", domain: "b.com", text: "Texte B." },
+    { title: "C", url: "https://c.com", domain: "c.com", text: "Texte C." }
+  ]);
+  const merged = appendIdentifiedSources(existing, [
+    { title: "D", url: "https://d.com", domain: "d.com", text: "Texte D." },
+    { title: "E", url: "https://e.com", domain: "e.com", text: "Texte E." }
+  ]);
+  assert.equal(merged.length, 5);
+  assert.equal(merged[3].sourceId, "SOURCE_4");
+  assert.equal(merged[4].sourceId, "SOURCE_5");
+  assert.equal(merged[3].title, "D");
+  assert.equal(merged[4].title, "E");
+});
+
+test("appendIdentifiedSources : liste existante vide se comporte comme buildIdentifiedSources", () => {
+  const merged = appendIdentifiedSources([], [{ title: "A", url: "https://a.com", text: "Texte A." }]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].sourceId, "SOURCE_1");
+});
+
+test("appendIdentifiedSources : liste existante null ne jette jamais, se comporte comme []", () => {
+  assert.doesNotThrow(() => appendIdentifiedSources(null, [{ title: "A", url: "https://a.com", text: "T." }]));
+  const merged = appendIdentifiedSources(null, [{ title: "A", url: "https://a.com", text: "T." }]);
+  assert.equal(merged[0].sourceId, "SOURCE_1");
+});
+
+test("appendIdentifiedSources : aucune nouvelle source renvoie la liste existante inchangée", () => {
+  const existing = buildIdentifiedSources([{ title: "A", url: "https://a.com", domain: "a.com", text: "Texte A." }]);
+  const merged = appendIdentifiedSources(existing, []);
+  assert.deepEqual(merged, existing);
 });

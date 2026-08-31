@@ -11,7 +11,14 @@ test("les cinq parcours générateurs passent par la chaîne V2", () => {
   for (const route of ["free_search", "notion_", "knowledge_import", "knowledge_import_batch", "comprendre"]) {
     assert.match(serverSource, new RegExp(`route:\\s*[\`\"']${route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   }
-  assert.equal((serverSource.match(/qualityControlRawQuestions\s*\(/g) || []).length, 6, "une définition et cinq branchements attendus");
+  // 7 depuis le 31/08/2026 (V3.2, "fallback d'enrichissement des sources") :
+  // une définition, cinq branchements historiques (un par route ci-dessus) et
+  // un sixième branchement dans expandGroundingAndRegenerateMissingQuestions
+  // (server.js) — jamais une nouvelle route, seulement une régénération
+  // ciblée supplémentaire, au sein de "free_search", pour les questions
+  // manquantes après enrichissement du corpus. Repasse par EXACTEMENT la
+  // même chaîne V2 (aucun contournement), cf. test/qcm-grounding-source-expansion-integration.test.js.
+  assert.equal((serverSource.match(/qualityControlRawQuestions\s*\(/g) || []).length, 7, "une définition, cinq branchements historiques et le branchement d'expansion V3.2");
 });
 
 test("la critique est faite avant validateNarrativeQuizQuestions/shuffle", () => {

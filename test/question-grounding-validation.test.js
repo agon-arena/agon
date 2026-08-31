@@ -275,3 +275,44 @@ test("extractStructuredFacts : un nombre avec séparateur de milliers est reconn
   const facts = extractStructuredFacts("Environ 1 200 000 habitants vivent dans cette région.");
   assert.ok(facts.some((f) => f.value === 1200000));
 });
+
+// ── Régression V3.1 (31/08/2026) : forme "variants[]" (format réel de   ────
+// ── generateNotionLevelQuiz) — resolveAnswerTexts ne regardait auparavant  ─
+// ── QUE la forme à plat et ne trouvait donc jamais de réponse à vérifier. ─
+
+test("forme variants[] : une réponse incorrecte dans variants[0] est bien détectée (jamais ignorée faute de type/options au niveau racine)", () => {
+  const sources = { SOURCE_1: { text: "La durée légale du travail à temps complet est fixée à 35 heures par semaine." } };
+  const result = validateQuestionGrounding({
+    knowledgeTarget: "La durée légale du travail est de 35 heures.",
+    supporting_claim: "La durée légale du travail à temps complet est fixée à 35 heures par semaine.",
+    source_ids: ["SOURCE_1"],
+    variants: [{ type: "qcm", options: ["32 heures", "35 heures", "37 heures", "39 heures"], correctIndex: 3, question: "Q ?", explanation: "..." }]
+  }, sources);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "numeric_claim_not_supported");
+});
+
+test("forme variants[] : une réponse correcte dans variants[0] est acceptée", () => {
+  const sources = { SOURCE_1: { text: "La durée légale du travail à temps complet est fixée à 35 heures par semaine." } };
+  const result = validateQuestionGrounding({
+    knowledgeTarget: "La durée légale du travail est de 35 heures.",
+    supporting_claim: "La durée légale du travail à temps complet est fixée à 35 heures par semaine.",
+    source_ids: ["SOURCE_1"],
+    variants: [{ type: "qcm", options: ["32 heures", "35 heures", "37 heures", "40 heures"], correctIndex: 1, question: "Q ?", explanation: "..." }]
+  }, sources);
+  assert.equal(result.ok, true);
+});
+
+test("forme variants[] : PLUSIEURS variantes — une réponse incorrecte dans une variante secondaire est aussi détectée, jamais seulement variants[0]", () => {
+  const sources = { SOURCE_1: { text: "La durée légale du travail à temps complet est fixée à 35 heures par semaine." } };
+  const result = validateQuestionGrounding({
+    knowledgeTarget: "La durée légale du travail est de 35 heures.",
+    supporting_claim: "La durée légale du travail à temps complet est fixée à 35 heures par semaine.",
+    source_ids: ["SOURCE_1"],
+    variants: [
+      { type: "qcm", options: ["32 heures", "35 heures", "37 heures", "40 heures"], correctIndex: 1, question: "Q1 ?", explanation: "..." },
+      { type: "qcm", options: ["32 heures", "36 heures", "37 heures", "40 heures"], correctIndex: 1, question: "Q2 ?", explanation: "..." }
+    ]
+  }, sources);
+  assert.equal(result.ok, false, "la seconde variante (36 heures, non soutenue) doit à elle seule faire échouer la validation");
+});
