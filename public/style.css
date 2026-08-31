@@ -1205,20 +1205,6 @@ font-family: "Barlow Condensed", sans-serif;
   display: none !important;
 }
 
-.debate-card-episode-toggle-row {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  margin: 0 0 2px;
-}
-.episode-toggle-side {
-  flex: 1;
-  display: flex;
-}
-.episode-toggle-right {
-  justify-content: flex-end;
-}
-
 .debate-card-context-toggle {
   position: relative;
   z-index: 3;
@@ -5125,9 +5111,16 @@ body.page-debate #score-b {
   margin-top:14px;
   margin-bottom:20px;
   padding-top:14px;
-  padding-bottom:14px;
+  padding-bottom:18px;
   border-top:1px solid #e5e7eb;
   border-bottom:1px solid #e5e7eb;
+}
+
+/* Arènes communautés uniquement (demande du 31/08/2026) : liseret bleu
+   pétrole plutôt que le gris clair des cartes actualités. */
+.debate-card--community .index-card-notions-section{
+  border-top:2px solid #243038;
+  border-bottom:2px solid #243038;
 }
 .index-card-notions-section .debate-notions-title{
   font-size:11px;
@@ -10373,6 +10366,41 @@ padding:4px 14px 12px 14px;
   display: block;
 }
 
+.debate-card-options-share-row {
+  padding: 3px 3px 2px;
+}
+
+.debate-card-options-share-row .debate-card-share-actions {
+  justify-content: flex-start;
+  gap: 6px;
+  overflow: visible;
+}
+
+.debate-card-options-share-row .share-icon-button {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.debate-card-options-share-row .index-share-btn {
+  background: #ffffff !important;
+  border-color: transparent !important;
+}
+.debate-card-options-share-row .share-icon-button.copy i { color: #2563eb; }
+.debate-card-options-share-row .share-icon-button.qrcode i { color: #6b7280; }
+.debate-card-options-share-row .share-icon-button.x i { color: #111827; }
+.debate-card-options-share-row .share-icon-button.email i { color: #ea4335; }
+
+.debate-card-options-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 0;
+}
+
 .debate-card-options-item {
   display: inline-flex;
   align-items: center;
@@ -14745,41 +14773,6 @@ body.page-debate .debate-episode-link:hover {
   background: rgba(255,255,255,0.14);
 }
 
-.index-card-episode-nav {
-  width: 100%;
-  margin-top: 2px;
-}
-
-.index-card-episode-divider {
-  height: 1px;
-  background: #243038;
-  opacity: 0.2;
-  margin-bottom: 8px;
-  width: 100%;
-}
-
-.index-card-episode-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1.5px solid #111827;
-  background: #f3f4f6;
-  color: #000000;
-  text-decoration: none;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
-  font-size: 0.76rem;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.index-card-episode-btn:hover {
-  background: #243038;
-  color: #ffffff;
-  border-color: #111827;
-}
-
 .theme-horizontal-inner > .debate-card.index-card-episode-flash,
 .debate-card.index-card-episode-flash {
   animation: indexCardBgFlash 2s ease-in-out 1;
@@ -18449,6 +18442,7 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
 }
 .debate-card-context-extra .debate-card-meta-below-media {
   margin-top: 10px;
+  margin-bottom: 10px;
   text-align: center;
   justify-content: center;
   align-items: center;
@@ -18475,6 +18469,7 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   .debate-card-context-extra .debate-card-meta-below-media {
     gap: 0 !important;
     margin-top: 5px !important;
+    margin-bottom: 6px !important;
   }
   .debate-card-context-extra .debate-card-counts-row {
     line-height: 1.1 !important;
@@ -18598,6 +18593,10 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
     margin-bottom: 8px;
   }
 
+  .debate-card--community .debate-card-context-extra .debate-card-positions {
+    margin-top: 2px;
+  }
+
   .debate-card-context-extra .debate-card-score .score-bar {
     height: 12px;
     border-radius: 6px;
@@ -18607,6 +18606,10 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
     font-size: 14px;
     font-weight: 700;
     margin-top: 5px;
+  }
+
+  .debate-card--community .debate-card-context-extra .score-labels {
+    margin-bottom: 6px;
   }
 }
 
@@ -18621,6 +18624,10 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
     margin-bottom: 6px;
   }
 
+  .debate-card--community .debate-card-context-extra .debate-card-positions {
+    margin-top: 1px;
+  }
+
   .debate-card-context-extra .debate-card-score .score-bar {
     height: 11px;
     border-radius: 5px;
@@ -18630,6 +18637,10 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
     font-size: 13px;
     font-weight: 700;
     margin-top: 4px;
+  }
+
+  .debate-card--community .debate-card-context-extra .score-labels {
+    margin-bottom: 4px;
   }
 }
 
@@ -21934,6 +21945,17 @@ body.page-home-mobile .debate-card-context-extra {
   border-top: 1px solid rgba(36, 48, 56, 0.12) !important;
 }
 
+/* Cartes communauté (demande du 31/08/2026) : ce liseret sied bien avant le score
+   des débats à position, mais forme une seconde barre superflue juste au-dessus
+   du liseret du bloc notions quand il n'y a pas de barre de score (arènes libres)
+   ou juste avant elle — on le retire uniquement pour ces cartes. */
+body.page-home .debate-card.debate-card--community .debate-card-context-extra,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-context-extra {
+  border-top: none !important;
+  margin-top: 2px !important;
+  padding-top: 0 !important;
+}
+
 body.page-home .debate-card-meta-below-media,
 body.page-home-mobile .debate-card-meta-below-media {
   gap: 0 !important;
@@ -21968,7 +21990,7 @@ body.page-home-mobile .debate-last-argument {
   border-radius: 999px !important;
   background: transparent !important;
   border: none !important;
-  color: #111827 !important;
+  color: #d1d5db !important;
   font-family: 'Barlow Condensed', Impact, 'Arial Narrow', sans-serif !important;
   font-size: 11px !important;
   font-weight: 700 !important;
@@ -24131,7 +24153,7 @@ body.page-home .debate-card .debate-date,
 body.page-home-mobile .debate-card .debate-date,
 body.page-home .debate-card .debate-last-argument,
 body.page-home-mobile .debate-card .debate-last-argument {
-  color: #1A1F24 !important;
+  color: #d1d5db !important;
   text-shadow: none !important;
   background: transparent !important;
   padding: 2px 8px !important;
@@ -24140,19 +24162,22 @@ body.page-home-mobile .debate-card .debate-last-argument {
   font-weight: 700 !important;
 }
 
-/* Badges épisodes suivant/précédent */
-body.page-home .index-card-episode-btn:hover,
-body.page-home-mobile .index-card-episode-btn:hover {
-  background: #243038 !important;
-  color: #ffffff !important;
-  border-color: #111827 !important;
-}
-
-body.page-home .index-card-episode-btn,
-body.page-home-mobile .index-card-episode-btn {
-  background: #d1d5db !important;
-  border: 1.5px solid #111827 !important;
-  color: #1A1F24 !important;
+/* Cartes communauté (demande du 31/08/2026) : même couleur que le titre
+   (#000000, cf. .debate-card--community h2 plus haut) plutôt que le gris
+   clair pensé pour les titres blancs des cartes actualités. */
+body.page-home .debate-card.debate-card--community .debate-card-ideas-count,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-ideas-count,
+body.page-home .debate-card.debate-card--community .debate-card-comments-count,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-comments-count,
+body.page-home .debate-card.debate-card--community .debate-card-votes-count,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-votes-count,
+body.page-home .debate-card.debate-card--community .debate-card-stats-badge,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-stats-badge,
+body.page-home .debate-card.debate-card--community .debate-date,
+body.page-home-mobile .debate-card.debate-card--community .debate-date,
+body.page-home .debate-card.debate-card--community .debate-last-argument,
+body.page-home-mobile .debate-card.debate-card--community .debate-last-argument {
+  color: #000000 !important;
 }
 
 /* Media dans les bords de la carte sur page-home → coins arrondis visibles. Le débord de chaque
@@ -24678,6 +24703,17 @@ body.page-home-mobile .debate-card.debate-card--community .index-card-title-bann
   text-shadow: none !important;
 }
 
+/* Cartes communauté (sans image, donc :not(.has-title-banner)) : le titre a par défaut
+   un fond propre séparé du reste de la carte (dégradé blanc/#243038 + inset noir, pensé
+   pour trancher en clair sur le bleu nuit) — sur le fond clair #ffffff, ça laissait un
+   bandeau visiblement plus blanc juste sous le titre, avant le gris #ffffff du reste. */
+.debate-card.debate-card--community:not(.has-title-banner) h2,
+body.page-home .debate-card.debate-card--community:not(.has-title-banner) h2,
+body.page-home-mobile .debate-card.debate-card--community:not(.has-title-banner) h2 {
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
 /* Cartes communauté : supprime le liseré (.debate-card-context a un border plein autour
    du texte + du bouton "Voir plus") qui donne l'impression de deux barres parallèles,
    une au-dessus du bloc et une juste sous le bouton "Voir plus". */
@@ -24685,6 +24721,7 @@ body.page-home-mobile .debate-card.debate-card--community .index-card-title-bann
 body.page-home .debate-card.debate-card--community .debate-card-context,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-context {
   border: none !important;
+  background: transparent !important;
 }
 
 /* Cartes communauté : même blanc cassé que les bandeaux haut/bas (.topbar, .home-bottom-nav).
@@ -24695,7 +24732,7 @@ body.page-home-mobile .debate-card.debate-card--community .debate-card-context {
 .debate-card.debate-card--community,
 body.page-home .debate-card.debate-card--community,
 body.page-home-mobile .debate-card.debate-card--community {
-  background: #e9ebec !important;
+  background: #ffffff !important;
 }
 
 .debate-card.debate-card--community .debate-source-card,
@@ -24707,23 +24744,33 @@ body.page-home-mobile .debate-card.debate-card--community .debate-source-card-im
 .debate-card.debate-card--community .debate-source-card-body,
 body.page-home .debate-card.debate-card--community .debate-source-card-body,
 body.page-home-mobile .debate-card.debate-card--community .debate-source-card-body {
-  background: #e9ebec !important;
+  background: #ffffff !important;
 }
 
 /* Bandeau titre (has-title-banner, cas source-only) : même fond + dégradés qui
-   se fondent dans #e9ebec au lieu du bleu nuit #243038 par défaut. */
+   se fondent dans #ffffff au lieu du bleu nuit #243038 par défaut. */
 .debate-card.debate-card--community .index-card-title-banner,
 body.page-home .debate-card.debate-card--community .index-card-title-banner,
 body.page-home-mobile .debate-card.debate-card--community .index-card-title-banner {
-  background: #e9ebec !important;
+  background: #ffffff !important;
 }
 
 .debate-card.debate-card--community .index-card-media-with-title::before {
-  background: linear-gradient(to top, transparent, #e9ebec) !important;
+  background: linear-gradient(to top, transparent, #ffffff) !important;
 }
 
 .debate-card.debate-card--community .index-card-media-with-title::after {
-  background: linear-gradient(to bottom, transparent, #e9ebec) !important;
+  background: linear-gradient(to bottom, transparent, #ffffff) !important;
+}
+
+/* Cartes communauté (demande du 31/08/2026) : .debate-card::after assombrit les
+   24 derniers px de TOUTE carte (dégradé vers rgba(28,32,36,0.45), pensé pour se
+   fondre dans le fond bleu nuit #243038 des cartes actualités) — sur le fond
+   clair #ffffff des cartes communauté, ça donnait un bas visiblement plus gris
+   que le haut. */
+body.page-home .debate-card.debate-card--community::after,
+body.page-home-mobile .debate-card.debate-card--community::after {
+  background: none !important;
 }
 
 /* Overrides finaux : textes des modales création / ajout idée / barème IA. */
@@ -25503,10 +25550,12 @@ body.page-create-mobile .create-card .create-submit-helper {
   /* Centré (demande du 01/09/2026, "centre le bouton compteur de voix, au centre, juste
      au-dessus du bandeau blanc du bas") : 50% au lieu de 80%, même transform:translateX(-50%)
      déjà en place pour le centrage exact. */
+  /* +12px (demande du 01/09/2026, "en mobile remonte le un peu") : 50px au lieu de 38px, et
+     +14px au lieu de +2px pour la variante embarquée (même écart). */
   body.page-debate:not(.debate-embedded-frame) #voices-float-badge {
     left: 50% !important;
     right: auto !important;
-    bottom: 38px !important;
+    bottom: 50px !important;
     height: 42px !important;
     min-height: 42px !important;
     display: inline-flex;
@@ -25519,7 +25568,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.debate-embedded-frame #voices-float-badge {
     left: 50% !important;
     right: auto !important;
-    bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 2px) !important;
+    bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 14px) !important;
     height: 42px !important;
     min-height: 42px !important;
     display: inline-flex;
@@ -27667,4 +27716,13 @@ html body .home-bottom-nav .home-bottom-nav-item span {
   body.is-standalone:is(.page-notifications, .page-notifications-mobile) .topbar-actions {
     right: 64px !important;
   }
+}
+
+/* Flèche "Retour" (.mobile-back-button) retirée sur TOUTES les pages, mobile ET desktop
+   (demande du 01/09/2026 : d'abord /debate mobile seul, puis "toutes les pages" en mobile,
+   puis "en desktop aussi, supprime la" — plus de media query, s'applique partout). Placée en
+   toute fin de fichier pour l'emporter sur les nombreuses règles de positionnement
+   !important déjà posées sur ce sélecteur, page par page. */
+.mobile-back-button {
+  display: none !important;
 }

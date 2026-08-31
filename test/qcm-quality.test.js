@@ -463,3 +463,127 @@ test("métriques : un rejet purement structurel (pas de grounding) n'incrémente
   assert.equal(result.metrics.groundingCandidatesFirstPass, 0, "jamais soumis au contrôle grounding : déjà invalide avant");
   assert.equal(result.metrics.groundingRejectedFirstPass, 0);
 });
+
+// ── Sécurisation avant amélioration pédagogique (demande du 31/08/2026,
+// suite à l'audit QCM complet) : ces tests verrouillent le COMPORTEMENT
+// ACTUEL de runQuestionQualityPipeline pour un motif de rejet PÉDAGOGIQUE
+// (fictif à ce stade — la production ne produit pas encore ce genre de
+// code, cf. rapport d'audit §12). Objectif : garantir qu'une future
+// extension du critique sémantique (hors périmètre de cette étape) pourra
+// s'appuyer sur EXACTEMENT le même mécanisme de régénération ciblée que les
+// rejets déterministes/grounding existants, sans aucune modification de ce
+// fichier. Aucun nouveau code de production n'est créé ici.
+
+test("motif pédagogique fictif (IMPLAUSIBLE_DISTRACTOR) : Q1 et Q2 valides restent EXACTEMENT les mêmes références, seule Q3 part en régénération", async () => {
+  const q1 = q("Quelle est la capitale du Canada ?");
+  const q2 = q("Quelle ville canadienne abrite le Parlement fédéral ?", { sourceId: "canada-2" });
+  const q3 = q("Quelle est la capitale du Canada, selon les institutions ?", { sourceId: "canada-3" });
+  const replacementForQ3 = q("Où siège le gouvernement fédéral du Canada ?", { sourceId: "canada-3" });
+  let regenerationInput = null;
+  const result = await runQuestionQualityPipeline([q1, q2, q3], {
+    maxRetries: 1,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry, index) => ({
+        id: entry.id,
+        verdict: index === 2 ? "reject" : "accept",
+        reasonCodes: index === 2 ? ["IMPLAUSIBLE_DISTRACTOR"] : [],
+        expectedCorrectIndexes: [0],
+        targetsKnowledge: true,
+        groundedInSource: true
+      }))
+    }),
+    regenerate: async (input) => { regenerationInput = input; return [replacementForQ3]; }
+  });
+  assert.equal(regenerationInput.rejected.length, 1, "seule Q3 doit être transmise au callback de régénération");
+  assert.equal(regenerationInput.rejected[0].question, q3);
+  assert.equal(regenerationInput.rejected[0].reasons[0].code, "IMPLAUSIBLE_DISTRACTOR");
+  assert.deepEqual(regenerationInput.accepted, [q1, q2], "Q1 et Q2 sont transmises telles quelles au générateur, comme contexte 'déjà acceptées'");
+  assert.equal(result.accepted.length, 3);
+  assert.equal(result.accepted[0], q1, "Q1 doit rester EXACTEMENT la même référence, jamais rejouée");
+  assert.equal(result.accepted[1], q2, "Q2 doit rester EXACTEMENT la même référence, jamais rejouée");
+  assert.equal(result.accepted[2], replacementForQ3);
+});
+
+// DANGER — comportement actuel documenté tel quel, PAS ENCORE CORRIGÉ
+// (décision à prendre séparément, cf. rapport d'audit §9/§21). Si le
+// critique tombe en panne technique sur un cycle TARDIF (après qu'un cycle
+// précédent a déjà fait accepter des questions), `accepted.length = 0`
+// efface AUSSI ces questions déjà validées. Ce test sert de photographie
+// explicite pour permettre une décision consciente plus tard : conserver ce
+// comportement fail-closed agressif, ou le corriger pour ne wiper que le
+// cycle en cours.
+test("DANGER (comportement actuel, non corrigé) : une panne technique du critique sur un cycle tardif efface aussi les questions acceptées lors d'un cycle précédent", async () => {
+  const kept = q("Quelle ville est la capitale fédérale du Canada ?");
+  const toFix = q("Quelle est la capitale du Canada ?", { sourceId: "canada-2" });
+  const replacement = q("Où siège le gouvernement fédéral canadien ?", { sourceId: "canada-2" });
+  let criticCall = 0;
+  const result = await runQuestionQualityPipeline([kept, toFix], {
+    maxRetries: 1,
+    maxTechnicalRetries: 1,
+    technicalBackoff: async () => {},
+    reviewSemantic: async ({ entries }) => {
+      criticCall += 1;
+      if (criticCall === 1) {
+        // Cycle 1 : verdict normal — `kept` accepté, `toFix` refusé (motif
+        // sémantique quelconque), déclenchant une régénération ciblée.
+        return {
+          reviews: entries.map((entry, index) => ({
+            id: entry.id,
+            verdict: index === 1 ? "reject" : "accept",
+            reasonCodes: index === 1 ? ["IMPLAUSIBLE_DISTRACTOR"] : [],
+            expectedCorrectIndexes: [0],
+            targetsKnowledge: true,
+            groundedInSource: true
+          }))
+        };
+      }
+      // Cycle 2 : panne technique persistante sur le lot régénéré.
+      const error = new Error("timeout");
+      error.code = "CRITIC_TIMEOUT";
+      throw error;
+    },
+    regenerate: async () => [replacement]
+  });
+  assert.equal(result.metrics.technicalFailure, true);
+  assert.equal(result.metrics.regenerationCycles, 1, "un seul cycle de régénération a eu lieu avant la panne");
+  // Comportement actuel : `accepted` est vidé intégralement, y compris
+  // `kept`, pourtant déjà validé (structurellement + sémantiquement) au
+  // cycle précédent.
+  assert.equal(result.accepted.length, 0, "kept est également effacé — ce n'est PAS le comportement idéal, seulement le comportement actuel");
+  // `kept` n'apparaît nulle part : ni accepté, ni dans l'historique des
+  // rejets — il disparaît silencieusement.
+  assert.ok(!result.rejected.some((entry) => entry.question === kept), "kept ne réapparaît pas non plus dans l'historique des rejets — il disparaît silencieusement");
+});
+
+// ── Multi-pipelines (§10 de l'audit) : le critique est partagé par les 6
+// pipelines QCM, qui ne diffèrent que par `context.hasIndependentSource`/
+// `context.isComprehension` — jamais par la logique du pipeline
+// lui-même. `hasIndependentSource:false` ne survient en pratique que pour
+// le pipeline "sujet libre"/"notion avec niveau" quand AUCUNE source
+// Brave n'a été trouvée ; tous les autres pipelines (Éclairages/Histoire,
+// imports, Comprendre) passent toujours `hasIndependentSource:true`
+// explicitement — déjà couvert par les tests groundingSources/Comprendre
+// ci-dessus. Les deux tests suivants verrouillent le SEUL cas encore non
+// couvert : la bascule elle-même.
+
+test("hasIndependentSource:false (grounding web non trouvé, pipeline 'sujet libre' sans corpus) : un verdict accept est retenu même si groundedInSource:false", async () => {
+  const result = await runQuestionQualityPipeline([q()], {
+    maxRetries: 0,
+    context: { hasIndependentSource: false },
+    reviewSemantic: async ({ entries }) => ({
+      reviews: [{ id: entries[0].id, verdict: "accept", reasonCodes: [], expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: false }]
+    })
+  });
+  assert.equal(result.accepted.length, 1, "sans grounding indépendant, groundedInSource:false ne doit pas, à lui seul, faire échouer la question");
+});
+
+test("hasIndependentSource omis (comportement par défaut, imports/Éclairages/Comprendre) : groundedInSource:false fait échouer la question", async () => {
+  const result = await runQuestionQualityPipeline([q()], {
+    maxRetries: 0,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: [{ id: entries[0].id, verdict: "accept", reasonCodes: [], expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: false }]
+    })
+  });
+  assert.equal(result.accepted.length, 0, "par défaut (hasIndependentSource non explicitement false), une source doit être jugée disponible par le critique");
+  assert.equal(result.rejected[0].reasons[0].code, "NOT_GROUNDED_IN_SOURCE");
+});

@@ -4878,7 +4878,7 @@ async function computeUserScores() {
   }
 
   // Tailles de population par axe (pédagogique : affichées dans la modale
-  // avec le score). Chaque axe a sa propre population (Rhetor = auteurs avec
+  // avec le score). Chaque axe a sa propre population (Doxa = auteurs avec
   // ≥1 idée postée, Logos = auteurs avec ≥1 idée notée), donc son propre
   // total et sa propre taille de palier — pas les mêmes effectifs.
   const votesTierSizeByTier = new Map();
@@ -5063,13 +5063,13 @@ async function computeUserScores() {
     votesTotalByAuthorKey,
     // Nombre d'idées postées par auteur (demande du 17/08/2026) : sert à
     // dériver la moyenne de voix reçues par idée côté /api/my-score, en plus
-    // du score Rhetor sur 100 (jamais à la place) — déjà calculé plus haut
+    // du score Doxa sur 100 (jamais à la place) — déjà calculé plus haut
     // pour les paliers de contribution, jamais exposé jusqu'ici.
     contributionCountByAuthorKey,
     noteAvgByAuthorKey,
     // Nombre d'idées notées par l'IA par auteur (demande du 17/08/2026) :
     // affiché à côté de la moyenne Logos déjà exposée (notesValue), jamais à
-    // sa place — même principe que contributionCountByAuthorKey pour Rhetor.
+    // sa place — même principe que contributionCountByAuthorKey pour Doxa.
     // Peut différer du nombre total d'idées postées (contributionCountByAuthorKey) :
     // seules les idées déjà analysées par l'IA comptent ici.
     noteCountByAuthorKey,
@@ -5151,7 +5151,7 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
       noesisTierUsers: noesisTier ? (noesisTierSizeByTier.get(noesisTier) || 0) : null,
       votesValue: votesTotalByAuthorKey.has(key) ? votesTotalByAuthorKey.get(key) : null,
       // Moyenne de voix reçues par idée (demande du 17/08/2026) — en plus du
-      // score Rhetor sur 100 (votesScore) et du total brut (votesValue),
+      // score Doxa sur 100 (votesScore) et du total brut (votesValue),
       // jamais à leur place. contributionCountByAuthorKey ne peut être 0 ici
       // (une entrée n'existe dans cette map que si l'auteur a posté au moins
       // une idée, cf. computeUserScores), donc pas de division par zéro.
@@ -5161,7 +5161,7 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
       votesIdeaCount: contributionCountByAuthorKey.has(key) ? contributionCountByAuthorKey.get(key) : null,
       notesValue: noteAvgByAuthorKey.has(key) ? Math.round(noteAvgByAuthorKey.get(key) * 10) / 10 : null,
       // Nombre d'idées ayant contribué à cette moyenne (demande du 17/08/2026),
-      // à côté de notesValue — même principe que votesIdeaCount pour Rhetor.
+      // à côté de notesValue — même principe que votesIdeaCount pour Doxa.
       notesIdeaCount: noteCountByAuthorKey.has(key) ? noteCountByAuthorKey.get(key) : null,
       // Gnosis (redéfini le 17/08/2026) : taux de réussite brut sur les
       // repasses "Ancrer" uniquement, à côté du percentile gnosisScore
@@ -8305,6 +8305,20 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         optionB: option_b,
         category,
         type: type || "debate"
+      });
+      // Génération des "notions à approfondir" dès la création (demande du
+      // 01/09/2026) plutôt qu'à la première visite de la page débat (ancien
+      // comportement, cf. GET /api/debates/:id/notions) : sans ça, une carte
+      // n'affiche jamais de notion tant que personne n'a ouvert l'arène en
+      // plein écran — la grande majorité des arènes, en pratique (cf. audit).
+      // Best-effort, jamais awaité : n'importe quelle erreur reste interne à
+      // extractDebateTopicNotions/generateAndCacheDebateTopicNotions.
+      generateAndCacheDebateTopicNotions(data.id, {
+        question,
+        content: normalizedContent,
+        optionA: option_a,
+        optionB: option_b,
+        category
       });
       try {
         // Certamen (pipeline bot veille) publie ses arènes communauté via cet endpoint
@@ -11918,6 +11932,17 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       category: theme || "",
       type: debateType
     });
+    // Génération des "notions à approfondir" dès la création — même logique
+    // que POST /api/debates ci-dessus (cf. generateAndCacheDebateTopicNotions),
+    // pour que les arènes Actualités affichent une notion dès leur apparition
+    // sur l'accueil plutôt qu'après une première visite de la page débat.
+    generateAndCacheDebateTopicNotions(data.id, {
+      question: safeQuestion,
+      content: resolvedContent,
+      optionA: debateType === "open" ? "" : normalizedPositionA,
+      optionB: debateType === "open" ? "" : normalizedPositionB,
+      category: theme || ""
+    });
 
 
 
@@ -14048,6 +14073,17 @@ async function qualityControlRawQuestions({
       if (rejectionCodes.has("DOUBLE_NEGATION")) {
         targetedConstraints.push("- DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe. N’utilise aucun assemblage de négations (ne/n’, pas, plus, jamais, aucun/aucune, ni). Ne te contente pas de retirer un seul mot.");
       }
+      // Distracteurs plausibles (demande du 01/09/2026, suite à l'audit QCM
+      // du 31/08/2026 — cas réel "rhétorique antique") : mêmes codes que
+      // ceux désormais demandés au critique sémantique
+      // (buildSemanticReviewPrompt, lib/qcm-quality.js) — jamais un nouveau
+      // contrôle déterministe, jamais un nouveau code GROUNDING_* (ce
+      // rejet reste toujours pédagogique, jamais documentaire : ne doit
+      // JAMAIS déclencher shouldExpandGroundingSources, cf.
+      // lib/grounding-source-expansion.js et son test dédié).
+      if (["IMPLAUSIBLE_DISTRACTOR", "CATEGORY_MISMATCH"].some((code) => rejectionCodes.has(code))) {
+        targetedConstraints.push("- IMPLAUSIBLE_DISTRACTOR / CATEGORY_MISMATCH : remplace au moins le(s) distracteur(s) fautif(s) par d'autres appartenant STRICTEMENT à la même catégorie conceptuelle que la bonne réponse (même nature, même époque, même registre — ex. si la bonne réponse est un nom de personne, les distracteurs sont d'autres noms de personnes plausibles dans ce contexte précis), et globalement comparables en longueur/précision à la bonne réponse. N'utilise jamais un élément hors-sujet, anachronique ou d'une autre catégorie, même s'il est incontestablement faux — un distracteur trop facile à éliminer par simple bon sens catégoriel ne teste aucune connaissance réelle. Cette règle ne s'applique jamais au format \"intrus\", dont le principe même est qu'une option diffère légitimement des 3 autres.");
+      }
       if (["INVALID_ORDER_COUNT", "invalidOrderCount"].some((code) => rejectionCodes.has(code))) {
         targetedConstraints.push("- INVALID_ORDER_COUNT / invalidOrderCount : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide. Cette interdiction remplace toute consigne antérieure de rotation ou de diversité des formats.");
       }
@@ -15294,27 +15330,56 @@ const DEBATE_TOPIC_NOTIONS_MODEL = process.env.OPENAI_DEBATE_NOTIONS_MODEL || "g
 // comme un appel mort (crash serveur, timeout réseau) plutôt que toujours en
 // cours — reprise possible par la requête suivante.
 const DEBATE_TOPIC_NOTIONS_STALE_MS = 3 * 60 * 1000;
-const DEBATE_TOPIC_NOTIONS_MIN = 2;
-const DEBATE_TOPIC_NOTIONS_MAX = 3;
+// La pertinence prime sur le nombre (demande du 01/09/2026, refonte
+// pédagogique) : 1 seule notion vraiment solide est préférable à un quota
+// forcé — jamais de notion médiocre ajoutée juste pour atteindre MIN.
+const DEBATE_TOPIC_NOTIONS_MIN = 1;
+const DEBATE_TOPIC_NOTIONS_MAX = 5;
 
-function buildDebateTopicNotionsPrompt(question, content) {
+// Refonte du 01/09/2026 : l'ancien prompt invitait explicitement à extraire
+// des "mots-clés" et n'imposait aucun critère de granularité/durabilité — il
+// produisait des notions trop circonstancielles (noms de lieux précis,
+// détails anecdotiques de l'article) ou de simples mots-clés bruts ("Maillot
+// rouge", "Commotion cérébrale"), sans niveau de granularité intermédiaire
+// garanti. Ce prompt encode explicitement les 2 questions-tests et les
+// exemples bon/mauvais qui ont servi à diagnostiquer le problème.
+// optionA/optionB/category : contexte supplémentaire toujours disponible,
+// même quand `content` est vide (arène communauté créée sans article) — cf.
+// renderDebateNotions côté client, qui gère déjà ce cas.
+function buildDebateTopicNotionsPrompt(question, content, optionA, optionB, category) {
+  const trimmedContent = String(content || "").trim();
   return [
-    "Tu identifies les notions, mots-clés ou concepts clés à connaître pour bien comprendre le débat d'actualité ci-dessous — termes techniques, juridiques, économiques, institutionnels, scientifiques ou politiques qui méritent d'être expliqués et mémorisés par un lecteur qui découvre le sujet.",
+    "Tu sélectionnes les notions à approfondir pour quelqu'un qui découvre le sujet ci-dessous : des concepts, mécanismes, institutions, théories, phénomènes ou événements historiques structurants — jamais de simples mots-clés extraits du texte, jamais un fait divers ou un détail circonstanciel isolé.",
+    "",
+    "Pour CHAQUE notion candidate, vérifie mentalement ces deux questions et rejette-la si l'une des deux réponses est non :",
+    "1. Cette notion aide-t-elle réellement à comprendre ce contenu précis (son sujet, son contexte, ses mécanismes ou ses enjeux) ?",
+    "2. Cette notion serait-elle encore un sujet d'apprentissage pertinent dans plusieurs années, indépendamment de cette actualité précise ?",
+    "",
     "Règles strictes :",
     "- Base-toi uniquement sur le texte fourni, n'invente aucun fait.",
-    `- Choisis entre ${DEBATE_TOPIC_NOTIONS_MIN} et ${DEBATE_TOPIC_NOTIONS_MAX} notions distinctes, jamais de doublon ni de synonymes proches.`,
+    `- Entre ${DEBATE_TOPIC_NOTIONS_MIN} et ${DEBATE_TOPIC_NOTIONS_MAX} notions distinctes, jamais de doublon ni de synonymes proches. La pertinence prime toujours sur le nombre : n'ajoute JAMAIS une notion médiocre ou tirée par les cheveux pour atteindre un quota — une seule notion vraiment solide vaut mieux que plusieurs approximatives.`,
+    "- Vise un niveau de granularité intermédiaire, entre ces deux excès à éviter absolument : (a) un mot-clé ou un détail anecdotique/circonstanciel du contenu (nom de lieu précis, nom propre secondaire, \"l'événement du [date]\") — trop étroit pour constituer un objet d'apprentissage ; (b) une catégorie généraliste qui engloberait n'importe quel contenu du même domaine (\"Histoire\", \"Politique\", \"Science\", \"International\", \"Économie\") — trop vague pour être précise ou pour qu'un apprentissage ciblé puisse être construit dessus.",
+    "- Chaque notion doit avoir un lien réel et explicite avec le sujet principal du contenu — jamais une notion seulement adjacente, évoquée en passant, ou reliée par une simple proximité thématique sans rapport direct avec l'enjeu central.",
     "- Écarte les notions triviales ou déjà évidentes pour un lecteur de la presse générale — ne retiens que celles qui apportent un vrai éclairage.",
-    "- Priorité absolue à l'utilité : choisis les notions qui aident vraiment à comprendre les ENJEUX du débat (pourquoi ce sujet compte, ce qui se joue, ce qui est débattu) — jamais une notion choisie seulement parce qu'elle est technique ou qu'elle sonne savante. Une notion étonnante ou peu connue est un plus si elle est réellement vraie et pertinente pour ce débat, mais jamais au détriment de l'utilité : ne sacrifie jamais la compréhension des enjeux pour un fait curieux mais secondaire.",
     "- Vérifie que chaque notion et son explication sont exactes et vérifiables avant de les retenir — en cas de doute sur un fait, écarte-le plutôt que de risquer une explication fausse ou approximative.",
-    "- Pour chaque notion : un nom court et correctement capitalisé (1 à 4 mots, jamais une phrase ni une question), et une explication neutre de 1 à 3 phrases qui définit la notion et précise son lien avec ce débat précis.",
-    "- Français neutre, sans jugement de valeur, sans reprendre le camp \"pour\" ou \"contre\" du débat.",
-    "- Si le texte fourni est trop pauvre pour en tirer au moins 3 notions sérieuses, réponds avec une liste vide plutôt que d'inventer.",
+    "- Pour chaque notion : un nom court et correctement capitalisé (1 à 4 mots, jamais une phrase ni une question, jamais une simple date ou un nom propre isolé), et une explication neutre de 1 à 3 phrases qui définit la notion et précise son lien avec ce contenu précis.",
+    "- Français neutre, sans jugement de valeur, sans reprendre le camp \"pour\" ou \"contre\" si le contenu est un débat.",
+    "- Si le contenu fourni est trop pauvre, trop anecdotique ou trop circonstanciel pour en tirer au moins une notion sérieuse qui réponde aux deux questions-tests ci-dessus, réponds avec une liste vide plutôt que d'inventer ou de forcer une catégorie trop large.",
     "",
-    `Question du débat : ${String(question || "").trim().slice(0, 300)}`,
-    `Contexte : ${String(content || "").trim().slice(0, 1800)}`,
+    "Exemple — actualité \"nouvelle offensive russe en Ukraine\" :",
+    "Mauvais : \"Russie\" (catégorie trop large), \"Politique internationale\" (catégorie trop large), \"Offensive du 30 août\" (circonstanciel, pas durable).",
+    "Bon (seulement celles réellement abordées dans le contenu) : \"Guerre russo-ukrainienne\", \"OTAN\", \"Sanctions économiques internationales\", \"Dissuasion nucléaire\", \"Zones d'influence en Europe de l'Est\".",
+    "",
+    "Exemple — actualité \"épisode de canicule exceptionnel en Espagne\" :",
+    "Bon (selon ce qui est effectivement abordé) : \"Vagues de chaleur\", \"Changement climatique\", \"Climat méditerranéen\", \"Îlot de chaleur urbain\".",
+    "",
+    `Sujet : ${String(question || "").trim().slice(0, 300)}`,
+    (optionA || optionB) ? `Positions débattues : "${String(optionA || "").trim().slice(0, 120)}" contre "${String(optionB || "").trim().slice(0, 120)}"` : "",
+    category ? `Thème : ${String(category).trim().slice(0, 120)}` : "",
+    `Contexte : ${trimmedContent ? trimmedContent.slice(0, 1800) : "(aucun texte disponible au-delà du sujet ci-dessus — base-toi uniquement sur lui)"}`,
     "",
     "Réponds strictement en JSON, sans aucun texte autour : {\"notions\": [{\"name\": \"...\", \"explanation\": \"...\"}]}."
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 // Slug stable dérivé du nom (pour sourceDebateId/slot du QCM de notion,
@@ -15330,13 +15395,13 @@ function slugifyDebateNotionName(name) {
 }
 
 // Best-effort, jamais bloquant pour l'affichage de l'arène : une erreur ou
-// une réponse vide renvoie simplement [] (cf. appelant GET /api/debates/:id/notions),
-// jamais une exception qui casserait la page.
-async function extractDebateTopicNotions(question, content) {
+// une réponse vide renvoie simplement [] (cf. appelants ci-dessous), jamais
+// une exception qui casserait la page ou la création du débat.
+async function extractDebateTopicNotions(question, content, optionA, optionB, category) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
   try {
-    const raw = await _callOpenAI(apiKey, [{ role: "user", content: buildDebateTopicNotionsPrompt(question, content) }], {
+    const raw = await _callOpenAI(apiKey, [{ role: "user", content: buildDebateTopicNotionsPrompt(question, content, optionA, optionB, category) }], {
       model: DEBATE_TOPIC_NOTIONS_MODEL,
       temperature: 0.3,
       responseFormat: { type: "json_object" },
@@ -15361,6 +15426,31 @@ async function extractDebateTopicNotions(question, content) {
   }
 }
 
+// Génère (si besoin) et persiste les notions d'un débat — partagé entre
+// GET /api/debates/:id/notions (repli au premier affichage, cf. plus bas) et
+// la génération à la création (cf. POST /api/debates et /api/admin/veille/publish,
+// demande du 01/09/2026 : générer dès la création plutôt qu'à la première
+// visite, pour que les cartes Actualités/Communauté affichent une notion dès
+// leur apparition dans les carrousels, pas seulement après qu'un visiteur ait
+// ouvert la page de l'arène — 88% des arènes n'étaient jamais visitées
+// individuellement, cf. audit). Toujours "generating" -> "ready"/"failed",
+// jamais d'état intermédiaire visible ailleurs que via ces deux colonnes.
+async function generateAndCacheDebateTopicNotions(debateId, { question, content, optionA, optionB, category }) {
+  await supabase.from("debates").update({
+    topic_notions_status: "generating",
+    topic_notions_generated_at: new Date().toISOString()
+  }).eq("id", debateId);
+
+  const notions = await extractDebateTopicNotions(question, content, optionA, optionB, category);
+  await supabase.from("debates").update({
+    topic_notions: notions,
+    topic_notions_status: notions.length ? "ready" : "failed",
+    topic_notions_generated_at: new Date().toISOString()
+  }).eq("id", debateId);
+
+  return notions;
+}
+
 // Lecture publique des notions d'une arène — génère et met en cache
 // (debates.topic_notions*) au premier appel, sert le cache ensuite. Pas de
 // verrou atomique : au pire deux visiteurs arrivant au même instant sur une
@@ -15373,7 +15463,7 @@ app.get("/api/debates/:id/notions", rateLimit("debate-notions-read", 240), async
   try {
     const { data: debate, error } = await supabase
       .from("debates")
-      .select("id, question, content, topic_notions, topic_notions_status, topic_notions_generated_at")
+      .select("id, question, content, option_a, option_b, category, topic_notions, topic_notions_status, topic_notions_generated_at")
       .eq("id", canonicalId)
       .single();
     if (error || !debate) return res.status(404).json({ ok: false, error: "Débat introuvable." });
@@ -15386,24 +15476,20 @@ app.get("/api/debates/:id/notions", rateLimit("debate-notions-read", 240), async
     // nouvel appel IA à chaque visite, seulement après le même délai de
     // grâce que "generating" — évite de payer un appel OpenAI par visiteur
     // sur une arène dont le contenu ne permettra de toute façon jamais
-    // d'extraire 3 notions sérieuses.
+    // d'extraire de notion sérieuse.
     const isStale = !debate.topic_notions_generated_at
       || (Date.now() - new Date(debate.topic_notions_generated_at).getTime()) > DEBATE_TOPIC_NOTIONS_STALE_MS;
     if ((debate.topic_notions_status === "generating" || debate.topic_notions_status === "failed") && !isStale) {
       return res.json({ ok: true, status: debate.topic_notions_status, notions: [] });
     }
 
-    await supabase.from("debates").update({
-      topic_notions_status: "generating",
-      topic_notions_generated_at: new Date().toISOString()
-    }).eq("id", canonicalId);
-
-    const notions = await extractDebateTopicNotions(debate.question, debate.content);
-    await supabase.from("debates").update({
-      topic_notions: notions,
-      topic_notions_status: notions.length ? "ready" : "failed",
-      topic_notions_generated_at: new Date().toISOString()
-    }).eq("id", canonicalId);
+    const notions = await generateAndCacheDebateTopicNotions(canonicalId, {
+      question: debate.question,
+      content: debate.content,
+      optionA: debate.option_a,
+      optionB: debate.option_b,
+      category: debate.category
+    });
 
     return res.json({ ok: true, status: notions.length ? "ready" : "failed", notions });
   } catch (err) {
@@ -20855,15 +20941,24 @@ app.post("/api/daily-quiz/practice-answer", rateLimit("daily-quiz-answer", 60), 
 // dans ses repasses de répétition espacée ("Renforcement"). N'affecte jamais
 // la session de QCM en cours (chaque question n'y apparaît qu'une fois de
 // toute façon) — seul fetchCultureGeneraleReviewInjectionForToday consulte
-// cette table, cf. plus bas. `questionId` peut arriver préfixé "cgreview-"
-// si l'exclusion est cliquée pendant une repasse : normalisé ici vers l'id
-// canonique, le seul utilisé par memory_items.question_id/les événements de
-// réponse (cf. fetchUserCultureGeneraleAnswerEvents).
+// cette table, cf. plus bas. `questionId` peut arriver sous la forme
+// "cgreview-{id}::r{reps}" si l'exclusion est cliquée pendant une repasse :
+// normalisé ici vers l'id canonique via parseCultureGeneraleReviewRef (même
+// helper que applyFsrsReviewForDailyQuizAnswer), le seul utilisé par
+// memory_items.question_id/les événements de réponse (cf.
+// fetchUserCultureGeneraleAnswerEvents). Un simple .replace(/^cgreview-/, "")
+// laissait le suffixe "::rN" dans la ligne stockée — jamais égal au
+// question_id canonique lu par fetchExcludedQuestionIds, donc l'exclusion
+// n'avait aucun effet en Ancrer (repassait à chaque nouvelle valeur de reps,
+// constaté le 31/08/2026).
 app.post("/api/daily-quiz/exclude-question", rateLimit("users", 30), async (req, res) => {
   try {
     const validation = validateLegacyKey(req.body?.legacyKey);
     if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
-    const questionId = String(req.body?.questionId || "").trim().replace(/^cgreview-/, "");
+    const rawQuestionId = String(req.body?.questionId || "").trim();
+    const questionId = rawQuestionId.startsWith("cgreview-")
+      ? (parseCultureGeneraleReviewRef(rawQuestionId) || "")
+      : rawQuestionId;
     if (!questionId || questionId.length > 200) return res.status(400).json({ ok: false, error: "Requête invalide." });
 
     const { error } = await supabase.from("user_question_exclusions").upsert(

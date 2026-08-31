@@ -176,3 +176,51 @@ test("aucun code documentaire fourni -> qualificatif générique par défaut, ja
   const query = buildSourceExpansionQuery("photosynthèse", {});
   assert.match(query, /source de référence/);
 });
+
+// ── Verrou explicite (demande du 31/08/2026, suite à l'audit QCM complet,
+// §5/§6/§11) : REJET PÉDAGOGIQUE ≠ NOUVELLE RECHERCHE BRAVE. Les 4 codes
+// ci-dessous sont FICTIFS — la production ne les produit pas encore (aucune
+// modification de buildSemanticReviewPrompt à ce stade). Ils servent
+// uniquement à vérifier que shouldExpandGroundingSources se comporte
+// correctement pour N'IMPORTE QUEL futur motif non préfixé GROUNDING_,
+// jamais à anticiper que la production les produise déjà.
+
+const FICTIONAL_PEDAGOGICAL_CODES = [
+  "IMPLAUSIBLE_DISTRACTOR",
+  "CATEGORY_MISMATCH",
+  "GUESSABLE_WITHOUT_KNOWLEDGE",
+  "NEGATIVE_STEM"
+];
+
+for (const code of FICTIONAL_PEDAGOGICAL_CODES) {
+  test(`verrou pédagogique ≠ grounding : un motif fictif "${code}" (non préfixé GROUNDING_) ne déclenche JAMAIS l'expansion, même avec une couverture très faible`, () => {
+    const result = shouldExpandGroundingSources(
+      { groundingEnabled: true, finalAccepted: 0, unresolvedReasonCounts: { [code]: 4 } },
+      { questionsRequested: 4 }
+    );
+    assert.equal(result.expand, false);
+    assert.equal(result.reason, "no_documentary_signal");
+  });
+}
+
+// ── Non-régression V3.2 (demande du 31/08/2026, §6) : les motifs
+// documentaires réels continuent de pouvoir déclencher l'expansion, selon
+// les conditions déjà en place — aucun seuil modifié. ─────────────────────
+
+const REAL_DOCUMENTARY_CODES = [
+  "GROUNDING_CLAIM_NOT_GROUNDED_IN_SOURCE",
+  "GROUNDING_ANSWER_NOT_IN_CLAIM",
+  "GROUNDING_NUMERIC_CLAIM_NOT_SUPPORTED",
+  "GROUNDING_EXCESSIVE_PRECISION"
+];
+
+for (const code of REAL_DOCUMENTARY_CODES) {
+  test(`non-régression V3.2 : le motif documentaire réel "${code}" peut toujours déclencher l'expansion (couverture insuffisante, seuils inchangés)`, () => {
+    const result = shouldExpandGroundingSources(
+      { groundingEnabled: true, finalAccepted: 0, unresolvedReasonCounts: { [code]: 4 } },
+      { questionsRequested: 4 }
+    );
+    assert.equal(result.expand, true);
+    assert.equal(result.reason, "insufficient_documentary_coverage");
+  });
+}

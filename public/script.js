@@ -1505,7 +1505,7 @@ function formatPct(n) {
 const MNORIA_LOGOS_ICON = '<i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i>';
 
 // Explique les 2 scores au clic sur le widget — noms empruntés à la rhétorique
-// classique (Mnoria = joute oratoire) : Rhetor pour les voix récoltées, Logos
+// classique (Mnoria = joute oratoire) : Doxa pour les voix récoltées, Logos
 // pour la qualité argumentative notée par l'IA.
 function formatUserCount(n) {
   return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
@@ -1527,11 +1527,11 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
   const s = stats || {};
   const tierRank = (Number.isFinite(tier) && Number.isFinite(tierCount)) ? (' (' + tier + '/' + tierCount + ')') : '';
 
-  // Rhetor et Logos partagent le même palier (volume d'idées postées) mais
+  // Doxa et Logos partagent le même palier (volume d'idées postées) mais
   // pas la même population (tout le monde n'a pas de note IA) : une ligne de
   // comptage par axe, chacune affichée dans l'onglet de son propre axe.
   const votesTierCountHint = (Number.isFinite(s.votesTierUsers) && Number.isFinite(s.votesTotalUsers))
-    ? '<p class="install-modal-text install-modal-hint">Palier Rhetor : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
+    ? '<p class="install-modal-text install-modal-hint">Palier Doxa : ' + formatUserCount(s.votesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.votesTotalUsers) + '</p>'
     : '';
   const notesTierCountHint = (Number.isFinite(s.notesTierUsers) && Number.isFinite(s.notesTotalUsers))
     ? '<p class="install-modal-text install-modal-hint">Palier Logos : ' + formatUserCount(s.notesTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.notesTotalUsers) + '</p>'
@@ -1565,7 +1565,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
       '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>'
     : '';
 
-  // Chaque score a son propre onglet (clic sur Rhetor / Logos / Gnosis / Noesis
+  // Chaque score a son propre onglet (clic sur Doxa / Logos / Gnosis / Noesis
   // dans le menu) plutôt que d'être tous empilés à la suite dans la modale. Les 4
   // scores existent toujours (pire note tant qu'on n'a rien posté/répondu,
   // cf. USER_SCORE_EMPTY côté serveur), donc toujours 4 onglets.
@@ -1599,13 +1599,13 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu dans Relier.';
   const tabs = [
     {
-      key: "rhetor",
+      key: "doxa",
       icon: '<i class="fa-solid fa-bolt"></i>',
-      label: "Rhetor",
+      label: "Doxa",
       content:
         (hasVotesScore ? tierIntro + votesTierCountHint : '') +
         '<div class="install-modal-divider"></div>' +
-        '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Rhetor — Top ' + formatPct(votesScore) + '%</h4>' +
+        '<h4 class="install-modal-platform"><i class="fa-solid fa-bolt"></i> Score Doxa — Top ' + formatPct(votesScore) + '%</h4>' +
         votesValueLine +
         '<p class="install-modal-text">' + votesExplanation + '</p>'
     },
@@ -8582,6 +8582,10 @@ function buildIndexCardFooterActionsHtml(debate) {
             onclick="event.stopPropagation(); toggleCardOptionsMenu(this)"
           >···</button>
           <div class="debate-card-options-menu" role="menu" onclick="event.stopPropagation()">
+            <div class="debate-card-options-share-row" onclick="event.stopPropagation()">
+              ${buildIndexCardShareActionsHtml(d)}
+            </div>
+            <div class="debate-card-options-divider"></div>
             <button
               class="debate-card-options-item report-button"
               type="button"
@@ -8806,17 +8810,6 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
   const isCommunityCard = !!d.is_community;
   const mediaHtml = buildIndexSwipeableMediaHtml(d, options);
   const mediaOutsideLink = !!mediaHtml;
-  const prevEpUrl = String(d.previous_episode_url || "").trim();
-  const nextEpUrl = String(d.next_episode_url || "").trim();
-  const episodeNavHtml = (prevEpUrl || nextEpUrl) ? `
-    <div class="index-card-episode-nav">
-      <div class="index-card-episode-divider"></div>
-      <div class="debate-card-episode-toggle-row">
-        <span class="episode-toggle-side episode-toggle-left">${nextEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(nextEpUrl)}" title="${escapeHtml(d.next_episode_title || 'Épisode suivant')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(nextEpUrl)}')">← Épisode suivant</a>` : ''}</span>
-        <span class="episode-toggle-side episode-toggle-right">${prevEpUrl ? `<a class="index-card-episode-btn" href="${escapeHtml(prevEpUrl)}" title="${escapeHtml(d.previous_episode_title || 'Épisode précédent')}" onclick="event.preventDefault(); event.stopPropagation(); openDebateIframeModal('${escapeHtml(prevEpUrl)}')">Épisode précédent →</a>` : ''}</span>
-      </div>
-    </div>
-  ` : "";
   const scoresHtml = !isOpenDebate(d) ? `
     <div class="debate-card-positions">
       <span class="pos-a">${escapeHtml(d.option_a || "Position A")}</span>
@@ -8834,9 +8827,8 @@ function buildIndexLikeDebateCardHtml(debate, options = {}) {
     </div>
   ` : "";
   const metaHtml = buildIndexCardMetaHtml(d, { mediaOutsideLink });
-  const shareHtml = buildIndexCardShareActionsHtml(d);
   const notionsHtml = buildIndexCardNotionsHtml(d);
-  const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, shareHtml, episodeNavHtml, notionsHtml);
+  const contextHtml = buildIndexContextPreviewHtml(d, scoresHtml, metaHtml, "", "", notionsHtml);
   const isNewDebate = isDebateNew(d);
   const newBadgeHtml = isNewDebate ? `<div class="debate-card-new-badge">Nouveau</div>` : "";
   const mnoriaBadgeHtml = getIndexCardTrendBadgeHtml(d);
@@ -18492,8 +18484,8 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
       ><div class="context-text-clamp">${renderIndexContextPreviewText(shortText, false, isOpenDebate(debate))}</div></div>` : ""}
       ${needsToggle ? `
         <div class="debate-card-context-extra">
-          ${notionsHtml}
           ${scoresHtml}
+          ${notionsHtml}
           ${metaHtml}
           ${shareHtml ? `<div class="debate-card-actions">${shareHtml}</div>` : ""}
           ${episodeNavHtml}
@@ -25936,6 +25928,17 @@ function renderDebateNotions(debateId, debateQuestion, notions) {
     section.hidden = true;
     container.innerHTML = "";
     return;
+  }
+
+  // Arènes communautés (content vide) : renderDebateContext masque tout
+  // #debate-context-wrap faute d'article, ce qui cachait aussi les notions
+  // (générées à partir de la seule question) une fois chargées ici, après
+  // coup — cf. demande du 31/08/2026 d'étendre ce système aux arènes
+  // communautés, même emplacement que pour les débats d'actualité.
+  const wrap = document.getElementById("debate-context-wrap");
+  if (wrap && wrap.style.display === "none") {
+    wrap.style.display = "block";
+    positionDebateContextBelowSources();
   }
 
   container.innerHTML = notions.map((notion) => `

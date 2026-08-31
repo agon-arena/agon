@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260831-badges-no-bg" />
+<link rel="stylesheet" href="/style.min.css?v=20260901-community-score-more-space-below" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -388,13 +388,6 @@
     }
 
     /* Textes sur fond clair (harmonisé avec le reste du site, 27/08/2026) */
-    .page-contributions .section-header h3 {
-      color: #111827;
-    }
-    .page-contributions .section-header-home {
-      justify-content: center;
-      text-align: center;
-    }
     .page-contributions .contributions-accordion {
       background: #f9fafb;
       border: 1px solid #e5e7eb;
@@ -658,9 +651,62 @@
       object-fit: contain;
       animation: createSubmitSpin 0.8s linear infinite;
     }
+    /* Onglets "Score"/"Contributions" — même visuel exact que Découvrir/Ancrer/Relier/Mes
+       acquis de la page Apprentissage (.qcm-category-group/.qcm-slot-btn/.qcm-slot-btn.active,
+       qcm-du-jour.html), repris tel quel (demande du 01/09/2026, "boutons doivent etre cote
+       à cote... reprend aussi la taille de la police, la police des titres" puis "avec comme
+       deux pages indépendantes : scores et contributions") : deux vrais onglets fonctionnels
+       (un seul panneau visible à la fois, cf. setContributionsPageTab plus bas), pas deux
+       titres juste décoratifs. */
+    .contributions-section-titles {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      gap: 9px;
+      margin: 0 0 14px;
+    }
+    .contributions-section-title {
+      position: relative;
+      width: auto;
+      flex: 0 0 auto;
+      padding: 6px 3px 10px;
+      border: none;
+      background: none;
+      color: #111827;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .contributions-section-title.active {
+      font-weight: 700;
+    }
+    .contributions-section-title.active::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 3px;
+      border-radius: 999px;
+      background: #f5b642;
+    }
+    @media (max-width: 480px) {
+      .contributions-section-titles {
+        gap: 8px;
+      }
+      .contributions-section-title {
+        font-size: 20px;
+        letter-spacing: 0.005em;
+      }
+    }
     .contributions-scores {
       display: grid;
-      /* 2 colonnes fixes (pas auto-fit) : Rhetor+Logos sur la 1re ligne, Gnosis+Noesis sur la 2e,
+      /* 2 colonnes fixes (pas auto-fit) : Doxa+Logos sur la 1re ligne, Gnosis+Noesis sur la 2e,
          quelle que soit la largeur d'écran — demande du 26/08/2026. */
       grid-template-columns: repeat(2, 1fr);
       gap: 10px;
@@ -697,6 +743,16 @@
       font-size: 12px;
       margin: 0;
       line-height: 1.4;
+    }
+    /* Explique le mode de calcul (classement/palier), sous la statistique brute déjà
+       affichée par .contributions-score-card-hint (demande du 01/09/2026, "je veux que tu
+       expliques plus comment sont calculer les scores, dans les cases"). */
+    .contributions-score-card-explain {
+      color: #9ca3af;
+      font-size: 11px;
+      font-style: italic;
+      margin: 3px 0 0;
+      line-height: 1.35;
     }
     .contributions-scores-empty .contributions-score-card-title i { color: #92400e; }
     .contributions-score-card-locked {
@@ -777,65 +833,84 @@
 
 <main class="container home-page" id="scores-contributions-page">
   <section class="debates-section page-contributions-panel">
-    <div class="section-header section-header-home">
-      <div>
-        <h3>Mes scores et contributions</h3>
+    <div class="contributions-section-titles">
+      <button type="button" class="contributions-section-title active" id="contributions-tab-score" onclick="setContributionsPageTab('score')">Score</button>
+      <button type="button" class="contributions-section-title" id="contributions-tab-contributions" onclick="setContributionsPageTab('contributions')">Contributions</button>
+    </div>
+
+    <div id="contributions-tab-panel-score">
+      <div class="contributions-scores contributions-scores-empty" id="contributions-scores">
+        <div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div>
       </div>
     </div>
 
-    <div class="contributions-scores contributions-scores-empty" id="contributions-scores">
-      <div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div>
-    </div>
+    <div id="contributions-tab-panel-contributions" hidden>
+      <details class="contributions-accordion">
+        <summary>
+          <span class="contributions-accordion-label"><span class="mnoria-arena-icon" aria-hidden="true"></span> Mes arènes <span class="contributions-count" id="contributions-debates-count"></span></span>
+          <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+        </summary>
+        <div class="contributions-accordion-body" id="contributions-debates"><div class="empty-state">Chargement…</div></div>
+      </details>
 
-    <details class="contributions-accordion">
-      <summary>
-        <span class="contributions-accordion-label"><span class="mnoria-arena-icon" aria-hidden="true"></span> Mes arènes <span class="contributions-count" id="contributions-debates-count"></span></span>
-        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
-      </summary>
-      <div class="contributions-accordion-body" id="contributions-debates"><div class="empty-state">Chargement…</div></div>
-    </details>
+      <details class="contributions-accordion">
+        <summary>
+          <span class="contributions-accordion-label"><i class="fa-regular fa-lightbulb"></i> Mes idées <span class="contributions-count" id="contributions-arguments-count"></span></span>
+          <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+        </summary>
+        <div class="contributions-accordion-body" id="contributions-arguments"><div class="empty-state">Chargement…</div></div>
+      </details>
 
-    <details class="contributions-accordion">
-      <summary>
-        <span class="contributions-accordion-label"><i class="fa-regular fa-lightbulb"></i> Mes idées <span class="contributions-count" id="contributions-arguments-count"></span></span>
-        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
-      </summary>
-      <div class="contributions-accordion-body" id="contributions-arguments"><div class="empty-state">Chargement…</div></div>
-    </details>
-
-    <details class="contributions-accordion">
-      <summary>
-        <span class="contributions-accordion-label"><i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i> Mes notes <span class="contributions-count" id="contributions-notes-count"></span></span>
-        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
-      </summary>
-      <div class="contributions-accordion-body">
-        <div id="contributions-notes-actions" style="display:none; margin-bottom:10px;">
-          <button type="button" id="notes-evolution-btn" class="notes-evolution-btn">
-            <i class="fa-solid fa-chart-line"></i>
-            <span>Voir l'évolution</span>
-          </button>
+      <details class="contributions-accordion">
+        <summary>
+          <span class="contributions-accordion-label"><i class="mnoria-logos-icon" aria-hidden="true"><svg viewBox="2 0 21 21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 11a1 1 0 0 1 1 1a2 2 0 0 1-2 2a3 3 0 0 1-3-3a4 4 0 0 1 4-4a5 5 0 0 1 5 5a6 6 0 0 1-6 6a7 7 0 0 1-7-7a8 8 0 0 1 8-8a9 9 0 0 1 9 9"/></svg></i> Mes notes <span class="contributions-count" id="contributions-notes-count"></span></span>
+          <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+        </summary>
+        <div class="contributions-accordion-body">
+          <div id="contributions-notes-actions" style="display:none; margin-bottom:10px;">
+            <button type="button" id="notes-evolution-btn" class="notes-evolution-btn">
+              <i class="fa-solid fa-chart-line"></i>
+              <span>Voir l'évolution</span>
+            </button>
+          </div>
+          <div id="contributions-notes"><div class="empty-state">Chargement…</div></div>
         </div>
-        <div id="contributions-notes"><div class="empty-state">Chargement…</div></div>
-      </div>
-    </details>
+      </details>
 
-    <details class="contributions-accordion">
-      <summary>
-        <span class="contributions-accordion-label"><i class="fa-regular fa-comment"></i> Mes commentaires <span class="contributions-count" id="contributions-comments-count"></span></span>
-        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
-      </summary>
-      <div class="contributions-accordion-body" id="contributions-comments"><div class="empty-state">Chargement…</div></div>
-    </details>
+      <details class="contributions-accordion">
+        <summary>
+          <span class="contributions-accordion-label"><i class="fa-regular fa-comment"></i> Mes commentaires <span class="contributions-count" id="contributions-comments-count"></span></span>
+          <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+        </summary>
+        <div class="contributions-accordion-body" id="contributions-comments"><div class="empty-state">Chargement…</div></div>
+      </details>
 
-    <details class="contributions-accordion">
-      <summary>
-        <span class="contributions-accordion-label"><i class="fa-solid fa-bolt"></i> Mes voix <span class="contributions-count" id="contributions-votes-count"></span></span>
-        <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
-      </summary>
-      <div class="contributions-accordion-body" id="contributions-votes"><div class="empty-state">Chargement…</div></div>
-    </details>
+      <details class="contributions-accordion">
+        <summary>
+          <span class="contributions-accordion-label"><i class="fa-solid fa-bolt"></i> Mes voix <span class="contributions-count" id="contributions-votes-count"></span></span>
+          <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+        </summary>
+        <div class="contributions-accordion-body" id="contributions-votes"><div class="empty-state">Chargement…</div></div>
+      </details>
+    </div>
   </section>
 </main>
+<script>
+  // Deux "pages" indépendantes (Score / Contributions), comme les onglets Découvrir/Ancrer/
+  // Relier de la page Apprentissage (demande du 01/09/2026) — un seul panneau visible à la
+  // fois, plutôt que les deux sections empilées en permanence.
+  function setContributionsPageTab(tab) {
+    var isScore = tab === 'score';
+    var scoreBtn = document.getElementById('contributions-tab-score');
+    var contribBtn = document.getElementById('contributions-tab-contributions');
+    var scorePanel = document.getElementById('contributions-tab-panel-score');
+    var contribPanel = document.getElementById('contributions-tab-panel-contributions');
+    if (scoreBtn) scoreBtn.classList.toggle('active', isScore);
+    if (contribBtn) contribBtn.classList.toggle('active', !isScore);
+    if (scorePanel) scorePanel.hidden = !isScore;
+    if (contribPanel) contribPanel.hidden = isScore;
+  }
+</script>
 
 <main class="universe-page-shell universe-page-shell--embedded" id="memory-page-main">
   <h1>Ma mémoire</h1>
@@ -1189,7 +1264,7 @@
     svg.onmouseleave = clearActive;
   }
 
-  // Scores Rhetor (voix reçues) / Logos (notes IA) — même endpoint que le
+  // Scores Doxa (voix reçues) / Logos (notes IA) — même endpoint que le
   // widget de la topbar, affichés ici en cartes fixes plutôt qu'en popup.
   function renderScores(key) {
     var container = document.getElementById("contributions-scores");
@@ -1203,18 +1278,20 @@
     // "—") tant que le score n'existe pas encore, plutôt que de la faire
     // disparaître : on voit d'un coup d'œil sur quoi on n'a pas encore été
     // évalué, pas seulement sur quoi on l'a été.
-    function scoreCardHtml(iconHtml, label, score, unlockedHint, lockedHint, tabKey) {
+    function scoreCardHtml(iconHtml, label, score, unlockedHint, lockedHint, tabKey, explainText) {
       if (score !== null) {
         return '<div class="contributions-score-card" data-score-tab="' + tabKey + '">' +
           '<p class="contributions-score-card-title">' + iconHtml + ' ' + label + '</p>' +
           '<p class="contributions-score-card-value">Top ' + formatPct(score) + '%</p>' +
           '<p class="contributions-score-card-hint">' + unlockedHint + '</p>' +
+          '<p class="contributions-score-card-explain">' + esc(explainText) + '</p>' +
         '</div>';
       }
       return '<div class="contributions-score-card contributions-score-card-locked" data-score-tab="' + tabKey + '">' +
         '<p class="contributions-score-card-title">' + iconHtml + ' ' + label + '</p>' +
         '<p class="contributions-score-card-value contributions-score-card-value-locked">—</p>' +
         '<p class="contributions-score-card-hint">' + esc(lockedHint) + '</p>' +
+        '<p class="contributions-score-card-explain">' + esc(explainText) + '</p>' +
       '</div>';
     }
 
@@ -1244,24 +1321,26 @@
         // Demande du 17/08/2026 : moyenne de voix reçues PAR IDÉE, en plus du
         // score sur 100 (votesScore, inchangé) et du total brut déjà affiché.
         scoreCardHtml(
-          '<i class="fa-solid fa-bolt"></i>', 'Rhetor', votesScore,
+          '<i class="fa-solid fa-bolt"></i>', 'Doxa', votesScore,
           (votesValue !== null && votesAveragePerIdea !== null)
             ? esc(votesAveragePerIdea.toLocaleString("fr-FR") + " voix/idée en moyenne (" + votesValue.toLocaleString("fr-FR") + " au total)")
             : "Voix récoltées sur tes idées",
           "Pas encore évalué : poste une idée pour débloquer ce score.",
-          "rhetor"
+          "doxa",
+          "Classement parmi les contributeurs ayant posté un volume d'idées similaire au tien."
         ) +
         // Demande du 17/08/2026 : nombre d'idées notées à côté de la moyenne
         // (notesValue, déjà affichée) et du score sur 100 (notesScore,
         // inchangé) — même principe que votesAveragePerIdea/votesIdeaCount
-        // pour Rhetor juste au-dessus.
+        // pour Doxa juste au-dessus.
         scoreCardHtml(
           MNORIA_LOGOS_ICON, 'Logos', notesScore,
           (notesValue !== null && notesIdeaCount !== null)
             ? esc("Moyenne de " + notesValue.toLocaleString("fr-FR") + "/100 sur " + notesIdeaCount.toLocaleString("fr-FR") + (notesIdeaCount > 1 ? " idées notées" : " idée notée"))
             : "Qualité de tes idées, notée par l'IA",
           "Pas encore évalué : poste une idée pour débloquer ce score.",
-          "logos"
+          "logos",
+          "Classement parmi les contributeurs ayant un volume similaire d'idées notées par l'IA."
         ) +
         // Gnosis (redéfini le 17/08/2026 : ex-"Ancrage", justesse aux repasses
         // "Ancrer" — plus l'ancienne justesse sur contenu frais, cf. server.js
@@ -1273,7 +1352,8 @@
             ? esc(Math.round(gnosisCorrect / gnosisAnswered * 100) + "% de réussite en Ancrer")
             : "Justesse aux repasses",
           "Pas encore évalué : réponds à des repasses dans Ancrer pour débloquer ce score.",
-          "gnosis"
+          "gnosis",
+          "Classement parmi les contributeurs ayant répondu à un volume similaire de repasses en Ancrer."
         ) +
         // Noesis (demande du 17/08/2026) : compréhension des liens, QCM "Relier" — même
         // format que Gnosis ("Top X%", un classement percentile). A désormais son propre
@@ -1284,7 +1364,8 @@
             ? esc(Math.round(relierCorrect / relierAnswered * 100) + "% de réussite en Relier")
             : "Compréhension des liens entre connaissances",
           "Pas encore évalué : réponds dans Relier pour débloquer ce score.",
-          "noesis"
+          "noesis",
+          "Classement parmi les contributeurs ayant répondu à un volume similaire de questions en Relier."
         );
 
       // Réactive le détail au clic sur une carte (demande du 20/08/2026, revient
@@ -1348,7 +1429,7 @@
         container.classList.add("contributions-scores-empty");
         container.innerHTML =
           '<div class="contributions-score-card">' +
-            '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Rhetor, Logos &amp; Gnosis</p>' +
+            '<p class="contributions-score-card-title"><i class="fa-solid fa-bolt"></i> Doxa, Logos &amp; Gnosis</p>' +
             '<p class="contributions-score-card-hint">Impossible de charger tes scores pour l\'instant.</p>' +
           '</div>';
       });
@@ -1469,7 +1550,7 @@ function contributionsBottomNavHome() {
 }
 </script>
 
-<script src="/script.min.js?v=20260831-remove-card-share-btn" defer></script>
+<script src="/script.min.js?v=20260901-rhetor-to-doxa" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
     import("/mon-univers.js?v=20260830-frame-ready-gate");

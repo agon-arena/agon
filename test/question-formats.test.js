@@ -17,7 +17,10 @@ const {
   validateKnowledgeCandidates,
   filterQuestionsToAdmittedKnowledge,
   filterVariantsByKnowledgeConstraints,
-  extractGroundingFields
+  extractGroundingFields,
+  rankAdmittedKnowledge,
+  attachPedagogicalRanks,
+  selectQuestionsForRequestedLevel
 } = require("../lib/question-formats");
 const { resolveActiveQuestionVariant } = require("../lib/spaced-repetition/question-variant");
 
@@ -45,6 +48,107 @@ test("qcm : un nombre d'options différent de 4 est rejeté", () => {
 test("qcm : une question sans texte est rejetée", () => {
   const item = { type: "qcm", question: "", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "..." };
   assert.equal(validateQuestionItemCore(item), null);
+});
+
+// ── Sécurisation avant amélioration pédagogique (demande du 31/08/2026,
+// suite à l'audit QCM complet) — §2/§3/§4/§22 du rapport. Aucune de ces
+// fixtures ne modifie lib/question-formats.js ni lib/qcm-quality.js. ──────
+
+// PHOTOGRAPHIE (cas réel, PAS un objectif à préserver) : documente que le
+// distracteur hétérogène/anachronique du cas réel "rhétorique antique" (une
+// question qui a réellement traversé la production) passe aujourd'hui la
+// validation déterministe intégrale (structure + shuffle + verrou
+// post-shuffle). Ce n'est PAS un test de non-régression à protéger
+// indéfiniment : une future amélioration du critique sémantique (hors
+// périmètre de cette étape) devrait un jour le faire échouer. Tant que ce
+// jour n'est pas venu, ce test sert de référence explicite de l'état
+// initial du système, pour permettre de mesurer objectivement l'effet
+// d'une future modification.
+test("PHOTOGRAPHIE (cas réel, pas un objectif à préserver) : le distracteur hétérogène/anachronique 'rhétorique antique' passe aujourd'hui la validation déterministe", () => {
+  const item = {
+    type: "qcm",
+    question: "Parmi ces propositions, laquelle ne fait pas partie des caractéristiques ou auteurs de la rhétorique antique ?",
+    options: [
+      "Codifiée par Aristote",
+      "L'art de persuader par le discours",
+      "Codifiée par Cicéron",
+      "Fondée sur les techniques de la communication numérique"
+    ],
+    correctIndex: 3,
+    explanation: "La rhétorique antique est l'art de persuader par le discours, codifiée notamment par Aristote et Cicéron ; la communication numérique est un concept moderne, sans rapport avec l'Antiquité."
+  };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result, "aucun contrôle déterministe actuel ne rejette un distracteur hors-catégorie/anachronique — cf. rapport d'audit §4/§22");
+  assert.equal(result.type, "qcm");
+  assert.equal(result.options[result.correctIndex], "Fondée sur les techniques de la communication numérique");
+});
+
+// Protège le format INTRUS contre une future règle anti-formulation
+// négative trop générale : sa formulation naturelle ("lequel ne fait pas
+// partie du groupe") ne doit jamais être confondue avec une double
+// négation interdite (hasDoubleNegation exige déjà ≥3 marqueurs, cf.
+// lib/qcm-quality.js — vérifié ici comme comportement observable).
+test("intrus : une formulation négative légitime ('lequel ne fait pas partie du groupe') reste acceptée — protège ce format d'une future règle anti-négation trop générale", () => {
+  const item = {
+    type: "intrus",
+    question: "Parmi ces planètes, laquelle ne fait pas partie du système solaire interne (rocheux) ?",
+    options: ["Mercure", "Vénus", "Jupiter", "Mars"],
+    correctIndex: 2,
+    explanation: "Mercure, Vénus et Mars sont des planètes telluriques (rocheuses) du système solaire interne ; Jupiter est une géante gazeuse du système solaire externe."
+  };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result, "le format intrus doit rester utilisable avec sa formulation négative naturelle");
+  assert.equal(result.type, "intrus");
+  assert.equal(result.options[result.correctIndex], "Jupiter");
+});
+
+// Point de référence distinct du cas défectueux ci-dessus : une simple
+// négation ("laquelle ne fait pas partie") sur un "qcm" classique n'est PAS
+// rejetée par le validateur déterministe actuel — y compris pour une
+// question de bonne qualité pédagogique (options homogènes, distracteurs
+// plausibles). Contrairement à la photographie "rhétorique antique",
+// CE test doit continuer à passer même après une future amélioration du
+// critique sémantique — il documente que la négation elle-même n'est
+// jamais le problème.
+test("qcm classique : une simple négation ('laquelle ne fait pas partie') avec des options homogènes n'est pas rejetée (point de référence, distinct du cas défectueux ci-dessus)", () => {
+  const item = {
+    type: "qcm",
+    question: "Parmi ces capitales, laquelle ne fait pas partie de l'Union européenne ?",
+    options: ["Paris", "Berlin", "Londres", "Madrid"],
+    correctIndex: 2,
+    explanation: "Paris, Berlin et Madrid sont des capitales d'États membres de l'Union européenne ; Londres (Royaume-Uni) n'en fait plus partie depuis le Brexit."
+  };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result, "une simple négation ('ne ... pas') ne doit pas être confondue avec la double négation interdite");
+  assert.equal(result.options[result.correctIndex], "Londres");
+});
+
+// Shuffle après régénération (§8 de l'audit) : simule le cas "question
+// rejetée → régénérée → validée → shuffle" en appelant directement
+// validateQuestionItemCore (le point d'entrée réel du shuffle, cf.
+// lib/question-formats.js) sur une question "régénérée", répété de
+// nombreuses fois (le shuffle utilise Math.random, non seedable ici — la
+// répétition joue le rôle des "graines multiples" demandées).
+test("shuffle après régénération : la bonne réponse reste correctement indexée sur de nombreuses exécutions aléatoires", () => {
+  const regenerated = {
+    type: "qcm",
+    question: "Où siège le gouvernement fédéral canadien ?",
+    options: ["Ottawa", "Toronto", "Montréal", "Vancouver"],
+    correctIndex: 0,
+    explanation: "Le gouvernement fédéral canadien siège à Ottawa."
+  };
+  const RUNS = 200;
+  const seenOrders = new Set();
+  for (let i = 0; i < RUNS; i++) {
+    const result = validateQuestionItemCore({ ...regenerated, options: regenerated.options.slice() });
+    assert.ok(result, `exécution ${i} : la question régénérée doit rester valide`);
+    assert.equal(result.type, "qcm", `exécution ${i} : le type ne doit jamais changer`);
+    assert.equal(result.options.length, 4, `exécution ${i} : toujours 4 options`);
+    assert.equal(result.options[result.correctIndex], "Ottawa", `exécution ${i} : correctIndex doit toujours pointer vers le texte de la bonne réponse`);
+    assert.equal(result.options.filter((o) => o === "Ottawa").length, 1, `exécution ${i} : une seule occurrence de la bonne réponse`);
+    seenOrders.add(result.options.join("|"));
+  }
+  assert.ok(seenOrders.size > 1, "le shuffle doit produire plusieurs ordres différents sur 200 exécutions, jamais un ordre figé");
 });
 
 // ── qcm_multi ───────────────────────────────────────────────────────────
@@ -710,4 +814,200 @@ test("validateQuestionItemCore : absence de supporting_claim/source_ids ne chang
   assert.ok(result);
   assert.equal("supporting_claim" in result, false);
   assert.equal("source_ids" in result, false);
+});
+
+// ── V4.0 (demande du 01/09/2026) : corpus maître, découplage
+// generationDepth/requestedLevel — classement pédagogique et serving par
+// niveau. Trois fonctions PURES, testables sans réseau. ────────────────────
+
+function knowledgeItem(fact, importance = "high", overrides = {}) {
+  return { fact, importance, certainty: "high", sequential: false, clearBoundary: false, ...overrides };
+}
+
+// ── rankAdmittedKnowledge ──────────────────────────────────────────────
+
+test("rankAdmittedKnowledge : les connaissances 'high' passent toutes avant les 'medium'", () => {
+  const admitted = [
+    knowledgeItem("Fait medium 1", "medium"),
+    knowledgeItem("Fait high 1", "high"),
+    knowledgeItem("Fait medium 2", "medium"),
+    knowledgeItem("Fait high 2", "high")
+  ];
+  const ranked = rankAdmittedKnowledge(admitted);
+  assert.deepEqual(ranked.map((k) => k.fact), ["Fait high 1", "Fait high 2", "Fait medium 1", "Fait medium 2"]);
+});
+
+test("rankAdmittedKnowledge : tri stable — l'ordre d'admission d'origine est préservé au sein d'un même palier d'importance", () => {
+  const admitted = [
+    knowledgeItem("Troisième high", "high"),
+    knowledgeItem("Premier high", "high"),
+    knowledgeItem("Deuxième high", "high")
+  ];
+  const ranked = rankAdmittedKnowledge(admitted);
+  assert.deepEqual(ranked.map((k) => k.fact), ["Troisième high", "Premier high", "Deuxième high"], "ordre d'admission conservé, jamais réordonné alphabétiquement ou autrement");
+});
+
+test("rankAdmittedKnowledge : pedagogicalRank est continu, commence à 1, et unique", () => {
+  const admitted = Array.from({ length: 7 }, (_, i) => knowledgeItem(`Fait ${i}`, i % 2 === 0 ? "high" : "medium"));
+  const ranked = rankAdmittedKnowledge(admitted);
+  assert.deepEqual(ranked.map((k) => k.pedagogicalRank), [1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(new Set(ranked.map((k) => k.pedagogicalRank)).size, 7);
+});
+
+test("rankAdmittedKnowledge : entrée vide/non-tableau renvoie [] sans planter", () => {
+  assert.deepEqual(rankAdmittedKnowledge([]), []);
+  assert.deepEqual(rankAdmittedKnowledge(null), []);
+  assert.deepEqual(rankAdmittedKnowledge(undefined), []);
+});
+
+test("rankAdmittedKnowledge : préserve tous les autres champs de la connaissance (fact, certainty, sequential, clearBoundary)", () => {
+  const admitted = [knowledgeItem("Un fait", "high", { sequential: true, clearBoundary: true })];
+  const ranked = rankAdmittedKnowledge(admitted);
+  assert.equal(ranked[0].sequential, true);
+  assert.equal(ranked[0].clearBoundary, true);
+  assert.equal(ranked[0].pedagogicalRank, 1);
+});
+
+// ── attachPedagogicalRanks ─────────────────────────────────────────────
+
+test("attachPedagogicalRanks : rattache le rang via knowledgeTarget, indépendamment de la position dans le tableau de questions", () => {
+  const ranked = rankAdmittedKnowledge([
+    knowledgeItem("Fait A", "high"),
+    knowledgeItem("Fait B", "high"),
+    knowledgeItem("Fait C", "medium")
+  ]); // rangs : A=1, B=2, C=3
+  // Questions dans un ordre PHYSIQUE différent de l'ordre d'admission —
+  // le rang doit suivre le fait, jamais la position.
+  const questions = [
+    { knowledgeTarget: "Fait C", type: "qcm" },
+    { knowledgeTarget: "Fait A", type: "qcm" },
+    { knowledgeTarget: "Fait B", type: "qcm" }
+  ];
+  const result = attachPedagogicalRanks(questions, ranked);
+  assert.equal(result[0].pedagogicalRank, 3); // Fait C
+  assert.equal(result[1].pedagogicalRank, 1); // Fait A
+  assert.equal(result[2].pedagogicalRank, 2); // Fait B
+});
+
+test("attachPedagogicalRanks : comparaison insensible à la casse/espaces (même normalisation que filterQuestionsToAdmittedKnowledge)", () => {
+  const ranked = rankAdmittedKnowledge([knowledgeItem("Paris   est la capitale.", "high")]);
+  const questions = [{ knowledgeTarget: "paris est la capitale.", type: "qcm" }];
+  const result = attachPedagogicalRanks(questions, ranked);
+  assert.equal(result[0].pedagogicalRank, 1);
+});
+
+test("attachPedagogicalRanks : une question régénérée pour LA MÊME connaissance récupère le MÊME rang que celle qu'elle remplace (jamais recalculé de la position après régénération)", () => {
+  const ranked = rankAdmittedKnowledge([knowledgeItem("Fait remplacé", "high"), knowledgeItem("Autre fait", "medium")]);
+  // Simule : la question originale pour "Fait remplacé" a été rejetée puis
+  // régénérée — le remplacement est ajouté en FIN de tableau (comportement
+  // réel de runQuestionQualityPipeline, cf. audit), pas à sa position
+  // d'origine.
+  const questionsAfterRegeneration = [
+    { knowledgeTarget: "Autre fait", type: "qcm" },
+    { knowledgeTarget: "Fait remplacé", type: "qcm", id: "regenerated-replacement" }
+  ];
+  const result = attachPedagogicalRanks(questionsAfterRegeneration, ranked);
+  const replacement = result.find((q) => q.id === "regenerated-replacement");
+  assert.equal(replacement.pedagogicalRank, 1, "le remplacement doit porter le rang de la connaissance qu'il teste, pas sa position physique dans le tableau");
+});
+
+test("attachPedagogicalRanks : une question dont le knowledgeTarget ne correspond à aucune connaissance classée reste sans pedagogicalRank (défensif, jamais inventé)", () => {
+  const ranked = rankAdmittedKnowledge([knowledgeItem("Fait connu", "high")]);
+  const questions = [{ knowledgeTarget: "Fait totalement différent, jamais admis.", type: "qcm" }];
+  const result = attachPedagogicalRanks(questions, ranked);
+  assert.equal("pedagogicalRank" in result[0], false);
+});
+
+test("attachPedagogicalRanks : n'altère aucun autre champ de la question", () => {
+  const ranked = rankAdmittedKnowledge([knowledgeItem("Fait", "high")]);
+  const questions = [{ knowledgeTarget: "Fait", type: "qcm", question: "Une vraie question ?", options: ["A", "B", "C", "D"], correctIndex: 0 }];
+  const result = attachPedagogicalRanks(questions, ranked);
+  assert.equal(result[0].question, "Une vraie question ?");
+  assert.deepEqual(result[0].options, ["A", "B", "C", "D"]);
+});
+
+test("attachPedagogicalRanks : entrée vide/non-tableau renvoie [] sans planter", () => {
+  assert.deepEqual(attachPedagogicalRanks([], []), []);
+  assert.deepEqual(attachPedagogicalRanks(null, []), []);
+});
+
+// ── selectQuestionsForRequestedLevel — cas A à F de la demande V4.0 ───────
+
+function rankedQuestion(rank, overrides = {}) {
+  return { id: `q-${rank}`, type: "qcm", question: `Question ${rank} ?`, options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "...", pedagogicalRank: rank, ...overrides };
+}
+
+function masterOf(n) {
+  return Array.from({ length: n }, (_, i) => rankedQuestion(i + 1));
+}
+
+test("cas B : master de 20, niveau élémentaire (cap 5) -> exactement les rangs 1 à 5, dans l'ordre", () => {
+  const result = selectQuestionsForRequestedLevel(masterOf(20), 5);
+  assert.equal(result.length, 5);
+  assert.deepEqual(result.map((q) => q.pedagogicalRank), [1, 2, 3, 4, 5]);
+});
+
+test("cas C : master de 20, niveau avancé (cap 10) -> exactement les rangs 1 à 10", () => {
+  const result = selectQuestionsForRequestedLevel(masterOf(20), 10);
+  assert.equal(result.length, 10);
+  assert.deepEqual(result.map((q) => q.pedagogicalRank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
+
+test("cas D : master de 20, niveau expert (cap 20) -> l'intégralité disponible", () => {
+  const result = selectQuestionsForRequestedLevel(masterOf(20), 20);
+  assert.equal(result.length, 20);
+  assert.deepEqual(result.map((q) => q.pedagogicalRank), Array.from({ length: 20 }, (_, i) => i + 1));
+});
+
+test("cas E : master partiel (13 questions valides) -> elementaire=5, avance=10, expert=13 (jamais un remplissage artificiel jusqu'à 20)", () => {
+  const master13 = masterOf(13);
+  assert.equal(selectQuestionsForRequestedLevel(master13, 5).length, 5);
+  assert.equal(selectQuestionsForRequestedLevel(master13, 10).length, 10);
+  const expertResult = selectQuestionsForRequestedLevel(master13, 20);
+  assert.equal(expertResult.length, 13, "expert reçoit les 13 disponibles, jamais 20 par construction artificielle");
+  assert.deepEqual(expertResult.map((q) => q.pedagogicalRank), Array.from({ length: 13 }, (_, i) => i + 1));
+});
+
+test("cas F : master insuffisant (4 questions), élémentaire demandé (cap 5) -> les 4 disponibles, JAMAIS une 5e inventée", () => {
+  const master4 = masterOf(4);
+  const result = selectQuestionsForRequestedLevel(master4, 5);
+  assert.equal(result.length, 4, "aucune question fabriquée côté serving pour atteindre le cap");
+  assert.deepEqual(result.map((q) => q.pedagogicalRank), [1, 2, 3, 4]);
+});
+
+test("rétrocompatibilité (section 9) : un quiz SANS AUCUN pedagogicalRank (legacy, généré avant le 01/09/2026) est renvoyé STRICTEMENT inchangé, quel que soit le cap", () => {
+  const legacyQuestions = [
+    { id: "legacy-1", type: "qcm", question: "Q1 ?", options: ["A", "B", "C", "D"], correctIndex: 0 },
+    { id: "legacy-2", type: "qcm", question: "Q2 ?", options: ["A", "B", "C", "D"], correctIndex: 1 }
+  ];
+  const result = selectQuestionsForRequestedLevel(legacyQuestions, 1);
+  assert.equal(result.length, 2, "un quiz legacy sans pedagogicalRank n'est jamais tronqué — comportement historique exact");
+  assert.deepEqual(result, legacyQuestions);
+});
+
+test("cap non fini (undefined/null/NaN) sur un master classé : aucune troncature, mais toujours trié par rang", () => {
+  const shuffledMaster = [rankedQuestion(3), rankedQuestion(1), rankedQuestion(2)];
+  assert.equal(selectQuestionsForRequestedLevel(shuffledMaster, undefined).length, 3);
+  assert.deepEqual(selectQuestionsForRequestedLevel(shuffledMaster, undefined).map((q) => q.pedagogicalRank), [1, 2, 3]);
+  assert.deepEqual(selectQuestionsForRequestedLevel(shuffledMaster, null).map((q) => q.pedagogicalRank), [1, 2, 3]);
+  assert.deepEqual(selectQuestionsForRequestedLevel(shuffledMaster, NaN).map((q) => q.pedagogicalRank), [1, 2, 3]);
+});
+
+test("questions non classées mêlées à des questions classées (cas défensif) : les classées passent en premier, triées ; les non classées suivent, jamais prioritaires", () => {
+  const mixed = [rankedQuestion(2), { id: "unranked", type: "qcm", question: "Sans rang ?", options: ["A", "B", "C", "D"], correctIndex: 0 }, rankedQuestion(1)];
+  const result = selectQuestionsForRequestedLevel(mixed, 3);
+  assert.deepEqual(result.map((q) => q.id), ["q-1", "q-2", "unranked"]);
+});
+
+test("selectQuestionsForRequestedLevel ne mute jamais le tableau reçu (fonction pure, jamais de réordonnancement physique du master)", () => {
+  const master = masterOf(6);
+  const snapshot = master.map((q) => q.id);
+  selectQuestionsForRequestedLevel(master, 3);
+  assert.deepEqual(master.map((q) => q.id), snapshot, "le tableau d'entrée doit rester intact — le serving ne réordonne jamais le master en base");
+});
+
+test("entrée vide/non-tableau renvoie [] sans planter", () => {
+  assert.deepEqual(selectQuestionsForRequestedLevel([], 5), []);
+  assert.deepEqual(selectQuestionsForRequestedLevel(null, 5), []);
+  assert.deepEqual(selectQuestionsForRequestedLevel(undefined, 5), []);
 });
