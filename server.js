@@ -67,6 +67,26 @@ const {
 } = require("./lib/knowledge-admission");
 const { findEquivalentCustomTopic, parseCustomTopicSlotLevel } = require("./lib/topic-dedup");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
+const {
+  buildBraveSearchUrl,
+  buildAuthorityRetryQuery,
+  normalizeBraveResults,
+  filterCandidateSources,
+  buildSourceSelectionPrompt,
+  parseSourceSelectionResponse,
+  buildGroundingText,
+  buildIdentifiedSources,
+  formatIdentifiedSourcesBlock,
+  WEB_SEARCH_RAW_RESULTS_COUNT
+} = require("./lib/web-search-grounding");
+const {
+  buildTopicContext,
+  rankCandidates,
+  filterByMinQuality,
+  shouldAttemptAuthorityRetry,
+  MIN_QUALITY_THRESHOLD
+} = require("./lib/source-scoring");
+const { validateExtractedSourceContent } = require("./lib/source-extraction-validation");
 const { truncateAtTextBoundary } = require("./lib/text-boundaries");
 const {
   classifyAiError,
@@ -92,7 +112,9 @@ const {
 const {
   analyzeUrlKnowledge,
   createUrlAnalysisToken,
-  verifyUrlAnalysisToken
+  verifyUrlAnalysisToken,
+  fetchPublicHtml,
+  extractReadableContent
 } = require("./lib/url-knowledge");
 const {
   YoutubeKnowledgeError,
@@ -13425,7 +13447,7 @@ const QUESTION_FORMAT_DEFS = [
   { type: "association", desc: "\"association\" : une consigne d'appariement (ex. \"Associe chaque élément à ce qui lui correspond\"), avec un tableau \"pairs\" de 3 ou 4 paires {\"left\":\"...\",\"right\":\"...\"} — n'utilise ce format QUE si le sujet retenu pour cette question offre naturellement 3 à 4 ENTITÉS DISTINCTES de la même catégorie (ex. plusieurs philosophes, plusieurs pays, plusieurs éléments chimiques) à apparier chacune à son propre correspondant. INTERDIT : combiner plusieurs sujets différents, ET combiner 3-4 attributs indépendants d'UNE SEULE entité (ex. jamais associer \"date de naissance de Louis IX\"/\"lieu de sa mort\"/\"date de sa canonisation\"/\"pape qui l'a canonisé\" — ce sont 4 connaissances séparées sur une même personne, pas un appariement ; préfère alors 4 questions \"qcm\" distinctes, une par fait). Sinon préfère un autre format." },
   { type: "intrus", desc: "\"intrus\" : 4 options dont une seule ne va pas avec les 3 autres (qui partagent un point commun clair au vu du texte) — la question formule ce qu'ont en commun les 3 bonnes et demande de trouver l'intrus ; correctIndex pointe vers l'intrus." },
   { type: "qcm_multi", desc: "\"qcm_multi\" : question à 4 ou 5 options où PLUSIEURS sont correctes (2 au minimum, jamais toutes) — un tableau \"correctIndexes\" (ex. [0,2]) au lieu de \"correctIndex\". N'utilise ce format QUE pour une vraie question d'APPARTENANCE À UNE CATÉGORIE COHÉRENTE ET CLAIREMENT DÉFINIE (ex. \"lesquelles de ces capitales sont en Asie ?\", \"lesquels sont membres permanents du Conseil de sécurité de l'ONU ?\") — jamais pour compresser plusieurs faits indépendants sur un même sujet en une seule question (ex. jamais \"lesquelles de ces affirmations sur le Piton de la Fournaise sont vraies ?\" avec des options portant chacune sur un aspect sans rapport — altitude, activité, localisation — préfère alors une question \"qcm\" séparée par fait). Sinon préfère un autre format." },
-  { type: "ordre", desc: "\"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents et ordonnés DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents, ni un ordre déduit de connaissances extérieures au texte fourni. N'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte — JAMAIS un tri alphabétique, une longueur de nom ou tout autre critère arbitraire utilisé comme substitut faute d'un vrai ordre disponible : un tri purement alphabétique ne teste aucune connaissance, seulement l'orthographe. Sinon préfère un autre format." }
+  { type: "ordre", desc: "\"ordre\" : 3 ou 4 éléments à remettre dans leur ordre correct (chronologique, logique, d'importance...) — un tableau \"items\" donné DANS LE BON ORDRE (l'affichage côté client les mélange lui-même) ; les éléments doivent être des faits ou étapes explicitement présents DANS LE TEXTE DE CE SUJET UNIQUEMENT — jamais un mélange d'événements tirés de sujets différents. L'ordre à restituer est le VRAI ordre chronologique/logique des faits eux-mêmes (déduit des dates ou indications explicites données dans le texte — ex. une année citée, \"avant\", \"après\", \"puis\", \"à la suite de\"), JAMAIS le simple ordre dans lequel les phrases se succèdent dans le texte source : un article peut évoquer un événement plus tardif avant un événement antérieur pour des raisons de narration ou de collecte de l'information, ce n'est pas pour autant leur ordre réel — ne confonds jamais l'ordre d'apparition dans le texte avec l'ordre chronologique des faits qu'il décrit. Si le texte ne donne pas assez d'indications explicites pour établir cet ordre réel avec certitude, n'utilise pas ce format. N'utilise ce format QUE si le sujet offre ainsi un ordre objectif et non discutable au vu du texte — JAMAIS un tri alphabétique, une longueur de nom ou tout autre critère arbitraire utilisé comme substitut faute d'un vrai ordre disponible : un tri purement alphabétique ne teste aucune connaissance, seulement l'orthographe. Sinon préfère un autre format." }
 ];
 
 // `includeAltVariant` (demande du 12/08/2026) : demande en plus, pour
@@ -13438,7 +13460,19 @@ const QUESTION_FORMAT_DEFS = [
 // principale : les formats composites (association/intrus/qcm_multi/ordre)
 // ont besoin d'éléments supplémentaires qui n'existent pas pour une simple
 // reformulation d'un seul fait isolé.
-function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVariants, excludeTypes) {
+// `groundingSourcesBlock` (optionnel, V3 du 31/08/2026 — "fiabilisation
+// factuelle des QCM par traçabilité aux sources") : le bloc de texte des
+// vraies sources web identifiées (SOURCE_1, SOURCE_2..., cf.
+// lib/web-search-grounding.js formatIdentifiedSourcesBlock), transmis
+// UNIQUEMENT par generateNotionLevelQuiz quand un grounding web a
+// effectivement été trouvé (jamais par les autres appelants de cette
+// fonction — Éclairages/Histoire, imports — dont le comportement reste
+// donc identique au caractère près). Quand présent, exige en plus
+// "supporting_claim"/"source_ids" par connaissance (jamais par variante :
+// toutes les variantes d'un knowledgeTarget partagent la même preuve) — la
+// vérification programmatique de ces champs (lib/question-grounding-validation.js)
+// vit hors de cette fonction, restée pure construction de prompt.
+function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVariants, excludeTypes, groundingSourcesBlock) {
   const assignments = buildFormatAssignments(questionCount, excludeTypes);
   const availableDefs = excludeTypes && excludeTypes.length
     ? QUESTION_FORMAT_DEFS.filter((d) => !excludeTypes.includes(d.type))
@@ -13530,6 +13564,19 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     "- false : la question ne peut être comprise ou résolue qu'en comparant les propositions entre elles, ou y fait explicitement référence (ex. \"Lequel de ces historiens n'a pas travaillé sur le Moyen Âge ?\", \"Parmi ces éléments, lequel...\", toute question de type comparatif ou par élimination). Sois honnête et strict : en cas de doute réel, réponds false plutôt que true — mieux vaut afficher les propositions à tort que de bloquer une question à laquelle on ne peut objectivement pas répondre sans elles.",
     "Aucun champ \"selfContained\" pour les autres types (association, intrus, ordre) — la question n'est jamais concernée par ce choix.",
     "",
+    ...(groundingSourcesBlock ? [
+      "=== Traçabilité obligatoire aux sources (V3, 31/08/2026) ===",
+      "Génère UNIQUEMENT des questions dont la bonne réponse est explicitement ou directement soutenue par les sources ci-dessous (identifiées SOURCE_1, SOURCE_2...). N'utilise JAMAIS tes connaissances internes pour ajouter un chiffre, une date, un nom ou tout autre détail précis absent de ces sources — une information peut être vraie dans le monde réel mais doit être écartée ici si ces sources précises ne permettent pas de l'établir.",
+      "Pour chaque connaissance (au niveau du \"knowledgeTarget\", pas de chaque variante — toutes les variantes d'une même connaissance partagent la même preuve), ajoute deux champs :",
+      "- \"supporting_claim\" : l'affirmation factuelle EXACTE, telle qu'elle apparaît dans les sources (paraphrase fidèle acceptée, jamais une reformulation vague ni une simple mention du même sujet), qui justifie la bonne réponse.",
+      "- \"source_ids\" : un tableau des identifiants SOURCE_N (jamais l'URL, jamais un identifiant inventé) dont le contenu soutient RÉELLEMENT cette affirmation précise — au maximum 3, uniquement celles qui participent effectivement à la preuve, jamais la liste complète des sources disponibles \"par précaution\".",
+      "La précision de la question ne doit JAMAIS dépasser la précision réellement disponible dans les sources (ex. si une source dit \"environ 66 millions d'années\", ne pose jamais une question exigeant \"66,04 millions d'années\").",
+      "Si les sources fournies ne permettent pas de créer suffisamment de questions ainsi tracées, génère moins de questions plutôt que d'inventer ou d'extrapoler — moins de questions fiables vaut toujours mieux que plus de questions dont certaines sont douteuses.",
+      "",
+      "Sources disponibles (identifiant, titre, url, contenu) :",
+      groundingSourcesBlock,
+      ""
+    ] : []),
     includeVariants
       // Exemple à DEUX objets dans "variants" (pas un seul) : un modèle
       // pattern-matche fortement sur la forme littérale de l'exemple — un
@@ -13538,8 +13585,8 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
       // prose demandant d'en viser 2 (constaté le 16/08/2026 : 18/18
       // questions à 1 variante sur deux générations réelles avant ce
       // correctif). L'exemple est donc explicitement direct+inverse.
-      ? `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...","variants":[{"type":"${availableTypes.join("|")}","question":"(formulation directe)","options":["..."] (qcm/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"retrievalMode":"direct"},{"type":"qcm|texte_a_trous","question":"(formulation inverse ou contextuelle, PAS une paraphrase de la première)","options":["..."],"correctIndex":0,"explanation":"...","selfContained":true|false,"retrievalMode":"inverse"}],"${sourceIdField}":"id fourni"}]} — 2 variantes dans cet exemple, mais rappel : 1 seule si aucun second angle honnête n'existe, 3 si un troisième chemin apporte vraiment quelque chose.`
-      : `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...","type":"${availableTypes.join("|")}","question":"...","options":["..."] (qcm/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"}]}.`
+      ? `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...",${groundingSourcesBlock ? `"supporting_claim":"...","source_ids":["SOURCE_1"],` : ""}"variants":[{"type":"${availableTypes.join("|")}","question":"(formulation directe)","options":["..."] (qcm/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"retrievalMode":"direct"},{"type":"qcm|texte_a_trous","question":"(formulation inverse ou contextuelle, PAS une paraphrase de la première)","options":["..."],"correctIndex":0,"explanation":"...","selfContained":true|false,"retrievalMode":"inverse"}],"${sourceIdField}":"id fourni"}]} — 2 variantes dans cet exemple, mais rappel : 1 seule si aucun second angle honnête n'existe, 3 si un troisième chemin apporte vraiment quelque chose.`
+      : `Réponds uniquement en JSON strict, sous la forme {"questions":[{"knowledgeTarget":"...",${groundingSourcesBlock ? `"supporting_claim":"...","source_ids":["SOURCE_1"],` : ""}"type":"${availableTypes.join("|")}","question":"...","options":["..."] (qcm/texte_a_trous/intrus/qcm_multi uniquement),"correctIndex":0 (qcm/texte_a_trous/intrus uniquement),"correctIndexes":[0,2] (qcm_multi uniquement),"pairs":[{"left":"...","right":"..."}] (association uniquement),"items":["...","..."] (ordre uniquement, dans le bon ordre),"explanation":"...","selfContained":true|false (qcm/texte_a_trous/qcm_multi uniquement),"${sourceIdField}":"id fourni"}]}.`
   ];
 }
 
@@ -13889,7 +13936,14 @@ async function qualityControlRawQuestions({
   route,
   context = {},
   timeoutMs,
-  metricsSink
+  metricsSink,
+  // groundingSources (V3, 31/08/2026) : Map/objet SOURCE_N -> {text,...},
+  // transmis UNIQUEMENT par generateNotionLevelQuiz quand un grounding web a
+  // réellement été trouvé — absent partout ailleurs (comportement
+  // strictement inchangé pour tous les autres appelants). Simplement
+  // relayé à runQuestionQualityPipeline, qui applique
+  // validateQuestionGrounding lui-même (cf. lib/qcm-quality.js).
+  groundingSources
 }) {
   const startedAt = Date.now();
   const outcome = await runQuestionQualityPipeline(rawQuestions, {
@@ -13897,6 +13951,7 @@ async function qualityControlRawQuestions({
     maxRetries: QCM_SEMANTIC_REVIEW_MAX_RETRIES,
     maxTechnicalRetries: QCM_CRITIC_TECHNICAL_MAX_RETRIES,
     context,
+    groundingSources,
     reviewSemantic: async ({ entries, context: reviewContext }) => {
       const content = await _callOpenAI(apiKey, [{ role: "user", content: buildSemanticReviewPrompt(entries, reviewContext) }], {
         model: DAILY_QUIZ_CRITIC_MODEL,
@@ -13935,6 +13990,19 @@ async function qualityControlRawQuestions({
       }
       if (["unclearQuestion", "formulationAmbiguë", "vagueQuestion", "questionVague"].some((code) => rejectionCodes.has(code))) {
         targetedConstraints.push("- QUESTION FLOUE OU VAGUE : réécris entièrement la question. Nomme explicitement le sujet, l’entité, le lieu ou la période nécessaires ; bannis les pronoms et références implicites ; la question doit être autonome, précise et répondre uniquement à knowledgeTarget.");
+      }
+      // Traçabilité aux sources (V3, 31/08/2026) : chaque code GROUNDING_*
+      // correspond à un motif de rejet de lib/question-grounding-validation.js
+      // — instructions correctives ciblées, même philosophie que les blocs
+      // ci-dessus (jamais une consigne générique "sois plus précis").
+      if ([...rejectionCodes].some((code) => code.startsWith("GROUNDING_"))) {
+        targetedConstraints.push("- NON TRACÉ AUX SOURCES (tout code GROUNDING_*) : remplace cette question par une AUTRE connaissance réellement et directement soutenue par les sources ci-dessus (jamais une correction cosmétique de la même affirmation) — choisis un fait dont le chiffre/la date/le nom exact apparaît littéralement dans une des sources fournies, cite SEULEMENT les SOURCE_N qui le soutiennent vraiment (jamais toutes par précaution), et écris un \"supporting_claim\" qui reprend fidèlement le passage de la source. Si aucune autre connaissance de ce knowledgeTarget n'est ainsi traçable, remplace entièrement cette question par une portant sur un AUTRE knowledgeTarget déjà admis mais pas encore transformé en question.");
+      }
+      if (rejectionCodes.has("GROUNDING_UNKNOWN_SOURCE")) {
+        targetedConstraints.push("- GROUNDING_UNKNOWN_SOURCE spécifiquement : ne cite QUE des identifiants SOURCE_N listés ci-dessus, jamais un numéro inventé, une URL, ou un nom de domaine.");
+      }
+      if (rejectionCodes.has("GROUNDING_EXCESSIVE_PRECISION")) {
+        targetedConstraints.push("- GROUNDING_EXCESSIVE_PRECISION spécifiquement : la question exigeait une précision (décimales, chiffre exact) que la source ne donne pas — reformule avec EXACTEMENT le niveau de précision présent dans la source (ex. \"environ 66 millions\" et non \"66,04 millions\" si c'est tout ce que la source fournit).");
       }
       const regenerationPrompt = [
         basePrompt,
@@ -14011,6 +14079,189 @@ function parseFicheAndKnowledgeCandidates(parsed, fallbackName, levelConfig) {
   return { sourceName, sourceDetail, candidates, imageSearchQuery };
 }
 
+// ── Recherche web de grounding (demande du 31/08/2026, étendue le même jour
+// par "Fiabilisation intelligente des sources Brave") ───────────────────────
+// Comble le manque de source externe de generateNotionLevelQuiz (cf.
+// l'avertissement de tête de buildFicheAndKnowledgeAdmissionPrompt dans
+// lib/knowledge-admission.js) : cherche de vraies pages web sur `subject`,
+// les ORDONNE par un scoring déterministe contextuel (lib/source-scoring.js
+// — un résultat bien classé par Brave n'est pas nécessairement la meilleure
+// source pédagogique, cf. cas réel constaté : pour "Durée légale du travail
+// en France", Brave classe un blog SaaS commercial devant legifrance.gouv.fr),
+// relance UNE recherche ciblée vers une autorité du registre si rien n'est
+// encore assez bon (shouldAttemptAuthorityRetry), puis laisse une IA trancher
+// la sélection finale parmi les candidats ayant franchi un seuil minimal
+// (buildSourceSelectionPrompt, désormais informée du classement automatique).
+// Le texte est ensuite extrait avec le même extracteur que l'import de
+// connaissances par URL (lib/url-knowledge.js).
+// Volontairement appelée sur `subject` SEUL, jamais sur un contexte de débat
+// éventuel : pour une notion liée à une actu (ex. "avalanche glaciaire" pour
+// un débat sur le Népal), le sujet mémorisé est la NOTION générale, jamais
+// l'actualité elle-même — chercher "Népal" trouverait des sources sur
+// l'actu, pas sur le mécanisme physique à mémoriser (cf. échange du
+// 31/08/2026).
+// Toujours best-effort, à l'image de searchKnowledgeImage juste en dessous :
+// BRAVE_SEARCH_API_KEY absente, échec réseau, aucun résultat exploitable, ou
+// aucune source jugée fiable par l'IA → null, jamais une erreur qui
+// bloquerait la génération. La fiche reste alors rédigée "de mémoire" comme
+// avant ce correctif (groundingText reste optionnel côté prompts).
+// Budget d'appels (section 16 de la demande, jamais dépassé) : au plus 2
+// appels Brave (recherche de base + UNE relance ciblée optionnelle) et
+// TOUJOURS exactement 1 appel IA (sélection finale) — aucun appel IA
+// supplémentaire pour "comprendre le sujet" : topicContext est calculé par
+// simple recoupement lexical déterministe (lib/source-scoring.js), jamais
+// par un modèle.
+const WEB_SEARCH_GROUNDING_TIMEOUT_MS = 8000;
+const WEB_SEARCH_PAGE_FETCH_TIMEOUT_MS = 8000;
+
+async function braveSearchRaw(query, braveKey, id) {
+  try {
+    const res = await fetch(buildBraveSearchUrl(query, WEB_SEARCH_RAW_RESULTS_COUNT), {
+      headers: { Accept: "application/json", "X-Subscription-Token": braveKey },
+      signal: AbortSignal.timeout(WEB_SEARCH_GROUNDING_TIMEOUT_MS)
+    });
+    if (!res.ok) {
+      console.warn(`[web-search-grounding:${id}] Brave a répondu ${res.status}.`);
+      return [];
+    }
+    return normalizeBraveResults(await res.json());
+  } catch (error) {
+    console.warn(`[web-search-grounding:${id}] recherche Brave :`, error.message);
+    return [];
+  }
+}
+
+async function resolveWebSearchGrounding(apiKey, subject, id) {
+  const braveKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!braveKey) return null;
+  const query = String(subject || "").trim();
+  if (!query) return null;
+
+  const rawResults = await braveSearchRaw(query, braveKey, id);
+  let candidates = filterCandidateSources(rawResults);
+  if (!candidates.length) return null;
+
+  // Scoring déterministe (lib/source-scoring.js) : ordonne les candidats
+  // AVANT de solliciter l'IA — aucun appel réseau/IA supplémentaire ici,
+  // seulement des signaux déjà en main (domaine, titre, description,
+  // page_age déjà renvoyés par Brave dans la même réponse).
+  const topicContext = buildTopicContext(subject);
+  let ranked = rankCandidates(candidates, topicContext);
+
+  // Relance ciblée (section 10/11) : UNE seule tentative, seulement si le
+  // meilleur candidat actuel n'est pas déjà assez bon ET qu'une autorité du
+  // registre manifestement compétente pour ce sujet manque encore parmi les
+  // candidats (ex. NASA absente des résultats bruts sur "Composition de
+  // l'atmosphère de Mars", alors que Wikipédia seule ne dépasse pas
+  // GOOD_ENOUGH_THRESHOLD).
+  const retryAuthority = shouldAttemptAuthorityRetry(ranked, topicContext);
+  if (retryAuthority) {
+    const retryQuery = buildAuthorityRetryQuery(query, retryAuthority.domain);
+    const retryRawResults = await braveSearchRaw(retryQuery, braveKey, id);
+    if (retryRawResults.length) {
+      const existingDomains = new Set(candidates.map((c) => c.domain));
+      const newCandidates = filterCandidateSources(retryRawResults).filter((c) => !existingDomains.has(c.domain));
+      if (newCandidates.length) {
+        candidates = [...candidates, ...newCandidates];
+        ranked = rankCandidates(candidates, topicContext);
+      }
+    }
+  }
+
+  // Observabilité (section 13) : jamais affiché à l'utilisateur, seulement
+  // pour le diagnostic — un log compact par candidat, avant filtrage.
+  console.info(`[web-search-grounding:${id}] classement (${ranked.length} candidat(s), retry=${retryAuthority ? retryAuthority.domain : "aucune"}) :`,
+    ranked.map((c) => `${c.domain}=${c.score.finalScore}`).join(", "));
+
+  // Seuil minimal (section 10, "ne jamais forcer une mauvaise source") : un
+  // candidat sous ce score n'est même pas soumis au jugement de l'IA.
+  const qualified = filterByMinQuality(ranked);
+  if (!qualified.length) {
+    console.warn(`[web-search-grounding:${id}] aucun candidat n'atteint le seuil minimal de qualité (${MIN_QUALITY_THRESHOLD}), génération sans grounding.`);
+    return null;
+  }
+
+  let selected;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildSourceSelectionPrompt(subject, null, qualified) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.2,
+      responseFormat: { type: "json_object" },
+      feature: "web_search_source_selection"
+    });
+    selected = parseSourceSelectionResponse(content, qualified);
+  } catch (error) {
+    console.warn(`[web-search-grounding:${id}] sélection IA des sources :`, error.message);
+    return null;
+  }
+  if (!selected.length) return null;
+
+  // Récupération EN PARALLÈLE (pages indépendantes les unes des autres) —
+  // chaque échec individuel (page injoignable, contenu trop court/long, type
+  // non HTML...) est ignoré plutôt que de faire échouer tout le grounding :
+  // une seule source exploitable suffit à continuer. Une source bien notée
+  // par le scoring (qualité du CANDIDAT) peut malgré tout renvoyer, une fois
+  // récupérée, un contenu inexploitable (page anti-bot, de connexion,
+  // d'erreur...) — cas réel constaté le 31/08/2026 (travail-emploi.gouv.fr,
+  // noté 81/100, a renvoyé une page "Vérification de sécurité") — d'où la
+  // validation du CONTENU réellement extrait, distincte du score du
+  // candidat (lib/source-extraction-validation.js). Jamais de nouvel appel
+  // Brave pour compenser une extraction invalide (section 5 de la demande,
+  // "éviter de lancer automatiquement une nouvelle recherche") : les autres
+  // sources déjà sélectionnées et récupérées en parallèle jouent déjà ce
+  // rôle de repli.
+  const topicTokens = topicContext.subjectTokens;
+  const settled = await Promise.allSettled(selected.map(async (source) => {
+    const page = await fetchPublicHtml(source.url, { timeoutMs: WEB_SEARCH_PAGE_FETCH_TIMEOUT_MS });
+    // enforceMaxLength:false (cf. lib/url-knowledge.js) : buildGroundingText
+    // tronque de toute façon chaque source à WEB_SEARCH_EXCERPT_MAX_CHARS
+    // juste plus bas — un article long (Wikipédia notamment) ne doit jamais
+    // être rejeté ici pour cette seule raison.
+    const { sourceTitle, text } = extractReadableContent(page.html, page.finalUrl, { enforceMaxLength: false });
+    const validation = validateExtractedSourceContent({ text, extractedTitle: sourceTitle, originalTitle: source.title, subjectTokens: topicTokens });
+    return { ...source, url: page.finalUrl, title: sourceTitle || source.title, text, validation, sourceScore: source.score?.finalScore ?? null };
+  }));
+
+  // Observabilité (section 6) : distingue clairement mauvaise source
+  // (jamais atteinte ici, déjà filtrée en amont), bonne source impossible à
+  // extraire, et extraction réussie.
+  settled.forEach((r, i) => {
+    const domain = selected[i]?.domain || "?";
+    const sourceScore = selected[i]?.score?.finalScore ?? null;
+    if (r.status === "rejected") {
+      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=fetch_failed detail="${r.reason?.message || ""}"`);
+    } else if (!r.value.validation.ok) {
+      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=${r.value.validation.reason} detail="${r.value.validation.detail}"`);
+    } else {
+      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=accepted contentLength=${r.value.validation.contentLength}`);
+    }
+  });
+
+  const extracted = settled
+    .filter((r) => r.status === "fulfilled" && r.value.validation.ok)
+    .map((r) => r.value);
+  if (!extracted.length) return null;
+
+  const groundingText = buildGroundingText(extracted);
+  if (!groundingText) return null;
+
+  // identifiedSources/identifiedSourcesBlock (V3, 31/08/2026) : mêmes
+  // sources déjà extraites/validées ci-dessus, ré-étiquetées SOURCE_1,
+  // SOURCE_2... pour que la génération des questions (server.js
+  // generateNotionLevelQuiz) puisse leur attribuer un identifiant citable
+  // sans jamais faire reconstruire d'URL au modèle (cf. section 4 de la
+  // demande). groundingText/sources ci-dessus restent inchangés — utilisés
+  // tels quels par la fiche et la vérification indépendante des
+  // connaissances, jamais par la génération des questions.
+  const identifiedSources = buildIdentifiedSources(extracted);
+  return {
+    groundingText,
+    sources: extracted.map((s) => ({ title: s.title, url: s.url })),
+    identifiedSources,
+    identifiedSourcesBlock: formatIdentifiedSourcesBlock(identifiedSources)
+  };
+}
+
 // ── Orchestration complète du sujet libre / notion de débat avec niveau
 // (demande du 17/08/2026) : fiche + candidats → vérification indépendante
 // batchée (EN PARALLÈLE d'une éventuelle recherche d'image, cf.
@@ -14035,11 +14286,18 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   // validateurs pédagogiques et factuels ci-dessous.
   const contentAttempts = 2;
 
+  // Recherche web AVANT la rédaction de la fiche (cf. resolveWebSearchGrounding
+  // ci-dessus) : son résultat conditionne le contenu du prompt de fiche
+  // ci-dessous, donc séquentiel plutôt qu'en parallèle de la génération —
+  // contrairement à la recherche d'image (imageSearchQuery), qui elle ne
+  // conditionne rien en amont et peut donc rester parallèle plus bas.
+  const grounding = await resolveWebSearchGrounding(apiKey, subject, id);
+
   let parsed;
   for (let attempt = 1; attempt <= contentAttempts; attempt++) {
     let content;
     try {
-      content = await _callOpenAI(apiKey, [{ role: "user", content: buildFicheAndKnowledgeAdmissionPrompt(subject, contextHint, levelConfig, requireValidation) }], {
+      content = await _callOpenAI(apiKey, [{ role: "user", content: buildFicheAndKnowledgeAdmissionPrompt(subject, contextHint, levelConfig, requireValidation, grounding?.groundingText || null) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
         responseFormat: { type: "json_object" },
@@ -14106,7 +14364,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   for (let attempt = 1; attempt <= contentAttempts; attempt++) {
     let verifyContent;
     try {
-      verifyContent = await _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(candidates, sourceName) }], {
+      verifyContent = await _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(candidates, sourceName, grounding?.groundingText || null) }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
@@ -14136,6 +14394,12 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   }
   resolvedImage = await imagePromise;
   sourceDetail.image = resolvedImage;
+  // Traçabilité (jamais affiché nulle part pour l'instant, cf. discussion du
+  // 31/08/2026) : conserve les vraies sources web ayant fondé la fiche,
+  // quand la recherche en a trouvé — null sinon (comportement identique à
+  // avant ce correctif), jamais une liste vide qui laisserait croire à un
+  // grounding qui n'a pas eu lieu.
+  sourceDetail.sources = grounding?.sources || null;
   if (!accepted) return generationFailure("CONTENT_UNUSABLE", "knowledge_verification_parsing");
   if (!accepted.length) {
     console.warn(`[notion-quiz:${id}] aucune connaissance n'a passé la vérification indépendante (${candidates.length} candidate(s)).`);
@@ -14147,9 +14411,17 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   // Une seule génération initiale : les reprises sont désormais exclusivement
   // ciblées dans qualityControlRawQuestions. Rejouer ce lot entier ici
   // régénérerait aussi les questions déjà acceptées, contrairement au contrat V2.
+  // groundingSourcesMap (V3, 31/08/2026) : Map SOURCE_N -> {text,...},
+  // construite une seule fois pour toute la boucle — null quand aucun
+  // grounding web n'a été trouvé (comportement strictement inchangé dans
+  // ce cas : ni bloc de sources dans le prompt, ni validation de
+  // traçabilité, ni changement du contexte envoyé au critique sémantique).
+  const groundingSourcesMap = grounding?.identifiedSources?.length
+    ? new Map(grounding.identifiedSources.map((s) => [s.sourceId, s]))
+    : null;
   const questionAttempts = 1;
   for (let attempt = 1; attempt <= questionAttempts; attempt++) {
-    const formatBlock = buildQuestionFormatsPromptBlock("sourceId", accepted.length, true);
+    const formatBlock = buildQuestionFormatsPromptBlock("sourceId", accepted.length, true, undefined, grounding?.identifiedSourcesBlock || null);
     const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, accepted, instruction, formatBlock);
     try {
       const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
@@ -14166,7 +14438,19 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         basePrompt: questionPrompt,
         route: "free_search",
         timeoutMs,
-        context: { hasIndependentSource: false },
+        // hasIndependentSource devient true UNIQUEMENT quand un grounding web
+        // réel a été trouvé (groundingSourcesMap non nul) — sourceExcerptFor
+        // donne alors au critique sémantique le supporting_claim de CETTE
+        // question précise (déjà vérifié par validateQuestionGrounding avant
+        // même d'atteindre le critique), jamais le contenu brut d'une page
+        // entière. Repli sur knowledgeTarget si supporting_claim est absent
+        // (question passée par le rejet grounding puis régénérée sans succès
+        // avant ce point — ne devrait normalement pas atteindre le critique).
+        context: {
+          hasIndependentSource: !!groundingSourcesMap,
+          sourceExcerptFor: (_sourceId, q) => String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200)
+        },
+        groundingSources: groundingSourcesMap,
         metricsSink: (metrics) => { questionQualityMetrics = metrics; }
       });
       // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
@@ -17093,6 +17377,16 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // pour distinguer d'un coup d'œil un QCM entièrement répondu d'un QCM
       // réalisé avec des questions passées en route.
       let trueAnsweredCount = 0;
+      // Une question passée/retirée sort aussi du dénominateur de progressPct
+      // (demande du 31/08/2026, "je réponds à 4 questions sur 8 tout bon,
+      // ancrage affiché 50%, alors qu'il est en réalité de 100%") : l'ancien
+      // calcul (questions.length complet) pénalisait un QCM juste parce
+      // qu'il contenait des questions passées, sans lien avec ce qui a
+      // vraiment été mémorisé parmi celles réellement engagées. Une question
+      // passée continue de ne rapporter aucun crédit (numérateur inchangé),
+      // mais ne compte plus non plus dans le total sur lequel ce crédit est
+      // rapporté.
+      let progressDenominator = 0;
       for (const q of questions) {
         const row = stateByQuestionKey.get(`${link.quiz_date}:${link.slot}:${q.id}`);
         if (row) {
@@ -17102,11 +17396,14 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
           );
           answeredCount += 1;
           trueAnsweredCount += 1;
+          progressDenominator += 1;
         } else if (excludedQuestionIds.has(q.id)) {
           answeredCount += 1;
+        } else {
+          progressDenominator += 1;
         }
       }
-      const progressPct = Math.round((creditSum / questions.length) * 100);
+      const progressPct = progressDenominator > 0 ? Math.round((creditSum / progressDenominator) * 100) : 0;
       const durableAcquisState = durableAcquisBySourceId.get(String(questions[0]?.sourceDebateId || ""));
       const firstQuestion = questions[0];
       const memoryKnowledgeKey = `${firstQuestion?.sourceType || ""}:${firstQuestion?.sourceDebateId || ""}`;

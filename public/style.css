@@ -1192,6 +1192,19 @@ font-family: "Barlow Condensed", sans-serif;
   margin: 1.25em 0 0;
 }
 
+/* Signature du bot de veille (ex. "J.L Grasso", "M. Guillot") jamais affichée
+   nulle part sur le site (demande du 31/08/2026) — le paragraphe reste dans
+   debates.content en base (le bot de veille écrit ce texte, pas ce dépôt) et
+   continue d'être détecté/isolé par le JS exactement comme avant, pour ne
+   jamais casser l'extraction de la citation latine (Latin du jour) ni de la
+   question de réflexion qui le précèdent dans le même texte : seul l'ajout
+   visuel de CE paragraphe précis est coupé ici, un seul override valable pour
+   les 3 contextes où il apparaît (carte accueil repliée/dépliée, page débat
+   desktop et mobile). */
+.context-signature {
+  display: none !important;
+}
+
 .debate-card-episode-toggle-row {
   display: flex;
   align-items: center;
@@ -10908,6 +10921,40 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   .debate-evaluation-axis-text { font-size: 15px; }
 }
 
+/* "Encore X contribution(s)..." déplacé sous le barème (demande du 01/09/2026, cf.
+   renderEvaluationAxis, script.js) : même couleur/police/taille que
+   .debate-evaluation-axis-text juste au-dessus (demande du 01/09/2026, "doit etre de la
+   meme couleur... et meme police et meme taille aussi"), sans le border-top propre à ce
+   dernier. */
+#debate-ai-progress-slot:not(:empty) {
+  margin: 8px auto 0;
+  max-width: 680px;
+  text-align: center;
+  font-size: 14px !important;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.62) !important;
+  line-height: 1.55;
+  opacity: 1 !important;
+}
+#debate-ai-progress-slot:not(:empty) * {
+  color: rgba(255, 255, 255, 0.62) !important;
+  font-size: inherit !important;
+  opacity: 1 !important;
+}
+/* Le chiffre restant, mis en avant (demande du 01/09/2026, "le nombre... plus gros, afin de
+   le rendre plus visible") : plus grand que le reste du texte, italique (demande du
+   01/09/2026, "met le numéro en italique"), blanc franc pour ressortir davantage. Après la
+   règle générique ci-dessus (même sélecteur * !important) pour gagner dans la cascade malgré
+   une spécificité identique. */
+#debate-ai-progress-slot:not(:empty) #debate-ai-progress-slot-count {
+  font-size: 1.2em !important;
+  font-style: italic !important;
+  font-weight: 700;
+  color: #ffffff !important;
+}
+@media (min-width: 769px) {
+  #debate-ai-progress-slot:not(:empty) { font-size: 15px !important; }
+}
 .debate-evaluation-axis-strictness-badge {
   display: inline-block;
   margin: 0 0 6px;
@@ -26496,10 +26543,11 @@ body.page-home:not(.mnoria-memoire-cloud-mode)
 }
 
 /* Petit radar cosmique : enfant du viewport de Ma mémoire, donc ancré au cadre et jamais au
-   document. Il reste au-dessus du monde mais sous le liseré noir permanent du cadre (z:200). */
+   document. Il reste au-dessus du monde mais sous le liseré noir permanent du cadre (z:200).
+   En bas à GAUCHE (demande du 01/09/2026, déplacé depuis en bas à droite). */
 .universe-minimap {
   position: absolute;
-  right: 12px;
+  left: 12px;
   bottom: 12px;
   width: 128px;
   height: 92px;
@@ -26530,7 +26578,8 @@ body.page-home:not(.mnoria-memoire-cloud-mode)
    pas pixel-parfait. Offset = inset du viewport (cf. .universe-zoom-viewport) + position de la
    minicarte dans ce viewport + sa propre taille + une petite respiration :
    bottom = 23 (inset bas viewport) + 12 (bottom minicarte) + 92 (hauteur minicarte) + 6 = 133px
-   right  = 20 (inset droit viewport) + 12 (right minicarte) = 32px. */
+   left   = 20 (inset gauche viewport) + 12 (left minicarte) = 32px (minicarte passée en bas à
+   gauche le 01/09/2026, ce bloc suit le même côté). */
 /* Enfants directs de cloudEl (voir commentaire ci-dessus) : sur l'accueil, ce même conteneur
    sert aussi aux bulles Actu/Communauté — sans ce garde-fou, ces deux éléments restaient
    visibles même hors mode "Ma mémoire" (demande du 17/08/2026, régression). Jamais sur
@@ -26544,7 +26593,7 @@ body.page-home-mobile:not(.mnoria-memoire-cloud-mode) .universe-isolation-info {
 }
 .universe-minimap__zoom-controls {
   position: absolute;
-  right: 32px;
+  left: 32px;
   bottom: 133px;
   width: 128px;
   height: 23px;
@@ -26720,7 +26769,7 @@ body.page-home-mobile:not(.mnoria-memoire-cloud-mode) .universe-isolation-info {
 }
 @media (max-width: 640px) {
   .universe-minimap {
-    right: 8px;
+    left: 8px;
     bottom: 8px;
     width: 106px;
     height: 76px;
@@ -26733,10 +26782,11 @@ body.page-home-mobile:not(.mnoria-memoire-cloud-mode) .universe-isolation-info {
     height: 20px;
     font-size: 13px;
   }
-  /* right = 2 (inset droit viewport mobile) + 8 (right minicarte) = 10px
+  /* left = 2 (inset gauche viewport mobile) + 8 (left minicarte) = 10px (minicarte passée en
+     bas à gauche le 01/09/2026, ce bloc suit le même côté)
      bottom = 78 (inset bas viewport mobile) + 8 (bottom minicarte) + 76 (hauteur) + 6 = 168px */
   .universe-minimap__zoom-controls {
-    right: 10px;
+    left: 10px;
     bottom: 168px;
     width: 106px;
   }
@@ -27567,9 +27617,13 @@ html body .home-bottom-nav .home-bottom-nav-item span {
 /* iOS standalone : les pages secondaires peuvent exposer une safe-area basse
    à 0 px alors que l'écran conserve encore sa zone physique inférieure. On
    prolonge leur bandeau comme celui de l'accueil, sans déplacer sa rangée de
-   boutons ni affecter Safari classique ou le desktop. */
+   boutons ni affecter Safari classique ou le desktop. .page-qcm-du-jour
+   (/apprentissage) ajoutée le 01/09/2026 ("bande noire en bas de l'écran,
+   sous le bandeau blanc, qui disparaît un instant après" — même bug, cette
+   page reprend le même bandeau que l'accueil mais n'était pas dans cette
+   liste). */
 @media (display-mode: standalone) and (max-width: 768px) {
-  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile):not(.page-memory-only) {
+  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile, .page-qcm-du-jour):not(.page-memory-only) {
     /* Même scroll racine que l'accueil : overflow-x:hidden fait calculer
        overflow-y:auto sur WebKit et stabilise immédiatement le viewport des
        éléments fixed, sans attendre le premier geste vertical. */
@@ -27578,7 +27632,7 @@ html body .home-bottom-nav .home-bottom-nav-item span {
     -webkit-overflow-scrolling: touch;
   }
 
-  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile)
+  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile, .page-qcm-du-jour)
     .home-bottom-nav {
     bottom: calc(0px - max(36px, env(safe-area-inset-bottom, 0px))) !important;
     padding-bottom: calc(3px + max(36px, env(safe-area-inset-bottom, 0px))) !important;

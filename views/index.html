@@ -62,6 +62,13 @@
        entièrement en cache avant qu'un incident ne survienne. -->
   <link rel="preload" href="/mnoria-logo.png" as="image">
   <link rel="preload" href="/mnoria-error-robot.png" as="image">
+  <!-- Icône de la fenêtre "On te prévient quand ça réagit ?" (invite notifications
+       push, cf. showPushInvite dans script.js) — même souci que les deux préchargements
+       ci-dessus : sans lui, cette icône n'était récupérée qu'au moment où la fenêtre
+       s'affiche (typiquement juste après le lancement standalone), la faisant apparaître
+       en retard par rapport au reste de la fenêtre (demande du 31/08/2026, "l'icône
+       mnoria met trop de temps à apparaître"). -->
+  <link rel="preload" href="/mnoria-icon-192.png" as="image">
 <link rel="manifest" href="/manifest.webmanifest?v=20260825-mnoria-icon-v2">
 <link rel="apple-touch-icon" sizes="192x192" href="/mnoria-icon-192.png?v=20260825-mnoria-icon-v2">
   <meta name="theme-color" content="#243038">
@@ -78,7 +85,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260830-memoire-frame-smooth-height">
+  <link rel="stylesheet" href="/style.min.css?v=20260901-nbsp-italic">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -200,61 +207,98 @@
       pointer-events: none;
       background: radial-gradient(circle at 50% 50vh, #243038 0%, #101820 55%, #05070a 100%);
     }
-    /* Cache plein écran pour "Ma mémoire" en standalone mobile (demande du 30/08/2026,
-       "à chaque fois que je reviens sur index, peu importe la page") : contrairement au
-       loader de démarrage ci-dessous (masqué par mnoria-skip-startup-once sur tout retour
-       interne à l'accueil, cf. html.mnoria-skip-startup-once .mnoria-startup-loader plus
-       haut — ce qui le rendait invisible précisément sur ce cas), ce cache-ci est TOUJOURS
-       peint dès le premier octet HTML dans ce contexte précis (scopé par sélecteur body,
-       jamais par une classe désactivable). Retiré par JS (cf. plus bas, même événement que
-       mountUniverseAndHideSpinnerWhenReady dans mon-univers.js) une fois
-       --mnoria-home-trends-section-top réellement stabilisé
-       (window.__mnoriaHomeTrendsSectionTopReady, script.js) — jamais avant, sans quoi le
-       cadre "Ma mémoire" pouvait encore visiblement changer de hauteur en dessous. Même
-       construction anti-WebKit que #mnoria-conn-retry-cover ci-dessus (débordement bas +
-       logo ancré depuis le haut, cf. son commentaire pour le détail). */
-    #mnoria-memoire-settle-cover {
+    /* Bandeau "Chargement en cours" + sablier, sur voile flou (demande du 31/08/2026 :
+       "le voile flou n'apparaît pas assez vite : je veux aussi bandeau avec chargement en
+       cours (et sablier)" — remplace l'essai précédent où ce nœud était créé en JS depuis
+       script.js, chargé en defer et donc visible avec un retard perceptible une fois le
+       bundle parsé/exécuté). Peint ici en HTML/CSS statique, dès le premier octet, comme
+       l'était l'ancien #mnoria-memoire-settle-cover — seul le visuel change (voile flou +
+       carte blanche, au lieu d'un fond plein écran). Masqué par défaut (scope identique à
+       la formule de hauteur dynamique du cadre "Ma mémoire", cf. --mnoria-home-trends-
+       section-top / body.is-standalone.page-home-mobile, style.css) ; retiré en JS une fois
+       window.__mnoriaHomeTrendsSectionTopReady réellement vrai (cf. script plus bas, même
+       événement mnoria:memoire-frame-ready que mountUniverseAndHideSpinnerWhenReady dans
+       mon-univers.js). Valeurs "élargir... qu'il soit exactement comme quand je vais sur
+       page apprentissage" (01/09/2026) : copiées telles quelles depuis la variante PAR
+       DÉFAUT (sans classe modificatrice) de .page-arrival-loading-overlay/-box/-hourglass/
+       -title dans ensurePageArrivalLoadingOverlayStyles (script.js) — le voile que
+       /apprentissage affiche pour son propre chargement en accès direct. Exception
+       demandée explicitement : le flou de fond (blur(1.5px) chez apprentissage) est monté
+       à blur(10px) ici ("le flou doit être bien plus prononcé derrière", 01/09/2026). Le
+       trio will-change/-webkit-backface-visibility/translateZ(0) ci-dessous (demande du
+       01/09/2026, "le bandeau fait un petit saut vers le bas, il suit le cadre") promeut le
+       voile dans sa propre couche de composition GPU — même parade déjà en place sur
+       .debate-iframe-parent-loading-overlay (script.js) pour le même bug de fond :
+       position:fixed + backdrop-filter se désynchronise sur iOS/WebKit quand la mise en
+       page SOUS le calque continue de bouger (ici, la hauteur du cadre "Ma mémoire" qui se
+       stabilise), le calque "suivant" visuellement ce mouvement au lieu de rester fixé au
+       vrai viewport. z-index 140 (au lieu de 9500) : demande du 01/09/2026, "le flou doit
+       s'arrêter au dessus du bandeau blanc" — plutôt que de réserver une hauteur exacte en
+       bas (fragile à mesurer pendant que la page se stabilise, cf. le commentaire abandonné
+       en ce sens sur updatePageArrivalLoadingOverlayBounds dans script.js), on passe
+       simplement SOUS .home-bottom-nav (z-index 145, style.css) : le bandeau blanc, plus
+       haut dans l'empilement, reste alors net et non flouté par-dessus le voile, sans
+       calcul de hauteur à synchroniser. Reste au-dessus du cadre "Ma mémoire" lui-même
+       (#mnoria-tag-trends-cloud, z-index 130). */
+    #mnoria-memoire-loading-veil {
       display: none;
     }
     @media (max-width: 768px) {
-      body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover {
-        display: block;
+      body.is-standalone.page-home-mobile #mnoria-memoire-loading-veil {
+        display: flex;
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
-        padding-bottom: calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
-        box-sizing: border-box;
-        z-index: 9600;
-        background: radial-gradient(circle at 50% 50vh, #243038, #101820 55%, #05070a);
+        inset: 0;
+        z-index: 140;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(17, 24, 39, 0.18);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         opacity: 1;
         transition: opacity 0.25s ease;
+        will-change: transform;
+        -webkit-backface-visibility: hidden;
+        transform: translateZ(0);
       }
-      body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover.is-hiding {
+      body.is-standalone.page-home-mobile #mnoria-memoire-loading-veil.is-hiding {
         opacity: 0;
         pointer-events: none;
       }
-      body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover img {
-        position: absolute;
-        left: 50%;
-        top: 50vh;
-        top: 50dvh;
-        transform: translate(-50%, -50%);
-        width: 64px;
-        height: 64px;
-        animation: pageArrivalLogoSpin 1s linear infinite;
-      }
-      @media (display-mode: standalone) {
-        body.is-standalone.page-home-mobile #mnoria-memoire-settle-cover img {
-          top: 50vh;
-          top: 50lvh;
-        }
-      }
     }
-    @keyframes pageArrivalLogoSpin {
+    #mnoria-memoire-loading-veil-box {
+      width: min(92vw, 360px);
+      border-radius: 24px;
+      padding: 22px 20px 18px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid rgba(17, 17, 17, 0.08);
+      box-shadow: 0 18px 50px rgba(17, 17, 17, 0.14);
+      text-align: center;
+    }
+    #mnoria-memoire-loading-veil-hourglass {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #mnoria-memoire-loading-veil-hourglass img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      animation: mnoriaMemoireVeilSpin 1s linear infinite;
+      transform-origin: center;
+    }
+    @keyframes mnoriaMemoireVeilSpin {
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
+    }
+    #mnoria-memoire-loading-veil-title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: #111111;
     }
     .mnoria-startup-loader {
       position: fixed;
@@ -430,7 +474,21 @@
     }
   </style>
   <style>
+    /* #243038 (bleu-gris pétrole) : couleur d'origine, visible telle quelle sur desktop
+       (demande du 01/09/2026, "en desktop le fond de l'accueil n'est plus comme avant : je
+       veux de nouveau le fond bleu gris pétrole" — la remplacer globalement, cf. plus bas,
+       avait aussi affecté le desktop alors que seul le mobile posait problème). */
     body { background-color: #243038; }
+    /* Volontairement plus sombre que #243038 en mobile SEULEMENT (demande du 01/09/2026,
+       "idem quand je retourne vers accueil : met la meme bande en bas, le temps du
+       chargement" — même correctif que sur /apprentissage, cf. qcm-du-jour.html) : le cadre
+       "Ma mémoire" y charge en fond mnoria-bulles-bg.jpg (bokeh sombre) sous un voile quasi
+       noir (rgba(8,12,16,0.35→0.55), cf. .mnoria-tag-trends-cloud::after, style.css) —
+       #243038 était plus clair que ce rendu final, donc visible comme une bande bleue
+       distincte tant que le JPG n'a pas fini de charger. */
+    @media (max-width: 768px) {
+      body { background-color: #0c1218; }
+    }
 
     /* Réserve le gabarit mobile définitif avant le premier rendu. Sans ce
        verrou précoce, le conteneur flex peut brièvement comprimer le cadre
@@ -643,37 +701,39 @@
 })();
 </script>
 
-<!-- cf. commentaire CSS de #mnoria-memoire-settle-cover plus haut (demande du 30/08/2026,
-     "à chaque fois que je reviens sur index") : peint uniquement en standalone mobile
-     (sélecteur CSS body.is-standalone.page-home-mobile), retiré une fois le cadre "Ma
-     mémoire" réellement stabilisé. -->
-<div id="mnoria-memoire-settle-cover" aria-hidden="true">
-  <img src="/sablier-96.png" alt="">
+<!-- cf. commentaire CSS de #mnoria-memoire-loading-veil plus haut (demande du 31/08/2026) :
+     peint uniquement en standalone mobile, retiré une fois le cadre "Ma mémoire" réellement
+     stabilisé. -->
+<div id="mnoria-memoire-loading-veil" role="status" aria-live="polite" aria-hidden="true">
+  <div id="mnoria-memoire-loading-veil-box">
+    <div id="mnoria-memoire-loading-veil-hourglass"><img src="/sablier-96.png" alt=""></div>
+    <div id="mnoria-memoire-loading-veil-title">Chargement en cours</div>
+  </div>
 </div>
 <script>
 (function(){
-  var cover = document.getElementById('mnoria-memoire-settle-cover');
-  if (!cover) return;
+  var veil = document.getElementById('mnoria-memoire-loading-veil');
+  if (!veil) return;
   // Rien à attendre hors du seul contexte concerné (le CSS ne le peint de toute façon
   // que là, même condition) — vidé immédiatement pour ne jamais laisser un noeud DOM
   // inerte traîner jusqu'au filet de sécurité de 3s plus bas.
   if (!document.body || !document.body.classList.contains('is-standalone') || window.innerWidth > 768) {
-    cover.remove();
+    veil.remove();
     return;
   }
   var removed = false;
-  function removeCover() {
+  function removeVeil() {
     if (removed) return;
     removed = true;
-    cover.classList.add('is-hiding');
-    setTimeout(function () { if (cover.parentNode) cover.parentNode.removeChild(cover); }, 260);
+    veil.classList.add('is-hiding');
+    setTimeout(function () { if (veil.parentNode) veil.parentNode.removeChild(veil); }, 260);
   }
   // Posé par script.js (markMnoriaHomeTrendsSectionTopReady), chargé en defer — l'écouteur
   // ci-dessous est sans risque d'ordre : il fonctionne même posé avant que ce code n'existe.
-  window.addEventListener('mnoria:memoire-frame-ready', removeCover, { once: true });
+  window.addEventListener('mnoria:memoire-frame-ready', removeVeil, { once: true });
   // Filet de sécurité si cet événement ne survient jamais (ex. desktop élargi après coup,
   // page hors du flux "Ma mémoire" par défaut).
-  setTimeout(removeCover, 3000);
+  setTimeout(removeVeil, 3000);
 })();
 </script>
 
@@ -1190,12 +1250,31 @@
 }
 /* La classe du CADRE est la source de vérité : sur certaines restaurations desktop/PWA, la
    scène mémoire est déjà rendue alors que la classe équivalente du body n'a pas encore été
-   resynchronisée. Le bouton ne doit pas dépendre de ce décalage transitoire. */
+   resynchronisée. Le bouton ne doit pas dépendre de ce décalage transitoire. En bas à droite
+   (demande du 01/09/2026, déplacé depuis en haut à droite). top:auto !important nécessaire :
+   la règle de base juste au-dessus pose top:0 (jamais annulé sinon), qui restait actif en
+   même temps qu'un premier essai à bottom:12px et étirait le bouton sur toute la hauteur du
+   cadre entre les deux (signalé le 01/09/2026, "les boutons sont énormes"). bottom:35px =
+   même formule que l'ancien positionnement en haut (inset bas du cadre décoratif, 23px, +
+   12px de marge, cf. .mnoria-tag-trends-cloud::before) plutôt qu'un simple 12px depuis le
+   bord du cadre : contrairement à la minicarte (nichée dans .universe-zoom-viewport, déjà en
+   retrait de cette même bordure), le bouton est enfant DIRECT du cadre — à 12px seulement du
+   vrai bord bas, il se retrouvait recouvert par le bandeau de navigation fixe en bas d'écran
+   (signalé le 01/09/2026, "je ne vois plus le bouton"). */
 #mnoria-tag-trends-cloud.mnoria-memoire-frame > .mnoria-memory-fullpage-btn {
   display: inline-flex !important;
-  top: calc(var(--bubble-frame-top, 55px) + 12px) !important;
-  right: 42px !important;
+  top: auto !important;
+  /* 50px (au lieu de 35px) en desktop : encore un peu trop bas (demande du 01/09/2026). */
+  bottom: 50px !important;
+  /* 24px (au lieu de 12px) : décalé un peu plus à gauche (demande du 01/09/2026). */
+  right: 24px !important;
   z-index: 1000 !important;
+  /* Même taille que le bouton "Quitter le plein écran" (.universe-exit-fullscreen,
+     mon-univers.html) en desktop (demande du 01/09/2026) : celui-ci n'impose pas de
+     min-height/min-width, juste ce padding plus resserré. */
+  min-height: 0 !important;
+  min-width: 0 !important;
+  padding: 6px 9px !important;
 }
 .mnoria-memory-fullpage-btn:hover,
 .mnoria-memory-fullpage-btn:focus-visible {
@@ -1206,8 +1285,9 @@
 }
 @media (max-width: 768px) {
   #mnoria-tag-trends-cloud.mnoria-memoire-frame > .mnoria-memory-fullpage-btn {
-    top: calc(var(--bubble-frame-top, 55px) + 10px) !important;
-    right: 32px !important;
+    /* 78 (inset bas du cadre décoratif en mobile) + 8px de marge, même logique. */
+    bottom: 86px !important;
+    right: 8px !important;
     min-height: 30px;
     min-width: 0;
     gap: 4px;
@@ -1931,7 +2011,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260830-startup-loader-gate" defer></script>
+<script src="/script.min.js?v=20260901-nbsp-italic" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -329,3 +329,71 @@ test("Comprendre : une question n'utilisant qu'un côté est refusée", async ()
   assert.equal(result.accepted.length, 0);
   assert.equal(result.rejected[0].reasons[0].code, "COMPREHENSION_ONE_SIDED");
 });
+
+// ── groundingSources (V3, 31/08/2026 — "traçabilité factuelle des QCM") ────
+
+const CANADA_SOURCES = { SOURCE_1: { text: "Ottawa est la capitale fédérale du Canada, choisie en 1857 par la reine Victoria." } };
+
+function qGrounded(overrides = {}) {
+  return q(undefined, {
+    supporting_claim: "Ottawa est la capitale fédérale du Canada.",
+    source_ids: ["SOURCE_1"],
+    ...overrides
+  });
+}
+
+test("groundingSources absent (comportement par défaut) : une question sans supporting_claim/source_ids passe sans être affectée", async () => {
+  const result = await runQuestionQualityPipeline([q()], { semanticReviewEnabled: false });
+  assert.equal(result.accepted.length, 1);
+});
+
+test("groundingSources fourni : une question correctement tracée est acceptée sans appel IA supplémentaire", async () => {
+  let reviewCalled = false;
+  const result = await runQuestionQualityPipeline([qGrounded()], {
+    semanticReviewEnabled: false,
+    groundingSources: CANADA_SOURCES,
+    reviewSemantic: async () => { reviewCalled = true; }
+  });
+  assert.equal(result.accepted.length, 1);
+  assert.equal(reviewCalled, false);
+});
+
+test("groundingSources fourni : une question citant une source inexistante est rejetée avec un code GROUNDING_* dédié", async () => {
+  const result = await runQuestionQualityPipeline([qGrounded({ source_ids: ["SOURCE_9"] })], {
+    semanticReviewEnabled: false,
+    groundingSources: CANADA_SOURCES,
+    maxRetries: 0
+  });
+  assert.equal(result.accepted.length, 0);
+  assert.equal(result.rejected[0].reasons[0].code, "GROUNDING_UNKNOWN_SOURCE");
+});
+
+test("groundingSources fourni : sur un lot de plusieurs questions, seule celle non tracée est envoyée en régénération ciblée, les autres restent conservées (section 14)", async () => {
+  const good = qGrounded();
+  const untraceable = q("Quelle ville canadienne compte le plus d'habitants ?", { options: ["Toronto", "Montréal", "Vancouver", "Calgary"], supporting_claim: "", source_ids: [] });
+  let regenerationInput = null;
+  const replacement = qGrounded({ question: "Dans quelle ville siège le gouvernement fédéral canadien ?" });
+  const result = await runQuestionQualityPipeline([good, untraceable], {
+    semanticReviewEnabled: false,
+    groundingSources: CANADA_SOURCES,
+    regenerate: async (input) => { regenerationInput = input; return [replacement]; }
+  });
+  assert.equal(result.accepted.length, 2);
+  assert.equal(regenerationInput.rejected.length, 1);
+  assert.equal(regenerationInput.rejected[0].reasons[0].code, "GROUNDING_MISSING_SUPPORTING_CLAIM");
+  // La question déjà correctement tracée n'est jamais repassée en régénération.
+  assert.ok(!regenerationInput.accepted.some((item) => item.question === "Quelle ville canadienne compte le plus d'habitants ?"));
+});
+
+test("groundingSources fourni : un nombre incorrect dans la bonne réponse est rejeté (numeric_claim_not_supported)", async () => {
+  const wrongYear = qGrounded({
+    question: "En quelle année Ottawa devient-elle la capitale du Canada ?",
+    options: ["1855", "1857", "1860", "1867"],
+    correctIndex: 2,
+    supporting_claim: "Ottawa est choisie comme capitale fédérale en 1857.",
+    source_ids: ["SOURCE_1"]
+  });
+  const result = await runQuestionQualityPipeline([wrongYear], { semanticReviewEnabled: false, groundingSources: CANADA_SOURCES, maxRetries: 0 });
+  assert.equal(result.accepted.length, 0);
+  assert.equal(result.rejected[0].reasons[0].code, "GROUNDING_NUMERIC_CLAIM_NOT_SUPPORTED");
+});

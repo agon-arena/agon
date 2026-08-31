@@ -724,6 +724,31 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   window.scrollTo(0, 0);
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
+  // Demande du 31/08/2026, "le message Cultive ton esprit est visible avant même le logo" :
+  // la pause de 400ms ci-dessous (runIntroSequence) supposait le logo déjà chargé à ce
+  // moment-là (cas fréquent sur cache chaud), mais rien ne l'empêchait de s'écouler AVANT
+  // que le <img> (visibility:hidden tant que .is-loaded n'est pas posée, cf. CSS) n'ait
+  // fini de charger sur un lancement PWA à froid/réseau lent — le texte démarrait alors
+  // son fondu pendant que le logo restait invisible. Attend désormais la vraie fin de
+  // chargement (ou son échec, onerror pose aussi .is-loaded), plafonnée pour ne jamais
+  // bloquer indéfiniment si l'image ne répond jamais.
+  const waitForLogoLoaded = function(maxWaitMs) {
+    return new Promise(function(resolve) {
+      const img = loader.querySelector('.mnoria-startup-logo-img');
+      if (!img || img.classList.contains('is-loaded') || img.complete) { resolve(); return; }
+      let done = false;
+      const finish = function() {
+        if (done) return;
+        done = true;
+        img.removeEventListener('load', finish);
+        img.removeEventListener('error', finish);
+        resolve();
+      };
+      img.addEventListener('load', finish, { once: true });
+      img.addEventListener('error', finish, { once: true });
+      setTimeout(finish, maxWaitMs);
+    });
+  };
   const waitForPaint = function() {
     return new Promise(function(resolve) {
       requestAnimationFrame(function() {
@@ -871,14 +896,20 @@ window.forceFullPageRefresh = forceFullPageRefresh;
       return;
     }
 
-    // Pause sur le logo avant les messages
-    if (window.__mnoriaStartupInlineStarted !== true) {
-      await wait(400);
-    } else {
+    // Pause sur le logo avant les messages — la durée minimale (400ms par défaut, ou ce
+    // qu'il reste du délai déjà amorcé par le script inline précoce d'index.html, cf.
+    // __mnoriaStartupInlineStarted) reste inchangée, mais on attend maintenant AUSSI la
+    // vraie fin de chargement du logo (cf. waitForLogoLoaded ci-dessus) : sans ça, cette
+    // pause purement chronométrée pouvait s'écouler avant que le logo (visibility:hidden
+    // tant qu'il n'a pas fini de charger) ne soit réellement visible, laissant le texte
+    // démarrer son fondu en premier (demande du 31/08/2026).
+    let minPauseMs = 400;
+    if (window.__mnoriaStartupInlineStarted === true) {
       const delayUntil = Number(window.__mnoriaStartupLineDelayUntil || 0);
       const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
-      if (delayUntil > now) await wait(delayUntil - now);
+      minPauseMs = Math.max(0, delayUntil - now);
     }
+    await Promise.all([wait(minPauseMs), waitForLogoLoaded(1200)]);
 
     await playStartupLine(loader.querySelector('.mnoria-startup-line-1'), 1600);
 
@@ -2249,8 +2280,11 @@ function showPushInvite(reason = "action", options = {}) {
   if (isStandaloneMode()) {
     // app installée → invite push notifs
     toast.setAttribute("aria-label", "Notifications");
-    title.textContent = "On te prévient quand ça réagit à tes publications ?";
-    text.textContent = "Juste les réponses à tes posts — rien d'autre, jamais.";
+    // Message du 31/08/2026 ("très court et percutant") : couvre les deux usages réels
+    // des notifications push (réactions à une publication ET rappels de mémorisation),
+    // jamais un seul des deux comme l'ancien texte.
+    title.textContent = "Utile, jamais intrusif";
+    text.textContent = "Réactions à tes idées, rappels pour mémoriser. Rien de plus.";
     primaryButton.textContent = "Activer";
     // Ferme la modale immédiatement au clic : la chaîne async qui suit (permission
     // navigateur, service worker, sauvegarde serveur) prenait jusque-là un temps de
@@ -2866,9 +2900,16 @@ function getStableBottomBarOffset() {
   const bottomBar = document.querySelector(".home-bottom-nav");
   if (!bottomBar) return 0;
 
+  // Uniquement la hauteur propre du bandeau (jamais window.innerHeight -
+  // rect.top, demande du 30/08/2026, "le voile ne va pas assez bas en
+  // standalone") : ce terme suppose le bandeau parfaitement collé au vrai
+  // bas visuel de l'écran, ce qui n'est pas garanti au moment exact de la
+  // mesure en PWA standalone (rect.top/window.innerHeight pas toujours
+  // synchronisés à cet instant) — un résultat gonflé faisait réserver plus
+  // de place qu'il n'en fallait réellement, laissant une bande non floutée
+  // juste au-dessus du bandeau.
   const rect = bottomBar.getBoundingClientRect();
   const occupiedHeight = Math.max(
-    Number(window.innerHeight - rect.top || 0),
     Number(rect.height || 0),
     Number(bottomBar.offsetHeight || 0),
     Number(bottomBar.clientHeight || 0)
@@ -3057,11 +3098,18 @@ function updatePageArrivalLoadingOverlayBounds() {
   if (!overlay) return;
 
   const isDebatePage = location.pathname === "/debate";
-  const isDebateMobile = isDebatePage && window.innerWidth <= 768;
   const preserveTopbar = (isDebatePage && (isIframeDebateLoadingOverlayContext() || isCreateToDebateLoadingTransition()))
     || isAiScorePopupOverlayContext();
   const top = preserveTopbar ? getStableTopbarBottomOffset() : 0;
-  const bottom = isDebateMobile ? 0 : getStableBottomBarOffset();
+  // Toujours 0 plutôt qu'une hauteur réservée pour le bandeau du bas (demande
+  // du 30/08/2026, "un voile sur toute la page si c'est plus facile, même
+  // sur le bandeau blanc du bas") : le bandeau (z-index 10020) reste de toute
+  // façon visible par-dessus ce voile (z-index 1200, bien plus bas) — la
+  // valeur réservée ici ne servait donc qu'à éviter un flou "derrière" lui,
+  // et son calcul (mesure de .home-bottom-nav) pouvait rester trop grand au
+  // moment précis de la mesure en PWA standalone, laissant une bande de fond
+  // non couverte juste au-dessus du bandeau.
+  const bottom = 0;
 
   overlay.style.setProperty("--page-arrival-loading-top", `${top}px`);
   overlay.style.setProperty("--page-arrival-loading-bottom", `${bottom}px`);
@@ -23070,6 +23118,18 @@ function renderEvaluationAxis(debate) {
     hero.appendChild(el);
   }
 
+  // "Encore X contribution(s)..." déplacé ici, juste sous le barème et avant les idées
+  // (demande du 01/09/2026) : n'apparaissait auparavant plus haut, dans le bandeau titre/
+  // actions de l'arène (#debate-ai-progress-slot y était statique dans debate.html) — créé
+  // dynamiquement ici plutôt que statique dans le HTML, pour rester ancré à cet axe
+  // d'évaluation même si sa position dans le hero varie (barème caché/personnalisé, etc.).
+  let progressSlot = document.getElementById('debate-ai-progress-slot');
+  if (!progressSlot) {
+    progressSlot = document.createElement('div');
+    progressSlot.id = 'debate-ai-progress-slot';
+  }
+  el.insertAdjacentElement('afterend', progressSlot);
+
   // Bloc dans le formulaire "Ajouter une idée" (uniquement arène libre avec axe personnalisé)
   if (formAxisEl) {
     if (isOpen && axis) {
@@ -29422,8 +29482,14 @@ function renderDebateAiProgressInlineFromAnalysis(debateId) {
 
       const rawRemaining = Math.max(0, Math.round(remaining));
       const safeRemaining = rawRemaining === 0 ? 5 : rawRemaining;
-      const label = `Encore ${safeRemaining} contribution${safeRemaining === 1 ? "" : "s"} ${hasReady ? "pour renouveler l'analyse IA" : "avant le lancement de l'analyse IA"}`;
-      slot.innerHTML = `<span class="debate-ai-progress-inline ada-countdown-progress">${escapeHtml(label)}</span>`;
+      const suffix = `contribution${safeRemaining === 1 ? "" : "s"} ${hasReady ? "pour renouveler l'analyse IA" : "avant le lancement de l'analyse IA"}.`;
+      // Le chiffre est mis en avant visuellement (demande du 01/09/2026, "le nombre... plus
+      // gros, afin de le rendre plus visible") : seul lui grandit, le reste du texte garde la
+      // taille du barème au-dessus (cf. #debate-ai-progress-slot-count, style.css). &nbsp;
+      // explicites de part et d'autre (plutôt que de simples espaces, qui disparaissaient à
+      // l'affichage, demande du 01/09/2026 "surtout des espaces autour !!") pour garantir un
+      // espacement visible quel que soit le comportement de repli des espaces du navigateur.
+      slot.innerHTML = `<span class="debate-ai-progress-inline ada-countdown-progress">Encore&nbsp;<span id="debate-ai-progress-slot-count">${escapeHtml(String(safeRemaining))}</span>&nbsp;${escapeHtml(suffix)}</span>`;
     })
     .catch(() => {});
 }
@@ -35602,11 +35668,52 @@ window.__mnoriaHomeTrendsSectionTopReady = !(
 // haut de ce fichier, exécuté bien avant que ce flag n'existe) s'abonne dessus pour
 // garder SON PROPRE loader plein écran affiché — déjà peint dès le tout premier rendu,
 // contrairement à un cache créé après coup côté JS (demande du 30/08/2026, "la page de
-// chargement apparaît trop tard, elle doit apparaître immédiatement").
+// chargement apparaît trop tard, elle doit apparaître immédiatement"). Même raison pour
+// le voile "Chargement en cours" : posé en HTML/CSS inline dans index.html (peint dès le
+// premier octet, cf. #mnoria-memoire-loading-veil là-bas), pas construit ici en JS — un
+// essai précédent créait ce nœud depuis ce fichier (chargé en defer, donc après coup, et
+// seulement une fois le bundle de 880ko parsé/exécuté) et apparaissait donc perceptiblement
+// en retard (demande du 31/08/2026, "le voile flou n'apparaît pas assez vite"). Ce fichier
+// ne fait plus que dispatcher l'événement ; le voile inline s'y abonne lui-même pour se
+// masquer (son propre <script> dans index.html), sans dépendance à une fonction d'ici.
 function markMnoriaHomeTrendsSectionTopReady() {
   if (window.__mnoriaHomeTrendsSectionTopReady === true) return;
   window.__mnoriaHomeTrendsSectionTopReady = true;
   window.dispatchEvent(new Event('mnoria:memoire-frame-ready'));
+}
+// iOS/WebKit standalone : env(safe-area-inset-bottom) peut valoir 0 sur les toutes
+// premières frames après un lancement à froid, avant de se corriger — un bandeau
+// position:fixed calé dessus (.home-bottom-nav, cf. son débordement volontaire pour
+// /create, /notifications, /apprentissage dans style.css) laisse alors voir une bande
+// non couverte sous lui jusqu'à ce que WebKit recompose la couche, ce qui ne se
+// produisait jusqu'ici qu'au premier scroll réel de l'utilisateur (constaté le
+// 01/09/2026, "ca fait pareil en create et notification : bande [qui] disparaît
+// quand on scroll vers le bas"). Hypothèse testée à la demande de l'utilisateur
+// ("rajoute comme un faux élément en bas, afin de mimer scroll ?") : un tout petit
+// scroll synthétique (1px aller-retour, sans geste réel) juste après le chargement,
+// pour déclencher cette recomposition sans attendre l'utilisateur.
+function forceStandaloneFixedNavRepaintOnce() {
+  const body = document.body;
+  if (!body || window.innerWidth > 768 || !body.classList.contains('is-standalone')) return;
+  const affectedPageClasses = [
+    'page-create', 'page-create-mobile',
+    'page-notifications', 'page-notifications-mobile',
+    'page-qcm-du-jour',
+  ];
+  if (!affectedPageClasses.some((c) => body.classList.contains(c))) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      try {
+        window.scrollTo(0, 1);
+        window.scrollTo(0, 0);
+      } catch (error) {}
+    });
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', forceStandaloneFixedNavRepaintOnce, { once: true });
+} else {
+  forceStandaloneFixedNavRepaintOnce();
 }
 function syncMnoriaHomeTrendsSectionMinHeight() {
   const body = document.body;

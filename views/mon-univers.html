@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260830-memoire-frame-smooth-height" />
+<link rel="stylesheet" href="/style.min.css?v=20260901-nbsp-italic" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -56,6 +56,21 @@
         min-height: 100lvh;
       }
     }
+    /* 100lvh (hauteur MAXIMALE, barre d'adresse rétractée) plutôt que 100dvh (hauteur
+       réellement visible) : quand la barre d'adresse est affichée (Safari mobile hors PWA
+       installée, ou juste après le lancement), le cadre se mesurait plus grand que l'espace
+       réellement visible, poussant la minicarte ancrée en bas hors de l'écran (demande du
+       01/09/2026, "toujours trop bas : il faut vraiment le mettre sur l'écran" — même bug
+       déjà rencontré et corrigé pour .mnoria-tag-trends-section/.mnoria-memoire-frame sur
+       l'accueil). 100dvh en repli, après 100lvh dans l'ordre des règles pour gagner via la
+       cascade sur les navigateurs qui le supportent. */
+    @supports (height: 100dvh) {
+      html:has(body.page-memory-only),
+      body.page-memory-only {
+        height: 100dvh;
+        min-height: 100dvh;
+      }
+    }
     /* Le gabarit partagé porte aussi les classes Notifications. Les
        correctifs globaux standalone de cette page ajoutent un calque blanc
        dans la safe-area basse ; en mode mémoire seule il recouvrirait la
@@ -84,6 +99,12 @@
         height: 100lvh;
       }
     }
+    /* Même correctif que body.page-memory-only plus haut (100dvh plutôt que 100lvh). */
+    @supports (height: 100dvh) {
+      body.page-memory-only #memory-page-main {
+        height: 100dvh;
+      }
+    }
     body.page-memory-only #memory-page-main > h1,
     body.page-memory-only #memory-page-main > .universe-subtitle {
       display: none !important;
@@ -109,12 +130,24 @@
       border: 0 !important;
       border-radius: 0 !important;
     }
+    /* En plein écran mobile, la minicarte (bottom:8px fixe, style.css) se retrouvait trop
+       près du bord réel de l'écran — trop bas, parfois contre la zone d'encoche/geste iOS
+       (demande du 01/09/2026, "en mobile : il est trop bas"). Relevée avec une marge de
+       sécurité liée à env(safe-area-inset-bottom), comme les autres éléments plein écran de
+       cette page (.universe-exit-fullscreen, #universe-breadcrumb). Pas besoin de scoper à
+       une media query mobile : env(safe-area-inset-bottom) vaut 0 sur desktop, donc max(12px,
+       0px) redonne exactement la même valeur que l'ancien bottom:12px de base là-bas. */
+    body.page-memory-only #mnoria-universe-cloud .universe-minimap {
+      bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+    }
     /* Les contrôles sont enfants directs du grand cadre alors que la mini-carte est enfant du
        viewport. Une fois les anciens insets supprimés en plein écran, ils doivent reprendre les
-       offsets réels de la mini-carte : même `right`, même largeur, et 6px juste au-dessus. */
+       offsets réels de la mini-carte : même côté (`left`, minicarte passée en bas à gauche le
+       01/09/2026), même largeur, et 6px juste au-dessus — recalculé dynamiquement (calc) pour
+       suivre le bottom ci-dessus, désormais lié à la safe-area plutôt qu'une valeur fixe. */
     body.page-memory-only #mnoria-universe-cloud > .universe-minimap__zoom-controls {
-      right: 12px !important;
-      bottom: 110px !important; /* 12px + 92px + 6px */
+      left: 12px !important;
+      bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + 92px + 6px) !important;
       width: 128px !important;
     }
     body.page-memory-only #universe-breadcrumb {
@@ -122,11 +155,11 @@
       z-index: 220;
       top: max(18px, env(safe-area-inset-top, 0px));
       left: max(20px, env(safe-area-inset-left, 0px));
-      /* + espace réservé au bouton "Quitter le plein écran" (position:fixed,
-         même coin haut-droit, z-index bien plus élevé) : sans cette marge,
-         un fil d'Ariane suffisamment long (plusieurs niveaux imbriqués) le
-         faisait passer dessous, recouvert (demande du 30/08/2026). */
-      right: calc(max(20px, env(safe-area-inset-right, 0px)) + 145px);
+      /* Le bouton "Quitter le plein écran" est passé en bas à droite le
+         01/09/2026 (avant : même coin haut-droit, d'où la marge réservée
+         ici) : plus de risque de chevauchement avec le fil d'Ariane, donc
+         plus besoin de lui réserver un espace à droite. */
+      right: max(20px, env(safe-area-inset-right, 0px));
       width: auto;
       margin: 0;
       pointer-events: none;
@@ -156,10 +189,13 @@
     .universe-exit-fullscreen {
       display: none;
     }
+    /* En bas à droite (demande du 01/09/2026, déplacé depuis en haut à droite, même coin
+       que le bouton "Plein écran" qu'il annule, cf. .mnoria-memory-fullpage-btn dans
+       index.html — même logique de miroir avec la minicarte, passée en bas à gauche). */
     body.page-memory-only .universe-exit-fullscreen {
       position: fixed;
       z-index: 10020;
-      top: max(18px, env(safe-area-inset-top, 0px));
+      bottom: max(18px, env(safe-area-inset-bottom, 0px));
       right: max(20px, env(safe-area-inset-right, 0px));
       display: inline-flex;
       align-items: center;
@@ -187,13 +223,16 @@
       outline: none;
     }
     @media (max-width: 640px) {
+      body.page-memory-only #mnoria-universe-cloud .universe-minimap {
+        bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
+      }
       body.page-memory-only #mnoria-universe-cloud > .universe-minimap__zoom-controls {
-        right: 8px !important;
-        bottom: 90px !important; /* 8px + 76px + 6px */
+        left: 8px !important;
+        bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 76px + 6px) !important;
         width: 106px !important;
       }
       body.page-memory-only .universe-exit-fullscreen {
-        top: max(12px, env(safe-area-inset-top, 0px));
+        bottom: max(12px, env(safe-area-inset-bottom, 0px));
         right: max(12px, env(safe-area-inset-right, 0px));
         padding: 6px 8px;
         font-size: 9.5px;
@@ -1430,7 +1469,7 @@ function contributionsBottomNavHome() {
 }
 </script>
 
-<script src="/script.min.js?v=20260830-startup-loader-gate" defer></script>
+<script src="/script.min.js?v=20260901-nbsp-italic" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
     import("/mon-univers.js?v=20260830-frame-ready-gate");

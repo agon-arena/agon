@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260830-memoire-frame-smooth-height">
+  <link rel="stylesheet" href="/style.min.css?v=20260901-nbsp-italic">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -39,17 +39,35 @@
     [hidden] {
       display: none !important;
     }
-    /* Même bleu-gris foncé que le bandeau des bulles sur l'accueil (#243038).
-       Posé à la fois sur html et body : html a déjà ce fond par défaut (cf.
+    /* Posé à la fois sur html et body : html a déjà un fond par défaut (cf.
        style.css ligne ~14068), mais sans hauteur de body qui couvre tout le
-       viewport, une bande plus claire pouvait apparaître sous une carte courte. */
+       viewport, une bande plus claire pouvait apparaître sous une carte courte.
+       Volontairement plus sombre que le #243038 utilisé ailleurs (bandeau des
+       bulles sur l'accueil) : cette couleur sert ici uniquement de fond
+       transitoire avant que la texture neuronale (webp, cf. qcm-learning-
+       background plus bas) ne charge — #243038 étant nettement plus clair/bleu
+       que le rendu final (image quasi noire + voile rgba(16,24,32,0.72)), il se
+       voyait comme une bande bleue distincte qui "disparaissait" une fois
+       l'image chargée (demande du 01/09/2026, "j'ai d'abord bande bleue en bas
+       qui disparaît un instant après"). Repris ici au plus près du ton final. */
     html,
     html:has(body.page-qcm-du-jour) {
-      background-color: #243038;
+      background-color: #0c1218;
     }
     body.page-qcm-du-jour {
       min-height: 100vh;
-      background-color: #243038;
+      background-color: #0c1218;
+    }
+    /* 100vh en PWA standalone iOS ne correspond pas toujours au vrai
+       viewport visuel (même bug déjà corrigé sur mon-univers.html, cf. son
+       @supports jumeau) : le fond assombri/texturé du body pouvait alors
+       s'arrêter avant le vrai bas de l'écran, laissant le bandeau du bas
+       posé sur un bout de fond non couvert par ce fond (demande du
+       30/08/2026, "le voile ne va pas assez bas en standalone"). */
+    @supports (height: 100dvh) {
+      body.page-qcm-du-jour {
+        min-height: 100dvh;
+      }
     }
     /* État initial peint avant toute exécution du JS : la page Apprentissage affiche déjà la
        texture neuronale utilisée ensuite par Découvrir/Ancrer/Relier/Mes acquis. Cela supprime
@@ -1837,8 +1855,8 @@
     }
     .qcm-mesqcm-table th {
       padding: 8px 10px;
-      border-bottom: 1px solid #d1d5db;
-      color: #6b7280;
+      border-bottom: 1px solid #000000;
+      color: #000000;
       font-size: 12px;
       font-weight: 700;
       text-align: left;
@@ -1908,6 +1926,17 @@
       font-size: 12px;
       font-weight: 400;
       white-space: nowrap;
+    }
+    /* Ligne d'un apprentissage tout juste ajouté depuis "Sujets proposés"
+       (cf. scrollToAndBlinkMesQcmRow, demande du 30/08/2026) : quelques
+       pulsations pour la repérer une fois la liste rechargée et défilée
+       jusqu'à elle, jamais un état permanent. */
+    .qcm-mesqcm-row-blink {
+      animation: qcmMesqcmRowBlink 600ms ease-in-out 4;
+    }
+    @keyframes qcmMesqcmRowBlink {
+      0%, 100% { background-color: transparent; }
+      50% { background-color: #fdf3dd; }
     }
     /* Fenêtre de choix ouverte au clic sur le nom d'un apprentissage (cf.
        openMesQcmActionMenu) : "Consulter la fiche", "Faire/refaire le QCM"
@@ -2531,6 +2560,25 @@
     }
     .qcm-fiche-explanation:first-of-type {
       margin-top: 0;
+    }
+    .qcm-fiche-sources {
+      margin: 14px 0 0;
+      padding-top: 10px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .qcm-fiche-sources-list {
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 12px;
+    }
+    .qcm-fiche-sources-list li {
+      margin: 2px 0;
+    }
+    .qcm-fiche-sources-list a {
+      color: #6b7280;
+      text-decoration: underline;
+      text-decoration-color: #d1d5db;
     }
     .qcm-fiche-bottom-close {
       display: block;
@@ -3233,7 +3281,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260830-startup-loader-gate" defer></script>
+<script src="/script.min.js?v=20260901-nbsp-italic" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -3506,6 +3554,11 @@
   // le popup "Explorer les apprentissages disponibles" pour ne pas proposer
   // d'adopter un sujet déjà présent dans la liste personnelle du visiteur.
   var currentMesQcmQuizzes = [];
+  // Slot|date de l'apprentissage à faire défiler jusqu'à "En attente de
+  // réalisation" puis à faire clignoter, une fois la liste rechargée (cf.
+  // adoptCatalogRecommendation, consommé et remis à null dans
+  // renderMesQcmList — demande du 30/08/2026).
+  var pendingHighlightRowKey = null;
   // Jeton incrémenté à chaque loadSlot/loadMesQcm : les callbacks async de
   // ces fonctions (fetch imbriqués, parfois lents) vérifient qu'ils sont
   // toujours le dernier appel en date avant de toucher au DOM. Sans ça, un
@@ -4259,6 +4312,23 @@
     nextBtn.className = 'qcm-next-btn visible';
     nextBtn.onclick = goToNextQuestion;
   }
+  // Défilement automatique jusqu'au bouton "Retourner aux apprentissages" une
+  // fois une réponse VALIDÉE pour la première fois (demande du 31/08/2026) —
+  // appelée uniquement depuis les 4 submitXAnswer, jamais depuis les
+  // applyXAnswerState (partagées avec le simple ré-affichage d'une question
+  // déjà répondue, ex. retour arrière) : sans cette distinction, rouvrir une
+  // question déjà répondue ferait aussi défiler la page à chaque fois.
+  function scrollToRevealLearningReturn() {
+    requestAnimationFrame(function () {
+      if (learningReturnBottom && !learningReturnBottom.hidden) {
+        learningReturnBottom.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        // Un peu plus bas que le strict "block:end" (demande du 31/08/2026) :
+        // laisse une marge sous le bouton plutôt que de le coller pile au
+        // bord bas du viewport.
+        window.scrollBy({ top: 60, behavior: 'smooth' });
+      }
+    });
+  }
 
   function renderChoiceQuestion(question, answer) {
     var type = question.type || 'qcm';
@@ -4350,6 +4420,7 @@
         if (data.error) throw new Error(data.error);
         recordAnsweredQuestion(question.id, data);
         applyChoiceAnswerState(question, data);
+        scrollToRevealLearningReturn();
       })
       .catch(function () {
         optionsEl.querySelectorAll('.qcm-option-btn').forEach(function (btn) { btn.disabled = false; });
@@ -4439,6 +4510,7 @@
         if (data.error) throw new Error(data.error);
         recordAnsweredQuestion(question.id, data);
         applyAssociationAnswerState(question, data, selects);
+        scrollToRevealLearningReturn();
       })
       .catch(function () {
         selects.forEach(function (s) { s.disabled = false; });
@@ -4550,6 +4622,7 @@
         if (data.error) throw new Error(data.error);
         recordAnsweredQuestion(question.id, data);
         applyMultiChoiceAnswerState(data, buttons);
+        scrollToRevealLearningReturn();
       })
       .catch(function () {
         buttons.forEach(function (btn) { btn.disabled = false; });
@@ -4665,6 +4738,7 @@
         if (data.error) throw new Error(data.error);
         recordAnsweredQuestion(question.id, data);
         applyOrderAnswerState(data, poolEl, chosenEl, question.items);
+        scrollToRevealLearningReturn();
       })
       .catch(function () {
         if (difficultyContainer) difficultyContainer.querySelectorAll('.qcm-difficulty-btn').forEach(function (btn) { btn.disabled = false; });
@@ -4839,6 +4913,25 @@
     });
     html += renderLinksSection(links);
     if (extraHtml) html += extraHtml;
+    // Sources web réelles ayant fondé cette fiche (cf. server.js
+    // resolveWebSearchGrounding, demande du 31/08/2026) — absentes (rien
+    // affiché) pour toute fiche générée sans grounding trouvé, ou pour les
+    // rubriques qui n'en produisent jamais (Éclairages/Histoire, import).
+    // Tout en bas de la fiche, après le corrigé des questions, juste avant
+    // le bouton de fermeture.
+    var ficheSources = Array.isArray(detail.sources)
+      ? detail.sources.filter(function (s) { return s && /^https?:\/\//i.test(String(s.url || '')); })
+      : [];
+    if (ficheSources.length) {
+      html += '<div class="qcm-fiche-sources">' +
+        '<h3 class="qcm-fiche-section-label">Sources</h3>' +
+        '<ul class="qcm-fiche-sources-list">' +
+        ficheSources.map(function (s) {
+          return '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.title || s.url) + '</a></li>';
+        }).join('') +
+        '</ul>' +
+        '</div>';
+    }
     html += '<button type="button" class="qcm-fiche-bottom-close">Retour</button>';
     html += '</div>';
     return html;
@@ -5908,10 +6001,29 @@
   function adoptCatalogRecommendation(item, btn) {
     if (!voterKey) return;
     if (btn) btn.disabled = true;
+    // Sablier immédiat (demande du 30/08/2026, "je veux un bandeau de
+    // chargement qui se déclenche immédiatement") : sans lui, rien ne
+    // signalait que le clic avait été pris en compte pendant les deux
+    // aller-retours réseau ci-dessous (résolution de la fiche puis adoption).
+    var loadingOverlay = document.createElement('div');
+    loadingOverlay.className = 'qcm-fiche-overlay';
+    loadingOverlay.innerHTML = '<div class="qcm-fiche-overlay-inner"><div class="qcm-fiche-modal">' +
+      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p>' +
+      '</div></div>';
+    document.body.appendChild(loadingOverlay);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+    function removeLoadingOverlay() {
+      loadingOverlay.remove();
+      try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    }
+    var resolvedSlot = null;
+    var resolvedQuizDate = null;
     fetch('/api/users/notion-quizzes/fiche?linkType=' + encodeURIComponent(item.subjectType) + '&linkSourceId=' + encodeURIComponent(item.subjectSourceId) + '&legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error || !data.slot || !data.quizDate) throw new Error(data.error || 'introuvable');
+        resolvedSlot = data.slot;
+        resolvedQuizDate = data.quizDate;
         return fetch('/api/users/notion-quizzes/adopt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5922,12 +6034,17 @@
         if (!data || !data.ok) throw new Error('adoption échouée');
         sendLearnNextEvent(item, 'added');
         replaceLearnNextItem(item);
+        removeLoadingOverlay();
+        // Scroll + clignotement une fois la liste rechargée (cf.
+        // scrollToAndBlinkMesQcmRow, demande du 30/08/2026).
+        pendingHighlightRowKey = resolvedSlot + '|' + resolvedQuizDate;
         loadMesQcm();
       })
       .catch(function () {
         // Best-effort strict (même esprit que le reste de cette section,
         // demande du 30/08/2026) : jamais de message d'erreur agressif, on
         // réactive simplement la ligne pour permettre de réessayer.
+        removeLoadingOverlay();
         if (btn) btn.disabled = false;
       });
   }
@@ -6437,9 +6554,11 @@
     var creatingHtml = renderCreatingNotionQuizzesHtml();
     if (!quizzes.length && !creatingHtml) { renderMesQcmEmpty(); return; }
 
-    var pendingQuizzes = quizzes.filter(function (q) { return !q.realized; })
-      .slice()
-      .sort(compareMesQcmByStateThenName);
+    // Jamais retrié par nom ici (contrairement à renderMesAcquisList) : l'ordre
+    // vient tel quel du serveur (GET /api/users/notion-quizzes, le plus
+    // récemment ajouté en premier) pour que le dernier élément mémorisé/cliqué
+    // reste tout en haut de "En attente de réalisation" (demande du 30/08/2026).
+    var pendingQuizzes = quizzes.filter(function (q) { return !q.realized; });
     var inProgressQuizzes = pendingQuizzes.filter(function (q) { return q.inProgress; });
     var notStartedQuizzes = pendingQuizzes.filter(function (q) { return !q.inProgress; });
 
@@ -6466,6 +6585,47 @@
     html += '</div>';
     body.innerHTML = html;
     wireMesQcmListInteractions(quizzes);
+    if (pendingHighlightRowKey) {
+      var highlightKey = pendingHighlightRowKey;
+      pendingHighlightRowKey = null;
+      scrollToAndBlinkMesQcmRow(highlightKey);
+    }
+  }
+
+  // Fait défiler jusqu'à la ligne "En attente de réalisation" correspondant à
+  // ce slot|date (cf. pendingHighlightRowKey) puis la fait clignoter — bascule
+  // d'abord sur la bonne page paginée si besoin, en reprenant à la main la
+  // logique de showPage (non exposée hors d'initMesQcmPagination), avant de
+  // défiler et clignoter (demande du 30/08/2026, "quand c'est prêt, il faut
+  // que ça scroll... et que la connaissance clignote").
+  function scrollToAndBlinkMesQcmRow(rowKey) {
+    var index = currentMesQcmQuizzes.findIndex(function (q) { return getMesQcmRowKey(q) === rowKey; });
+    if (index === -1) return;
+    var nameBtn = body.querySelector('.qcm-mesqcm-group--pending [data-mesqcm-index="' + index + '"]');
+    if (!nameBtn) return;
+    var page = nameBtn.closest('.qcm-mesqcm-page');
+    var pagedList = nameBtn.closest('.qcm-mesqcm-paged-list');
+    if (page && pagedList && page.hidden) {
+      var pageIndex = Number(page.getAttribute('data-page-index')) || 0;
+      var pageCount = Number(pagedList.getAttribute('data-page-count')) || 1;
+      pagedList.setAttribute('data-current-page', String(pageIndex));
+      pagedList.querySelectorAll('.qcm-mesqcm-page').forEach(function (p) {
+        p.hidden = (p !== page);
+      });
+      var previousBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-previous');
+      var nextBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-next');
+      var pageLabel = pagedList.querySelector('.qcm-mesqcm-current-page');
+      if (previousBtn) previousBtn.disabled = pageIndex === 0;
+      if (nextBtn) nextBtn.disabled = pageIndex === pageCount - 1;
+      if (pageLabel) pageLabel.textContent = String(pageIndex + 1);
+      refreshMesQcmVisibleTableHints(pagedList);
+    }
+    var row = nameBtn.closest('tr') || nameBtn;
+    requestAnimationFrame(function () {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.add('qcm-mesqcm-row-blink');
+      setTimeout(function () { row.classList.remove('qcm-mesqcm-row-blink'); }, 2400);
+    });
   }
 
   function renderMesAcquisEmpty() {
@@ -6745,7 +6905,7 @@
     var loadingOverlay = document.createElement('div');
     loadingOverlay.className = 'qcm-fiche-overlay';
     loadingOverlay.innerHTML = '<div class="qcm-fiche-overlay-inner"><div class="qcm-fiche-modal">' +
-      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p>' +
+      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours du parcours d\'apprentissage « ' + escapeHtml(q.label || 'cette connaissance') + ' »…</p>' +
       '</div></div>';
     document.body.appendChild(loadingOverlay);
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
@@ -6761,7 +6921,7 @@
     mesQcmActionMenuLoadingOverlay = { overlay: loadingOverlay, onKeydown: onLoadingKeydown };
 
     var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
-    var doLabel = q.realized ? 'Refaire le QCM' : (q.inProgress ? 'Continuer le QCM' : 'Faire le QCM');
+    var doLabel = q.realized ? 'Refaire le parcours d\'apprentissage' : (q.inProgress ? 'Continuer le parcours d\'apprentissage' : 'Commencer le parcours d\'apprentissage');
     // Phrase d'explication par action (demande du 30/08/2026) : celle du QCM
     // dépend de l'état déjà connu de ce visiteur sur cet apprentissage, même
     // logique que doLabel juste au-dessus.
@@ -6817,7 +6977,7 @@
             '<p class="qcm-mesqcm-action-modal-name">' + escapeHtml(q.label || meta.label) + '</p>' +
             '<div class="qcm-mesqcm-action-menu-info"><span>Ancrage</span>' + ancrageBadgeHtml + '</div>' +
             mediaHtml +
-            actionCardHtml('fiche', 'fa-file-lines', 'Consulter le parcours d\'apprentissage', 'Voir les connaissances, l’image et le corrigé complet des questions.') +
+            actionCardHtml('fiche', 'fa-file-lines', 'Consulter les connaissances à apprendre / mémoriser', 'Voir les connaissances, l’image et le corrigé complet des questions.') +
             actionCardHtml('quiz', 'fa-play', doLabel, doDesc) +
             // Discret à dessein (demande du 30/08/2026, "rend l'option
             // supprimer beaucoup plus discrète") : simple lien texte sous
@@ -7052,10 +7212,11 @@
     var myToken = ++mesQcmFicheToken;
     closeMesQcmFicheLoadingOverlay();
     // Sablier immédiat (demande du 30/08/2026) : sans lui, cliquer sur
-    // "Consulter le parcours d'apprentissage" ne montrait rien tant que le
-    // fetch ci-dessous n'avait pas résolu — comme si le clic n'avait rien
-    // fait. Fermable (croix hors-sujet ici, mais clic dehors/Échap) : le
-    // token incrémenté fait ignorer une réponse qui arriverait après coup.
+    // "Consulter les connaissances à apprendre / mémoriser" ne montrait rien
+    // tant que le fetch ci-dessous n'avait pas résolu — comme si le clic
+    // n'avait rien fait. Fermable (croix hors-sujet ici, mais clic
+    // dehors/Échap) : le token incrémenté fait ignorer une réponse qui
+    // arriverait après coup.
     var loadingOverlay = document.createElement('div');
     loadingOverlay.className = 'qcm-fiche-overlay';
     loadingOverlay.innerHTML = '<div class="qcm-fiche-overlay-inner"><div class="qcm-fiche-modal">' +

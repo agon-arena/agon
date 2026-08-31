@@ -10,6 +10,7 @@ const {
   isBlockedIp,
   parsePublicHttpUrl,
   resolvePublicAddress,
+  buildPinnedLookup,
   fetchPublicHtml,
   extractReadableContent,
   analyzeUrlKnowledge,
@@ -30,6 +31,36 @@ test("les protocoles non HTTP(S), localhost et les IP privées sont refusés", a
   }
   assert.equal(isBlockedIp("93.184.216.34"), false);
   await assert.rejects(() => resolvePublicAddress(new URL("https://example.test"), async () => [{ address: "10.0.0.4", family: 4 }]), /réseau non autorisé/);
+});
+
+// ---- buildPinnedLookup : régression Happy Eyeballs (31/08/2026) ----
+// Node active autoSelectFamily par défaut : https.request appelle ce lookup
+// avec {all:true} et attend un TABLEAU d'adresses. L'ancienne implémentation
+// (callback(null, address, family) inconditionnel) répondait dans ce cas
+// avec le mauvais format et faisait échouer silencieusement TOUTE requête
+// HTTPS pinnée avec "Invalid IP address: undefined" — jamais couvert par les
+// tests existants car requestPage (donc requestPinnedUrl) y est mocké.
+
+test("buildPinnedLookup : répond au format tableau attendu quand lookupOptions.all est demandé (Happy Eyeballs)", () => {
+  const lookup = buildPinnedLookup({ address: "93.184.216.34", family: 4 });
+  lookup("example.test", { all: true }, (err, result) => {
+    assert.equal(err, null);
+    assert.deepEqual(result, [{ address: "93.184.216.34", family: 4 }]);
+  });
+});
+
+test("buildPinnedLookup : répond au format legacy (address, family séparés) quand lookupOptions.all n'est pas demandé", () => {
+  const lookup = buildPinnedLookup({ address: "93.184.216.34", family: 4 });
+  lookup("example.test", {}, (err, address, family) => {
+    assert.equal(err, null);
+    assert.equal(address, "93.184.216.34");
+    assert.equal(family, 4);
+  });
+  lookup("example.test", undefined, (err, address, family) => {
+    assert.equal(err, null);
+    assert.equal(address, "93.184.216.34");
+    assert.equal(family, 4);
+  });
 });
 
 test("une URL publique HTML simple est acceptée et l'URL finale est renvoyée", async () => {
@@ -104,6 +135,30 @@ test("Readability extrait le titre et le contenu principal sans le menu évident
 
 test("une page JS-only sans texte exploitable retourne content_not_available", () => {
   assert.throws(() => extractReadableContent('<html><body><div id="app"></div><script src="app.js"></script></body></html>', "https://example.test/app"), (error) => error.code === "content_not_available");
+});
+
+// ---- enforceMaxLength (31/08/2026, "privilégier Wikipédia") : une page très
+// longue (typiquement un article Wikipédia complet) ne doit bloquer que le
+// flux qui a réellement besoin du texte intégral, jamais le grounding web
+// (lib/web-search-grounding.js), qui tronque de toute façon chaque source
+// bien avant cette limite.
+
+function buildLongArticleHtml(paragraphCount) {
+  const paragraph = "Phrase factuelle assez longue pour peser sur la taille totale du texte extrait par Readability. ".repeat(6);
+  const body = Array.from({ length: paragraphCount }, () => `<p>${paragraph}</p>`).join("");
+  return `<!doctype html><html><head><title>Article long</title></head><body><main><article><h1>Article long</h1>${body}</article></main></body></html>`;
+}
+
+test("extractReadableContent : par défaut (enforceMaxLength non précisé), un article de plus de 50 000 caractères est rejeté (content_too_long) — comportement inchangé pour /api/url-knowledge/analyze", () => {
+  const html = buildLongArticleHtml(600);
+  assert.throws(() => extractReadableContent(html, "https://example.test/long"), (error) => error.code === "content_too_long");
+});
+
+test("extractReadableContent : enforceMaxLength:false conserve le texte intégral malgré les 50 000 caractères", () => {
+  const html = buildLongArticleHtml(600);
+  const result = extractReadableContent(html, "https://example.test/long", { enforceMaxLength: false });
+  assert.ok(result.text.length > 50000, `attendu >50000, obtenu ${result.text.length}`);
+  assert.match(result.sourceTitle, /Article long/);
 });
 
 test("l'analyse utilise la sélection textuelle et la feature url_knowledge_select", async () => {

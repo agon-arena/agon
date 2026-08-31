@@ -196,6 +196,20 @@ test("buildFicheAndKnowledgeAdmissionPrompt : imageSearchQuery apparaît dans le
   assert.match(withoutValidation, /"imageSearchQuery":"\.\.\."\|null/);
 });
 
+// ---- buildFicheAndKnowledgeAdmissionPrompt : grounding web optionnel (31/08/2026) ----
+
+test("buildFicheAndKnowledgeAdmissionPrompt : sans groundingText, comportement strictement identique à avant (rien sur des sources web)", () => {
+  const prompt = buildFicheAndKnowledgeAdmissionPrompt("Photosynthèse", null, LEVEL_CONFIG, false);
+  assert.doesNotMatch(prompt, /VRAIES sources web/);
+});
+
+test("buildFicheAndKnowledgeAdmissionPrompt : avec groundingText, l'injecte et impose de s'y fonder en priorité", () => {
+  const prompt = buildFicheAndKnowledgeAdmissionPrompt("Avalanche glaciaire", null, LEVEL_CONFIG, false, "[Source 1 — fr.wikipedia.org] Avalanche\nContenu réel extrait.");
+  assert.match(prompt, /VRAIES sources web/);
+  assert.match(prompt, /Contenu réel extrait\./);
+  assert.match(prompt, /écarte-le plutôt que de l'inventer/);
+});
+
 // ---- sanitizeImageSearchQuery : validation structurelle, sans jamais planter ----
 
 test("sanitizeImageSearchQuery : une chaîne valide est conservée telle quelle (trim)", () => {
@@ -260,6 +274,21 @@ test("buildKnowledgeVerificationPrompt : ne prétend jamais constituer une preuv
   const prompt = buildKnowledgeVerificationPrompt([knowledge()], "Sujet test");
   assert.doesNotMatch(prompt, /recherche (web|internet)/i);
   assert.doesNotMatch(prompt, /source externe vérifiée/i);
+});
+
+// ---- buildKnowledgeVerificationPrompt : grounding web optionnel (31/08/2026) ----
+
+test("buildKnowledgeVerificationPrompt : sans groundingText, comportement strictement identique à avant (aucune mention de sources)", () => {
+  const prompt = buildKnowledgeVerificationPrompt([knowledge()], "Sujet test");
+  assert.doesNotMatch(prompt, /Sources ayant servi/);
+});
+
+test("buildKnowledgeVerificationPrompt : avec groundingText, ajoute un critère de rejet si le fait n'est pas soutenu par les sources, sans retirer les critères existants", () => {
+  const prompt = buildKnowledgeVerificationPrompt([knowledge()], "Sujet test", "[Source 1 — exemple.com] Titre\nExtrait réel.");
+  assert.match(prompt, /n'est PAS clairement soutenue par les sources ci-dessous/);
+  assert.match(prompt, /Sources ayant servi à rédiger cette liste/);
+  assert.match(prompt, /Extrait réel\./);
+  assert.match(prompt, /formulation est trop absolue/); // critères existants toujours présents
 });
 
 // ---- applyKnowledgeVerificationDecisions : conservateur par construction ----

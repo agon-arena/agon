@@ -39,10 +39,10 @@ test("Éclairages/Histoire (buildNotionQuestions, branche legacy) passe désorma
   );
 });
 
-test("sujet libre (generateNotionLevelQuiz) reste inchangé : includeVariants:true", () => {
+test("sujet libre (generateNotionLevelQuiz) reste inchangé : includeVariants:true (V3 du 31/08/2026 : 5e argument optionnel ajouté pour la traçabilité aux sources, jamais un changement des 3 premiers)", () => {
   assert.match(
     SERVER_SOURCE,
-    /const formatBlock = buildQuestionFormatsPromptBlock\("sourceId", accepted\.length, true\);/
+    /const formatBlock = buildQuestionFormatsPromptBlock\("sourceId", accepted\.length, true, undefined, grounding\?\.identifiedSourcesBlock \|\| null\);/
   );
 });
 

@@ -16,7 +16,8 @@ const {
   gradeQuizSubmissionOptionIndex,
   validateKnowledgeCandidates,
   filterQuestionsToAdmittedKnowledge,
-  filterVariantsByKnowledgeConstraints
+  filterVariantsByKnowledgeConstraints,
+  extractGroundingFields
 } = require("../lib/question-formats");
 const { resolveActiveQuestionVariant } = require("../lib/spaced-repetition/question-variant");
 
@@ -651,4 +652,62 @@ test("filterVariantsByKnowledgeConstraints : après filtrage, resolveActiveQuest
 
 test("filterVariantsByKnowledgeConstraints : 0 question en entrée → 0 en sortie, sans crash", () => {
   assert.deepEqual(filterVariantsByKnowledgeConstraints([], [knowledgeFor("Peu importe.")]), []);
+});
+
+// ── supporting_claim / source_ids (V3, 31/08/2026) : régression réelle ────
+// Bug constaté en conditions réelles le 31/08/2026 : validateQuestionItemCore
+// reconstruisait l'objet final en ne conservant QUE knowledgeTarget,
+// supprimant silencieusement supporting_claim/source_ids pourtant présents
+// sur la réponse brute du modèle — les questions stockées en base n'avaient
+// alors plus aucune trace de leur grounding malgré une génération et une
+// validation de traçabilité qui avaient réellement eu lieu en amont.
+
+test("extractGroundingFields : conserve supporting_claim et source_ids valides", () => {
+  const fields = extractGroundingFields({ supporting_claim: "Ottawa est la capitale du Canada.", source_ids: ["SOURCE_1", "SOURCE_2"] });
+  assert.deepEqual(fields, { supporting_claim: "Ottawa est la capitale du Canada.", source_ids: ["SOURCE_1", "SOURCE_2"] });
+});
+
+test("extractGroundingFields : absents ou de type invalide → champs simplement omis, jamais une erreur", () => {
+  assert.deepEqual(extractGroundingFields({}), {});
+  assert.deepEqual(extractGroundingFields({ supporting_claim: 42, source_ids: "SOURCE_1" }), {});
+  assert.deepEqual(extractGroundingFields({ supporting_claim: "", source_ids: [] }), {});
+});
+
+test("validateQuestionItemCore : supporting_claim/source_ids survivent pour une question SANS variants (régression réelle du 31/08/2026)", () => {
+  const item = {
+    type: "qcm", question: "Quelle est la durée légale hebdomadaire du travail ?",
+    options: ["32 heures", "35 heures", "37 heures", "40 heures"], correctIndex: 1, explanation: "...",
+    knowledgeTarget: "La durée légale du travail est de 35 heures.",
+    supporting_claim: "La durée légale du travail à temps complet est fixée à 35 heures par semaine.",
+    source_ids: ["SOURCE_1"]
+  };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result);
+  assert.equal(result.supporting_claim, "La durée légale du travail à temps complet est fixée à 35 heures par semaine.");
+  assert.deepEqual(result.source_ids, ["SOURCE_1"]);
+});
+
+test("validateQuestionItemCore : supporting_claim/source_ids survivent pour une question AVEC variants (cas réel de generateNotionLevelQuiz)", () => {
+  const item = {
+    knowledgeTarget: "La durée légale du travail est de 35 heures.",
+    supporting_claim: "La durée légale du travail à temps complet est fixée à 35 heures par semaine.",
+    source_ids: ["SOURCE_1", "SOURCE_2"],
+    variants: [
+      { type: "qcm", question: "Quelle est la durée légale hebdomadaire du travail ?", options: ["32 heures", "35 heures", "37 heures", "40 heures"], correctIndex: 1, explanation: "...", selfContained: true, retrievalMode: "direct" }
+    ]
+  };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result);
+  assert.equal(result.supporting_claim, "La durée légale du travail à temps complet est fixée à 35 heures par semaine.");
+  assert.deepEqual(result.source_ids, ["SOURCE_1", "SOURCE_2"]);
+  // Le champ reste aussi porté par l'enveloppe à plat (première exposition, cf. stripQuestionForClient).
+  assert.ok(result.variants[0]);
+});
+
+test("validateQuestionItemCore : absence de supporting_claim/source_ids ne change rien (comportement par défaut inchangé)", () => {
+  const item = { type: "qcm", question: "Quelle est la bonne réponse ?", options: ["A", "B", "C", "D"], correctIndex: 0, explanation: "..." };
+  const result = validateQuestionItemCore(item);
+  assert.ok(result);
+  assert.equal("supporting_claim" in result, false);
+  assert.equal("source_ids" in result, false);
 });
