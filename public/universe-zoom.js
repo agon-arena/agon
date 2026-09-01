@@ -97,14 +97,29 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
   return positions;
 }
 
-function stablePhaseDegrees(value) {
+function stableUnitInterval(value) {
   const text = String(value || "");
   let hash = 2166136261;
   for (let index = 0; index < text.length; index += 1) {
     hash ^= text.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
-  return ((hash >>> 0) / 4294967296) * 360;
+  return (hash >>> 0) / 4294967296;
+}
+
+function stablePhaseDegrees(value) {
+  return stableUnitInterval(value) * 360;
+}
+
+// Personnalité radiale stable de chaque étoile. La moyenne de deux valeurs
+// pseudo-aléatoires indépendantes donne une distribution triangulaire : la
+// majorité reste près du rayon nominal et les extrêmes 0,82 / 1,22 sont rares.
+// Le facteur ne dépend jamais de l'index ni du nombre total d'étoiles.
+function stableRadialFactor(value) {
+  const triangular = stableUnitInterval(`${value}:radial:a`) + stableUnitInterval(`${value}:radial:b`) - 1;
+  return triangular < 0
+    ? 1 + triangular * 0.18
+    : 1 + triangular * 0.22;
 }
 
 function packFixedGroupsWithGrowth(items, initialRadius, opts = {}) {
@@ -154,9 +169,13 @@ function packSatellitesAroundPoint(items, cx, cy, orbitRadius, opts = {}) {
   // comme les nœuds eux-mêmes et reste perceptible à tous les niveaux de caméra.
   const gap = opts.gap ?? Math.max(0.8, sizeBasis * 0.12);
   const slotSpacing = maxStarRadius * 2 + gap;
-  const firstOrbit = Math.max(orbitRadius, sizeBasis + maxStarRadius + gap);
+  // Le premier anneau est dimensionné pour que même le facteur minimal 0,82
+  // reste hors du disque central. Sans cette réserve, une étoile courte serait
+  // rejetée sur l'anneau suivant et créerait paradoxalement un très long trait.
+  const firstOrbit = Math.max(orbitRadius, (sizeBasis + maxStarRadius + gap) / 0.82);
   const ringSpacing = Math.max(slotSpacing, sizeBasis * 0.45);
   const phase = ((Number(opts.phaseDegrees) || 15) * Math.PI) / 180;
+  const radialSeedPrefix = String(opts.radialSeedPrefix || "solar");
   const fixedObstacles = Array.isArray(opts.obstacles) ? opts.obstacles : [];
   // Tableau partagé par tous les solars : chaque étoile validée devient immédiatement un
   // obstacle pour celles qui seront placées ensuite, y compris dans un autre système.
@@ -178,14 +197,17 @@ function packSatellitesAroundPoint(items, cx, cy, orbitRadius, opts = {}) {
 
   order.forEach((itemIndex, orderIndex) => {
     const r = radii[itemIndex];
+    const stableItemId = items[itemIndex]?.ref?.id ?? items[itemIndex]?.id ?? `item-${itemIndex}`;
+    const radialFactor = stableRadialFactor(`${radialSeedPrefix}:${stableItemId}`);
     let best = null;
     // Limite très généreuse : normalement les premiers anneaux suffisent. Le repli situé juste
     // après garantit quand même une terminaison déterministe pour un jeu pathologique.
     const maxRingAttempts = Math.max(24, items.length + Math.ceil((fixedObstacles.length + occupied.length) / 4));
 
     for (let ringIndex = 0; ringIndex < maxRingAttempts && !best; ringIndex += 1) {
-      const radialDistance = firstOrbit + ringIndex * ringSpacing;
-      const ringCapacity = Math.max(6, Math.floor((Math.PI * 2 * radialDistance) / slotSpacing));
+      const baseRingRadius = firstOrbit + ringIndex * ringSpacing;
+      const radialDistance = baseRingRadius * radialFactor;
+      const ringCapacity = Math.max(6, Math.floor((Math.PI * 2 * baseRingRadius) / slotSpacing));
       // Point de départ en nombre d'or : les premières étoiles ne se tassent pas toutes dans le
       // même quadrant. Les anneaux impairs sont aussi déphasés d'un demi-cran.
       const startSlot = Math.floor(
@@ -197,7 +219,7 @@ function packSatellitesAroundPoint(items, cx, cy, orbitRadius, opts = {}) {
         const angle = phase + ((slot + (ringIndex % 2 ? 0.5 : 0)) / ringCapacity) * Math.PI * 2;
         const x = cx + Math.cos(angle) * radialDistance;
         const y = cy + Math.sin(angle) * radialDistance;
-        if (!collides(x, y, r)) best = { x, y, r };
+        if (!collides(x, y, r)) best = { x, y, r, radialFactor, baseRingRadius, ringIndex };
       }
     }
 
@@ -207,15 +229,18 @@ function packSatellitesAroundPoint(items, cx, cy, orbitRadius, opts = {}) {
       // termine donc nécessairement, sans repli susceptible de réintroduire un chevauchement.
       // Ce chemin n'est atteint que pour des volumes extrêmes.
       const angle = phase + orderIndex * goldenFraction * Math.PI * 2;
-      let radialDistance = firstOrbit + maxRingAttempts * ringSpacing;
+      let baseRingRadius = firstOrbit + maxRingAttempts * ringSpacing;
+      let fallbackRingIndex = maxRingAttempts;
       while (!best) {
+        const radialDistance = baseRingRadius * radialFactor;
         const x = cx + Math.cos(angle) * radialDistance;
         const y = cy + Math.sin(angle) * radialDistance;
         if (!collides(x, y, r)) {
-          best = { x, y, r };
+          best = { x, y, r, radialFactor, baseRingRadius, ringIndex: fallbackRingIndex };
           break;
         }
-        radialDistance += ringSpacing;
+        baseRingRadius += ringSpacing;
+        fallbackRingIndex += 1;
       }
     }
 
@@ -260,6 +285,7 @@ function layoutUniverseWorld(galaxies, worldRadius) {
         maxRatio: 0.4,
         gap: Math.max(0.8, visualRadius * 0.12),
         phaseDegrees: stablePhaseDegrees(`${g.name}:${solarSystem.id}`),
+        radialSeedPrefix: `${g.name}:${solarSystem.id}`,
         obstacles: [{ x: 0, y: 0, r: visualRadius }],
         occupied: []
       });
@@ -346,6 +372,7 @@ function layoutUniverseWorld(galaxies, worldRadius) {
         outStars.push({
           id: `star:${draft.g.name}:${draftSystem.solarSystem.id}:${star.id}`,
           name: star.name, x: x + local.x, y: y + local.y, r: local.r,
+          radialFactor: local.radialFactor, baseRingRadius: local.baseRingRadius, ringIndex: local.ringIndex,
           weight: draftSystem.starItems[starIndex].weight,
           solarSystemId: systemNode.id, galaxyId: galaxyNode.id, ref: star
         });
@@ -774,6 +801,7 @@ function createUniverseCamera({
 
 export {
   layoutUniverseWorld,
+  stableRadialFactor,
   computeUniverseWorldBounds,
   focusScaleForUniverseNode,
   createUniverseCamera

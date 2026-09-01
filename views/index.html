@@ -38,6 +38,10 @@
   <meta property="og:image:alt" content="mnoria — l'arène des idées">
   <link rel="canonical" href="__META_URL__">
   <link rel="preload" as="image" href="/logovisuelchargement.png">
+  <!-- Le bouton Apprentissages du bandeau mobile est une destination fréquente.
+       Anticiper seulement son document raccourcit le délai réseau au clic, sans
+       exécuter la page ni charger ses ressources lourdes à l'avance. -->
+  <link rel="prefetch" href="/apprentissage" as="document">
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="__META_TITLE__">
@@ -1728,7 +1732,10 @@ window.addEventListener("pageshow", function() {
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
   <!-- Ma mémoire et les scores/contributions restent accessibles depuis le menu supérieur. -->
-  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages" onclick="event.preventDefault(); openDebateIframeModal('/apprentissage')">
+  <!-- Navigation native volontaire : elle démarre dès le clic, même si le gros
+       script de l'accueil est encore occupé, au lieu de traverser la fonction
+       générique d'ouverture des fenêtres avant de changer de document. -->
+  <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages">
     <i class="fa-solid fa-list-check"></i>
     <span>Apprentissages</span>
   </a>

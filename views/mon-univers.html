@@ -105,6 +105,28 @@
         height: 100dvh;
       }
     }
+    /* Standalone iOS : 100dvh peut s'arrêter avant la dernière zone peinte
+       sous l'indicateur d'accueil. Étend réellement la scène étoilée dans
+       cette zone au lieu de laisser apparaître le fond gris global. Les
+       variables de repli sont déjà mesurées par script.js et valent 0 sur
+       les appareils qui n'ont pas ce défaut. */
+    @media (display-mode: standalone) {
+      html.memory-fullscreen-root,
+      body.page-memory-only {
+        background: #020610 !important;
+      }
+      body.page-memory-only {
+        --memory-standalone-bottom-bleed: max(
+          env(safe-area-inset-bottom, 0px),
+          var(--mnoria-mobile-bottom-fill, 0px),
+          var(--mnoria-legacy-standalone-bottom-fill, 0px)
+        );
+      }
+      body.page-memory-only #memory-page-main {
+        height: calc(100dvh + var(--memory-standalone-bottom-bleed)) !important;
+        min-height: calc(100dvh + var(--memory-standalone-bottom-bleed)) !important;
+      }
+    }
     body.page-memory-only #memory-page-main > h1,
     body.page-memory-only #memory-page-main > .universe-subtitle {
       display: none !important;
@@ -236,6 +258,25 @@
         right: max(12px, env(safe-area-inset-right, 0px));
         padding: 6px 8px;
         font-size: 9.5px;
+      }
+    }
+    /* Le cadre est volontairement prolongé sous le viewport ; compense ce
+       débordement pour que minicarte et zoom restent, eux, dans la partie
+       visible et au-dessus de la zone de geste. */
+    @media (display-mode: standalone) {
+      body.page-memory-only #mnoria-universe-cloud .universe-minimap {
+        bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + var(--memory-standalone-bottom-bleed)) !important;
+      }
+      body.page-memory-only #mnoria-universe-cloud > .universe-minimap__zoom-controls {
+        bottom: calc(max(12px, env(safe-area-inset-bottom, 0px)) + var(--memory-standalone-bottom-bleed) + 92px + 6px) !important;
+      }
+    }
+    @media (display-mode: standalone) and (max-width: 640px) {
+      body.page-memory-only #mnoria-universe-cloud .universe-minimap {
+        bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + var(--memory-standalone-bottom-bleed)) !important;
+      }
+      body.page-memory-only #mnoria-universe-cloud > .universe-minimap__zoom-controls {
+        bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + var(--memory-standalone-bottom-bleed) + 76px + 6px) !important;
       }
     }
 
@@ -818,6 +859,7 @@
   (function() {
     var contributionsOnly = location.pathname === "/contributions";
     document.body.classList.add(contributionsOnly ? "page-contributions-only" : "page-memory-only");
+    if (!contributionsOnly) document.documentElement.classList.add("memory-fullscreen-root");
     if (contributionsOnly) document.title = "Scores et contributions | mnoria";
   })();
 </script>

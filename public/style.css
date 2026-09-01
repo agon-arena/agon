@@ -20185,24 +20185,24 @@ body.page-home #debates-list .theme-row-section:first-child {
   background: linear-gradient(135deg, #fff2a8 0%, #ffd447 42%, #f09a20 100%);
   color: #1A1F24;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
     inset 0 0 0 1px rgba(122, 72, 10, 0.22),
-    0 0 8px rgba(255, 231, 126, 0.95),
-    0 0 20px rgba(255, 196, 55, 0.9),
-    0 0 36px rgba(255, 171, 35, 0.62);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
-  filter: saturate(1.18) brightness(1.08);
+    0 0 6px rgba(255, 231, 126, 0.66),
+    0 0 15px rgba(255, 196, 55, 0.56),
+    0 0 27px rgba(255, 171, 35, 0.34);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  filter: saturate(1.12) brightness(1.03);
 }
 
 #mnoria-cloud-mode-switch .mnoria-cloud-mode-segment-active:hover {
   background: linear-gradient(135deg, #fff7c7 0%, #ffe064 42%, #f6a934 100%);
   color: #1A1F24;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
     inset 0 0 0 1px rgba(122, 72, 10, 0.18),
-    0 0 10px rgba(255, 239, 157, 1),
-    0 0 26px rgba(255, 202, 65, 0.95),
-    0 0 44px rgba(255, 171, 35, 0.72);
+    0 0 8px rgba(255, 239, 157, 0.78),
+    0 0 19px rgba(255, 202, 65, 0.68),
+    0 0 32px rgba(255, 171, 35, 0.45);
 }
 
 #mnoria-cloud-mode-switch .mnoria-cloud-mode-segment-active::before {
@@ -20215,15 +20215,15 @@ body.page-home #debates-list .theme-row-section:first-child {
   width: 28%;
   pointer-events: none;
   transform: rotate(18deg);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.92), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.66), transparent);
   filter: blur(1px);
   animation: mnoria-active-tab-shine 2.1s ease-in-out infinite;
 }
 
 @keyframes mnoria-active-tab-shine {
   0%, 20% { left: -45%; opacity: 0; }
-  30% { opacity: 1; }
-  62% { left: 118%; opacity: 0.9; }
+  30% { opacity: 0.76; }
+  62% { left: 118%; opacity: 0.68; }
   63%, 100% { left: 118%; opacity: 0; }
 }
 

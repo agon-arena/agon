@@ -36789,6 +36789,39 @@ var _mobileCloudFrameTrustedHeight = Number.isFinite(Number(window.__mnoriaIniti
 // fonction quand elle lui est donnée directement en callback (cf. syncCloudSectionHeight) :
 // une comparaison stricte évite qu'un appel rAF normal soit pris pour la revérification.
 var MOBILE_CLOUD_FRAME_RECHECK = 'recheck';
+var _mobileCloudSwitchResizeObserver = null;
+var _mobileCloudSwitchAlignRaf = 0;
+
+// Aligne le sélecteur sur le bord décoratif RÉELLEMENT rendu du cadre. En
+// standalone, la hauteur du cloud transitionne pendant 350 ms : calculer la
+// marge une seule fois juste après style.height utilisait encore l'ancienne
+// hauteur et les boutons finissaient trop bas une fois la transition achevée.
+function alignMobileCloudModeSwitchToRenderedFrame() {
+  if (!isMnoriaMobileCloudViewport()) return;
+  var cloud = document.getElementById('mnoria-tag-trends-cloud');
+  var switchRow = document.getElementById('mnoria-cloud-mode-switch');
+  if (!cloud || !switchRow) return;
+  switchRow.style.setProperty('margin-top', '0px', 'important');
+  var cloudRect = cloud.getBoundingClientRect();
+  var switchNaturalTop = switchRow.getBoundingClientRect().top;
+  var renderedFrameBottom = cloudRect.bottom - MNORIA_MOBILE_FRAME_BOTTOM_INSET;
+  var desiredSwitchTop = renderedFrameBottom + 35;
+  switchRow.style.setProperty('margin-top', (desiredSwitchTop - switchNaturalTop) + 'px', 'important');
+}
+
+function observeMobileCloudModeSwitchAlignment(cloud) {
+  if (!document.body.classList.contains('is-standalone')) return;
+  if (_mobileCloudSwitchResizeObserver || typeof ResizeObserver !== 'function') return;
+  _mobileCloudSwitchResizeObserver = new ResizeObserver(function() {
+    if (_mobileCloudSwitchAlignRaf) cancelAnimationFrame(_mobileCloudSwitchAlignRaf);
+    _mobileCloudSwitchAlignRaf = requestAnimationFrame(function() {
+      _mobileCloudSwitchAlignRaf = 0;
+      alignMobileCloudModeSwitchToRenderedFrame();
+    });
+  });
+  _mobileCloudSwitchResizeObserver.observe(cloud);
+}
+
 function revealStableMobileCloudFrame() {
   var section = document.getElementById('mnoria-tag-trends-section');
   if (section) section.style.visibility = 'visible';
@@ -36867,29 +36900,11 @@ function syncMobileCloudFrameHeight(recheckToken) {
     cloud.style.setProperty('margin-top', '0px', 'important');
   }
 
-  var switchRow = document.getElementById('mnoria-cloud-mode-switch');
-  if (switchRow) {
-    // #mnoria-cloud-mode-switch n'est PAS un enfant flex de .mnoria-tag-trends-section (donc pas un
-    // frère direct du cloud) : c'est un item de grille séparé, après la section entière (qui
-    // contient aussi la légende après le cloud). Dériver sa marge depuis cloudBottom mesurait
-    // donc la mauvaise référence (écart de plusieurs dizaines de px, chevauchement constaté le
-    // 16/08/2026). Même technique que pour la section : neutraliser puis mesurer sa vraie
-    // position naturelle, plutôt que de la déduire d'un autre élément.
-    switchRow.style.setProperty('margin-top', '0px', 'important');
-    // + scrollYAtMeasure : même correctif que naturalTop plus haut (getBoundingClientRect().top
-    // est relatif au viewport, desiredSwitchTop une cible à scrollY=0).
-    var switchNaturalTop = switchRow.getBoundingClientRect().top + scrollYAtMeasure;
-    // Dérivé de boxHeight (potentiellement plafonné ci-dessus par _mobileCloudFrameTrustedHeight),
-    // pas du desiredFrameBottom brut : sinon le sélecteur de mode restait calé sur le bas NON
-    // plafonné du cadre, laissant un vide entre le bas du cadre (plafonné, donc plus court) et les
-    // boutons — "boutons trop bas" (demande du 26/08/2026).
-    var effectiveDesiredFrameBottom = boxTop + boxHeight - MNORIA_MOBILE_FRAME_BOTTOM_INSET;
-    var desiredSwitchTop = effectiveDesiredFrameBottom + 35;
-    // setProperty(...,'important') : la règle CSS dédiée à "Ma mémoire"
-    // (.mnoria-tag-trends-cloud.mnoria-memoire-frame ~ #mnoria-cloud-mode-switch, mobile) est elle-même
-    // en !important — un simple .style.marginTop= perdait face à elle.
-    switchRow.style.setProperty('margin-top', (desiredSwitchTop - switchNaturalTop) + 'px', 'important');
-  }
+  alignMobileCloudModeSwitchToRenderedFrame();
+  // ResizeObserver suit uniquement les changements effectifs de taille du
+  // cadre (transition initiale, rotation, stabilisation du viewport), jamais
+  // chaque frame lorsque la géométrie ne change pas.
+  observeMobileCloudModeSwitchAlignment(cloud);
   _mobileCloudFrameLocked = true;
 
   // En standalone, env(safe-area-inset-top) ET env(safe-area-inset-bottom) (bandeaux haut et

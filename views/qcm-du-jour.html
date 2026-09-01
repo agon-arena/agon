@@ -6152,6 +6152,9 @@
   var learnNextVisible = [];
   var learnNextQueue = [];
   var learnNextTopUpInFlight = false;
+  var learnNextLoadPromise = null;
+  // Les blocs de Découvrir sont préparés en parallèle, puis révélés ensemble.
+  var discoverContentReady = false;
   function learnNextItemKey(item) {
     return item.isAiProposal ? ('ai:' + item.gapSignature + ':' + item.title) : (item.subjectType + ':' + item.subjectSourceId);
   }
@@ -6254,16 +6257,14 @@
   // topUpLearnNextQueue) : les propositions IA rejoignent simplement le pool
   // local (appendLearnNextItems), sans jamais écraser ce qui a déjà été
   // adopté entre-temps.
-  function fetchAndAppendAiFallbackProposals() {
-    if (!voterKey) return;
-    fetch('/api/users/recommendations/learn-next/ai-fallback?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store' })
+  function fetchAiFallbackProposals() {
+    if (!voterKey) return Promise.resolve([]);
+    return fetch('/api/users/recommendations/learn-next/ai-fallback?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store' })
       .then(function (res) { return res.ok ? res.json() : { proposals: [] }; })
       .then(function (data) {
-        var proposals = Array.isArray(data && data.proposals) ? data.proposals : [];
-        if (!proposals.length) return;
-        appendLearnNextItems(proposals);
+        return Array.isArray(data && data.proposals) ? data.proposals : [];
       })
-      .catch(function () {});
+      .catch(function () { return []; });
   }
   // Un seul aller-retour V1 "à froid" pour toute la durée de vie de la page
   // (garde learnNextInlinePhase !== 'idle', cf. ci-dessus) — appelée en
@@ -6273,18 +6274,20 @@
   // initial). Les réapprovisionnements suivants passent par
   // topUpLearnNextQueue, jamais par ici.
   function loadLearnNextInline() {
-    if (!voterKey || learnNextInlinePhase !== 'idle') return;
+    if (!voterKey) return Promise.resolve();
+    if (learnNextLoadPromise) return learnNextLoadPromise;
+    if (learnNextInlinePhase !== 'idle') return Promise.resolve();
     learnNextInlinePhase = 'loading';
-    renderLearnNextInlineSkeleton();
-    fetch('/api/users/recommendations/learn-next?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store' })
+    learnNextLoadPromise = fetch('/api/users/recommendations/learn-next?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store' })
       .then(function (res) {
         if (!res.ok) throw new Error('http ' + res.status);
         return res.json();
       })
       .then(function (data) {
         var items = Array.isArray(data && data.recommendations) ? data.recommendations : [];
-        appendLearnNextItems(items);
-        fetchAndAppendAiFallbackProposals();
+        return fetchAiFallbackProposals().then(function (proposals) {
+          appendLearnNextItems(items.concat(proposals));
+        });
       })
       .catch(function () {
         // Best-effort strict (demande du 30/08/2026) : jamais de message
@@ -6292,7 +6295,9 @@
         // de la page continue de fonctionner normalement.
         learnNextInlinePhase = 'empty';
         refreshLearnNextInlineVisibility();
-      });
+      })
+      .then(function () { learnNextLoadPromise = null; });
+    return learnNextLoadPromise;
   }
   // Visibilité = même créneau que le bouton "Commencer un nouvel
   // apprentissage" (cf. updateCustomSearchVisibility) ET un contenu réel déjà
@@ -6301,13 +6306,14 @@
     if (!learnNextInline) return;
     var categoryVisible = currentCategory === 'mesqcm' && !currentSlot;
     if (categoryVisible) loadLearnNextInline();
-    learnNextInline.hidden = !(categoryVisible && (learnNextInlinePhase === 'loading' || learnNextInlinePhase === 'has-content'));
+    learnNextInline.hidden = !(categoryVisible && discoverContentReady && learnNextInlinePhase === 'has-content');
   }
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
   // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
   function loadMesQcm() {
+    discoverContentReady = false;
     document.body.classList.add('qcm-discover-overview');
     clearQuestionBackgroundImage();
     applyLearningPageBackgroundImage();
@@ -6328,6 +6334,8 @@
     if (!voterKey) {
       renderMesQcmEmpty();
       updateMesAcquisAvailability([]);
+      discoverContentReady = true;
+      refreshLearnNextInlineVisibility();
       revealDiscoverActions();
       return;
     }
@@ -6336,11 +6344,12 @@
     var quizzesRequest = fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); });
     var gaugeRequest = fetchLoadGaugeData();
+    var recommendationsRequest = loadLearnNextInline();
 
-    // Les deux requêtes partent simultanément, mais la page n'est peinte
-    // qu'une fois leurs données réunies : plus d'apparition successive de la
-    // jauge, puis des rubriques (ou l'inverse) selon le réseau.
-    Promise.all([quizzesRequest, gaugeRequest])
+    // Les trois flux partent simultanément, mais la page n'est peinte qu'une
+    // fois réunis : jauge, actions, sujets proposés et rubriques apparaissent
+    // dans la même peinture finale.
+    Promise.all([quizzesRequest, gaugeRequest, recommendationsRequest])
       .then(function (results) {
         if (myToken !== loadToken) return;
         var data = results[0];
@@ -6352,12 +6361,16 @@
         else hideLoadGauge();
         renderMesQcmList(quizzes);
         updateMesAcquisAvailability(quizzes);
+        discoverContentReady = true;
+        refreshLearnNextInlineVisibility();
         revealDiscoverActions();
       })
       .catch(function () {
         if (myToken === loadToken) {
           hideLoadGauge();
           renderMessage('Impossible de charger tes QCM pour le moment.');
+          discoverContentReady = true;
+          refreshLearnNextInlineVisibility();
           revealDiscoverActions();
         }
       });
@@ -6727,14 +6740,16 @@
 
     var byTheme = {};
     var untagged = [];
+    // Les apprentissages issus de « Comprendre les liens » ne sont pas une
+    // thématique ordinaire : ils forment désormais une rubrique de premier
+    // niveau dédiée, avec le même bandeau blanc que « Tous mes apprentissages ».
+    var comprehensionQuizzes = [];
     quizzes.forEach(function (q) {
-      // Rubrique dédiée plutôt que "Autres" : un lien "comprendre" n'a jamais de thématique
-      // résolue (getPrimaryNotionQuizTheme côté serveur, propre aux QCM issus d'un débat) —
-      // sans ce cas particulier, ces liens se retrouveraient noyés dans "Autres" au lieu
-      // d'apparaître sous leur propre rubrique (demande du 16/08/2026).
-      var primaryTheme = q.sourceType === 'comprendre'
-        ? ACQUIS_SOURCE_TYPE_META.comprendre.label
-        : (Array.isArray(q.themes) ? q.themes.filter(Boolean)[0] : null);
+      if (q.sourceType === 'comprendre') {
+        comprehensionQuizzes.push(q);
+        return;
+      }
+      var primaryTheme = Array.isArray(q.themes) ? q.themes.filter(Boolean)[0] : null;
       if (!primaryTheme) { untagged.push(q); return; }
       (byTheme[primaryTheme] = byTheme[primaryTheme] || []).push(q);
     });
@@ -6744,24 +6759,32 @@
     // Suppression groupée retirée : la suppression individuelle reste
     // disponible sur chaque apprentissage, sans cases de sélection inutiles.
     var html = '<div class="qcm-mesqcm-groups">';
-    html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all">';
-    html += '<h2 class="qcm-mesqcm-group-title">Tous mes apprentissages</h2>';
-    themeNames.forEach(function (theme) {
-      var themeQuizzes = byTheme[theme].slice().sort(compareMesQcmByStateThenName);
-      html += '<section class="qcm-mesqcm-theme-group">';
-      html += '<button type="button" class="qcm-mesqcm-theme-toggle" aria-expanded="false">';
-      html += '<span>' + escapeHtml(theme) + '</span>';
-      html += '<span class="qcm-mesqcm-theme-count">' + themeQuizzes.length + '</span>';
-      html += '<span class="qcm-mesqcm-theme-action"><span class="qcm-mesqcm-theme-action-open">Masquer</span></span>';
-      html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-theme-chevron" aria-hidden="true"></i>';
-      html += '</button>';
-      html += '<div class="qcm-mesqcm-theme-panel">';
-      html += renderMesQcmPaginatedTablesHtml(themeQuizzes, quizzes, false);
-      html += '<button type="button" class="qcm-mesqcm-theme-collapse"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i> Masquer</button>';
-      html += '</div>';
+    if (themeNames.length) {
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all">';
+      html += '<h2 class="qcm-mesqcm-group-title">Tous mes apprentissages</h2>';
+      themeNames.forEach(function (theme) {
+        var themeQuizzes = byTheme[theme].slice().sort(compareMesQcmByStateThenName);
+        html += '<section class="qcm-mesqcm-theme-group">';
+        html += '<button type="button" class="qcm-mesqcm-theme-toggle" aria-expanded="false">';
+        html += '<span>' + escapeHtml(theme) + '</span>';
+        html += '<span class="qcm-mesqcm-theme-count">' + themeQuizzes.length + '</span>';
+        html += '<span class="qcm-mesqcm-theme-action"><span class="qcm-mesqcm-theme-action-open">Masquer</span></span>';
+        html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-theme-chevron" aria-hidden="true"></i>';
+        html += '</button>';
+        html += '<div class="qcm-mesqcm-theme-panel">';
+        html += renderMesQcmPaginatedTablesHtml(themeQuizzes, quizzes, false);
+        html += '<button type="button" class="qcm-mesqcm-theme-collapse"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i> Masquer</button>';
+        html += '</div>';
+        html += '</section>';
+      });
       html += '</section>';
-    });
-    html += '</section>';
+    }
+    if (comprehensionQuizzes.length) {
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--comprehension' + (themeNames.length ? '' : ' qcm-mesqcm-group--all') + '">';
+      html += '<h2 class="qcm-mesqcm-group-title">Comprendre les liens</h2>';
+      html += renderMesQcmPaginatedTablesHtml(comprehensionQuizzes.slice().sort(compareMesQcmByStateThenName), quizzes, false);
+      html += '</section>';
+    }
     html += '</div>';
     body.innerHTML = html;
     wireMesQcmListInteractions(quizzes);
@@ -7511,9 +7534,11 @@
 })();
 </script>
 <nav class="home-bottom-nav qcm-home-bottom-nav" aria-label="Navigation principale">
-  <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="qcmBottomNavHome()">
+  <!-- Lien natif volontaire : le premier appui lance immédiatement le retour,
+       sans dépendre de l'ancienne logique de fermeture d'iframe. -->
+  <a href="/?skipStartup=1" class="home-bottom-nav-item" aria-label="Revenir à l'accueil">
     <i class="fa-solid fa-house" aria-hidden="true"></i><span>Accueil</span>
-  </button>
+  </a>
   <button type="button" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="qcmBottomNavOpen('/create')">
     <i class="fa-solid fa-plus" aria-hidden="true"></i><span>Ouvrir</span>
   </button>
