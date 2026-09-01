@@ -19092,6 +19092,15 @@ app.post("/api/users/recommendations/learn-next/ai-fallback/adopt", rateLimit("u
 // "recherche IA" (sourceType "custom") — le reste de l'architecture (slot
 // générique, natural_key comme knowledge_id, batching par position) reste
 // indépendant de la source, prêt pour les autres imports plus tard.
+// Pause pipeline (demande du 01/09/2026, maîtrise des coûts) : coupe TOUTE
+// nouvelle génération (script IA + rendu RunPod) avant le moindre appel
+// payant, aussi bien le déclenchement automatique (triggerAutomaticNoesVideo,
+// silencieux) que le bouton explicite "Regarder Noès" (POST
+// /api/noes/videos, qui répond alors une erreur claire). Ne touche pas
+// /status : une vidéo déjà en cours de rendu au moment de la pause continue
+// d'être suivie et finalisée normalement. Repasser à false pour reprendre.
+const NOES_PIPELINE_PAUSED = true;
+
 const NOES_CONFIG = {
   pipelineVersion: process.env.NOES_PIPELINE_VERSION || "coeus-items-v2-captions",
   // Valeurs fixées par le worker lui-même (cf. coeus-serverless/handler.py :
@@ -19221,6 +19230,7 @@ function monitorAutomaticNoesVideo(video) {
 // ouvrir ensuite « Regarder Noès » retrouve le même job ou la même vidéo au
 // lieu d'en soumettre une seconde.
 function triggerAutomaticNoesVideo({ userId, slot, quizDate, questions }) {
+  if (NOES_PIPELINE_PAUSED) return;
   if (!slot.startsWith("notion:custom:") || !Array.isArray(questions) || !questions.length) return;
   void requestNoesVideo(noesDeps, {
     userId,
@@ -19241,6 +19251,10 @@ function triggerAutomaticNoesVideo({ userId, slot, quizDate, questions }) {
 // pendant tout le rendu (30 à 120s), cf. rapport d'audit section 3/12.
 app.post("/api/noes/videos", rateLimit("noes", 20), async (req, res) => {
   try {
+    if (NOES_PIPELINE_PAUSED) {
+      return res.status(503).json({ ok: false, error: "Génération de vidéos Noès temporairement suspendue." });
+    }
+
     const validation = validateLegacyKey(req.body?.legacyKey);
     if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
 
