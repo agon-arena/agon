@@ -14773,6 +14773,11 @@ async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, i
 async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, requireValidation, requestedLevel) {
   const { target, instruction, max, min } = levelConfig;
   const timeoutMs = Math.min(120_000, 45_000 + target * 3_000);
+  // TEMPORAIRE — diagnostic duplication/pénurie de connaissances (02/09/2026,
+  // cf. échanges "apprentissage marxisme"). Aucune donnée sensible : modèle,
+  // seuil, hash de commit public, compteurs. À retirer une fois la cause du
+  // décalage local/Render confirmée. Ne modifie aucune logique.
+  console.log(`[notion-quiz:${id}] runtime model=${DAILY_QUIZ_NARRATIVE_MODEL} min_master=${min} commit=${process.env.RENDER_GIT_COMMIT || "n/a"}`);
   // Une réponse HTTP OpenAI réussie peut malgré tout contenir un JSON
   // tronqué ou une structure qui ne respecte pas le contrat demandé.
   // _callOpenAI retente déjà les erreurs réseau/429/5xx ; ces deux essais
@@ -14820,6 +14825,13 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         break;
       }
       const parsedCandidate = parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig);
+      // TEMPORAIRE — diagnostic (cf. commentaire plus haut) : raw = ce que le
+      // modèle a proposé dans "knowledge" avant tout filtre ; accepted = ce
+      // qui reste après validateKnowledgeCandidates (appelé à l'intérieur de
+      // parseFicheAndKnowledgeCandidates). Loggé à CHAQUE tentative, y
+      // compris celles qui échouent — c'est précisément la donnée qui
+      // manquait pour trancher entre génération/admission/grounding.
+      console.log(`[notion-quiz:${id}] knowledge_candidates raw=${Array.isArray(candidate?.knowledge) ? candidate.knowledge.length : 0} accepted=${parsedCandidate ? parsedCandidate.candidates.length : 0}`);
       if (parsedCandidate && parsedCandidate.candidates.length >= min) {
         parsed = candidate;
         break;
