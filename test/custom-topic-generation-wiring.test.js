@@ -42,7 +42,11 @@ test("la route ne renvoie plus l'erreur technique Supabase brute", () => {
 test("le frontend distingue statut, JSON invalide, réseau et codes serveur", () => {
   assert.match(view, /status: res\.status/);
   assert.match(view, /invalidJson: !data/);
-  assert.match(view, /connexion avec le serveur a été interrompue/i);
+  // Correctif UX du 01/09/2026 (incident "Marxisme") : une coupure réseau sur le
+  // fetch initial ne doit plus jamais être présentée comme un échec probable de
+  // la génération — cf. test/notion-quiz-generation-status.test.js pour le détail.
+  assert.doesNotMatch(view, /la génération peut avoir été stoppée/i);
+  assert.match(view, /toujours en cours en arrière-plan/i);
   assert.doesNotMatch(view, /Vérifie ton réseau/i);
   for (const code of ["AI_UNAVAILABLE", "AI_TIMEOUT", "CONTENT_UNUSABLE", "STORAGE_TEMPORARY", "QCM_UNUSABLE"]) {
     assert.match(view, new RegExp(code));

@@ -5271,7 +5271,8 @@
       .then(function (data) {
         if (currentCategory !== 'mesqcm' || currentSlot) return;
         var ready = Array.isArray(data.ready) ? data.ready : [];
-        if (!ready.length) {
+        var failed = Array.isArray(data.failed) ? data.failed : [];
+        if (!ready.length && !failed.length) {
           syncPendingNotionQuizGenerations(currentMesQcmQuizzes);
           return;
         }
@@ -5279,6 +5280,18 @@
           if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
             window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
           }
+        });
+        // Vrai échec confirmé par le backend (correctif UX du 01/09/2026,
+        // incident "Marxisme") : avant, generation-status ne renvoyait jamais
+        // "failed" — un échec réel restait indiscernable d'une génération
+        // toujours en cours, ici comme dans checkPendingNotionQuizzesReadiness
+        // (public/script.js). Message mappé par code, identique à celui d'un
+        // échec détecté en direct sur la requête initiale.
+        failed.forEach(function (item) {
+          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+            window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
+          }
+          setCustomSearchStatus(customGenerationErrorMessage(item.code), true);
         });
         return fetchLatestMesQcmList();
       })
@@ -5438,6 +5451,41 @@
   // comportement strict qu'avant pour submitCustomTopic (onCreated est
   // simplement absent dans son cas), niveau toujours choisi par l'utilisateur
   // via le sélecteur existant, jamais présélectionné automatiquement.
+  // Hissées hors de startCustomTopicGeneration (correctif UX du 01/09/2026) :
+  // refreshPendingNotionQuizList (sondage periodique de generation-status)
+  // doit pouvoir afficher le même message d'erreur mappé par code qu'un échec
+  // détecté en direct sur la requête initiale, sans dupliquer le mapping.
+  function customGenerationErrorMessage(code, fallback) {
+    var messages = {
+      AI_CONFIG_MISSING: 'Le service IA n’est pas configuré pour le moment.',
+      AI_UNAVAILABLE: 'Le service IA est temporairement indisponible. Réessaie dans quelques instants.',
+      AI_TIMEOUT: 'La génération a pris trop de temps. Réessaie dans quelques instants.',
+      CONTENT_UNUSABLE: 'Le contenu généré n’a pas pu être exploité. Essaie de préciser le sujet.',
+      KNOWLEDGE_REJECTED: 'Aucune connaissance suffisamment fiable et importante n’a été trouvée sur ce sujet.',
+      QCM_UNUSABLE: 'La fiche a été créée, mais ses questions n’ont pas pu être validées. Réessaie ou précise le sujet.',
+      STORAGE_TEMPORARY: 'L’apprentissage n’a pas pu être enregistré pour le moment. Réessaie dans quelques instants.'
+    };
+    return messages[code] || fallback || 'Une erreur inattendue a interrompu la génération. Réessaie dans quelques instants.';
+  }
+
+  function customGenerationDiagnosticMessage(diagnostics) {
+    if (!diagnostics || typeof diagnostics !== 'object') return '';
+    var reasons = diagnostics.reasonCounts && typeof diagnostics.reasonCounts === 'object'
+      ? Object.keys(diagnostics.reasonCounts).sort().map(function (code) {
+          return code + '×' + Number(diagnostics.reasonCounts[code] || 0);
+        }).filter(function (value) { return !/×0$/.test(value); })
+      : [];
+    if (diagnostics.criticErrorCode) reasons.push(String(diagnostics.criticErrorCode));
+    if (!reasons.length) {
+      reasons.push('générées=' + Number(diagnostics.generatedQuestionCount || 0));
+      reasons.push('qualité=' + Number(diagnostics.finalQualityAcceptedCount || 0));
+      reasons.push('structure=' + Number(diagnostics.postQualityStructuralCount || 0));
+      reasons.push('connaissance=' + Number(diagnostics.postQualityKnowledgeMatchedCount || 0));
+      reasons.push('stockables=' + Number(diagnostics.postQualityConstraintCount || 0));
+    }
+    return reasons.length ? ' Référence diagnostic : ' + reasons.join(', ') + '.' : '';
+  }
+
   function startCustomTopicGeneration(topic, onCreated) {
     if (!voterKey) {
       setCustomSearchStatus('Identifiant introuvable, recharge la page et réessaie.', true);
@@ -5450,6 +5498,19 @@
     showNotionQuizLevelPicker(function (level) {
       showGenerateConfirmModal(topic, level, async function () {
         var pendingCustomSlot = await getCustomTopicPendingSlot(topic, level);
+        // Garde anti-double-soumission (correctif UX du 01/09/2026, incident
+        // "Marxisme") : une génération pour ce sujet+niveau exact est déjà
+        // suivie (marqueur persistant non résolu) — ne jamais en relancer une
+        // deuxième, que ce soit un double-clic ou un nouvel essai après une
+        // coupure réseau qui a réactivé le formulaire. Le flux existant
+        // (sondage periodique + ligne "En cours de création") reste seul en
+        // charge jusqu'à ready ou failed.
+        if (pendingCustomSlot && getPendingNotionQuizGenerations().some(function (item) {
+          return item.slot === pendingCustomSlot;
+        })) {
+          setCustomSearchStatus('Génération du QCM « ' + topic + ' » déjà en cours — cela peut prendre plusieurs minutes. Tu seras prévenu·e dès qu’il sera prêt.', false);
+          return;
+        }
         if (pendingCustomSlot && typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
           window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic });
         }
@@ -5468,37 +5529,6 @@
         // message d'erreur reste géré par le flux existant.
         closeAiGenerateModal();
         if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
-
-        function customGenerationErrorMessage(code, fallback) {
-          var messages = {
-            AI_CONFIG_MISSING: 'Le service IA n’est pas configuré pour le moment.',
-            AI_UNAVAILABLE: 'Le service IA est temporairement indisponible. Réessaie dans quelques instants.',
-            AI_TIMEOUT: 'La génération a pris trop de temps. Réessaie dans quelques instants.',
-            CONTENT_UNUSABLE: 'Le contenu généré n’a pas pu être exploité. Essaie de préciser le sujet.',
-            KNOWLEDGE_REJECTED: 'Aucune connaissance suffisamment fiable et importante n’a été trouvée sur ce sujet.',
-            QCM_UNUSABLE: 'La fiche a été créée, mais ses questions n’ont pas pu être validées. Réessaie ou précise le sujet.',
-            STORAGE_TEMPORARY: 'L’apprentissage n’a pas pu être enregistré pour le moment. Réessaie dans quelques instants.'
-          };
-          return messages[code] || fallback || 'Une erreur inattendue a interrompu la génération. Réessaie dans quelques instants.';
-        }
-
-        function customGenerationDiagnosticMessage(diagnostics) {
-          if (!diagnostics || typeof diagnostics !== 'object') return '';
-          var reasons = diagnostics.reasonCounts && typeof diagnostics.reasonCounts === 'object'
-            ? Object.keys(diagnostics.reasonCounts).sort().map(function (code) {
-                return code + '×' + Number(diagnostics.reasonCounts[code] || 0);
-              }).filter(function (value) { return !/×0$/.test(value); })
-            : [];
-          if (diagnostics.criticErrorCode) reasons.push(String(diagnostics.criticErrorCode));
-          if (!reasons.length) {
-            reasons.push('générées=' + Number(diagnostics.generatedQuestionCount || 0));
-            reasons.push('qualité=' + Number(diagnostics.finalQualityAcceptedCount || 0));
-            reasons.push('structure=' + Number(diagnostics.postQualityStructuralCount || 0));
-            reasons.push('connaissance=' + Number(diagnostics.postQualityKnowledgeMatchedCount || 0));
-            reasons.push('stockables=' + Number(diagnostics.postQualityConstraintCount || 0));
-          }
-          return reasons.length ? ' Référence diagnostic : ' + reasons.join(', ') + '.' : '';
-        }
 
         fetch('/api/users/notion-quizzes/custom', {
           method: 'POST',
@@ -5554,15 +5584,27 @@
           })
           .catch(function () {
             customSearchGenerationActive = false;
-            // Une coupure réseau ou la destruction de la page ne prouve pas que le serveur a
-            // arrêté son travail. On conserve donc le marqueur persistant : la page
-            // Apprentissage le réconciliera avec generation-status au prochain affichage.
+            // Une coupure réseau (ou la destruction de la page) ne prouve PAS que le
+            // serveur a arrêté son travail — cf. incident "Marxisme" du 01/09/2026 :
+            // une génération gpt-5.6-luna de 4 à 6 minutes dépasse le délai d'un
+            // intermédiaire réseau (proxy Render...) bien avant que le backend, lui,
+            // n'ait fini — il a effectivement terminé et créé les 16 questions dans
+            // ce cas précis. On ne présente donc plus ça comme un échec : le marqueur
+            // persistant est conservé et le flux de suivi existant (ligne "En cours de
+            // création" + sondage periodique de generation-status, cf.
+            // syncPendingNotionQuizGenerations/refreshPendingNotionQuizList) prend le
+            // relais jusqu'à ready ou (désormais) failed — seul generation-status fait
+            // foi, jamais l'état de cette connexion réseau précise.
             customTopicGenerationLabel = '';
             stopPieSpinner();
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
-            if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
-            setCustomSearchStatus('La connexion avec le serveur a été interrompue. La génération peut avoir été stoppée ; vérifie son état dans la liste avant de réessayer.', true);
+            if (currentCategory === 'mesqcm' && !currentSlot) {
+              renderMesQcmList(currentMesQcmQuizzes);
+              refreshPendingNotionQuizList(true);
+            } else {
+              setCustomSearchStatus('Génération du QCM « ' + topic + ' » toujours en cours en arrière-plan — cela peut prendre plusieurs minutes. Tu seras prévenu·e dès qu’il sera prêt.', false);
+            }
           });
       });
     });

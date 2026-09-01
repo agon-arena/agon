@@ -1027,6 +1027,38 @@ function showNotionQuizReadyAnnouncement(label) {
   });
 }
 
+// Annonce d'un vrai échec confirmé par le backend (correctif UX du
+// 01/09/2026, incident "Marxisme" — cf. showNotionQuizReadyAnnouncement
+// ci-dessus, même famille visuelle) : jusqu'ici, generation-status ne
+// renvoyait jamais "failed", donc un échec réel restait indiscernable d'une
+// génération toujours en cours pour l'utilisateur ayant quitté la page.
+function showNotionQuizFailedAnnouncement(label) {
+  const overlay = document.createElement("div");
+  overlay.className = "ecl-memorize-explainer-overlay";
+  const modal = document.createElement("div");
+  modal.className = "ecl-memorize-explainer-modal";
+  const text = document.createElement("p");
+  text.className = "ecl-memorize-explainer-text";
+  text.textContent = `La génération du parcours d'apprentissage « ${label} » a échoué. Tu peux réessayer depuis « Mes apprentissages ».`;
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "ecl-memorize-explainer-close";
+  closeBtn.textContent = "J’ai compris";
+  modal.appendChild(text);
+  modal.appendChild(closeBtn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+  }
+  function onKeydown(e) { if (e.key === "Escape") close(); }
+  document.addEventListener("keydown", onKeydown);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  closeBtn.addEventListener("click", close);
+}
+
 // Interrogation légère (localStorage seul, aucun réseau) tant qu'il n'y a
 // rien en attente ; un vrai appel serveur seulement si au moins une
 // génération suivie n'a pas encore de réponse.
@@ -1042,16 +1074,21 @@ function checkPendingNotionQuizzesReadiness() {
   fetchJSON(`${API}/users/notion-quizzes/generation-status?legacyKey=${encodeURIComponent(voterKeyForReadinessCheck)}&slots=${encodeURIComponent(slotsParam)}`, { cache: "no-store" })
     .then((data) => {
       const readySlots = new Set((data.ready || []).map((row) => row.slot));
+      const failedSlots = new Set((data.failed || []).map((row) => row.slot));
       // Relu juste avant d'agir : le flux direct (recherche libre restée
       // ouverte sur /apprentissage pendant toute la génération) peut avoir
       // déjà traité ce même slot pendant cet appel réseau — ne jamais
-      // notifier deux fois le même parcours prêt.
+      // notifier deux fois le même parcours prêt, ni le même échec.
       const stillPending = readPendingNotionQuizGenerations();
       pending.forEach((item) => {
-        if (!readySlots.has(item.slot)) return;
         if (!stillPending.some((row) => row.slot === item.slot)) return;
-        finishPendingNotionQuizGeneration(item.slot);
-        showNotionQuizReadyAnnouncement(item.label);
+        if (readySlots.has(item.slot)) {
+          finishPendingNotionQuizGeneration(item.slot);
+          showNotionQuizReadyAnnouncement(item.label);
+        } else if (failedSlots.has(item.slot)) {
+          finishPendingNotionQuizGeneration(item.slot);
+          showNotionQuizFailedAnnouncement(item.label);
+        }
       });
     })
     .catch(() => {})

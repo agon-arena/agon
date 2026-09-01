@@ -11,6 +11,7 @@ const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 const { recordAiUsage, extractUsage } = require("./lib/ai-usage-log");
+const { recordNotionQuizGenerationFailure, fetchRecentNotionQuizFailures } = require("./lib/notion-quiz-generation-failures");
 const { buildGroundingMetricsSummary, recordQcmGroundingMetrics } = require("./lib/qcm-grounding-metrics");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { buildMemoryItemNaturalKey } = require("./lib/spaced-repetition/memory-model");
@@ -15312,16 +15313,31 @@ function buildNotionMasterSlot(sourceType, sourceDebateId) {
 // corpus maître complet pour ce sujet. N'écrit jamais rien, ne fait aucun
 // appel IA — l'appelant reste responsable de la génération si rien n'est
 // trouvé (cf. ensureCustomTopicMasterGenerated/ensureNotionMasterGenerated).
+// Lecture en 2 temps (audit egress du 01/09/2026) : (slot, quiz_date) seuls
+// ne coûtent presque rien, alors que `questions` porte tout le poids
+// (jusqu'à 20 questions, fiche/placement dupliqués sur chacune). On ne
+// rapatrie donc `questions` en entier que ligne par ligne, dans le même
+// ordre qu'avant, en s'arrêtant au premier candidat réellement éligible —
+// jamais pour tout l'historique de régénérations des slots candidats. Le
+// candidat retourné (le même que le fetch en une passe d'avant) est
+// strictement inchangé.
 async function findExistingQuizMaster(candidateSlots) {
   const { data: rows, error } = await supabase
     .from("daily_quiz")
-    .select("slot, quiz_date, questions")
+    .select("slot, quiz_date")
     .in("slot", candidateSlots)
     .order("quiz_date", { ascending: false });
   if (error) throw new Error(error.message);
   for (const row of rows || []) {
-    if (isMasterEligibleQuiz(row.questions)) {
-      return { slot: row.slot, quizDate: row.quiz_date, questions: row.questions };
+    const { data: fullRow, error: fullError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("slot", row.slot)
+      .eq("quiz_date", row.quiz_date)
+      .maybeSingle();
+    if (fullError) throw new Error(fullError.message);
+    if (isMasterEligibleQuiz(fullRow?.questions)) {
+      return { slot: row.slot, quizDate: row.quiz_date, questions: fullRow.questions };
     }
   }
   return null;
@@ -15687,7 +15703,7 @@ function buildDebateTopicNotionsPrompt(question, content, optionA, optionB, cate
     "Règles strictes :",
     "- Base-toi uniquement sur le texte fourni, n'invente aucun fait.",
     `- Entre ${DEBATE_TOPIC_NOTIONS_MIN} et ${DEBATE_TOPIC_NOTIONS_MAX} notions distinctes, jamais de doublon ni de synonymes proches. La pertinence prime toujours sur le nombre : n'ajoute JAMAIS une notion médiocre ou tirée par les cheveux pour atteindre un quota — une seule notion vraiment solide vaut mieux que plusieurs approximatives.`,
-    "- Vise un niveau de granularité intermédiaire, entre ces deux excès à éviter absolument : (a) un mot-clé ou un détail anecdotique/circonstanciel du contenu (nom de lieu précis, nom propre secondaire, \"l'événement du [date]\") — trop étroit pour constituer un objet d'apprentissage ; (b) une catégorie généraliste qui engloberait n'importe quel contenu du même domaine (\"Histoire\", \"Politique\", \"Science\", \"International\", \"Économie\") — trop vague pour être précise ou pour qu'un apprentissage ciblé puisse être construit dessus.",
+    "- Vise un niveau de granularité intermédiaire, entre ces deux excès à éviter absolument : (a) un mot-clé ou un détail anecdotique/circonstanciel du contenu (nom de lieu précis, nom propre secondaire, \"l'événement du [date]\") — trop étroit pour constituer un objet d'apprentissage ; (b) une catégorie généraliste qui engloberait n'importe quel contenu du même domaine (\"Histoire\", \"Politique\", \"Science\", \"International\", \"Économie\") — trop vague pour être précise ou pour qu'un apprentissage ciblé puisse être construit dessus. En cas d'hésitation entre deux formulations valides, préfère toujours la plus large des deux — les notions trop pointues valent pire que les notions un peu larges.",
     "- Chaque notion doit avoir un lien réel et explicite avec le sujet principal du contenu — jamais une notion seulement adjacente, évoquée en passant, ou reliée par une simple proximité thématique sans rapport direct avec l'enjeu central.",
     "- Écarte les notions triviales ou déjà évidentes pour un lecteur de la presse générale — ne retiens que celles qui apportent un vrai éclairage.",
     "- Vérifie que chaque notion et son explication sont exactes et vérifiables avant de les retenir — en cas de doute sur un fait, écarte-le plutôt que de risquer une explication fausse ou approximative.",
@@ -17880,6 +17896,12 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
 // du sujet (normalizeCustomTopicKey) puisqu'aucun id stable n'existe côté
 // client pour un sujet libre.
 app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req, res) => {
+  // Portée hors du try (correctif UX du 01/09/2026, incident "Marxisme") :
+  // permet d'enregistrer un échec durable (cf. lib/notion-quiz-generation-failures)
+  // même quand l'erreur survient dans le catch général plus bas, une fois
+  // masterSlot déjà connu — c'est ce qui manquait à GET .../generation-status
+  // pour distinguer "toujours en cours" de "a réellement échoué".
+  let masterSlotForFailureTracking = null;
   try {
     const validation = validateLegacyKey(req.body?.legacyKey);
     if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
@@ -17896,6 +17918,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     const { level } = resolveNotionQuizLevel(req.body?.level);
     const slot = `notion:custom:${id}${level ? `:${level}` : ""}`;
     const masterSlot = buildCustomTopicMasterSlot(id);
+    masterSlotForFailureTracking = masterSlot;
 
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
@@ -17973,6 +17996,12 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
             const publicError = publicGenerationError(code, result.reason);
             const safeDiagnostics = result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : null;
             console.warn(`[notion-quizzes:custom:${id}] response stage=${result.stage || "subject_validation"} code=${publicError.body.code}${safeDiagnostics ? ` diagnostics=${JSON.stringify(safeDiagnostics)}` : ""}`);
+            // Best-effort, jamais awaité (même règle que recordAiUsage) : un vrai
+            // échec confirmé par le backend doit devenir visible du polling
+            // generation-status, y compris si le client qui a lancé cette requête
+            // s'est déjà déconnecté entre-temps (coupure réseau pendant la
+            // génération) et ne verra donc jamais cette réponse HTTP.
+            recordNotionQuizGenerationFailure(supabase, { identity: masterSlot, code: publicError.body.code, reason: result.reason });
             return res.status(publicError.status).json({ ...publicError.body, ...(safeDiagnostics ? { diagnostics: safeDiagnostics } : {}) });
           }
           questions = result.questions;
@@ -18038,6 +18067,9 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     // reste dans les logs et n'est jamais renvoyé au navigateur.
     const publicError = publicGenerationError("STORAGE_TEMPORARY");
     console.error("[notion-quizzes] création (recherche libre) stage=storage code=STORAGE_TEMPORARY :", error.message);
+    if (masterSlotForFailureTracking) {
+      recordNotionQuizGenerationFailure(supabase, { identity: masterSlotForFailureTracking, code: "STORAGE_TEMPORARY", reason: error.message });
+    }
     res.status(publicError.status).json(publicError.body);
   }
 });
@@ -18055,15 +18087,19 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
 // à revoir si le volume grossit significativement (cf. [[project_supabase_1000_rows]]).
 app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req, res) => {
   try {
-    // Nombre de questions affiché à côté du sujet (demande du 13/08/2026) :
-    // nécessite désormais de relire tout le tableau JSONB questions (PostgREST
-    // n'expose pas jsonb_array_length() en select=), pas seulement le libellé
-    // de la première comme avant (cf. audit egress du 12-13/08/2026) — accepté
-    // vu le volume actuel très faible (quelques dizaines de sujets libres),
-    // à revoir si ce nombre grossit significativement.
+    // Phase 1 (léger, audit egress du 01/09/2026) : slot + quiz_date + SEULE
+    // la première question (questions->0, syntaxe de sélection JSON de
+    // PostgREST) — le dédoublonnage "une ligne par slot, la plus récente" et
+    // le libellé/searchTopic/thème affichés ne regardent jamais que cette
+    // première question (cf. getPrimaryNotionQuizTheme, toujours appelé sur
+    // questions?.[0] avant comme après ce correctif). Le tableau `questions`
+    // complet (jusqu'à 20 questions, fiche/placement dupliqués sur chacune)
+    // n'est plus rapatrié pour tout l'historique de régénérations ici — voir
+    // phase 2 plus bas, qui ne le relit que pour les lignes réellement
+    // affichées, pour le questionCount exact.
     const { data: quizRows, error: quizError } = await supabase
       .from("daily_quiz")
-      .select("quiz_date, slot, questions")
+      .select("quiz_date, slot, first:questions->0")
       .like("slot", "notion:custom:%");
     if (quizError) throw new Error(quizError.message);
 
@@ -18084,30 +18120,57 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
     // ci-dessus reste toutes dates confondues pour ce même slot.
     const bySlot = new Map();
     for (const row of quizRows || []) {
-      const label = row.questions?.[0]?.sourceName;
+      const label = row.first?.sourceName;
       if (!label) continue;
       const existing = bySlot.get(row.slot);
-      if (!existing || row.quiz_date > existing.quiz_date) bySlot.set(row.slot, { ...row, label });
+      if (!existing || row.quiz_date > existing.quizDate) {
+        bySlot.set(row.slot, { slot: row.slot, quizDate: row.quiz_date, label, first: row.first });
+      }
     }
 
     const searchQuery = String(req.query.search || "").trim().toLowerCase();
     let items = Array.from(bySlot.values()).map((row) => ({
       slot: row.slot,
-      quizDate: row.quiz_date,
+      quizDate: row.quizDate,
       label: row.label,
       // Absent sur les sujets créés avant l'ajout de searchTopic (13/08/2026,
       // cf. POST /custom) : null plutôt qu'une chaîne vide, le client n'affiche
       // alors rien plutôt qu'une ligne identique au titre juste au-dessus.
-      searchTopic: row.questions?.[0]?.searchTopic || null,
-      questionCount: Array.isArray(row.questions) ? row.questions.length : 0,
-      userCount: userCountBySlot.get(row.slot) || 0,
+      searchTopic: row.first?.searchTopic || null,
       // Même thématique que "Ma mémoire" (demande du 30/08/2026, "classés par
       // thématique, la même que Ma mémoire") : getPrimaryNotionQuizTheme lit
       // sourcePlacement.category (ou repli sourceThemes), déjà la source
       // utilisée pour la galaxie de Ma mémoire (cf. GET /notion-quizzes).
-      theme: getPrimaryNotionQuizTheme(row.questions?.[0])
+      theme: getPrimaryNotionQuizTheme(row.first)
     }));
     if (searchQuery) items = items.filter((item) => item.label.toLowerCase().includes(searchQuery));
+
+    // Phase 2 (audit egress du 01/09/2026) : questionCount exact nécessite le
+    // tableau complet — PostgREST n'expose pas jsonb_array_length() en
+    // select=, donc on ne peut pas l'obtenir sans lui — mais on ne le relit
+    // désormais que pour les lignes qui vont RÉELLEMENT être affichées (post
+    // dédoublonnage ET post recherche), jamais pour tout l'historique comme
+    // avant.
+    let questionCountBySlot = new Map();
+    if (items.length) {
+      const orFilter = items
+        .map((item) => `and(slot.eq.${item.slot},quiz_date.eq.${item.quizDate})`)
+        .join(",");
+      const { data: countRows, error: countError } = await supabase
+        .from("daily_quiz")
+        .select("slot, questions")
+        .or(orFilter);
+      if (countError) throw new Error(countError.message);
+      questionCountBySlot = new Map(
+        (countRows || []).map((row) => [row.slot, Array.isArray(row.questions) ? row.questions.length : 0])
+      );
+    }
+    items = items.map((item) => ({
+      ...item,
+      questionCount: questionCountBySlot.get(item.slot) || 0,
+      userCount: userCountBySlot.get(item.slot) || 0
+    }));
+
     // Groupées par thématique (sujets sans thématique en dernier), puis même
     // ordre qu'avant (popularité, puis alphabétique) au sein d'un groupe.
     items.sort((a, b) => {
@@ -18220,18 +18283,18 @@ function getPrimaryNotionQuizTheme(question) {
 app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), async (req, res) => {
   try {
     const validation = validateLegacyKey(req.query?.legacyKey);
-    if (validation.error) return res.status(400).json({ ready: [], error: validation.error });
+    if (validation.error) return res.status(400).json({ ready: [], failed: [], error: validation.error });
     const slots = [...new Set(String(req.query?.slots || "")
       .split(",")
       .map((slot) => slot.trim())
       .filter((slot) => slot.startsWith("notion:") && slot.length <= 500))]
       .slice(0, 20);
-    if (!slots.length) return res.json({ ready: [] });
+    if (!slots.length) return res.json({ ready: [], failed: [] });
 
     const { data: user, error: userError } = await supabase
       .from("users").select("id").eq("legacy_key", validation.legacyKey).maybeSingle();
     if (userError) throw new Error(userError.message);
-    if (!user) return res.json({ ready: [] });
+    if (!user) return res.json({ ready: [], failed: [] });
 
     // Depuis la mutualisation V4.1, un sujet libre peut être demandé avec un
     // slot suffixé par le niveau (`:elementaire`, `:avance`, `:expert`) puis
@@ -18267,10 +18330,30 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
       // clé exacte enregistrée dans le localStorage que le client doit retirer.
       return row ? [{ slot: requestedSlot, quizDate: row.quiz_date }] : [];
     });
-    res.json({ ready });
+
+    // failed (correctif UX du 01/09/2026, incident "Marxisme") : jusqu'ici,
+    // cette route ne pouvait renvoyer que "ready" ou rien — un vrai échec
+    // backend (cf. recordNotionQuizGenerationFailure) restait indiscernable
+    // d'une génération toujours en cours, quelle que soit sa durée. `ready`
+    // reste toujours prioritaire : un slot qui vient de réussir après un échec
+    // antérieur sur le même sujet (nouvel essai) ne doit jamais être signalé
+    // comme échoué. Uniquement pertinent pour les slots "sujet libre"
+    // (notion:custom:*, seule route qui enregistre un échec aujourd'hui) —
+    // cf. son commentaire dans POST .../custom.
+    const readySlots = new Set(ready.map((row) => row.slot));
+    const pendingCustomSlots = slots.filter((slot) => slot.startsWith("notion:custom:") && !readySlots.has(slot));
+    const failureIdentities = [...new Set(pendingCustomSlots.map((slot) => customSlotIdentity(slot)))];
+    const failures = await fetchRecentNotionQuizFailures(supabase, failureIdentities);
+    const failureByIdentity = new Map(failures.map((row) => [row.identity, row]));
+    const failed = pendingCustomSlots.flatMap((requestedSlot) => {
+      const failure = failureByIdentity.get(customSlotIdentity(requestedSlot));
+      return failure ? [{ slot: requestedSlot, code: failure.code || null }] : [];
+    });
+
+    res.json({ ready, failed });
   } catch (error) {
     console.error("[notion-quizzes] suivi génération :", error.message);
-    res.status(500).json({ ready: [], error: "Suivi momentanément indisponible." });
+    res.status(500).json({ ready: [], failed: [], error: "Suivi momentanément indisponible." });
   }
 });
 
@@ -18297,13 +18380,21 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (linksError) throw new Error(linksError.message);
     if (!links || !links.length) return res.json({ quizzes: [] });
 
-    const quizDates = [...new Set(links.map((l) => l.quiz_date))];
-    const slots = [...new Set(links.map((l) => l.slot))];
+    // Filtre par paires exactes (quiz_date, slot), jamais par un
+    // `.in(dates).in(slots)` croisé (audit egress du 01/09/2026) : ce dernier
+    // matche aussi toute ligne dont la date ET le slot appartiennent chacun à
+    // DEUX liens différents de cet utilisateur, sans que ce (date, slot)
+    // précis en soit un — un slot régénéré à une date qui, par coïncidence,
+    // est aussi la date d'un AUTRE lien de ce même utilisateur rapatrierait
+    // ainsi une ligne `questions` complète et jamais utilisée (questionsByKey
+    // n'est jamais lu qu'avec les paires exactes de `links`).
+    const pairFilter = links
+      .map((l) => `and(quiz_date.eq.${l.quiz_date},slot.eq.${l.slot})`)
+      .join(",");
     const { data: quizRows, error: quizRowsError } = await supabase
       .from("daily_quiz")
       .select("quiz_date, slot, questions")
-      .in("quiz_date", quizDates)
-      .in("slot", slots);
+      .or(pairFilter);
     if (quizRowsError) throw new Error(quizRowsError.message);
     const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
 
@@ -19924,20 +20015,38 @@ async function hasPendingCultureGeneraleComprehensionQuestions(legacyKey, quizDa
 
   const selectedLinks = selectCultureGeneraleComprehensionLinksForDay(links, quizDate);
   const selectedSlots = selectedLinks.map(cultureGeneraleComprehensionQuizSlot);
-  const { data: quizRows, error: quizError } = await supabase
+  // Lecture en 2 temps (audit egress du 01/09/2026) : on ne rapatrie
+  // `questions` en entier (jusqu'à 20 questions, fiche/placement dupliqués
+  // sur chacune) que pour la ligne la plus récente et non vide de CHAQUE
+  // slot sélectionné, jamais pour tout l'historique de régénérations de ces
+  // (au plus 6) slots. `first:questions->0` (syntaxe de sélection JSON de
+  // PostgREST) suffit à détecter "non vide" (Array.isArray+length) sans
+  // transférer le tableau complet — le repli sur une ligne plus ancienne en
+  // cas de ligne la plus récente vide reste strictement identique à avant.
+  const { data: quizMetaRows, error: quizMetaError } = await supabase
     .from("daily_quiz")
-    .select("quiz_date,slot,questions")
+    .select("quiz_date, slot, first:questions->0")
     .in("slot", selectedSlots)
     .order("quiz_date", { ascending: false });
-  if (quizError) throw new Error(quizError.message);
+  if (quizMetaError) throw new Error(quizMetaError.message);
 
-  const latestBankBySlot = new Map();
-  for (const row of quizRows || []) {
-    if (!latestBankBySlot.has(row.slot) && Array.isArray(row.questions) && row.questions.length) {
-      latestBankBySlot.set(row.slot, row.questions);
+  const latestDateBySlot = new Map();
+  for (const row of quizMetaRows || []) {
+    if (!latestDateBySlot.has(row.slot) && row.first != null) {
+      latestDateBySlot.set(row.slot, row.quiz_date);
     }
   }
-  if (selectedSlots.some((slot) => !latestBankBySlot.has(slot))) return true;
+  if (selectedSlots.some((slot) => !latestDateBySlot.has(slot))) return true;
+
+  const pairFilter = [...latestDateBySlot.entries()]
+    .map(([slot, quizDateValue]) => `and(slot.eq.${slot},quiz_date.eq.${quizDateValue})`)
+    .join(",");
+  const { data: quizRows, error: quizError } = await supabase
+    .from("daily_quiz")
+    .select("slot, questions")
+    .or(pairFilter);
+  if (quizError) throw new Error(quizError.message);
+  const latestBankBySlot = new Map((quizRows || []).map((row) => [row.slot, row.questions || []]));
 
   const banks = selectedSlots.map((slot) => latestBankBySlot.get(slot) || []);
   const questions = assembleComprehensionSession(banks, COMPREHENSION_QUIZ_MAX_QUESTIONS);
@@ -21506,8 +21615,14 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
 // que soit la variante affichée à l'utilisateur.
 async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, questionId, isCorrect, difficulty }) {
   let memoryItemRow = null;
+  // Réutilisé plus bas si upsertMemoryItemForNotionAnswer l'a déjà résolu
+  // (branches "notion:"/"comprendre:") pour éviter de relire deux fois la
+  // même ligne daily_quiz (audit egress du 01/09/2026) — reste null pour
+  // "cgreview-", qui ne passe jamais par cette fonction.
+  let canonicalQuestion = null;
   if (questionId.startsWith("notion:")) {
     memoryItemRow = await upsertMemoryItemForNotionAnswer({ slot, quizDate, questionId });
+    canonicalQuestion = memoryItemRow?.canonicalQuestion || null;
   } else if (questionId.startsWith("cgreview-")) {
     // "Dernière génération gagne" (même convention que la réutilisation d'un
     // sujet libre déjà généré, cf. POST /api/users/notion-quizzes/custom) :
@@ -21545,15 +21660,18 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
     if (comprehensionQuizRowError) throw comprehensionQuizRowError;
     if (!comprehensionQuizRow) return;
     memoryItemRow = await upsertMemoryItemForNotionAnswer({ slot: comprehensionPairSlot, quizDate: comprehensionQuizRow.quiz_date, questionId });
+    canonicalQuestion = memoryItemRow?.canonicalQuestion || null;
   } else {
     return; // hors périmètre FSRS (question actu, ancien slot hors "notion:%")
   }
   if (!memoryItemRow) return;
 
-  const { data: quizRow, error: quizRowError } = await supabase.from("daily_quiz")
-    .select("questions").eq("quiz_date", memoryItemRow.quiz_date).eq("slot", memoryItemRow.slot).maybeSingle();
-  if (quizRowError) throw quizRowError;
-  const canonicalQuestion = (quizRow?.questions || []).find((q) => q.id === memoryItemRow.question_id);
+  if (!canonicalQuestion) {
+    const { data: quizRow, error: quizRowError } = await supabase.from("daily_quiz")
+      .select("questions").eq("quiz_date", memoryItemRow.quiz_date).eq("slot", memoryItemRow.slot).maybeSingle();
+    if (quizRowError) throw quizRowError;
+    canonicalQuestion = (quizRow?.questions || []).find((q) => q.id === memoryItemRow.question_id);
+  }
   if (!canonicalQuestion) return; // ne devrait pas arriver pour un slot "notion:%" (jamais purgé)
 
   const { user } = await resolveLegacyUser(supabase, voterKey);
@@ -21649,7 +21767,11 @@ async function upsertMemoryItemForNotionAnswer({ slot, quizDate, questionId }) {
     .select("id, slot, quiz_date, question_id")
     .single();
   if (error) throw error;
-  return data;
+  // canonicalQuestion (audit egress du 01/09/2026) : la question déjà lue
+  // ci-dessus, réutilisée par applyFsrsReviewForDailyQuizAnswer pour éviter
+  // de relire deux fois la même ligne daily_quiz — jamais consommé ailleurs,
+  // ne change donc rien pour les autres lecteurs de cette fonction.
+  return { ...data, canonicalQuestion: question };
 }
 
 // "Refaire" (cf. views/qcm-du-jour.html renderFinalScore/quizAnswerEndpoint,

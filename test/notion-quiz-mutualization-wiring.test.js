@@ -34,7 +34,11 @@ test("findExistingQuizMaster filtre les candidats par isMasterEligibleQuiz (jama
   assert.ok(fnIndex > 0);
   const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 800);
   assert.match(fnBody, /\.in\("slot", candidateSlots\)/, "doit chercher parmi TOUS les slots candidats (nu + legacy suffixés), pas un seul");
-  assert.match(fnBody, /if \(isMasterEligibleQuiz\(row\.questions\)\)/, "un candidat trouvé ne doit être retenu comme master que s'il porte pedagogicalRank");
+  // Lecture en 2 temps depuis l'audit egress du 01/09/2026 (cf.
+  // test/daily-quiz-egress-v1.test.js) : `questions` n'est plus dans le
+  // select initial, l'éligibilité est vérifiée sur la relecture ciblée
+  // (fullRow) — même garde-fou qu'avant, jamais un simple exact-match aveugle.
+  assert.match(fnBody, /if \(isMasterEligibleQuiz\(fullRow\?\.questions\)\)/, "un candidat trouvé ne doit être retenu comme master que s'il porte pedagogicalRank");
 });
 
 test("POST /api/users/notion-quizzes/custom interroge findExistingQuizMaster avec le slot nu ET les 3 slots legacy suffixés, avant toute autre réutilisation", () => {

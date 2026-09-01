@@ -24,9 +24,13 @@ test("Relier est disponible seulement s'il reste une question du jour sans répo
 });
 
 test("un nouveau lien sans banque de questions garde Relier disponible", () => {
+  // Depuis l'audit egress du 01/09/2026 (cf. test/daily-quiz-egress-v1.test.js),
+  // la détection "slot sans ligne" se fait sur latestDateBySlot (léger, phase 1
+  // questions->0), plus latestBankBySlot (qui ne porte désormais que le
+  // tableau complet des slots retenus, phase 2) — même garde-fou qu'avant.
   assert.match(
     server,
-    /selectedSlots\.some\(\(slot\) => !latestBankBySlot\.has\(slot\)\)\) return true;/
+    /selectedSlots\.some\(\(slot\) => !latestDateBySlot\.has\(slot\)\)\) return true;/
   );
 });
 
