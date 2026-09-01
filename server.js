@@ -12945,10 +12945,18 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
   const feature = opts.feature || null;
   const startedAt = Date.now();
 
+  // Diagnostic temporaire (01/09/2026) : model_not_found sur gpt-5.6-luna en
+  // prod alors que ça fonctionne en local. Hash court et irréversible de la
+  // clé (jamais la clé elle-même) pour comparer local vs Render sans exposer
+  // le secret ; baseURL en dur ci-dessous donc loggée telle quelle.
+  const OPENAI_BASE_URL_USED = "https://api.openai.com/v1/chat/completions";
+  const keyHash = apiKey ? crypto.createHash("sha256").update(apiKey).digest("hex").slice(0, 8) : "absent";
+  console.log(`[_callOpenAI] baseURL=${OPENAI_BASE_URL_USED} model=${model} apiKeyHash=${keyHash} feature=${feature || "n/a"}`);
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let r;
     try {
-      r = await fetch("https://api.openai.com/v1/chat/completions", {
+      r = await fetch(OPENAI_BASE_URL_USED, {
         method:  "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
         body:    JSON.stringify({
