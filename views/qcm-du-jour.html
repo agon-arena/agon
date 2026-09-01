@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260901-community-score-more-space-below">
+  <link rel="stylesheet" href="/style.min.css?v=20260901-memoire-back-btn-removed">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -1094,10 +1094,11 @@
     .qcm-explore-theme-heading:first-child {
       margin-top: 0;
     }
-    /* Confirmation avant génération IA (demande du 13/08/2026) : reprend le
-       sujet + niveau choisis, pour éviter une génération lancée par erreur
-       (sujet mal tapé, mauvais niveau cliqué) — même famille visuelle que les
-       autres popups de cette page (.qcm-fiche-overlay/.qcm-fiche-modal). */
+    /* Confirmation avant génération IA (demande du 13/08/2026, restaurée le
+       01/09/2026) : reprend le sujet + niveau choisis, pour éviter une
+       génération lancée par erreur (sujet mal tapé, mauvais niveau cliqué) —
+       même famille visuelle que les autres popups de cette page
+       (.qcm-fiche-overlay/.qcm-fiche-modal). */
     .qcm-generate-confirm-text {
       margin: 0 0 8px;
       font-size: 15px;
@@ -1497,6 +1498,19 @@
       color: #4b5563;
       font-size: 13px;
       line-height: 1.4;
+    }
+    /* Lien "Scores et contributions" inline dans le message Gnosis/Noesis
+       (demande du 01/09/2026) : reprend la taille/couleur du texte autour,
+       seul le soulignement distingue le lien cliquable. */
+    .qcm-final-score-hint-link {
+      margin: 0;
+      padding: 0;
+      border: none;
+      background: none;
+      color: inherit;
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
     }
     /* Progression vers la mémorisation durable (4 bonnes réponses à
        intervalles croissants — 3j/7j/1mois, cf. server.js
@@ -3281,7 +3295,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260901-rhetor-to-doxa" defer></script>
+<script src="/script.min.js?v=20260901-ai-report-btn-moved" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -4318,15 +4332,25 @@
   // applyXAnswerState (partagées avec le simple ré-affichage d'une question
   // déjà répondue, ex. retour arrière) : sans cette distinction, rouvrir une
   // question déjà répondue ferait aussi défiler la page à chaque fois.
+  // scrollIntoView({block:'end'}) alignait le bas du bouton sur le bas réel
+  // du viewport — pile sous le bandeau de navigation fixe (.qcm-home-bottom-
+  // nav, position:fixed) qui le recouvrait alors entièrement ; le
+  // window.scrollBy() smooth lancé juste après interrompait l'animation en
+  // cours au lieu de s'y ajouter, pour un résultat imprévisible (demande du
+  // 01/09/2026, "prend en compte le bandeau blanc du bas"). Un seul
+  // scrollTo, avec une cible calculée à partir de la hauteur réelle du
+  // bandeau (getBoundingClientRect, qui inclut déjà son padding-bottom lié à
+  // env(safe-area-inset-bottom), donc valable aussi sur iPhone à encoche).
   function scrollToRevealLearningReturn() {
     requestAnimationFrame(function () {
-      if (learningReturnBottom && !learningReturnBottom.hidden) {
-        learningReturnBottom.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        // Un peu plus bas que le strict "block:end" (demande du 31/08/2026) :
-        // laisse une marge sous le bouton plutôt que de le coller pile au
-        // bord bas du viewport.
-        window.scrollBy({ top: 60, behavior: 'smooth' });
-      }
+      if (!learningReturnBottom || learningReturnBottom.hidden) return;
+      var navEl = document.querySelector('.qcm-home-bottom-nav');
+      var navHeight = navEl ? navEl.getBoundingClientRect().height : 0;
+      var margin = 24;
+      var rect = learningReturnBottom.getBoundingClientRect();
+      var visibleBottom = window.innerHeight - navHeight - margin;
+      var delta = rect.bottom - visibleBottom;
+      if (delta > 0) window.scrollTo({ top: window.scrollY + delta, behavior: 'smooth' });
     });
   }
 
@@ -4771,6 +4795,14 @@
     wireNextButton(document.getElementById('qcm-next-btn'));
   }
 
+  // "Scores et contributions" cliquable dans le message Gnosis/Noesis de l'écran
+  // final (demande du 01/09/2026) : qcmBottomNavOpen (défini dans le <script>
+  // du dock du bas, en fin de page) gère déjà l'ouverture correcte selon le
+  // contexte (modale iframe depuis l'accueil, ou navigation directe).
+  function scoresContributionsLinkHtml() {
+    return '<button type="button" class="qcm-final-score-hint-link" onclick="qcmBottomNavOpen(\'/contributions\')">Scores et contributions</button>';
+  }
+
   function renderFinalScore() {
     signalIframeReady();
     // Écran de score final : plus une question précise à l'image dédiée,
@@ -4827,13 +4859,15 @@
     // (practiceMode), aucun des deux : ce passage d'entraînement ne compte
     // jamais pour l'ancrage (cf. POST /api/daily-quiz/practice-answer, qui ne
     // persiste jamais la réponse).
+    // Demande du 01/09/2026 : plus de message sous le score en mode Refaire/entraînement, ni en
+    // Découvrir (par défaut) — seuls Ancrer/Relier en gardent un.
     var scoreHint = practiceMode
-      ? 'Cet entraînement ne compte pas — il ne modifie jamais ton ancrage ni tes vraies réponses du jour.'
+      ? ''
       : (currentCategory === 'renforcement'
-        ? 'Les questions d’ancrage alimentent ton score Gnosis (voir page Scores et contributions).'
+        ? 'Les questions d’ancrage alimentent ton score Gnosis (voir page ' + scoresContributionsLinkHtml() + ').'
         : (currentCategory === 'comprendre'
-          ? 'Les questions qui font le lien entre tes connaissances alimentent ton score Noesis (voir page Scores et contributions).'
-          : 'Dans quelques instants, tu pourras voir ton classement par rapport aux autres utilisateurs (disponible depuis le bandeau blanc en haut ou en bas).'));
+          ? 'Les questions qui font le lien entre tes connaissances alimentent ton score Noesis (voir page ' + scoresContributionsLinkHtml() + ').'
+          : ''));
     // Demande du 17/08/2026 : plus de "Refaire"/"Refaire les questions loupées" — un seul
     // bouton "Terminé", qui ramène toujours sur Découvrir.
     body.innerHTML =
@@ -4842,7 +4876,7 @@
       '<div class="qcm-final-score-value">' + correct + ' / ' + total + '</div>' +
       '<div class="qcm-final-score-label">bonnes réponses aujourd’hui</div>' +
       '</div>' +
-      '<p class="qcm-final-score-hint">' + scoreHint + '</p>' +
+      (scoreHint ? '<p class="qcm-final-score-hint">' + scoreHint + '</p>' : '') +
       '<div class="qcm-final-actions">' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-finish-btn">Terminé</button>' +
       '</div>';
@@ -5236,11 +5270,16 @@
   });
 
   // Récapitule sujet + niveau choisis avant de lancer la génération IA
-  // (demande du 13/08/2026) : évite une génération partie par erreur (sujet
-  // mal tapé, mauvais niveau cliqué dans showNotionQuizLevelPicker) — coûte
-  // un appel IA (et, pour le niveau Expert, jusqu'à plusieurs minutes)
-  // impossible à annuler une fois lancé. Même famille visuelle que les
-  // autres popups de cette page (.qcm-fiche-overlay/.qcm-fiche-modal).
+  // (demande du 13/08/2026, restaurée le 01/09/2026) : évite une génération
+  // partie par erreur (sujet mal tapé, mauvais niveau cliqué dans
+  // showNotionQuizLevelPicker) — coûte un appel IA (et, pour le niveau
+  // Expert, jusqu'à plusieurs minutes) impossible à annuler une fois lancé.
+  // Même famille visuelle que les autres popups de cette page
+  // (.qcm-fiche-overlay/.qcm-fiche-modal). Ferme sans rien d'autre à
+  // l'écran qu'on confirme ou qu'on annule (pas de 3e fenêtre) : Annuler
+  // referme juste l'overlay, Confirmer referme puis lance directement le
+  // fetch (le statut qui suit s'affiche en ligne dans la barre de
+  // recherche, jamais dans une nouvelle popup).
   function showGenerateConfirmModal(topic, level, onConfirm) {
     var levelMeta = (typeof NOTION_QUIZ_LEVEL_OPTIONS !== 'undefined' ? NOTION_QUIZ_LEVEL_OPTIONS : [])
       .filter(function (o) { return o.level === level; })[0];
@@ -5484,7 +5523,7 @@
             if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
             setCustomSearchStatus('Connexion interrompue. Vérifie ton réseau puis réessaie.', true);
           });
-        });
+      });
     });
   }
   function submitCustomTopic(e) {

@@ -5110,8 +5110,8 @@ body.page-debate #score-b {
 .index-card-notions-section{
   margin-top:14px;
   margin-bottom:20px;
-  padding-top:14px;
-  padding-bottom:18px;
+  padding-top:4px;
+  padding-bottom:10px;
   border-top:1px solid #e5e7eb;
   border-bottom:1px solid #e5e7eb;
 }
@@ -25832,33 +25832,11 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
   }
 }
 
+/* Retirée (demande du 01/09/2026, "une petite flèche retour apparait à l'intérieur du cadre en
+   bas à gauche. Supprime la") : le fil d'Ariane (#mnoria-memoire-embed-before, toujours affiché
+   au-dessus du cadre) reste le seul moyen de remonter d'un niveau dans l'embed accueil. */
 #mnoria-memoire-embed-after .universe-back-btn.is-visible {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  margin-bottom: 0;
-  border-radius: 50%;
-  background: rgba(20, 28, 36, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  color: rgba(255, 255, 255, 0.8);
-  /* font-size:0 masque le texte "Retour" (nœud texte brut dans le bouton, pas de <span> dédié à
-     cibler) sans toucher au markup partagé avec la page Mon univers — l'icône restaure sa
-     propre taille juste après. */
-  font-size: 0;
-  transform: translateY(-20px);
-}
-
-#mnoria-memoire-embed-after .universe-back-btn.is-visible i {
-  font-size: 13px;
-}
-
-#mnoria-memoire-embed-after .universe-back-btn.is-visible:hover {
-  background: rgba(20, 28, 36, 0.8);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.45);
+  display: none;
 }
 
 /* Conteneur de bulles : hérite entièrement de .mnoria-tag-trends-cloud (taille,
@@ -25994,23 +25972,26 @@ body.is-standalone.page-home-mobile #mnoria-tag-trends-cloud.mnoria-memoire-fram
    Paliers alignés sur syncMnoriaTileMetrics (NATUREL / dpr, mon-univers.js) : 1x (repli var()),
    2x et 3x, les densités réellement rencontrées ; l'inline JS reste la valeur exacte finale pour
    toute densité intermédiaire (dpr fractionnaire). */
+/* ×0.6 (demande du 01/09/2026, "le fond de ma mémoire est trop zoomé") : mêmes paliers dpr que
+   syncMnoriaTileMetrics (mon-univers.js, MNORIA_TEXTURE_DISPLAY_SCALE), qui reprend la main dès
+   que le module se charge — ce repli ne sert qu'au tout premier paint. */
 #mnoria-universe-cloud.mnoria-tag-trends-cloud,
 .mnoria-memoire-frame.mnoria-tag-trends-cloud {
-  --mnoria-tile-width: 3840px;
-  --mnoria-tile-height: 2560px;
+  --mnoria-tile-width: 2304px;
+  --mnoria-tile-height: 1536px;
 }
 @media (min-resolution: 1.5dppx) {
   #mnoria-universe-cloud.mnoria-tag-trends-cloud,
   .mnoria-memoire-frame.mnoria-tag-trends-cloud {
-    --mnoria-tile-width: 1920px;
-    --mnoria-tile-height: 1280px;
+    --mnoria-tile-width: 1152px;
+    --mnoria-tile-height: 768px;
   }
 }
 @media (min-resolution: 2.5dppx) {
   #mnoria-universe-cloud.mnoria-tag-trends-cloud,
   .mnoria-memoire-frame.mnoria-tag-trends-cloud {
-    --mnoria-tile-width: 1280px;
-    --mnoria-tile-height: 853.333px;
+    --mnoria-tile-width: 768px;
+    --mnoria-tile-height: 512px;
   }
 }
 #mnoria-universe-cloud.mnoria-tag-trends-cloud::after,

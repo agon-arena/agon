@@ -309,8 +309,16 @@ const statusEl = document.getElementById("universe-status");
 const backBtn = document.getElementById("universe-back-btn");
 
 // Texture définitive fournie pour "Ma mémoire". À l'échelle caméra 1, une dimension CSS divisée
-// par devicePixelRatio fait correspondre un pixel source à un pixel physique sur les écrans
+// par devicePixelRatio ferait correspondre un pixel source à un pixel physique sur les écrans
 // Retina/HiDPI ; le zoom de la caméra reste ensuite un zoom visuel normal du même asset.
+// MNORIA_TEXTURE_DISPLAY_SCALE réduit cette correspondance 1:1 (demande du 01/09/2026, "le fond
+// de ma mémoire est trop zoomé") : le cadre étant petit face à la texture 4K, un mappage pixel
+// pour pixel n'affichait qu'un fragment agrandi de la nébuleuse au lieu d'un vrai ciel étoilé
+// large. 0.6 rétrécit la tuile affichée d'autant, donc le motif se répète plus tôt et paraît
+// plus éloigné/dézoomé, sans toucher au zoom de la scène elle-même (bulles, seuils de
+// révélation) ni au plafond de grossissement du fond (BACKGROUND_MAX_VISUAL_SCALE,
+// universe-zoom.js).
+const MNORIA_TEXTURE_DISPLAY_SCALE = 0.6;
 // WebP lossy (qualité 82, cf. audit "egress Ma mémoire" du 16/08/2026) remplace le PNG source
 // (mnoria_master_4K_seamless_infini.png, conservé sur disque comme master) : -90,6% de poids
 // (12,0 Mo -> 1,13 Mo) pour une différence visuelle imperceptible même sur les zones les plus
@@ -349,8 +357,8 @@ function ensureMnoriaTextureReady() {
 
 function syncMnoriaTileMetrics() {
   const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
-  const width = MNORIA_TEXTURE_NATURAL_W / dpr;
-  const height = MNORIA_TEXTURE_NATURAL_H / dpr;
+  const width = (MNORIA_TEXTURE_NATURAL_W * MNORIA_TEXTURE_DISPLAY_SCALE) / dpr;
+  const height = (MNORIA_TEXTURE_NATURAL_H * MNORIA_TEXTURE_DISPLAY_SCALE) / dpr;
   cloudEl?.style.setProperty("--mnoria-tile-width", `${width}px`);
   cloudEl?.style.setProperty("--mnoria-tile-height", `${height}px`);
   return { width, height };

@@ -1,10 +1,7 @@
-// Invalidation du 30/08/2026 (v233) : le vrai bug du bandeau blanc du haut sur Apprentissage/
-// Ouvrir/Notifications n'était PAS dans le même CSS que l'index (.home-topbar-login-icon) mais
-// dans .standalone-header-power (public/style.css) et le hamburger injecté par
-// header-score-widget.js (.mnoria-universal-menu-wrap) — deux mécanismes séparés, non touchés
-// par le correctif précédent (v232). Changer cette version vide l'ancien cache statique (HTML +
-// assets ?v=...) et laisse la navigation suivante récupérer la version corrigée.
-const SW_VERSION = "20260830-topbar-align-fix-v236-diag";
+// Invalidation du 01/09/2026 (v237) : ajout du postMessage "mnoria:play-notification-gong"
+// dans le handler push (cf. plus bas) — changer cette version vide l'ancien cache statique
+// et force l'activation du nouveau service worker.
+const SW_VERSION = "20260901-notification-gong-v237";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -314,7 +311,16 @@ self.addEventListener("push", (event) => {
     }
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Aucun son personnalisé possible sur la notification système elle-même (limitation
+  // des navigateurs, aucune option "sound" supportée) — à la place, on prévient les
+  // onglets/PWA déjà ouverts pour qu'ils jouent le même gong que l'animation de démarrage
+  // (demande du 01/09/2026, "je veux mettre le même gong que l'animation").
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, options),
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) client.postMessage({ type: "mnoria:play-notification-gong" });
+    })
+  ]));
 });
 
 self.addEventListener("notificationclick", (event) => {

@@ -1011,3 +1011,43 @@ test("entrée vide/non-tableau renvoie [] sans planter", () => {
   assert.deepEqual(selectQuestionsForRequestedLevel(null, 5), []);
   assert.deepEqual(selectQuestionsForRequestedLevel(undefined, 5), []);
 });
+
+// ── §11 de la demande V4.0 : progression calculée sur le SERVI, jamais sur
+// le master complet — démonstration arithmétique directe avec la même
+// formule que GET /api/users/notion-quizzes (server.js), appliquée au
+// résultat de selectQuestionsForRequestedLevel plutôt qu'au master brut.
+// Fixture : master=20, requestedLevel=elementaire, 5 questions répondues
+// (créditées), 15 jamais répondues.
+
+test("§11 progression : master=20 avec 5 réponses créditées -> 100% sur le sous-ensemble servi (elementaire), jamais 25% sur le master complet", () => {
+  const master = masterOf(20);
+  // Simule un état FSRS "répondu, retrouvable à 100%" pour les rangs 1 à 5
+  // (les 5 fondamentales) et aucun état pour les rangs 6 à 20.
+  const answeredIds = new Set(master.slice(0, 5).map((q) => q.id));
+  function progressPctFor(questionsForThisUser) {
+    let creditSum = 0;
+    let progressDenominator = 0;
+    for (const q of questionsForThisUser) {
+      if (answeredIds.has(q.id)) { creditSum += 1; progressDenominator += 1; }
+      else progressDenominator += 1;
+    }
+    return progressDenominator > 0 ? Math.round((creditSum / progressDenominator) * 100) : 0;
+  }
+
+  const served = selectQuestionsForRequestedLevel(master, 5);
+  assert.equal(progressPctFor(served), 100, "sur le sous-ensemble réellement servi à l'élémentaire, 5/5 répondues = 100%");
+
+  // Preuve du bug évité : calculer sur le MASTER COMPLET (comportement
+  // d'avant V4.0, sans le filtrage) donnerait un chiffre trompeur.
+  assert.equal(progressPctFor(master), 25, "sans le filtrage par niveau, le même utilisateur aurait vu 25% — c'est précisément ce que V4.0 doit éviter");
+});
+
+test("§11 progression : realized (answeredCount >= questions.length) devient vrai sur le sous-ensemble servi dès que ses 5 questions sont répondues, sans attendre les 15 autres", () => {
+  const master = masterOf(20);
+  const answeredIds = new Set(master.slice(0, 5).map((q) => q.id));
+  const served = selectQuestionsForRequestedLevel(master, 5);
+  const answeredCount = served.filter((q) => answeredIds.has(q.id)).length;
+  assert.equal(answeredCount >= served.length, true, "realized doit être vrai : les 5 questions du niveau élémentaire ont toutes été répondues");
+  const answeredCountOnMaster = master.filter((q) => answeredIds.has(q.id)).length;
+  assert.equal(answeredCountOnMaster >= master.length, false, "sur le master complet (comportement évité), ce même utilisateur ne serait JAMAIS 'realized' avant d'avoir répondu aux 20");
+});

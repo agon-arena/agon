@@ -339,6 +339,10 @@ function __mnoriaRecordReloadReason(reason) {
         if (previousUrl.origin === window.location.origin && target !== "/" && target !== current) {
           restoredTo = target;
         }
+        // Cas "déjà sur / avant le kill" : voir le garde synchrone dans le <head>
+        // d'index.html (avant ce script chargé en defer, donc trop tard pour agir
+        // avant la toute première image — cf. tentative retirée le 01/09/2026,
+        // "coupure au milieu" de l'intro).
       } catch (e) {}
     }
 
@@ -506,6 +510,13 @@ function registerServiceWorker() {
   // dans le cache par le service worker : on la laisse donc simplement servir au
   // prochain chargement volontaire, sans interrompre la session en cours.
   navigator.serviceWorker.addEventListener("message", (event) => {
+    // Aucun son personnalisé possible sur la notification système elle-même (limitation
+    // des navigateurs) : le service worker prévient ici l'onglet/PWA déjà ouvert(e) pour
+    // qu'il joue le même gong que l'animation de démarrage (demande du 01/09/2026).
+    if (event.data?.type === "mnoria:play-notification-gong") {
+      if (typeof playMnoriaStartupGongSound === "function") playMnoriaStartupGongSound();
+      return;
+    }
     if (event.data?.type !== "mnoria:page-stale" || window.__mnoriaStalePageRefreshed) return;
     window.__mnoriaStalePageRefreshed = true;
     window.__mnoriaPageUpdateAvailable = true;
@@ -1511,7 +1522,7 @@ function formatUserCount(n) {
   return Number.isFinite(n) ? n.toLocaleString("fr-FR") + (n > 1 ? " contributeurs" : " contributeur") : "";
 }
 
-function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, tierLabel, stats, tier, tierCount, gnosisTierLabel, gnosisTier, gnosisTierCount, noesisTierLabel, noesisTier, noesisTierCount, initialTab) {
+function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, tierLabel, stats, tier, tierCount, initialTab) {
   // Le clic (carte de score sur "Scores et contributions") peut venir de l'iframe /debate, mais
   // le détail doit toujours s'afficher dans le document le plus haut pour rester cohérent.
   let topDoc = document;
@@ -1541,28 +1552,17 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
       '<p class="install-modal-text">Pour une comparaison juste, tu n\'es classé que parmi les contributeurs ayant posté un volume d\'idées similaire au tien.</p>'
     : '';
 
-  // Palier propre à Gnosis (basé sur le nombre de questions répondues au QCM,
-  // pas le nombre d'idées postées) : population différente de celle des 2
-  // autres scores.
-  const gnosisTierRank = (Number.isFinite(gnosisTier) && Number.isFinite(gnosisTierCount)) ? (' (' + gnosisTier + '/' + gnosisTierCount + ')') : '';
-  const gnosisTierCountHint = (Number.isFinite(s.gnosisTierUsers) && Number.isFinite(s.gnosisTotalUsers))
-    ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.gnosisTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.gnosisTotalUsers) + '</p>'
-    : '';
-  const gnosisTierIntro = gnosisTierLabel
-    ? '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier Gnosis' + gnosisTierRank + ' — ' + gnosisTierLabel + '</h4>' +
-      '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>'
+  // Gnosis n'a plus de palier de volume (demande du 01/09/2026, "on enlève les paliers...
+  // le score gnosis doit juste etre le taux de réussite aux qcm ancrer") : comparé à toute
+  // la population d'un coup, juste le total affiché, sans notion de palier.
+  const gnosisTotalCountHint = Number.isFinite(s.gnosisTotalUsers)
+    ? '<p class="install-modal-text install-modal-hint">' + formatUserCount(s.gnosisTotalUsers) + ' au total.</p>'
     : '';
 
-  // Palier propre à Noesis (QCM "Relier", compréhension des liens) — même
-  // principe que Gnosis ci-dessus, population distincte (volume de questions
-  // répondues dans Relier, pas dans Ancrer).
-  const noesisTierRank = (Number.isFinite(noesisTier) && Number.isFinite(noesisTierCount)) ? (' (' + noesisTier + '/' + noesisTierCount + ')') : '';
-  const noesisTierCountHint = (Number.isFinite(s.noesisTierUsers) && Number.isFinite(s.noesisTotalUsers))
-    ? '<p class="install-modal-text install-modal-hint">Palier : ' + formatUserCount(s.noesisTierUsers) + ' · Tous paliers confondus : ' + formatUserCount(s.noesisTotalUsers) + '</p>'
-    : '';
-  const noesisTierIntro = noesisTierLabel
-    ? '<h4 class="install-modal-platform"><i class="fa-solid fa-layer-group"></i> Ton palier Noesis' + noesisTierRank + ' — ' + noesisTierLabel + '</h4>' +
-      '<p class="install-modal-text">Classé parmi les contributeurs ayant répondu à un volume de questions similaire au tien.</p>'
+  // Noesis n'a plus non plus de palier de volume (demande du 01/09/2026, "noesis aussi ne
+  // doit pas avoir de paliers !" — même traitement que Gnosis ci-dessus).
+  const noesisTotalCountHint = Number.isFinite(s.noesisTotalUsers)
+    ? '<p class="install-modal-text install-modal-hint">' + formatUserCount(s.noesisTotalUsers) + ' au total.</p>'
     : '';
 
   // Chaque score a son propre onglet (clic sur Doxa / Logos / Gnosis / Noesis
@@ -1592,10 +1592,10 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
     ? 'Mesure la qualité moyenne de tes idées, notée par l\'IA. ' + formatPct(notesScore) + '% des contributeurs de ton palier ont une meilleure moyenne que toi, ' + formatPct(100 - notesScore) + '% ont une moyenne inférieure.'
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car aucune de tes idées n\'a encore été évaluée.';
   const gnosisExplanation = hasGnosisScore
-    ? 'Mesure ta justesse au QCM. ' + formatPct(gnosisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.'
+    ? 'Mesure ta justesse au QCM. ' + formatPct(gnosisScore) + '% des contributeurs ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - gnosisScore) + '% ont une part inférieure.'
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu au QCM.';
   const noesisExplanation = hasNoesisScore
-    ? 'Mesure ta compréhension des liens entre connaissances, au QCM Relier. ' + formatPct(noesisScore) + '% des contributeurs de ton palier ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - noesisScore) + '% ont une part inférieure.'
+    ? 'Mesure ta compréhension des liens entre connaissances, au QCM Relier. ' + formatPct(noesisScore) + '% des contributeurs ont une meilleure part de bonnes réponses que toi, ' + formatPct(100 - noesisScore) + '% ont une part inférieure.'
     : '100 % des utilisateurs qui ont participé ont un meilleur score que toi, car tu n\'as pas encore répondu dans Relier.';
   const tabs = [
     {
@@ -1625,7 +1625,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
       icon: '<i class="fa-solid fa-brain"></i>',
       label: "Gnosis",
       content:
-        (hasGnosisScore ? gnosisTierIntro + gnosisTierCountHint : '') +
+        (hasGnosisScore ? gnosisTotalCountHint : '') +
         '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-brain"></i> Score Gnosis — Top ' + formatPct(gnosisScore) + '%</h4>' +
         gnosisValueLine +
@@ -1636,7 +1636,7 @@ function showUserScoreModal(votesScore, notesScore, gnosisScore, noesisScore, ti
       icon: '<i class="fa-solid fa-link"></i>',
       label: "Noesis",
       content:
-        (hasNoesisScore ? noesisTierIntro + noesisTierCountHint : '') +
+        (hasNoesisScore ? noesisTotalCountHint : '') +
         '<div class="install-modal-divider"></div>' +
         '<h4 class="install-modal-platform"><i class="fa-solid fa-link"></i> Score Noesis — Top ' + formatPct(noesisScore) + '%</h4>' +
         noesisValueLine +
@@ -7326,6 +7326,16 @@ function closeDebateIframeModal(options = {}) {
   // (pas de nouvelle arène ajoutée pendant que la sous-page était ouverte).
   _debateModalSavedScrollY = null;
   _debateModalSavedScrollAnchor = null;
+
+  // "Ma mémoire" reste affichée telle quelle pendant qu'une sous-page (QCM, arène...)
+  // est ouverte en iframe : une connaissance nouvellement acquise là-dedans n'apparaissait
+  // donc qu'après avoir rebasculé sur un autre mode puis revenu sur Mémoire (seul moment où
+  // reinitMemoireEmbed était rappelé) — demande du 01/09/2026, "simplement en retournant sur
+  // la page index ça devrait apparaître". Rafraîchissement bon marché désormais (cache serveur
+  // dédié à fetchUserAcquis), donc inconditionnel dès qu'on est en mode Mémoire au retour.
+  if (_memoireCloudMode && _memoireModuleLoadPromise) {
+    _memoireModuleLoadPromise.then((mod) => mod?.reinitMemoireEmbed?.()).catch(() => {});
+  }
 
   // Rafraîchit le feed si une nouvelle arène vient d'être créée dans la modale
   if (window.__mnoriaDebateModalNewDebateCreated) {
@@ -19824,7 +19834,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260830-frame-ready-gate').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260901-memoire-bg-dezoom').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -23132,6 +23142,16 @@ function renderEvaluationAxis(debate) {
     progressSlot.id = 'debate-ai-progress-slot';
   }
   el.insertAdjacentElement('afterend', progressSlot);
+
+  // Bouton "Générer rapport IA" / "Analyse et arbitrage IA" (+ Régénérer) remonté ici (demande du
+  // 01/09/2026, "n'est pas à la bonne place... remonter et le mettre sous le barème ia et
+  // éventuellement le nombre de vois restant") : juste sous le barème et le compteur de
+  // contributions restantes, au lieu de sa position statique d'origine dans debate.html, plus bas
+  // après la barre de score. #debate-ai-analysis-slot est déplacé (pas recréé) : admin-debate-
+  // analysis.js (chargé séparément) continue de le peupler par son id habituel, quel que soit son
+  // emplacement réel dans le DOM.
+  const analysisSlot = document.getElementById('debate-ai-analysis-slot');
+  if (analysisSlot) progressSlot.insertAdjacentElement('afterend', analysisSlot);
 
   // Bloc dans le formulaire "Ajouter une idée" (uniquement arène libre avec axe personnalisé)
   if (formAxisEl) {
@@ -34060,6 +34080,8 @@ function _buildNotifPageItemHtml(notification) {
     link = `/debate?id=${notification.debate_id}&highlight=argument-${notification.argument_id}`;
   } else if (notification.debate_id) {
     link = `/debate?id=${notification.debate_id}&highlight=${notification.type === "analysis_ready" ? "ai-report" : "debate"}`;
+  } else if (notification.type === "learning_digest") {
+    link = "/qcm-du-jour";
   }
 
   if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") { icon = "🗳️"; title = "Votre idée a reçu une voix"; subtitle = "Ouvrir l'idée"; }
@@ -34075,6 +34097,7 @@ function _buildNotifPageItemHtml(notification) {
   if (notification.type === "top5_idea_ai_score") { icon = "🏆"; title = "Votre idée entre dans un top 5 des mieux notées par l'IA"; subtitle = "Voir ta note IA"; }
   if (notification.type === "analysis_scheduled") { icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">'; title = "L'arbitrage IA démarre dans 24h"; subtitle = "Ouvrir le débat"; }
   if (notification.type === "analysis_ready") { icon = "⚖️"; title = "L'arbitrage IA est disponible"; subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse"; }
+  if (notification.type === "learning_digest") { icon = "🧠"; subtitle = "Ouvrir la page apprentissage"; }
 
   title = getNotificationDisplayTitle(notification, title);
   return `

@@ -53,7 +53,10 @@ const {
   isAssociationAnswerFullyCorrect,
   isQcmMultiAnswerFullyCorrect,
   isOrderAnswerFullyCorrect,
-  gradeQuizSubmissionOptionIndex
+  gradeQuizSubmissionOptionIndex,
+  rankAdmittedKnowledge,
+  attachPedagogicalRanks,
+  selectQuestionsForRequestedLevel
 } = require("./lib/question-formats");
 const {
   buildSemanticReviewPrompt,
@@ -3060,6 +3063,44 @@ function invalidateIntellectualUniverseCache(legacyKey) {
   const key = String(legacyKey || "").trim();
   if (!key) return;
   intellectualUniverseResponseCache.delete(key);
+  invalidateUserAcquisCache(key);
+}
+
+// fetchUserAcquis (lib/users.js... non, server.js) relit tout l'historique de réponses de
+// l'utilisateur depuis toujours (fetchUserCultureGeneraleAnswerEvents, sans fenêtre de temps)
+// puis reconstitue le contenu de chaque jour joué : mesuré à ~1,7-2,3s pour un utilisateur actif
+// (audit perf du 01/09/2026, "Ma mémoire" lent à apparaître). Le TTL de
+// intellectualUniverseResponseCache (4 min) ne suffisait pas : dès qu'il expirait, tout ce calcul
+// repartait de zéro. Ce second cache, dédié au seul résultat de fetchUserAcquis, a un TTL
+// beaucoup plus long car son invalidation est désormais événementielle (mêmes points d'appel que
+// invalidateIntellectualUniverseCache : la seule chose qui peut changer ce résultat est une
+// nouvelle réponse correcte) — le TTL n'est qu'un filet de sécurité, pas le mécanisme principal.
+const USER_ACQUIS_CACHE_TTL_MS = 60 * 60 * 1000;
+const USER_ACQUIS_CACHE_MAX = 1000;
+const userAcquisCache = new Map();
+
+function getCachedUserAcquis(legacyKey) {
+  const key = String(legacyKey || "").trim();
+  if (!key) return null;
+  const entry = userAcquisCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    userAcquisCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedUserAcquis(legacyKey, value) {
+  const key = String(legacyKey || "").trim();
+  if (!key) return;
+  _cacheSet(userAcquisCache, key, { value, expiresAt: Date.now() + USER_ACQUIS_CACHE_TTL_MS }, USER_ACQUIS_CACHE_MAX);
+}
+
+function invalidateUserAcquisCache(legacyKey) {
+  const key = String(legacyKey || "").trim();
+  if (!key) return;
+  userAcquisCache.delete(key);
 }
 
 const ogImageCache = new Map();
@@ -4784,32 +4825,11 @@ function getUserContributionTierLabel(tier) {
   return USER_SCORE_TIERS.find((t) => t.tier === tier)?.label || "";
 }
 
-// Paliers de volume pour le score Gnosis (QCM de notions) : mêmes proportions
-// que USER_SCORE_TIERS (1 / 3 / 9 / +) mais mises à l'échelle du rythme des
-// QCM plutôt que du rythme de publication d'idées — sinon un visiteur qui
-// répond régulièrement se retrouverait comparé à quelqu'un qui n'a répondu
-// qu'une fois.
-const GNOSIS_SCORE_TIERS = [
-  { tier: 1, max: 10, label: "10 questions répondues ou moins" },
-  { tier: 2, max: 30, label: "11 à 30 questions répondues" },
-  { tier: 3, max: 90, label: "31 à 90 questions répondues" },
-  { tier: 4, max: Infinity, label: "91 questions répondues ou plus" }
-];
-
-function getGnosisTier(count) {
-  for (const t of GNOSIS_SCORE_TIERS) {
-    if (count <= t.max) return t.tier;
-  }
-  return GNOSIS_SCORE_TIERS[GNOSIS_SCORE_TIERS.length - 1].tier;
-}
-
-function getGnosisTierLabel(tier) {
-  return GNOSIS_SCORE_TIERS.find((t) => t.tier === tier)?.label || "";
-}
-
-// Effectif plancher affiché pour chaque palier Gnosis (point de départ),
-// tant que le nombre réel d'utilisateurs du palier ne l'a pas dépassé.
-const GNOSIS_TIER_MIN_USERS = 1000;
+// Gnosis et Noesis n'ont plus de paliers de volume (demande du 01/09/2026,
+// "gnosis... noesis aussi ne doit pas avoir de paliers !") — l'ancien
+// GNOSIS_SCORE_TIERS/getGnosisTier/getGnosisTierLabel/GNOSIS_TIER_MIN_USERS a été retiré ;
+// les deux scores utilisent désormais buildPercentileScoreMap directement (cf.
+// computeUserScores plus bas).
 
 // Applique buildPercentileScoreMap indépendamment à l'intérieur de chaque
 // palier plutôt que sur toute la population d'un coup.
@@ -4944,31 +4964,22 @@ async function computeUserScores() {
     if (ev.is_correct) gnosisCorrectByAuthorKey.set(authorKey, (gnosisCorrectByAuthorKey.get(authorKey) || 0) + 1);
   }
 
-  const gnosisTierByAuthorKey = new Map();
-  for (const [authorKey, count] of gnosisAnsweredByAuthorKey) {
-    gnosisTierByAuthorKey.set(authorKey, getGnosisTier(count));
-  }
+  // Gnosis n'utilise plus de paliers de volume (demande du 01/09/2026, "on enlève les
+  // paliers : le score gnosis doit juste etre le taux de réussite aux qcm ancrer... par
+  // rapport aux autres utilisateurs, avec score sur 100") : percentile calculé sur toute la
+  // population d'un coup (buildPercentileScoreMap, cf. plus bas), pas buildTieredPercentile-
+  // ScoreMap. Noesis (Relier, juste en dessous) garde ses propres paliers, inchangé.
   const gnosisAccuracyByAuthorKey = new Map();
   for (const [authorKey, answered] of gnosisAnsweredByAuthorKey) {
     gnosisAccuracyByAuthorKey.set(authorKey, ((gnosisCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
   }
-  const gnosisTierRawSizeByTier = new Map();
-  for (const authorKey of gnosisAccuracyByAuthorKey.keys()) {
-    const tier = gnosisTierByAuthorKey.get(authorKey) || 1;
-    gnosisTierRawSizeByTier.set(tier, (gnosisTierRawSizeByTier.get(tier) || 0) + 1);
-  }
-  const gnosisTierSizeByTier = new Map();
-  for (const t of GNOSIS_SCORE_TIERS) {
-    gnosisTierSizeByTier.set(t.tier, Math.max(GNOSIS_TIER_MIN_USERS, gnosisTierRawSizeByTier.get(t.tier) || 0));
-  }
-  const gnosisTotalUsers = [...gnosisTierSizeByTier.values()].reduce((sum, size) => sum + size, 0);
+  const gnosisTotalUsers = gnosisAccuracyByAuthorKey.size;
 
   // Score Noesis (demande du 17/08/2026) : compréhension des liens, QCM
   // "Relier" (pseudo-slot DAILY_QUIZ_COMPREHENSION_SLOT) uniquement. Comme
   // Gnosis ci-dessus : un taux de réussite BRUT ET un score percentile
-  // ("comparaison des utilisateurs sur 100"), mêmes paliers de volume
-  // (GNOSIS_SCORE_TIERS, mêmes proportions) puisque "Relier" suit le même
-  // rythme de réponse au QCM.
+  // ("comparaison des utilisateurs sur 100"), sans palier de volume (demande
+  // du 01/09/2026, retiré comme pour Gnosis).
   //
   // Ne peut PAS réutiliser memory_review_events comme Gnosis ci-dessus : une
   // question "comprendre:{pairHash}-qN" déjà répondue peut, une fois due,
@@ -5021,43 +5032,26 @@ async function computeUserScores() {
     }
   }
 
-  const noesisTierByAuthorKey = new Map();
-  for (const [authorKey, count] of relierAnsweredByAuthorKey) {
-    noesisTierByAuthorKey.set(authorKey, getGnosisTier(count));
-  }
-
+  // Noesis n'utilise plus non plus de paliers de volume (demande du 01/09/2026, "noesis
+  // aussi ne doit pas avoir de paliers !" — même traitement que Gnosis juste au-dessus).
   const relierAccuracyByAuthorKey = new Map();
   for (const [authorKey, answered] of relierAnsweredByAuthorKey) {
     relierAccuracyByAuthorKey.set(authorKey, ((relierCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
   }
-
-  const noesisTierRawSizeByTier = new Map();
-  for (const authorKey of relierAccuracyByAuthorKey.keys()) {
-    const tier = noesisTierByAuthorKey.get(authorKey) || 1;
-    noesisTierRawSizeByTier.set(tier, (noesisTierRawSizeByTier.get(tier) || 0) + 1);
-  }
-  const noesisTierSizeByTier = new Map();
-  for (const t of GNOSIS_SCORE_TIERS) {
-    noesisTierSizeByTier.set(t.tier, Math.max(GNOSIS_TIER_MIN_USERS, noesisTierRawSizeByTier.get(t.tier) || 0));
-  }
-  const noesisTotalUsers = [...noesisTierSizeByTier.values()].reduce((sum, size) => sum + size, 0);
+  const noesisTotalUsers = relierAccuracyByAuthorKey.size;
 
   return {
     votesScoreByAuthorKey: buildTieredPercentileScoreMap(votesTotalByAuthorKey, tierByAuthorKey),
     notesScoreByAuthorKey: buildTieredPercentileScoreMap(noteAvgByAuthorKey, tierByAuthorKey),
-    gnosisScoreByAuthorKey: buildTieredPercentileScoreMap(gnosisAccuracyByAuthorKey, gnosisTierByAuthorKey, GNOSIS_SCORE_TIERS),
-    noesisScoreByAuthorKey: buildTieredPercentileScoreMap(relierAccuracyByAuthorKey, noesisTierByAuthorKey, GNOSIS_SCORE_TIERS),
+    gnosisScoreByAuthorKey: buildPercentileScoreMap(gnosisAccuracyByAuthorKey),
+    noesisScoreByAuthorKey: buildPercentileScoreMap(relierAccuracyByAuthorKey),
     tierByAuthorKey,
-    gnosisTierByAuthorKey,
-    noesisTierByAuthorKey,
     votesTotalUsers: votesTotalByAuthorKey.size,
     notesTotalUsers: noteAvgByAuthorKey.size,
     gnosisTotalUsers,
     noesisTotalUsers,
     votesTierSizeByTier,
     notesTierSizeByTier,
-    gnosisTierSizeByTier,
-    noesisTierSizeByTier,
     // Valeurs brutes (pas seulement le percentile) — affichées telles quelles
     // dans la modale à côté du "Top X%".
     votesTotalByAuthorKey,
@@ -5115,40 +5109,32 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
   try {
     const {
       votesScoreByAuthorKey, notesScoreByAuthorKey, gnosisScoreByAuthorKey, noesisScoreByAuthorKey,
-      tierByAuthorKey, gnosisTierByAuthorKey, noesisTierByAuthorKey,
+      tierByAuthorKey,
       votesTotalUsers, notesTotalUsers, gnosisTotalUsers, noesisTotalUsers,
-      votesTierSizeByTier, notesTierSizeByTier, gnosisTierSizeByTier, noesisTierSizeByTier,
+      votesTierSizeByTier, notesTierSizeByTier,
       votesTotalByAuthorKey, contributionCountByAuthorKey, noteAvgByAuthorKey, noteCountByAuthorKey,
       gnosisAnsweredByAuthorKey, gnosisCorrectByAuthorKey,
       relierAnsweredByAuthorKey, relierCorrectByAuthorKey
     } = await getUserScoreData();
     const tier = tierByAuthorKey.get(key) || null;
-    const gnosisTier = gnosisTierByAuthorKey.get(key) || null;
-    const noesisTier = noesisTierByAuthorKey.get(key) || null;
     // Rien posté / rien répondu sur un axe : pas encore de percentile
     // calculable, donc valeur initiale explicite à 100 %.
     res.json({
       votesScore: votesScoreByAuthorKey.has(key) ? votesScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
       notesScore: notesScoreByAuthorKey.has(key) ? notesScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
+      // Gnosis et Noesis n'ont plus de palier (demande du 01/09/2026) : percentile calculé
+      // sur toute la population, cf. computeUserScores.
       gnosisScore: gnosisScoreByAuthorKey.has(key) ? gnosisScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
       tierLabel: tier ? getUserContributionTierLabel(tier) : null,
       tier: tier || null,
       tierCount: USER_SCORE_TIERS.length,
-      gnosisTierLabel: gnosisTier ? getGnosisTierLabel(gnosisTier) : null,
-      gnosisTier: gnosisTier || null,
-      gnosisTierCount: GNOSIS_SCORE_TIERS.length,
       noesisScore: noesisScoreByAuthorKey.has(key) ? noesisScoreByAuthorKey.get(key) : USER_SCORE_EMPTY,
-      noesisTierLabel: noesisTier ? getGnosisTierLabel(noesisTier) : null,
-      noesisTier: noesisTier || null,
-      noesisTierCount: GNOSIS_SCORE_TIERS.length,
       votesTotalUsers,
       notesTotalUsers,
       gnosisTotalUsers,
       noesisTotalUsers,
       votesTierUsers: tier ? (votesTierSizeByTier.get(tier) || 0) : null,
       notesTierUsers: tier ? (notesTierSizeByTier.get(tier) || 0) : null,
-      gnosisTierUsers: gnosisTier ? (gnosisTierSizeByTier.get(gnosisTier) || 0) : null,
-      noesisTierUsers: noesisTier ? (noesisTierSizeByTier.get(noesisTier) || 0) : null,
       votesValue: votesTotalByAuthorKey.has(key) ? votesTotalByAuthorKey.get(key) : null,
       // Moyenne de voix reçues par idée (demande du 17/08/2026) — en plus du
       // score Doxa sur 100 (votesScore) et du total brut (votesValue),
@@ -5567,6 +5553,86 @@ if (TOP5_NOTIFY_SCHEDULER_ENABLED) {
   checkTop5IdeaEntries().catch((e) => console.error("[top5-notify] Erreur:", e.message));
 } else {
   console.log("[top5-notify] scheduler désactivé hors Render (forcer avec MNORIA_TOP5_NOTIFY_SCHEDULER=on).");
+}
+
+// Notification push "Ancrer/Relier" (demande du 01/09/2026) : un rappel quotidien
+// unique, seulement s'il y a réellement au moins un élément disponible (jamais de
+// rappel "rien à faire") — mêmes critères de disponibilité que le bandeau/bouton de
+// la page Apprentissage (GET /api/daily-quiz/status), pour ne jamais notifier un
+// état que l'utilisateur ne verrait pas en ouvrant la page.
+const LEARNING_DIGEST_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const LEARNING_DIGEST_HOUR = 9; // heure de Paris, cf. parisHour()
+const LEARNING_DIGEST_SCHEDULER_ENABLED = isRenderScopedTaskEnabled("MNORIA_LEARNING_DIGEST_SCHEDULER");
+const LEARNING_DIGEST_BATCH_SIZE = 10;
+let _lastLearningDigestDateKey = null;
+
+async function sendLearningDigestNotifications() {
+  const { data: subRows, error: subError } = await fetchAllSupabaseRows(() =>
+    supabase.from("push_subscriptions").select("user_id").is("revoked_at", null));
+  if (subError) {
+    console.error("[learning-digest] Erreur lecture abonnements push:", subError.message);
+    return;
+  }
+  const userIds = [...new Set((subRows || []).map((r) => r.user_id).filter(Boolean))];
+  if (!userIds.length) return;
+
+  const { data: userRows, error: usersError } = await fetchAllSupabaseRowsIn(userIds, (idsChunk) =>
+    supabase.from("users").select("id, legacy_key").in("id", idsChunk));
+  if (usersError) {
+    console.error("[learning-digest] Erreur lecture utilisateurs:", usersError.message);
+    return;
+  }
+  const legacyKeys = [...new Set((userRows || []).map((r) => String(r.legacy_key || "").trim()).filter(Boolean))];
+
+  const todayKey = parisDateKey();
+  let notified = 0;
+  for (let i = 0; i < legacyKeys.length; i += LEARNING_DIGEST_BATCH_SIZE) {
+    const batch = legacyKeys.slice(i, i + LEARNING_DIGEST_BATCH_SIZE);
+    await Promise.all(batch.map(async (legacyKey) => {
+      try {
+        const [reinforcementQuestions, comprehensionAvailable] = await Promise.all([
+          fetchCultureGeneraleReviewInjectionForToday(legacyKey, todayKey),
+          hasCultureGeneraleComprehensionLinks(legacyKey)
+        ]);
+        const ancrerAvailable = reinforcementQuestions.length > 0;
+        if (!ancrerAvailable && !comprehensionAvailable) return;
+
+        const parts = [];
+        if (ancrerAvailable) parts.push("ancrer");
+        if (comprehensionAvailable) parts.push("relier");
+        const message = parts.length === 2
+          ? "Tu as des connaissances à ancrer et à relier aujourd'hui."
+          : `Tu as des connaissances à ${parts[0]} aujourd'hui.`;
+
+        await createNotification({
+          user_key: legacyKey,
+          type: "learning_digest",
+          message
+        });
+        notified += 1;
+      } catch (error) {
+        console.error(`[learning-digest] Erreur pour ${legacyKey}:`, error.message);
+      }
+    }));
+  }
+  console.log(`[learning-digest] rappel envoyé à ${notified}/${legacyKeys.length} abonnés push.`);
+}
+
+async function checkLearningDigestSchedule() {
+  const todayKey = parisDateKey();
+  if (_lastLearningDigestDateKey === todayKey) return;
+  if (parisHour() < LEARNING_DIGEST_HOUR) return;
+  _lastLearningDigestDateKey = todayKey;
+  await sendLearningDigestNotifications();
+}
+
+if (LEARNING_DIGEST_SCHEDULER_ENABLED) {
+  setInterval(() => {
+    checkLearningDigestSchedule().catch((e) => console.error("[learning-digest] Erreur:", e.message));
+  }, LEARNING_DIGEST_CHECK_INTERVAL_MS).unref();
+  checkLearningDigestSchedule().catch((e) => console.error("[learning-digest] Erreur:", e.message));
+} else {
+  console.log("[learning-digest] scheduler désactivé hors Render (forcer avec MNORIA_LEARNING_DIGEST_SCHEDULER=on).");
 }
 
 app.get("/api/best-ideas", rateLimit("bestIdeas", 60), async (req, res) => {
@@ -6698,7 +6764,24 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
     // celle du soir. Seuil au milieu des deux vagues, avec un peu de marge
     // si l'admin clique un peu en retard sur la vague du matin.
     const isMorningWave = parisHour() < 13;
-    const body = isMorningWave ? "Les arènes du matin sont ouvertes." : "Les arènes du soir sont ouvertes.";
+    const wave = isMorningWave ? "morning" : "evening";
+    const body = "Les actualités du jour sont disponibles.";
+
+    // Idempotence (demande du 01/09/2026, "je reçois deux fois la même notification") :
+    // ce endpoint est appelé par le pipeline externe à la fin de sa vague de publication,
+    // sans garantie qu'il ne soit jamais rappelé deux fois pour la même vague (retry sur
+    // timeout, double déclenchement...). Persisté dans app_config (pas en mémoire) pour
+    // survivre à un redémarrage serveur entre les deux appels.
+    const todayKey = parisDateKey();
+    const { data: lastBroadcastRow, error: lastBroadcastError } = await supabase
+      .from("app_config").select("value").eq("key", "last_push_broadcast_daily").maybeSingle();
+    if (lastBroadcastError) throw lastBroadcastError;
+    const lastBroadcast = lastBroadcastRow?.value || null;
+    if (lastBroadcast && lastBroadcast.dateKey === todayKey && lastBroadcast.wave === wave) {
+      return res.json({ success: true, skipped: true, reason: "already_broadcast", wave, body, eclairages });
+    }
+    await supabase.from("app_config")
+      .upsert({ key: "last_push_broadcast_daily", value: { dateKey: todayKey, wave }, updated_at: nowIso() });
 
     const result = await broadcastPush(supabase, {
       publicKey: VAPID_PUBLIC_KEY,
@@ -6712,7 +6795,7 @@ app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
       badge: "/mnoria-icon-192.png"
     });
 
-    return res.json({ success: true, wave: isMorningWave ? "morning" : "evening", body, eclairages, ...result });
+    return res.json({ success: true, wave, body, eclairages, ...result });
   } catch (error) {
     console.error(error);
     return sendServerError(res, "Éclairages non publiés : notification push non envoyée.");
@@ -13753,11 +13836,31 @@ const NOTION_QUIZ_LEVELS = {
   expert: {
     label: "Expert",
     target: 20, max: 22, min: 1,
-    instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet (origine, mécanismes précis, controverses ou nuances, chiffres et exemples précis, conséquences, comparaisons) pour vérifier une maîtrise fine et complète — chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée.",
+    // Enrichi le 01/09/2026 (V4.0, "corpus maître de 20 questions") : cette
+    // configuration sert désormais TOUJOURS de profondeur de génération
+    // interne (cf. MASTER_GENERATION_DEPTH_CONFIG plus bas), quel que soit le
+    // niveau réellement demandé par l'utilisateur — d'où l'ajout explicite
+    // du principe "20 est un plafond souhaitable, jamais un quota" à cette
+    // instruction, qui s'applique désormais à TOUTE génération, pas
+    // seulement à une requête "Expert" littérale.
+    instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet (origine, mécanismes précis, controverses ou nuances, chiffres et exemples précis, conséquences, comparaisons) pour vérifier une maîtrise fine et complète — chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée. Vise jusqu'à 20 connaissances RÉELLEMENT utiles et distinctes — un maximum souhaitable, jamais un quota obligatoire : moins de 20 reste parfaitement acceptable si le sujet n'offre pas plus de matière solide. Ne décompose JAMAIS artificiellement une même connaissance en plusieurs pour gonfler ce nombre, et n'ajoute jamais d'anecdote, de trivia ou de détail insignifiant dans ce seul but — chaque connaissance retenue doit mériter une mémorisation autonome et pouvoir produire, à elle seule, une question réellement utile et distincte.",
     sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
     lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
   }
 };
+// Profondeur de génération TOUJOURS "master" (V4.0, demande du 01/09/2026 —
+// "corpus maître de 20 questions, découplage generationDepth/requestedLevel") :
+// generateNotionLevelQuiz utilise désormais TOUJOURS cette configuration pour
+// la fiche/l'admission/la génération de questions, quel que soit le niveau
+// RÉELLEMENT demandé par l'utilisateur — celui-ci (`level`) reste conservé
+// séparément par les appelants (buildNotionQuestions/buildCustomTopicQuiz)
+// pour l'identité du slot et le sous-ensemble servi ensuite (cf.
+// selectQuestionsForRequestedLevel, lib/question-formats.js). Alias direct de
+// NOTION_QUIZ_LEVELS.expert (jamais dupliqué, section 8 de la demande :
+// "utiliser les vraies constantes existantes") : "20" est déjà exactement la
+// profondeur maximale souhaitée pour le corpus maître — inutile d'introduire
+// une quatrième configuration qui redirait la même chose.
+const MASTER_GENERATION_DEPTH_CONFIG = NOTION_QUIZ_LEVELS.expert;
 // Comportement historique (clic "Mémoriser" sur Éclairages / Ce jour dans
 // l'Histoire, cf. views/eclairages.html) : cette page ne propose aucun choix
 // de niveau à l'utilisateur — on y garde exactement le dimensionnement
@@ -14204,9 +14307,17 @@ function parseFicheAndKnowledgeCandidates(parsed, fallbackName, levelConfig) {
 // 31/08/2026).
 // Toujours best-effort, à l'image de searchKnowledgeImage juste en dessous :
 // BRAVE_SEARCH_API_KEY absente, échec réseau, aucun résultat exploitable, ou
-// aucune source jugée fiable par l'IA → null, jamais une erreur qui
-// bloquerait la génération. La fiche reste alors rédigée "de mémoire" comme
-// avant ce correctif (groundingText reste optionnel côté prompts).
+// aucune source jugée fiable par l'IA → `{ diagnostic }` (jamais une erreur
+// qui bloquerait la génération) plutôt qu'un objet complet. La fiche reste
+// alors rédigée "de mémoire" comme avant ce correctif (groundingText reste
+// optionnel côté prompts) — tout le code appelant lit exclusivement via
+// `grounding?.champ`, donc ce changement de forme (null → objet minimal) ne
+// modifie aucun comportement existant, seul `diagnostic` est nouveau.
+// `diagnostic` (incident du 31/08/2026 sur "Administration coloniale et
+// gouvernementalité" : sources absentes de la fiche sans aucune trace
+// exploitable une fois les logs pm2 tournés) : persisté par l'appelant dans
+// sourceDetail.groundingDiagnostic pour rester interrogeable en base
+// (Supabase) longtemps après l'appel, jamais affiché à l'utilisateur.
 // Budget d'appels (section 16 de la demande, jamais dépassé) : au plus 2
 // appels Brave (recherche de base + UNE relance ciblée optionnelle) et
 // TOUJOURS exactement 1 appel IA (sélection finale) — aucun appel IA
@@ -14235,13 +14346,13 @@ async function braveSearchRaw(query, braveKey, id) {
 
 async function resolveWebSearchGrounding(apiKey, subject, id) {
   const braveKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!braveKey) return null;
+  if (!braveKey) return { diagnostic: { reason: "no_brave_key" } };
   const query = String(subject || "").trim();
-  if (!query) return null;
+  if (!query) return { diagnostic: { reason: "empty_subject" } };
 
   const rawResults = await braveSearchRaw(query, braveKey, id);
   let candidates = filterCandidateSources(rawResults);
-  if (!candidates.length) return null;
+  if (!candidates.length) return { diagnostic: { reason: "no_candidates", detail: `${rawResults.length} résultat(s) Brave brut(s)` } };
 
   // Scoring déterministe (lib/source-scoring.js) : ordonne les candidats
   // AVANT de solliciter l'IA — aucun appel réseau/IA supplémentaire ici,
@@ -14280,7 +14391,7 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
   const qualified = filterByMinQuality(ranked);
   if (!qualified.length) {
     console.warn(`[web-search-grounding:${id}] aucun candidat n'atteint le seuil minimal de qualité (${MIN_QUALITY_THRESHOLD}), génération sans grounding.`);
-    return null;
+    return { diagnostic: { reason: "below_quality_threshold", detail: ranked[0] ? `meilleur candidat : ${ranked[0].domain}=${ranked[0].score.finalScore}` : "aucun candidat classé" } };
   }
 
   let selected;
@@ -14294,9 +14405,9 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
     selected = parseSourceSelectionResponse(content, qualified);
   } catch (error) {
     console.warn(`[web-search-grounding:${id}] sélection IA des sources :`, error.message);
-    return null;
+    return { diagnostic: { reason: "ai_selection_error", detail: error.message } };
   }
-  if (!selected.length) return null;
+  if (!selected.length) return { diagnostic: { reason: "ai_selection_empty", detail: `${qualified.length} candidat(s) qualifié(s) soumis à l'IA` } };
 
   // Récupération EN PARALLÈLE (pages indépendantes les unes des autres) —
   // chaque échec individuel (page injoignable, contenu trop court/long, type
@@ -14342,10 +14453,17 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
   const extracted = settled
     .filter((r) => r.status === "fulfilled" && r.value.validation.ok)
     .map((r) => r.value);
-  if (!extracted.length) return null;
+  if (!extracted.length) {
+    const detail = settled.map((r, i) => {
+      const domain = selected[i]?.domain || "?";
+      const reason = r.status === "rejected" ? "fetch_failed" : r.value.validation.reason;
+      return `${domain}=${reason}`;
+    }).join(", ");
+    return { diagnostic: { reason: "extraction_failed", detail } };
+  }
 
   const groundingText = buildGroundingText(extracted);
-  if (!groundingText) return null;
+  if (!groundingText) return { diagnostic: { reason: "empty_grounding_text" } };
 
   // identifiedSources/identifiedSourcesBlock (V3, 31/08/2026) : mêmes
   // sources déjà extraites/validées ci-dessus, ré-étiquetées SOURCE_1,
@@ -14583,7 +14701,16 @@ async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, i
 //   n'a passé l'admission+vérification (cas normal, cf. §26 — jamais un
 //   contenu de repli fabriqué pour éviter une liste vide) ;
 // - {sourceName, sourceDetail, validated} : succès.
-async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, requireValidation) {
+// `requestedLevel` (V4.0, demande du 01/09/2026 — "corpus maître de 20
+// questions, découplage generationDepth/requestedLevel") : optionnel, le
+// niveau RÉELLEMENT choisi par l'utilisateur, distinct de `levelConfig`
+// (désormais TOUJOURS MASTER_GENERATION_DEPTH_CONFIG côté appelants pour un
+// niveau reconnu — cf. buildNotionQuestions/buildCustomTopicQuiz). Utilisé
+// UNIQUEMENT pour l'observabilité ci-dessous (jamais pour la profondeur de
+// génération elle-même, qui reste entièrement pilotée par `levelConfig`) —
+// absent, retombe sur `levelConfig.level` (comportement strictement
+// inchangé pour tout appelant qui ne le fournit pas).
+async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, requireValidation, requestedLevel) {
   const { target, instruction, max, min } = levelConfig;
   const timeoutMs = Math.min(120_000, 45_000 + target * 3_000);
   // Une réponse HTTP OpenAI réussie peut malgré tout contenir un JSON
@@ -14715,11 +14842,28 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   // avant ce correctif), jamais une liste vide qui laisserait croire à un
   // grounding qui n'a pas eu lieu.
   sourceDetail.sources = grounding?.sources || null;
+  // groundingDiagnostic (incident du 31/08/2026, cf. resolveWebSearchGrounding
+  // ci-dessus) : raison de l'échec quand `sources` est null, pour rester
+  // diagnosticable en base bien après la rotation des logs pm2 — jamais
+  // affiché à l'utilisateur (même statut que identifiedSources), null quand
+  // le grounding a réussi (sources déjà suffisant dans ce cas).
+  sourceDetail.groundingDiagnostic = sourceDetail.sources ? null : (grounding?.diagnostic || null);
   if (!accepted) return generationFailure("CONTENT_UNUSABLE", "knowledge_verification_parsing");
   if (!accepted.length) {
     console.warn(`[notion-quiz:${id}] aucune connaissance n'a passé la vérification indépendante (${candidates.length} candidate(s)).`);
     return generationFailure("KNOWLEDGE_REJECTED", "knowledge_verification", { reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." });
   }
+
+  // Classement pédagogique (V4.0, 01/09/2026 — "corpus maître de 20
+  // questions") : calculé UNE FOIS ici, à partir du signal importance déjà
+  // produit et vérifié par l'admission (jamais un nouveau scoring, jamais
+  // l'ordre de génération) — cf. lib/question-formats.js rankAdmittedKnowledge
+  // pour le détail et sa justification complète. Attaché aux questions juste
+  // avant le retour final, en aval de toute régénération/expansion V3.2 :
+  // une question régénérée pour la même connaissance récupère automatiquement
+  // le même rang que celle qu'elle remplace (appariement par knowledgeTarget,
+  // jamais par position — cf. attachPedagogicalRanks).
+  const rankedKnowledge = rankAdmittedKnowledge(accepted);
 
   let validated = [];
   let questionQualityMetrics = null;
@@ -14814,7 +14958,12 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         recordQcmGroundingMetrics(supabase, buildGroundingMetricsSummary(questionQualityMetrics, {
           generationId: id,
           route: "free_search",
-          level: levelConfig.level || null,
+          // requestedLevel (V4.0) prime toujours sur levelConfig.level : ce
+          // dernier vaut désormais "expert" pour TOUTE génération (profondeur
+          // master, cf. MASTER_GENERATION_DEPTH_CONFIG) — jamais le niveau
+          // réellement demandé par l'utilisateur, qui doit rester le seul
+          // affiché en observabilité.
+          level: requestedLevel || levelConfig.level || null,
           sourceType: requireValidation ? "custom" : "debate",
           questionsRequested: accepted.length,
           expansion: expansionSummary
@@ -14855,6 +15004,11 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
     });
   }
 
+  // Rattachement final du classement pédagogique (V4.0) — jamais avant, pour
+  // ne rattacher un rang qu'aux questions réellement survivantes après tout
+  // le pipeline qualité/grounding/expansion.
+  validated = attachPedagogicalRanks(validated, rankedKnowledge);
+  console.info(`[notion-quiz-master:${id}] requestedLevel=${requestedLevel || levelConfig.level || "?"} generationDepthTarget=${target} admittedKnowledgeCount=${accepted.length} masterQuestionCount=${validated.length}`);
   return { sourceName, sourceDetail, validated };
 }
 
@@ -14887,7 +15041,16 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
     // indépendante batchée → questions à partir des seules connaissances
     // acceptées, au lieu d'un seul appel qui décidait et questionnait à la
     // fois (cf. le commentaire de generateNotionLevelQuiz pour le détail).
-    const result = await generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, false);
+    // generationDepthConfig (V4.0, 01/09/2026) : TOUJOURS
+    // MASTER_GENERATION_DEPTH_CONFIG pour un niveau reconnu — `levelConfig`
+    // (dérivé du niveau réellement demandé) reste utilisé SEULEMENT pour
+    // stamper `level` sur les questions finales et pour le futur serving par
+    // niveau (cf. plus bas), jamais pour la profondeur de génération
+    // elle-même. Repli sur `levelConfig` lui-même si `level` ne correspond à
+    // aucun niveau connu (défensif, ne devrait pas arriver ici) — comportement
+    // strictement inchangé dans ce cas.
+    const generationDepthConfig = NOTION_QUIZ_LEVELS[level] ? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;
+    const result = await generateNotionLevelQuiz(apiKey, subject, contextHint, id, generationDepthConfig, false, level);
     if (result.error) {
       console.warn(`[notion-quiz:${sourceType}:${id}] ${result.error} : ${result.reason || "fiche ou QCM invalide."}`);
       return [];
@@ -15248,7 +15411,11 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   // mnésique) : fiche + admission des connaissances → vérification
   // indépendante batchée → questions à partir des seules connaissances
   // acceptées — cf. son commentaire pour le détail de l'architecture.
-  const result = await generateNotionLevelQuiz(apiKey, topic, null, id, levelConfig, true);
+  // generationDepthConfig (V4.0, 01/09/2026) : même principe que
+  // buildNotionQuestions ci-dessus — profondeur TOUJOURS master pour un
+  // niveau reconnu, `levelConfig` réel conservé pour `level`/le serving.
+  const generationDepthConfig = NOTION_QUIZ_LEVELS[level] ? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;
+  const result = await generateNotionLevelQuiz(apiKey, topic, null, id, generationDepthConfig, true, level);
   if (result.error) {
     // `reason` conservé (pas seulement pour "rejected") : POST
     // /api/users/notion-quizzes/custom l'affiche aussi sur un "failed" avec
@@ -16007,6 +16174,17 @@ async function resolveMissingAcquisSourceNames(acquis, originalQuizDateBySourceI
 // (fiche affichée au clic sur une étoile, cf. /api/users/intellectual-universe)
 // et par le badge de progression de "Mes apprentissages".
 async function fetchUserAcquis(voterKey, options = {}) {
+  const cached = getCachedUserAcquis(voterKey);
+  const sorted = cached || await _computeUserAcquis(voterKey);
+  if (!cached) setCachedUserAcquis(voterKey, sorted);
+  if (options.includeSourceDebateId) return sorted;
+  return sorted.map(({ sourceDebateId, ...rest }) => rest);
+}
+
+// Toujours la forme complète (avec sourceDebateId) : fetchUserAcquis dérive la forme
+// allégée à la volée, cache et calcul frais confondus (cf. USER_ACQUIS_CACHE_TTL_MS
+// ci-dessus pour le pourquoi de ce cache séparé).
+async function _computeUserAcquis(voterKey) {
   const { events, contentBySourceId, originalQuizDateBySourceId, slotBySourceId } = await fetchUserCultureGeneraleAnswerEvents(voterKey);
   if (!events.length) return [];
   const streaks = computeCultureGeneraleStreaks(events);
@@ -16048,8 +16226,7 @@ async function fetchUserAcquis(voterKey, options = {}) {
   // probables à intéresser l'utilisateur qui revient consulter sa banque.
   const sorted = acquis
     .sort((x, y) => (x.quizDate < y.quizDate ? 1 : x.quizDate > y.quizDate ? -1 : 0));
-  if (options.includeSourceDebateId) return sorted;
-  return sorted.map(({ sourceDebateId, ...rest }) => rest);
+  return sorted;
 }
 
 /* ================================================================= */
@@ -17004,7 +17181,17 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey) {
     .eq("slot", slot)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  const baseQuestions = data?.questions || [];
+  const rawQuestions = data?.questions || [];
+  // Serving par niveau (V4.0, 01/09/2026 — "corpus maître de 20 questions") :
+  // selectQuestionsForRequestedLevel est un no-op strict (même référence) pour
+  // tout quiz sans pedagogicalRank — donc pour TOUT slot qui n'est pas un
+  // master moderne (Éclairages/Histoire, Comprendre, parallele-historique,
+  // renforcement — déjà sortis plus haut —, et tout notion:custom/
+  // notion:debat-notion généré avant cette version). Le plafond réutilise
+  // NOTION_QUIZ_LEVELS[level].target — jamais un nombre dupliqué ici — lu sur
+  // le niveau STOCKÉ (homogène pour tout le quiz tant que la mutualisation
+  // inter-niveaux n'existe pas, cf. section 14 de la demande V4.0).
+  const baseQuestions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[rawQuestions[0]?.level]?.target);
   _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
   return baseQuestions;
 }
@@ -17302,6 +17489,12 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
       }
     }
 
+    // Serving par niveau (V4.0, 01/09/2026) : no-op strict pour tout quiz
+    // sans pedagogicalRank (legacy Éclairages/Histoire, ou tout quiz
+    // notion/débat antérieur à cette version) — cf. son commentaire complet
+    // dans getDailyQuizQuestions.
+    questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[level]?.target);
+
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
       .upsert(
@@ -17423,6 +17616,15 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
         }
       }
     }
+
+    // Serving par niveau (V4.0, 01/09/2026) : no-op strict pour tout quiz
+    // sans pedagogicalRank — cf. commentaire complet dans
+    // getDailyQuizQuestions. Appliqué AVANT la réponse HTTP ET avant
+    // triggerAutomaticNoesVideo plus bas, pour que les deux ne voient jamais
+    // que le sous-ensemble réellement servi à l'utilisateur (section 13 de
+    // la demande) — le corpus maître complet reste, lui, intact en base,
+    // déjà stocké par l'insert ci-dessus.
+    questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[level]?.target);
 
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
@@ -17773,8 +17975,15 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
 
     const quizzes = [];
     for (const link of links) {
-      const questions = questionsByKey.get(`${link.quiz_date}:${link.slot}`);
-      if (!questions || !questions.length) continue; // contenu introuvable (générateur en échec, cas limite) : jamais affiché
+      const rawQuestions = questionsByKey.get(`${link.quiz_date}:${link.slot}`);
+      if (!rawQuestions || !rawQuestions.length) continue; // contenu introuvable (générateur en échec, cas limite) : jamais affiché
+      // Serving par niveau (V4.0, 01/09/2026, section 11 de la demande) :
+      // TOUS les calculs ci-dessous (questionCount, answeredCount, realized,
+      // inProgress, progressPct) doivent porter sur le nombre de questions
+      // réellement SERVIES à ce niveau, jamais sur le corpus maître complet
+      // stocké — no-op strict pour tout quiz sans pedagogicalRank (cf.
+      // commentaire complet dans getDailyQuizQuestions).
+      const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[rawQuestions[0]?.level]?.target);
       let creditSum = 0;
       let answeredCount = 0;
       // Distinct de answeredCount (qui inclut aussi les questions passées, cf.
@@ -17891,6 +18100,14 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       questions = data?.questions || [];
     }
     if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
+
+    // Serving par niveau (V4.0, 01/09/2026, section 10 de la demande) : la
+    // fiche ne renvoie désormais que le sous-ensemble réellement servi à ce
+    // niveau — no-op strict pour tout quiz sans pedagogicalRank (cf.
+    // commentaire complet dans getDailyQuizQuestions). `questionCount`
+    // ci-dessous reflète donc ce sous-ensemble, jamais le corpus maître
+    // complet stocké en base.
+    questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[questions[0]?.level]?.target);
 
     const first = questions[0];
     let linkOwnerUserId = null;

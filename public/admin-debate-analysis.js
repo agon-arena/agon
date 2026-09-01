@@ -576,9 +576,11 @@
 
       /* ── Visual refresh: calmer palette, richer hierarchy ── */
       .ada-wrap {
-        /* 24px (au lieu de 6px) : plus d'espace sous "Regénérer"/"Générer rapport IA"
-           avant le contenu suivant (demande du 01/09/2026). */
-        margin: 14px auto 24px;
+        /* 32px (au lieu de 24px, lui-même déjà relevé de 6px) : encore un peu plus d'espace sous
+           "Regénérer"/"Générer rapport IA" avant le contenu suivant (demande du 01/09/2026, "laisse
+           un peu plus d'espace sous ce bouton" — après son remontée sous le barème/le compteur de
+           contributions restantes). */
+        margin: 14px auto 32px;
         width: min(100%, 920px);
       }
       .ada-trigger-btn {

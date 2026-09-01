@@ -85,7 +85,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260901-community-score-more-space-below">
+  <link rel="stylesheet" href="/style.min.css?v=20260901-memoire-back-btn-removed">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -624,6 +624,51 @@
   try {
     if (!shouldSkipStartup && document.wasDiscarded === true) {
       shouldSkipStartup = true;
+    }
+  } catch (_) {}
+
+  // Kill du processus WebKit sans pagehide en PWA standalone (mémoire) : iOS relance
+  // toujours sur le start_url ("/"), perçu par l'utilisateur comme "je reviens sur le
+  // site très brièvement" après avoir juste changé d'app — pas un vrai premier
+  // chargement, l'intro ne doit pas se rejouer (demande du 01/09/2026). Même
+  // traitement que le tab discard ci-dessus (shouldSkipStartup, loader entièrement
+  // retiré) : un essai intermédiaire gardait logo+texte visibles via
+  // mnoria-user-refresh-startup (pour ne pas perdre "Cultive ton esprit"), mais a
+  // recréé la coupure au milieu de l'animation sur cette page-ci une fois testé en
+  // conditions réelles — cause non confirmée, retiré le même jour plutôt que de
+  // laisser le bug revenir. Détection dupliquée ici — plutôt que déléguée à
+  // script.js, chargé en defer donc exécuté après la toute première image, trop tard
+  // pour empêcher l'intro de démarrer avant lui. Lecture seule de
+  // mnoria_last_lifecycle_snapshot (même clé que MNORIA_LAST_LIFECYCLE_SNAPSHOT_KEY,
+  // script.js) : aucune écriture ici, le diagnostic complet plus loin reste seul
+  // responsable de la tenir à jour. Ne couvre que "déjà sur /" : le cas "était sur une
+  // autre page" reste redirigé par ce même diagnostic (restoredTo), qui navigue de
+  // toute façon vers une page sans loader de démarrage.
+  try {
+    if (!shouldSkipStartup && window.location.pathname === '/') {
+      var isStandaloneAtStartup = !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+      if (isStandaloneAtStartup) {
+        var startupNavType = 'unknown';
+        var startupNavEntry = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+        if (startupNavEntry) startupNavType = startupNavEntry.type;
+        else if (performance.navigation) startupNavType = ['navigate', 'reload', 'back_forward', 'reserved'][performance.navigation.type] || 'unknown';
+        if (startupNavType === 'navigate') {
+          var rawSnapshot = localStorage.getItem('mnoria_last_lifecycle_snapshot');
+          var lastSnapshot = rawSnapshot ? JSON.parse(rawSnapshot) : null;
+          if (
+            lastSnapshot &&
+            lastSnapshot.documentContext === 'top' &&
+            lastSnapshot.reason !== 'pagehide' &&
+            lastSnapshot.reason !== 'beforeunload' &&
+            lastSnapshot.timestamp
+          ) {
+            var snapshotAgeMs = Date.now() - new Date(lastSnapshot.timestamp).getTime();
+            if (snapshotAgeMs >= 0 && snapshotAgeMs < 10 * 60 * 1000) {
+              shouldSkipStartup = true;
+            }
+          }
+        }
+      }
     }
   } catch (_) {}
   try {
@@ -2011,7 +2056,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260901-rhetor-to-doxa" defer></script>
+<script src="/script.min.js?v=20260901-ai-report-btn-moved" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

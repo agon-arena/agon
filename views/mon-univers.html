@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260901-community-score-more-space-below" />
+<link rel="stylesheet" href="/style.min.css?v=20260901-memoire-back-btn-removed" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -673,16 +673,16 @@
       border: none;
       background: none;
       color: #111827;
-      font-family: "Barlow Condensed", Arial, sans-serif;
-      font-size: 32px;
-      font-weight: 600;
+      font-family: "Barlow Condensed", Arial, sans-serif !important;
+      font-size: 32px !important;
+      font-weight: 600 !important;
       letter-spacing: 0.03em;
       text-transform: uppercase;
       white-space: nowrap;
       cursor: pointer;
     }
     .contributions-section-title.active {
-      font-weight: 700;
+      font-weight: 700 !important;
     }
     .contributions-section-title.active::after {
       content: "";
@@ -700,7 +700,7 @@
         gap: 8px;
       }
       .contributions-section-title {
-        font-size: 20px;
+        font-size: 20px !important;
         letter-spacing: 0.005em;
       }
     }
@@ -1353,7 +1353,7 @@
             : "Justesse aux repasses",
           "Pas encore évalué : réponds à des repasses dans Ancrer pour débloquer ce score.",
           "gnosis",
-          "Classement parmi les contributeurs ayant répondu à un volume similaire de repasses en Ancrer."
+          "Classement parmi tous les contributeurs ayant répondu à au moins une repasse en Ancrer."
         ) +
         // Noesis (demande du 17/08/2026) : compréhension des liens, QCM "Relier" — même
         // format que Gnosis ("Top X%", un classement percentile). A désormais son propre
@@ -1365,7 +1365,7 @@
             : "Compréhension des liens entre connaissances",
           "Pas encore évalué : réponds dans Relier pour débloquer ce score.",
           "noesis",
-          "Classement parmi les contributeurs ayant répondu à un volume similaire de questions en Relier."
+          "Classement parmi tous les contributeurs ayant répondu à au moins une question en Relier."
         );
 
       // Réactive le détail au clic sur une carte (demande du 20/08/2026, revient
@@ -1377,12 +1377,6 @@
         var tierLabelValue = String(d.tierLabel || "").trim();
         var tierValue = numOrNull(d.tier);
         var tierCountValue = numOrNull(d.tierCount);
-        var gnosisTierLabelValue = String(d.gnosisTierLabel || "").trim();
-        var gnosisTierValue = numOrNull(d.gnosisTier);
-        var gnosisTierCountValue = numOrNull(d.gnosisTierCount);
-        var noesisTierLabelValue = String(d.noesisTierLabel || "").trim();
-        var noesisTierValue = numOrNull(d.noesisTier);
-        var noesisTierCountValue = numOrNull(d.noesisTierCount);
         var modalStats = {
           votesTotalUsers: numOrNull(d.votesTotalUsers),
           notesTotalUsers: numOrNull(d.notesTotalUsers),
@@ -1390,8 +1384,6 @@
           noesisTotalUsers: numOrNull(d.noesisTotalUsers),
           votesTierUsers: numOrNull(d.votesTierUsers),
           notesTierUsers: numOrNull(d.notesTierUsers),
-          gnosisTierUsers: numOrNull(d.gnosisTierUsers),
-          noesisTierUsers: numOrNull(d.noesisTierUsers),
           votesValue: votesValue,
           notesValue: notesValue,
           gnosisAnswered: gnosisAnswered,
@@ -1405,8 +1397,6 @@
             showUserScoreModal(
               votesScore, notesScore, gnosisScore, noesisScore,
               tierLabelValue, modalStats, tierValue, tierCountValue,
-              gnosisTierLabelValue, gnosisTierValue, gnosisTierCountValue,
-              noesisTierLabelValue, noesisTierValue, noesisTierCountValue,
               card.dataset.scoreTab
             );
           });
@@ -1522,8 +1512,8 @@
 </script>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale">
-  <button type="button" class="home-bottom-nav-item" aria-label="Explorer" onclick="contributionsBottomNavHome()">
-    <i class="fa-regular fa-compass"></i><span>Explorer</span>
+  <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="contributionsBottomNavHome()">
+    <i class="fa-solid fa-house"></i><span>Accueil</span>
   </button>
   <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
     <i class="fa-solid fa-plus"></i><span>Ouvrir</span>
@@ -1531,8 +1521,8 @@
   <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
     <i class="fa-solid fa-rotate-right"></i><span>Actualiser</span>
   </button>
-  <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="contributionsBottomNavHome()">
-    <i class="fa-solid fa-house"></i><span>Accueil</span>
+  <button type="button" class="home-bottom-nav-item" aria-label="Explorer" onclick="contributionsBottomNavHome()">
+    <i class="fa-regular fa-compass"></i><span>Explorer</span>
   </button>
   <a href="/notifications" class="home-bottom-nav-item" aria-label="Notifications">
     <i class="fa-regular fa-bell"></i><span>Alertes</span>
@@ -1550,10 +1540,10 @@ function contributionsBottomNavHome() {
 }
 </script>
 
-<script src="/script.min.js?v=20260901-rhetor-to-doxa" defer></script>
+<script src="/script.min.js?v=20260901-ai-report-btn-moved" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260830-frame-ready-gate");
+    import("/mon-univers.js?v=20260901-memoire-bg-dezoom");
   }
 </script>
 </body>
