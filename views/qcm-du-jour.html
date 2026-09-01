@@ -954,6 +954,9 @@
     .qcm-custom-search-status.is-error {
       color: #d64545;
     }
+    #qcm-generation-status-anchor .qcm-custom-search-status {
+      margin: 8px 0 6px;
+    }
     /* "Camembert" qui se noircit en boucle pendant la génération (demande du
        13/08/2026, remplace un chiffré temps écoulé/compte à rebours écarté
        par l'utilisateur) : la durée réelle varie de quelques secondes à
@@ -1883,6 +1886,7 @@
       background: #f3f4f6;
       color: #6b7280;
       font-size: 12px;
+      line-height: 1.08;
       font-weight: 700;
       white-space: nowrap;
     }
@@ -1903,6 +1907,23 @@
       width: 18px;
       height: 18px;
       margin: 0;
+    }
+    .qcm-mesqcm-level {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+      color: #374151;
+      font-size: 12px;
+      line-height: 1.08;
+      white-space: nowrap;
+    }
+    .qcm-mesqcm-level-name {
+      font-weight: 700;
+    }
+    .qcm-mesqcm-level-count {
+      color: #6b7280;
+      font-weight: 500;
     }
     .qcm-mesqcm-name-btn {
       display: flex;
@@ -3248,6 +3269,14 @@
         <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="YouTube" data-icon="fa-brands fa-youtube" data-url="/youtube-knowledge"><i class="fa-brands fa-youtube" aria-hidden="true"></i><strong>YouTube</strong><span>Importer une vidéo</span></button>
       </div>
     </div>
+    <!-- Le suivi d'une génération lancée reste immédiatement sous le bouton
+         principal, avant les sujets proposés. Le statut et son indicateur
+         sont temporairement déplacés dans la modale pendant la saisie puis
+         reviennent dans cet emplacement à sa fermeture. -->
+    <div id="qcm-generation-status-anchor">
+      <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
+      <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
+    </div>
     <!-- "Sujets proposés" (demande du 30/08/2026) : intégrée directement
          sous "Commencer un nouvel apprentissage" plutôt que dans une fenêtre
          séparée ouverte depuis une entrée "Préconisations" du menu ci-dessus
@@ -3274,8 +3303,6 @@
           <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> <span class="qcm-custom-search-btn-label">Générer</span>
         </button>
       </form>
-      <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
-      <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
     </div>
     <!-- Contenu par défaut statique (pas posé par JS) : le cadre .qcm-panel est
          stylé (fond blanc, ombre, coins arrondis) dès le parsing du HTML, avant
@@ -5170,15 +5197,24 @@
     return (quizzes || []).map(function (quiz) { return quiz.slot + '|' + quiz.quizDate; }).sort().join('||');
   }
 
+  function mesQcmTrackingSlotIdentity(slot) {
+    var value = String(slot || '');
+    return value.indexOf('notion:custom:') === 0
+      ? value.replace(/:(?:elementaire|avance|expert)$/, '')
+      : value;
+  }
+
   // Réconcilie l'état optimiste déposé par Éclairages/Histoire avec la liste serveur. Dès que
   // le slot apparaît, le marqueur est supprimé ; tant qu'il manque, le même texte et le même
   // camembert tournant que la génération par barre de recherche restent visibles, nom compris.
   function syncPendingNotionQuizGenerations(quizzes) {
     var pending = getPendingNotionQuizGenerations();
     var availableSlots = {};
-    (quizzes || []).forEach(function (quiz) { availableSlots[quiz.slot] = true; });
+    (quizzes || []).forEach(function (quiz) {
+      availableSlots[mesQcmTrackingSlotIdentity(quiz.slot)] = true;
+    });
     pending.forEach(function (item) {
-      if (availableSlots[item.slot] && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+      if (availableSlots[mesQcmTrackingSlotIdentity(item.slot)] && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
         window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
       }
     });
@@ -5421,12 +5457,17 @@
         customTopicGenerationLabel = topic;
         customSearchBtn.disabled = true;
         customSearchInput.disabled = true;
-        if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
         setCustomSearchStatus(
           'Génération du QCM « ' + topic + ' » en cours — cela peut prendre plusieurs minutes…',
           false
         );
         startPieSpinner();
+        // La génération est désormais suivie par la ligne persistante « En cours de
+        // création » : refermer immédiatement la fenêtre de saisie, sans attendre la
+        // réponse (potentiellement longue) du serveur. En cas d'échec ultérieur, le
+        // message d'erreur reste géré par le flux existant.
+        closeAiGenerateModal();
+        if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
 
         function customGenerationErrorMessage(code, fallback) {
           var messages = {
@@ -5521,7 +5562,7 @@
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
             if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
-            setCustomSearchStatus('Connexion interrompue. Vérifie ton réseau puis réessaie.', true);
+            setCustomSearchStatus('La connexion avec le serveur a été interrompue. La génération peut avoir été stoppée ; vérifie son état dans la liste avant de réessayer.', true);
           });
       });
     });
@@ -5716,13 +5757,14 @@
   // cf. qcm-ai-generate-anchor dans le HTML) — aucun écouteur existant
   // (submitCustomTopic, spinner, statut) n'est retouché ni recréé.
   var aiGenerateAnchor = document.getElementById('qcm-ai-generate-anchor');
+  var generationStatusAnchor = document.getElementById('qcm-generation-status-anchor');
   var aiGenerateModalEls = null;
   function closeAiGenerateModal() {
     if (!aiGenerateModalEls) return;
     aiGenerateAnchor.appendChild(customSearchForm);
-    aiGenerateAnchor.appendChild(customSearchStatus);
+    generationStatusAnchor.appendChild(customSearchStatus);
     var spinnerEl = document.getElementById('qcm-pie-spinner');
-    if (spinnerEl) aiGenerateAnchor.appendChild(spinnerEl);
+    if (spinnerEl) generationStatusAnchor.appendChild(spinnerEl);
     customSearchForm.hidden = true;
     customSearchForm.classList.remove('visible');
     customSearchStatus.hidden = true;
@@ -6365,7 +6407,9 @@
       '</div>';
   }
 
-  // Un tableau (nom + progression) pour une liste de QCM déjà filtrée —
+  // Un tableau volontairement synthétique (nom + état + niveau) pour une
+  // liste de QCM déjà filtrée — le taux d'ancrage et la suppression restent
+  // accessibles dans la fenêtre ouverte en cliquant sur l'apprentissage.
   // `allQuizzes` sert uniquement à retrouver l'index d'origine
   // (data-mesqcm-index), pour que le câblage des clics reste unique même
   // quand un même QCM apparaît dans plusieurs rubriques (cf. renderMesQcmList).
@@ -6379,19 +6423,21 @@
     return q.slot + '|' + q.quizDate;
   }
 
-  function renderMesQcmTableHtml(list, allQuizzes, showCheckbox) {
+  function renderMesQcmTableHtml(list, allQuizzes) {
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
     html += '<table class="qcm-mesqcm-table">';
-    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Ancrage</th><th></th>' + (showCheckbox ? '<th></th>' : '') + '</tr></thead><tbody>';
+    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Niveau</th></tr></thead><tbody>';
     list.forEach(function (q) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
-      var progressPct = Math.max(0, Math.min(100, Number(q.progressPct) || 0));
-      var badgeHtml = q.validated
-        ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
-        : '<span class="qcm-acquis-badge">' + progressPct + '%</span>';
       var questionCount = Number(q.questionCount) || 0;
+      var tableLevelLabels = { elementaire: 'Élémentaire', avance: 'Approfondi', expert: 'Expert' };
+      var levelLabel = tableLevelLabels[q.level] || '';
+      var levelHtml = '<span class="qcm-mesqcm-level">' +
+        (levelLabel ? '<span class="qcm-mesqcm-level-name">' + escapeHtml(levelLabel) + '</span>' : '') +
+        (questionCount ? '<span class="qcm-mesqcm-level-count">' + questionCount + (questionCount > 1 ? ' questions' : ' question') + '</span>' : '') +
+        '</span>';
       // "Réalisé (X/Y)" (demande du 30/08/2026) : X = trueAnsweredCount,
       // les questions VRAIMENT répondues (jamais les passées, cf. serveur
       // GET /api/users/notion-quizzes) — distingue un QCM entièrement
@@ -6401,19 +6447,14 @@
       var stateHtml = q.realized
         ? '<span class="qcm-mesqcm-state is-realized">Réalisé (' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
         : (q.inProgress
-          ? '<span class="qcm-mesqcm-state is-inprogress">En cours (' + (Number(q.answeredCount) || 0) + '/' + questionCount + ')</span>'
-          : '<span class="qcm-mesqcm-state">En attente de réalisation</span>');
+          ? '<span class="qcm-mesqcm-state is-inprogress">En cours<br>' + (Number(q.answeredCount) || 0) + '/' + questionCount + '</span>'
+          : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>');
       html += '<tr>';
       html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
       html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
-      if (questionCount) html += '<span class="qcm-mesqcm-question-count">(' + questionCount + (questionCount > 1 ? ' questions' : ' question') + ')</span>';
       html += '</button></td>';
       html += '<td>' + stateHtml + '</td>';
-      html += '<td>' + badgeHtml + '</td>';
-      html += '<td><button type="button" class="qcm-mesqcm-delete-btn" data-mesqcm-delete-index="' + index + '" aria-label="Supprimer cet apprentissage" title="Supprimer"><i class="fa-solid fa-trash-can"></i></button></td>';
-      if (showCheckbox) {
-        html += '<td class="qcm-mesqcm-td-check"><input type="checkbox" class="qcm-mesqcm-row-checkbox" data-mesqcm-key="' + escapeHtml(getMesQcmRowKey(q)) + '" aria-label="Sélectionner ' + escapeHtml(q.label || meta.label) + '"></td>';
-      }
+      html += '<td>' + levelHtml + '</td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -6432,7 +6473,7 @@
     for (var pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
       var pageItems = list.slice(pageIndex * MES_QCM_PAGE_SIZE, (pageIndex + 1) * MES_QCM_PAGE_SIZE);
       html += '<div class="qcm-mesqcm-page" data-page-index="' + pageIndex + '"' + (pageIndex ? ' hidden' : '') + '>';
-      html += renderMesQcmTableHtml(pageItems, allQuizzes, showCheckbox);
+      html += renderMesQcmTableHtml(pageItems, allQuizzes);
       html += '</div>';
     }
     if (pageCount > 1) {

@@ -42,7 +42,8 @@ test("la route ne renvoie plus l'erreur technique Supabase brute", () => {
 test("le frontend distingue statut, JSON invalide, réseau et codes serveur", () => {
   assert.match(view, /status: res\.status/);
   assert.match(view, /invalidJson: !data/);
-  assert.match(view, /Connexion interrompue/);
+  assert.match(view, /connexion avec le serveur a été interrompue/i);
+  assert.doesNotMatch(view, /Vérifie ton réseau/i);
   for (const code of ["AI_UNAVAILABLE", "AI_TIMEOUT", "CONTENT_UNUSABLE", "STORAGE_TEMPORARY", "QCM_UNUSABLE"]) {
     assert.match(view, new RegExp(code));
   }
@@ -60,6 +61,36 @@ test("un sujet libre reste suivi après avoir quitté la page", () => {
   const catchStart = view.indexOf(".catch(function () {", view.indexOf("fetch('/api/users/notion-quizzes/custom'"));
   const catchEnd = view.indexOf("          });", catchStart);
   assert.doesNotMatch(view.slice(catchStart, catchEnd), /mnoriaFinishPendingNotionQuizGeneration/);
+});
+
+test("le suivi reconnaît toutes les variantes de niveau d'un même master mutualisé", () => {
+  const routeStart = server.indexOf('app.get("/api/users/notion-quizzes/generation-status"');
+  const routeEnd = server.indexOf('app.get("/api/users/notion-quizzes",', routeStart);
+  const route = server.slice(routeStart, routeEnd);
+  assert.match(route, /customSlotIdentity/);
+  assert.match(route, /elementaire\|avance\|expert/);
+  assert.match(route, /return row \? \[\{ slot: requestedSlot, quizDate: row\.quiz_date \}\] : \[\]/);
+  assert.match(view, /function mesQcmTrackingSlotIdentity\(slot\)/);
+  assert.match(view, /availableSlots\[mesQcmTrackingSlotIdentity\(item\.slot\)\]/);
+});
+
+test("la fenêtre Générer avec l’IA se ferme automatiquement dès que la génération est lancée", () => {
+  const generationStart = view.indexOf("mnoriaStartPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic })");
+  const modalClose = view.indexOf("closeAiGenerateModal();", generationStart);
+  const requestStart = view.indexOf("fetch('/api/users/notion-quizzes/custom'", generationStart);
+  assert.ok(generationStart >= 0, "le suivi persistant doit être lancé");
+  assert.ok(modalClose > generationStart, "la fenêtre doit se fermer après l'inscription du suivi en cours");
+  assert.ok(modalClose < requestStart, "la fenêtre doit disparaître sans attendre la fin de la requête IA");
+});
+
+test("le suivi de génération apparaît sous le bouton personnalisé et avant les sujets proposés", () => {
+  const button = view.indexOf('id="qcm-memorize-toggle"');
+  const statusAnchor = view.indexOf('id="qcm-generation-status-anchor"');
+  const suggestions = view.indexOf('id="qcm-learn-next-inline"');
+  assert.ok(button >= 0 && statusAnchor > button, "le statut doit suivre le bouton principal");
+  assert.ok(suggestions > statusAnchor, "le statut doit précéder les sujets proposés");
+  assert.match(view, /generationStatusAnchor\.appendChild\(customSearchStatus\)/);
+  assert.match(view, /generationStatusAnchor\.appendChild\(spinnerEl\)/);
 });
 
 test("l'ancien message générique trompeur a disparu du parcours", () => {

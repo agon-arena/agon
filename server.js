@@ -5593,7 +5593,7 @@ async function sendLearningDigestNotifications() {
       try {
         const [reinforcementQuestions, comprehensionAvailable] = await Promise.all([
           fetchCultureGeneraleReviewInjectionForToday(legacyKey, todayKey),
-          hasCultureGeneraleComprehensionLinks(legacyKey)
+          hasPendingCultureGeneraleComprehensionQuestions(legacyKey, todayKey)
         ]);
         const ancrerAvailable = reinforcementQuestions.length > 0;
         if (!ancrerAvailable && !comprehensionAvailable) return;
@@ -17369,7 +17369,7 @@ app.get("/api/daily-quiz/status", async (req, res) => {
     const [reinforcementQuestions, comprehensionAvailable] = voterKey
       ? await Promise.all([
           fetchCultureGeneraleReviewInjectionForToday(voterKey, todayKey),
-          hasCultureGeneraleComprehensionLinks(voterKey)
+          hasPendingCultureGeneraleComprehensionQuestions(voterKey, todayKey)
         ])
       : [[], false];
     const slots = {
@@ -18127,13 +18127,41 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
     if (userError) throw new Error(userError.message);
     if (!user) return res.json({ ready: [] });
 
+    // Depuis la mutualisation V4.1, un sujet libre peut être demandé avec un
+    // slot suffixé par le niveau (`:elementaire`, `:avance`, `:expert`) puis
+    // être rattaché à un master existant dont le slot est nu ou porte un
+    // autre suffixe. Pour le suivi uniquement, toutes ces variantes décrivent
+    // la même génération : sinon le navigateur attend indéfiniment un slot
+    // qui ne sera volontairement jamais inséré.
+    const customSlotIdentity = (slot) => String(slot || "").replace(
+      /:(?:elementaire|avance|expert)$/,
+      ""
+    );
+    const lookupSlots = [...new Set(slots.flatMap((slot) => {
+      if (!slot.startsWith("notion:custom:")) return [slot];
+      const identity = customSlotIdentity(slot);
+      return [identity, ...Object.keys(NOTION_QUIZ_LEVELS).map((level) => `${identity}:${level}`)];
+    }))];
+
     const { data: rows, error: rowsError } = await supabase
       .from("user_notion_quizzes")
       .select("slot,quiz_date")
       .eq("user_id", user.id)
-      .in("slot", slots);
+      .in("slot", lookupSlots);
     if (rowsError) throw new Error(rowsError.message);
-    res.json({ ready: (rows || []).map((row) => ({ slot: row.slot, quizDate: row.quiz_date })) });
+    const ready = slots.flatMap((requestedSlot) => {
+      const requestedIdentity = requestedSlot.startsWith("notion:custom:")
+        ? customSlotIdentity(requestedSlot)
+        : requestedSlot;
+      const row = (rows || []).find((candidate) => {
+        if (!requestedSlot.startsWith("notion:custom:")) return candidate.slot === requestedSlot;
+        return customSlotIdentity(candidate.slot) === requestedIdentity;
+      });
+      // Renvoyer le slot demandé, et non le slot physique trouvé : c'est la
+      // clé exacte enregistrée dans le localStorage que le client doit retirer.
+      return row ? [{ slot: requestedSlot, quizDate: row.quiz_date }] : [];
+    });
+    res.json({ ready });
   } catch (error) {
     console.error("[notion-quizzes] suivi génération :", error.message);
     res.status(500).json({ ready: [], error: "Suivi momentanément indisponible." });
@@ -18333,6 +18361,9 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         // pertinente, y compris pour les anciens QCM stockés avec plusieurs
         // sourceThemes.
         themes: primaryTheme ? [primaryTheme] : [],
+        // Niveau effectivement choisi pour cette adoption, utilisé dans la
+        // colonne « Niveau » de la page Apprentissage.
+        level: effectiveLevel,
         questionCount: questions.length,
         answeredCount,
         trueAnsweredCount,
@@ -19761,12 +19792,61 @@ async function resolveLegacyUserForComprehension(legacyKey) {
   return user;
 }
 
-async function hasCultureGeneraleComprehensionLinks(legacyKey) {
+function selectCultureGeneraleComprehensionLinksForDay(links, quizDate) {
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(quizDate || "")) ? String(quizDate) : parisDateKey();
+  return links
+    .map((link) => ({
+      link,
+      rank: crypto.createHash("sha1").update(`${dateKey}:${link.id}`).digest("hex")
+    }))
+    .sort((a, b) => a.rank.localeCompare(b.rank))
+    .slice(0, 6)
+    .map((entry) => entry.link);
+}
+
+// Le bouton « Relier » signifie désormais qu'une action est réellement
+// possible aujourd'hui, jamais seulement qu'au moins un lien existe. Une
+// banque absente reste disponible (le clic déclenchera sa préparation) ; une
+// session déjà générée n'est disponible que s'il reste une question sans
+// réponse pour ce visiteur à la date du jour.
+async function hasPendingCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
   const user = await resolveLegacyUserForComprehension(legacyKey);
   if (!user) return false;
   const notions = await fetchUserAcquiredCultureGeneraleNotions(user.id);
   const links = await fetchOwnedCultureGeneraleNotionLinks(user.id, notions);
-  return links.length > 0;
+  if (!links.length) return false;
+
+  const selectedLinks = selectCultureGeneraleComprehensionLinksForDay(links, quizDate);
+  const selectedSlots = selectedLinks.map(cultureGeneraleComprehensionQuizSlot);
+  const { data: quizRows, error: quizError } = await supabase
+    .from("daily_quiz")
+    .select("quiz_date,slot,questions")
+    .in("slot", selectedSlots)
+    .order("quiz_date", { ascending: false });
+  if (quizError) throw new Error(quizError.message);
+
+  const latestBankBySlot = new Map();
+  for (const row of quizRows || []) {
+    if (!latestBankBySlot.has(row.slot) && Array.isArray(row.questions) && row.questions.length) {
+      latestBankBySlot.set(row.slot, row.questions);
+    }
+  }
+  if (selectedSlots.some((slot) => !latestBankBySlot.has(slot))) return true;
+
+  const banks = selectedSlots.map((slot) => latestBankBySlot.get(slot) || []);
+  const questions = assembleComprehensionSession(banks, COMPREHENSION_QUIZ_MAX_QUESTIONS);
+  if (!questions.length) return false;
+  const questionIds = questions.map((question) => question.id);
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(quizDate || "")) ? String(quizDate) : parisDateKey();
+  const { data: answerRows, error: answersError } = await supabase
+    .from("daily_quiz_answers")
+    .select("question_id")
+    .eq("quiz_date", dateKey)
+    .eq("voter_key", legacyKey)
+    .in("question_id", questionIds);
+  if (answersError) throw new Error(answersError.message);
+  const answeredIds = new Set((answerRows || []).map((row) => row.question_id));
+  return questionIds.some((questionId) => !answeredIds.has(questionId));
 }
 
 // Parcours « Comprendre » : au plus COMPREHENSION_QUIZ_MAX_QUESTIONS questions par session, en
@@ -19779,15 +19859,7 @@ async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
   const notions = await fetchUserAcquiredCultureGeneraleNotions(user.id);
   const links = await fetchOwnedCultureGeneraleNotionLinks(user.id, notions);
   if (!links.length) return [];
-  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(quizDate || "")) ? String(quizDate) : parisDateKey();
-  const selectedLinks = links
-    .map((link) => ({
-      link,
-      rank: crypto.createHash("sha1").update(`${dateKey}:${link.id}`).digest("hex")
-    }))
-    .sort((a, b) => a.rank.localeCompare(b.rank))
-    .slice(0, 6)
-    .map((entry) => entry.link);
+  const selectedLinks = selectCultureGeneraleComprehensionLinksForDay(links, quizDate);
   // COMPREHENSION_QUIZ_MAX_QUESTIONS relations valides suffisent déjà à fournir autant de
   // questions (au moins une chacune — une banque à une seule question reste pleinement
   // éligible, cf. assembleComprehensionSession ci-dessous, renforcé le 17/08/2026 : un lien fort
