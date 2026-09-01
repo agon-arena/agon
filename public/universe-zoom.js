@@ -31,14 +31,17 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
   const normalized = weights.map((w) => 0.35 + 0.65 * Math.pow(w / maxWeight, 0.6));
 
   let sizeScale = 1;
-  const baseRadii = () => normalized.map((w) => sizeScale * (minRatio + (maxRatio - minRatio) * w) * maxR);
+  const hasFixedVisualRadii = items.every((item) => Number.isFinite(item.visualRadius) && item.visualRadius > 0);
+  const baseRadii = () => normalized.map((w, index) => hasFixedVisualRadii
+    ? items[index].visualRadius
+    : sizeScale * (minRatio + (maxRatio - minRatio) * w) * maxR);
 
   // Réduit l'échelle globale si la somme des aires dépasse l'aire utile du disque — même
   // logique que computeAutoScale (tagTrendCloud.js) mais ciblant un disque plutôt qu'un
   // rectangle de conteneur.
   const usableArea = Math.PI * maxR * maxR * fillRatio;
   const totalArea = () => baseRadii().reduce((sum, r) => sum + Math.PI * r * r, 0);
-  if (totalArea() > usableArea) {
+  if (!hasFixedVisualRadii && totalArea() > usableArea) {
     sizeScale = Math.sqrt(usableArea / totalArea());
     sizeScale = Math.max(sizeScale, 0.4);
   }
@@ -52,25 +55,27 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
     for (let k = 0; k < order.length; k += 1) {
       const i = order[k];
       const r = radii[i];
+      const collisionR = Math.max(r, Number(items[i].collisionRadius) || r);
       const prefAngle = (k * golden) % 360;
       let best = null;
-      for (let dist = 0; dist <= maxR - r + 1 && !best; dist += Math.max(2, maxR * 0.012)) {
+      for (let dist = 0; dist <= maxR - collisionR + 1 && !best; dist += Math.max(2, maxR * 0.012)) {
         for (let step = 0; step < 24 && !best; step += 1) {
           const angle = ((prefAngle + (step % 2 === 0 ? step / 2 : -((step + 1) / 2)) * 22) * Math.PI) / 180;
           const x = cx + Math.cos(angle) * dist;
           const y = cy + Math.sin(angle) * dist;
-          if (Math.hypot(x - cx, y - cy) + r > maxR) continue;
-          const collides = placed.some((p) => Math.hypot(x - p.x, y - p.y) < r + p.r - 2 + gap);
+          if (Math.hypot(x - cx, y - cy) + collisionR > maxR) continue;
+          const collides = placed.some((p) => Math.hypot(x - p.x, y - p.y) < collisionR + p.collisionR + gap);
           if (!collides) best = { x, y };
         }
       }
-      if (!best) {
+      if (!best && opts.allowCenterFallback !== false) {
         // Repli : le centre du disque minimise la distance aux bords, toujours dans les
         // bornes (rare — disque très encombré après réduction d'échelle).
         best = { x: cx, y: cy };
       }
-      placed.push({ x: best.x, y: best.y, r });
-      positions[i] = { x: best.x, y: best.y, r };
+      if (!best) return null;
+      placed.push({ x: best.x, y: best.y, r, collisionR });
+      positions[i] = { x: best.x, y: best.y, r, collisionR };
     }
     return positions;
   }
@@ -81,6 +86,7 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
   // dense), réduit encore l'échelle et retente, jusqu'à 4 fois — même esprit que la boucle de
   // computeAutoScale, jamais plus qu'un nombre borné d'essais.
   for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (!positions) break;
     const centerFallbacks = positions.filter((p) => p.x === cx && p.y === cy).length;
     if (centerFallbacks <= 1) break;
     sizeScale *= 0.88;
@@ -89,6 +95,31 @@ function packCirclesInDisk(items, cx, cy, maxR, opts = {}) {
   }
 
   return positions;
+}
+
+function stablePhaseDegrees(value) {
+  const text = String(value || "");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) / 4294967296) * 360;
+}
+
+function packFixedGroupsWithGrowth(items, initialRadius, opts = {}) {
+  const growthFactor = opts.growthFactor ?? 1.22;
+  const maxAttempts = opts.maxAttempts ?? 18;
+  let logicalRadius = Math.max(initialRadius, ...items.map((item) => Number(item.collisionRadius) || 0), 1);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const positions = packCirclesInDisk(items, 0, 0, logicalRadius, {
+      gap: opts.gap ?? 0,
+      allowCenterFallback: false
+    });
+    if (positions) return { positions, logicalRadius, attempts: attempt + 1 };
+    logicalRadius *= growthFactor;
+  }
+  throw new Error(`Universe layout: unable to pack ${items.length} groups without overlap after ${maxAttempts} attempts`);
 }
 
 // Place des "satellites" en orbite AUTOUR d'un point (pas emboîtés dans un disque comme
@@ -210,104 +241,185 @@ function layoutUniverseWorld(galaxies, worldRadius) {
     fillRatio: 0.58
   });
 
+  // Première passe locale : les rayons visuels restent ceux du moteur historique, mais chaque
+  // Solar réserve désormais l'enveloppe de son soleil, de ses étoiles et de marges bornées.
+  const galaxyDrafts = galaxies.map((g, gi) => {
+    const visualGalaxyRadius = galaxyPositions[gi].r;
+    const systemItems = g.solarSystems.map((s) => ({ weight: s.articleCount || 1, ref: s }));
+    const radiusProbe = packCirclesInDisk(systemItems, 0, 0, visualGalaxyRadius * 0.8, {
+      minRatio: 0.18, maxRatio: 0.4, fillRatio: 0.48, gap: visualGalaxyRadius * 0.1
+    });
+
+    const systems = g.solarSystems.map((solarSystem, si) => {
+      const visualRadius = radiusProbe[si].r;
+      const nominalOrbit = visualRadius * 1.6;
+      const starItems = solarSystem.stars.map((star) => ({ weight: star.articleCount || 1, ref: star }));
+      const localStars = packSatellitesAroundPoint(starItems, 0, 0, nominalOrbit, {
+        sizeBasis: visualRadius,
+        minRatio: 0.18,
+        maxRatio: 0.4,
+        gap: Math.max(0.8, visualRadius * 0.12),
+        phaseDegrees: stablePhaseDegrees(`${g.name}:${solarSystem.id}`),
+        obstacles: [{ x: 0, y: 0, r: visualRadius }],
+        occupied: []
+      });
+      const contentRadius = localStars.reduce(
+        (extent, star) => Math.max(extent, Math.hypot(star.x, star.y) + star.r),
+        visualRadius
+      );
+      const labelMargin = Math.min(visualRadius * 0.25, Math.max(0.8, visualRadius * 0.2));
+      const safetyMargin = Math.max(0.8, visualRadius * 0.2);
+      return {
+        solarSystem,
+        starItems,
+        localStars,
+        visualRadius,
+        contentRadius,
+        labelMargin,
+        safetyMargin,
+        effectiveRadius: contentRadius + labelMargin + safetyMargin
+      };
+    });
+
+    const interGroupGap = Math.max(0.8, visualGalaxyRadius * 0.04);
+    const packed = packFixedGroupsWithGrowth(
+      systems.map((system) => ({
+        weight: system.solarSystem.articleCount || 1,
+        visualRadius: system.visualRadius,
+        collisionRadius: system.effectiveRadius
+      })),
+      visualGalaxyRadius * 0.8,
+      { gap: interGroupGap }
+    );
+    systems.forEach((system, index) => { system.localCenter = packed.positions[index]; });
+    const contentRadius = systems.reduce(
+      (extent, system) => Math.max(extent, Math.hypot(system.localCenter.x, system.localCenter.y) + system.effectiveRadius),
+      visualGalaxyRadius
+    );
+    return { g, gi, visualRadius: visualGalaxyRadius, systems, contentRadius, logicalRadius: packed.logicalRadius, interGroupGap };
+  });
+
+  // Même protection au niveau supérieur : une galaxie garde son disque visuel historique, tandis
+  // que son rayon de collision agrégé peut grandir avec ses groupes Solar.
+  const galaxyGap = Math.max(0.8, worldRadius * 0.025);
+  const packedGalaxies = packFixedGroupsWithGrowth(
+    galaxyDrafts.map((draft) => ({
+      weight: galaxyItems[draft.gi].weight,
+      visualRadius: draft.visualRadius,
+      collisionRadius: draft.contentRadius
+    })),
+    worldRadius,
+    { gap: galaxyGap }
+  );
+
   const outGalaxies = [];
   const outSolarSystems = [];
   const outStars = [];
-  const pendingStarSystems = [];
-
-  galaxies.forEach((g, gi) => {
-    const gp = galaxyPositions[gi];
-    const galaxyNode = { id: `galaxy:${g.name}`, name: g.name, x: gp.x, y: gp.y, r: gp.r, weight: galaxyItems[gi].weight, ref: g };
+  galaxyDrafts.forEach((draft, draftIndex) => {
+    const center = packedGalaxies.positions[draftIndex];
+    const galaxyNode = {
+      id: `galaxy:${draft.g.name}`, name: draft.g.name, x: center.x, y: center.y,
+      r: draft.visualRadius, contentRadius: draft.contentRadius, logicalRadius: draft.logicalRadius,
+      weight: galaxyItems[draft.gi].weight, ref: draft.g
+    };
     outGalaxies.push(galaxyNode);
-
-    const systemItems = g.solarSystems.map((s) => ({ weight: s.articleCount || 1, ref: s }));
-    // gap + fillRatio réduit (0.6 -> 0.48) : les systèmes solaires d'une même galaxie
-    // apparaissaient trop collés/proches les uns des autres (demande du 13/08/2026, "écarte les
-    // solars des uns des autres") — un fillRatio plus bas force le calcul d'échelle globale à
-    // rétrécir davantage les systèmes pour laisser plus de vide entre eux, le gap ajoute une
-    // marge minimale garantie même sans ce rétrécissement (peu d'éléments, pas de compétition
-    // d'aire).
-    const systemPositions = packCirclesInDisk(systemItems, gp.x, gp.y, gp.r * 0.8, {
-      minRatio: 0.18,
-      maxRatio: 0.4,
-      fillRatio: 0.48,
-      gap: gp.r * 0.1
-    });
-
-    g.solarSystems.forEach((s, si) => {
-      const sp = systemPositions[si];
-      // orbitRadius : rayon de l'anneau où gravitent les étoiles de ce système (satellites,
-      // cf. packSatellitesAroundPoint) — au-delà de son propre cercle (1.6x, pas 1.25x : plus
-      // d'écart entre le point solaire et ses satellites, demande du 13/08/2026), pas emboîté
-      // dedans. Conservé sur le nœud (pas seulement local à cette fonction) : mon-univers.js
-      // s'en sert pour cadrer la caméra de sorte que TOUTE l'orbite tienne dans le cadre au
-      // clic (cf. focusScaleFor), pas seulement la taille des étoiles elles-mêmes.
-      const orbitRadius = sp.r * 1.6;
+    draft.systems.forEach((draftSystem) => {
+      const x = center.x + draftSystem.localCenter.x;
+      const y = center.y + draftSystem.localCenter.y;
       const systemNode = {
-        id: `solarSystem:${g.name}:${s.id}`,
-        name: s.name,
-        x: sp.x,
-        y: sp.y,
-        r: sp.r,
-        orbitRadius,
-        weight: systemItems[si].weight,
+        id: `solarSystem:${draft.g.name}:${draftSystem.solarSystem.id}`,
+        name: draftSystem.solarSystem.name,
+        x, y, r: draftSystem.visualRadius,
+        visualRadius: draftSystem.visualRadius,
+        contentRadius: draftSystem.contentRadius,
+        effectiveSolarRadius: draftSystem.effectiveRadius,
+        labelMargin: draftSystem.labelMargin,
+        safetyMargin: draftSystem.safetyMargin,
+        orbitRadius: draftSystem.contentRadius,
+        weight: draftSystem.solarSystem.articleCount || 1,
         galaxyId: galaxyNode.id,
-        ref: s
+        ref: draftSystem.solarSystem
       };
       outSolarSystems.push(systemNode);
-
-      const starItems = s.stars.map((star) => ({ weight: star.articleCount || 1, ref: star }));
-      pendingStarSystems.push({ galaxy: g, galaxyNode, solarSystem: s, systemNode, starItems });
-    });
-  });
-
-  // Les étoiles sont calculées seulement APRÈS tous les solars. Elles peuvent ainsi tester
-  // leur position contre chaque solar du monde (pas uniquement leur parent) et contre toutes
-  // les étoiles déjà validées. Si un anneau est encombré, packSatellitesAroundPoint passe au
-  // suivant, plus extérieur : jamais de chevauchement, jamais de réduction forcée.
-  const solarObstacles = outSolarSystems.map((solar) => ({ x: solar.x, y: solar.y, r: solar.r }));
-  const occupiedStars = [];
-
-  pendingStarSystems.forEach((pending, pendingIndex) => {
-    const { galaxy, galaxyNode, solarSystem, systemNode, starItems } = pending;
-    const starPositions = packSatellitesAroundPoint(
-      starItems,
-      systemNode.x,
-      systemNode.y,
-      systemNode.orbitRadius,
-      {
-        sizeBasis: systemNode.r,
-        minRatio: 0.18,
-        maxRatio: 0.4,
-        gap: Math.max(0.8, systemNode.r * 0.12),
-        phaseDegrees: 15 + (pendingIndex * 137.5) % 360,
-        obstacles: solarObstacles,
-        occupied: occupiedStars
-      }
-    );
-
-    let radialExtent = systemNode.orbitRadius;
-    solarSystem.stars.forEach((star, starIndex) => {
-      const stp = starPositions[starIndex];
-      radialExtent = Math.max(radialExtent, Math.hypot(stp.x - systemNode.x, stp.y - systemNode.y) + stp.r);
-      outStars.push({
-        id: `star:${galaxy.name}:${solarSystem.id}:${star.id}`,
-        name: star.name,
-        x: stp.x,
-        y: stp.y,
-        r: stp.r,
-        weight: starItems[starIndex].weight,
-        solarSystemId: systemNode.id,
-        galaxyId: galaxyNode.id,
-        ref: star
+      draftSystem.solarSystem.stars.forEach((star, starIndex) => {
+        const local = draftSystem.localStars[starIndex];
+        outStars.push({
+          id: `star:${draft.g.name}:${draftSystem.solarSystem.id}:${star.id}`,
+          name: star.name, x: x + local.x, y: y + local.y, r: local.r,
+          weight: draftSystem.starItems[starIndex].weight,
+          solarSystemId: systemNode.id, galaxyId: galaxyNode.id, ref: star
+        });
       });
     });
-    // Le cadrage caméra et la minimap doivent inclure le dernier anneau réellement utilisé,
-    // pas seulement le premier rayon nominal.
-    systemNode.orbitRadius = radialExtent;
   });
 
-  return { galaxies: outGalaxies, solarSystems: outSolarSystems, stars: outStars, worldRadius };
+  // Validation explicite : aucun fallback au centre ni dépassement silencieux n'est accepté.
+  for (let i = 0; i < outSolarSystems.length; i += 1) {
+    for (let j = i + 1; j < outSolarSystems.length; j += 1) {
+      const a = outSolarSystems[i];
+      const b = outSolarSystems[j];
+      const sameGalaxyGap = a.galaxyId === b.galaxyId
+        ? galaxyDrafts.find((draft) => `galaxy:${draft.g.name}` === a.galaxyId).interGroupGap
+        : galaxyGap;
+      if (Math.hypot(a.x - b.x, a.y - b.y) + 1e-7 < a.effectiveSolarRadius + b.effectiveSolarRadius + sameGalaxyGap) {
+        throw new Error(`Universe layout: Solar envelopes overlap (${a.id}, ${b.id})`);
+      }
+    }
+  }
+
+  // Le contrôle global historique est conservé comme invariant final, sans repousser les étoiles
+  // hors de l'enveloppe qui vient d'être réservée.
+  const solarById = new Map(outSolarSystems.map((solar) => [solar.id, solar]));
+  for (let i = 0; i < outStars.length; i += 1) {
+    const a = outStars[i];
+    const parentA = solarById.get(a.solarSystemId);
+    const starGapA = Math.max(0.8, (parentA?.r || 0) * 0.12);
+    outSolarSystems.forEach((solar) => {
+      if (solar.id === a.solarSystemId) return;
+      if (Math.hypot(a.x - solar.x, a.y - solar.y) + 1e-7 < a.r + solar.r + starGapA) {
+        throw new Error(`Universe layout: star overlaps a foreign Solar (${a.id}, ${solar.id})`);
+      }
+    });
+    for (let j = i + 1; j < outStars.length; j += 1) {
+      const b = outStars[j];
+      const parentB = solarById.get(b.solarSystemId);
+      const pairGap = Math.max(starGapA, Math.max(0.8, (parentB?.r || 0) * 0.12));
+      if (Math.hypot(a.x - b.x, a.y - b.y) + 1e-7 < a.r + b.r + pairGap) {
+        throw new Error(`Universe layout: stars overlap (${a.id}, ${b.id})`);
+      }
+    }
+  }
+
+  return {
+    galaxies: outGalaxies,
+    solarSystems: outSolarSystems,
+    stars: outStars,
+    worldRadius: packedGalaxies.logicalRadius
+  };
+}
+
+function computeUniverseWorldBounds(layout) {
+  const nodes = [
+    ...(layout?.galaxies || []),
+    ...(layout?.solarSystems || []),
+    ...(layout?.stars || [])
+  ];
+  if (!nodes.length) return { minX: -1, maxX: 1, minY: -1, maxY: 1 };
+  return nodes.reduce((bounds, node) => {
+    const radius = Math.max(0, Number(node.r) || 0);
+    bounds.minX = Math.min(bounds.minX, node.x - radius);
+    bounds.maxX = Math.max(bounds.maxX, node.x + radius);
+    bounds.minY = Math.min(bounds.minY, node.y - radius);
+    bounds.maxY = Math.max(bounds.maxY, node.y + radius);
+    return bounds;
+  }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+}
+
+function focusScaleForUniverseNode(node, childTargetPx = 58, orbitFitPx = 165) {
+  const targetR = node.maxChildR || node.r * 0.3;
+  const legibilityScale = childTargetPx / targetR;
+  if (!node.orbitRadius) return legibilityScale;
+  return Math.min(legibilityScale, orbitFitPx / node.orbitRadius);
 }
 
 // ---- Caméra : zoom continu sur #universe-world à l'intérieur de #universe-viewport ------------
@@ -660,4 +772,9 @@ function createUniverseCamera({
   };
 }
 
-export { layoutUniverseWorld, createUniverseCamera };
+export {
+  layoutUniverseWorld,
+  computeUniverseWorldBounds,
+  focusScaleForUniverseNode,
+  createUniverseCamera
+};

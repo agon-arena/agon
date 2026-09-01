@@ -114,6 +114,47 @@ test("V5 critic : refuse la sur-généralisation au-delà du knowledgeTarget ou 
   assert.match(prompt, /p[ée]riode|territoire|groupe concern[ée]|contexte/i);
 });
 
+// ── Qualité rédactionnelle (ajoutée le 01/09/2026, suite à l'audit
+// formulation QCM — cas réel "lequel n'était PAS exclu à l'origine de
+// l'application de la Déclaration des droits de l'homme et du citoyen ?",
+// qui passait tous les critères V5 ci-dessus malgré une formulation
+// scolaire) — désormais des invariants à protéger au même titre que les
+// critères V5. ──────────────────────────────────────────────────────────
+
+const V6_WORDING_CODES = ["UNNECESSARY_NEGATION", "AWKWARD_WORDING"];
+
+for (const code of V6_WORDING_CODES) {
+  test(`V6 critic : le reason code ${code} est défini dans le prompt`, () => {
+    assert.match(buildSemanticReviewPrompt(sampleEntries(), {}), new RegExp(code));
+  });
+}
+
+test("V6 critic : évalue explicitement le naturel du français, la simplicité syntaxique et l'oralité pédagogique", () => {
+  const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
+  assert.match(prompt, /fran[çc]ais naturel/i);
+  assert.match(prompt, /simplicit[ée] syntaxique/i);
+  assert.match(prompt, /pos[ée]rait [àa] l'oral/i);
+});
+
+test("V6 critic : la négation évitable a un seuil clair (nécessaire = accepté) et ne devient pas un rejet automatique de toute négation", () => {
+  const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
+  assert.match(prompt, /UNNECESSARY_NEGATION/);
+  assert.match(prompt, /N'utilise JAMAIS ce code lorsque la négation est intrinsèquement nécessaire/i);
+  assert.match(prompt, /intrus dont le point commun est naturellement négatif/i, "le format intrus doit rester explicitement protégé de ce critère");
+});
+
+test("V6 critic : la qualité rédactionnelle des options protège explicitement la brièveté/le style nominal contre un faux positif", () => {
+  const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
+  assert.match(prompt, /N'utilise JAMAIS ce critère pour pénaliser une option courte, nominale ou télégraphique en soi/i);
+  assert.match(prompt, /seule la maladresse réelle de formulation compte/i);
+});
+
+test("V6 critic : AWKWARD_WORDING exige un doute réel, jamais une simple préférence stylistique (limite l'inflation de régénérations)", () => {
+  const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
+  assert.match(prompt, /AWKWARD_WORDING/);
+  assert.match(prompt, /jamais pour une simple préférence stylistique/i);
+});
+
 // ── Contrat JSON attendu par parseSemanticReviews (lib/qcm-quality.js) —
 // un futur ajout de critère ne doit jamais faire disparaître un champ déjà
 // lu par le parseur, sous peine de CRITIC_INCOMPLETE_RESPONSE silencieux. ──

@@ -8,7 +8,12 @@
 // quel par les bulles Mnoria/Actu (public/script.js), sans rapport avec ce chantier.
 // Volontairement léger — pas de chargement de script.js (qui alourdirait la page pour un seul
 // besoin : getKey(), reproduite ici à l'identique, cf. script.js getKey()/lsGet()).
-import { layoutUniverseWorld, createUniverseCamera } from "/universe-zoom.js?v=20260817-revert-galaxy-size";
+import {
+  layoutUniverseWorld,
+  computeUniverseWorldBounds,
+  focusScaleForUniverseNode,
+  createUniverseCamera
+} from "/universe-zoom.js?v=20260901-solar-group-envelopes";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -408,11 +413,7 @@ const FOCUS_CHILD_TARGET_PX = 58;
 const FOCUS_ORBIT_FIT_PX = 165;
 
 function focusScaleFor(node) {
-  const targetR = node.maxChildR || node.r * 0.3;
-  const legibilityScale = FOCUS_CHILD_TARGET_PX / targetR;
-  if (!node.orbitRadius) return legibilityScale;
-  const fitScale = FOCUS_ORBIT_FIT_PX / node.orbitRadius;
-  return Math.min(legibilityScale, fitScale);
+  return focusScaleForUniverseNode(node, FOCUS_CHILD_TARGET_PX, FOCUS_ORBIT_FIT_PX);
 }
 
 function pluralize(n, word) { return `${n} ${word}${n > 1 ? "s" : ""}`; }
@@ -577,17 +578,7 @@ function computeUniverseMinimapBounds() {
   ];
   if (!nodes.length) return { minX: -1, maxX: 1, minY: -1, maxY: 1 };
 
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  nodes.forEach((node) => {
-    const radius = Math.max(0, Number(node.r) || 0);
-    minX = Math.min(minX, node.x - radius);
-    maxX = Math.max(maxX, node.x + radius);
-    minY = Math.min(minY, node.y - radius);
-    maxY = Math.max(maxY, node.y + radius);
-  });
+  let { minX, maxX, minY, maxY } = computeUniverseWorldBounds(worldLayout);
 
   const fallbackSpan = Math.max(2, (worldLayout?.worldRadius || 1) * 2);
   let width = Math.max(1, maxX - minX);

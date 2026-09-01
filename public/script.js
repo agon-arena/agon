@@ -19859,7 +19859,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260901-memoire-bg-dezoom').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260901-solar-group-envelopes').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;

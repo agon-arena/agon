@@ -112,7 +112,7 @@ const {
   buildAnalysisDataUrl,
   analyzePhotoKnowledge
 } = require("./lib/photo-knowledge");
-const { buildPhotoDocumentImportId, generatePhotoKnowledgeSheet } = require("./lib/photo-knowledge-sheet");
+const { buildPhotoDocumentImportId, buildImportParentTitleFallback, generatePhotoKnowledgeSheet } = require("./lib/photo-knowledge-sheet");
 const {
   decodePdfDataUrl,
   analyzePdfKnowledge,
@@ -13668,9 +13668,23 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     "INTERDICTION ABSOLUE : ne génère JAMAIS de question vrai/faux, oui/non, correct/incorrect, ni aucune formulation binaire équivalente qui donnerait artificiellement ~50% de chances de réussite au hasard — même sous un nom ou une apparence différente (ex. un \"qcm\" réduit à 2 options \"Vrai\"/\"Faux\", une question fermée dont la réponse est oui ou non). Toute question, quel que soit son format, doit toujours proposer au moins 3 options distinctes et sémantiquement plausibles (ou reposer sur un vrai appariement/une vraie séquence pour association/ordre).",
     "QUALITÉ OBLIGATOIRE : pour un QCM simple, une seule option doit être défendable et chaque distracteur doit être incontestablement faux au regard de la connaissance/source. Interdits : options sémantiquement équivalentes, \"toutes les réponses\", \"aucune de ces réponses\", double négation et piège de langage.",
     "La question doit être claire et autonome sans relire la fiche. La difficulté doit venir du savoir testé, jamais d'une formulation confuse. Avant de répondre, vérifie silencieusement la cohérence entre correctIndex/correctIndexes, le texte de la ou des bonnes options et l'explication.",
+    // Préférence à l'affirmatif (correctif du 01/09/2026, suite à l'audit
+    // qualité rédactionnelle des QCM — cas réel "Parmi ces groupes, lequel
+    // n'était PAS exclu à l'origine de l'application de la Déclaration des
+    // droits de l'homme et du citoyen ?", un intrus dont les causes
+    // structurelles réelles sont documentées dans le rapport : négation
+    // superflue, "PAS" en capitales, et négation empilée sur un concept déjà
+    // négatif "exclu"). Ne bannit JAMAIS la négation elle-même — certaines
+    // connaissances portent réellement sur une absence, une exclusion ou une
+    // interdiction et resteraient artificielles si on les forçait à
+    // l'affirmatif (cf. test/question-formats.test.js, format intrus) —
+    // seulement une préférence par défaut, écartée dès que la négation est
+    // le moyen le plus direct de tester la connaissance visée.
+    "PRÉFÉRENCE À L'AFFIRMATIF : privilégie toujours une formulation affirmative, directe et naturelle lorsqu'elle permet d'évaluer la même connaissance. N'utilise une formulation négative, une question d'exception ou une construction du type \"lequel n'est pas\"/\"lequel n'a pas\"/\"sauf\"/\"excepté\"/\"incorrect\" que si cette négation est réellement nécessaire à la connaissance testée et qu'aucune formulation positive équivalente ne serait aussi claire. La difficulté doit venir de la connaissance évaluée, jamais du décodage syntaxique de la question. Formule chaque question comme quelqu'un pourrait naturellement la poser à l'oral dans un contexte pédagogique — jamais un \"PAS\" en capitales pour forcer l'attention du lecteur, jamais une négation empilée sur un concept déjà négatif (ex. \"n'était pas exclu\", \"n'est pas interdit\") quand la même connaissance peut se poser directement (ex. \"qui bénéficiait de...\" plutôt que \"qui n'était pas exclu de...\").",
     "Respecte strictement knowledgeTarget. Si le format suggéré ne convient pas naturellement, abandonne-le au profit d'un QCM simple solide plutôt que de forcer une association, un ordre, un intrus ou un choix multiple artificiel.",
     "La pertinence pédagogique du format prime toujours sur la variété. Il n'existe aucun quota par format : un lot peut contenir beaucoup de QCM, peu de formats composites, aucun ordre et aucun intrus si les connaissances ne s'y prêtent pas.",
     "N'utilise spontanément le format intrus QUE si les quatre options sont des éléments naturellement comparables et si les trois non-intrus partagent un point commun substantiel que l'utilisateur doit réellement connaître. N'utilise jamais intrus quand la quatrième option ressort déjà par son ton, sa polarité, son époque, son registre ou une opposition sémantique visible à la simple lecture.",
+    "Le format intrus ne signifie pas automatiquement \"lequel n'est PAS...\" : quand une formulation directe existe, préfère \"Quel élément se distingue des autres ?\", \"Quel élément appartient à une autre catégorie ?\" ou une formulation propre au savoir testé — la négation n'y est légitime que si elle reste la façon la plus naturelle de nommer le point commun des trois autres options.",
     "",
     "=== Format suggéré, question par question (dans l'ordre) ===",
     "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions" + (includeVariants ? " (uniquement pour variants[0], la variante principale — n'influence pas le choix des variantes suivantes, cf. plus bas)" : "") + " :",
@@ -13737,7 +13751,7 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
       ? "Pour chaque VARIANTE de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) sur cette variante — une décision qui dépend du CONTENU de cette formulation précise, jamais de son seul type ni héritée d'une autre variante de la même question."
       : "Pour chaque question de type \"qcm\", \"texte_a_trous\" ou \"qcm_multi\" UNIQUEMENT, ajoute un champ \"selfContained\" (booléen) : l'interface l'utilise pour proposer ou non de réfléchir à la réponse avant d'afficher les propositions — une décision qui dépend du CONTENU de la question, jamais de son seul type."),
     "- true : la réponse existe indépendamment des propositions, un lecteur qui connaît le sujet peut la deviner seul avant de les voir (ex. \"Quel est l'historien qui a écrit « Le Fromage et les Vers » ?\").",
-    "- false : la question ne peut être comprise ou résolue qu'en comparant les propositions entre elles, ou y fait explicitement référence (ex. \"Lequel de ces historiens n'a pas travaillé sur le Moyen Âge ?\", \"Parmi ces éléments, lequel...\", toute question de type comparatif ou par élimination). Sois honnête et strict : en cas de doute réel, réponds false plutôt que true — mieux vaut afficher les propositions à tort que de bloquer une question à laquelle on ne peut objectivement pas répondre sans elles.",
+    "- false : la question ne peut être comprise ou résolue qu'en comparant les propositions entre elles, ou y fait explicitement référence (ex. \"Laquelle de ces quatre dates correspond exactement à la signature de ce traité ?\", \"Parmi ces éléments, lequel...\", toute question de type comparatif ou par élimination — la comparaison entre options ne justifie jamais à elle seule une formulation négative, cf. PRÉFÉRENCE À L'AFFIRMATIF plus haut). Sois honnête et strict : en cas de doute réel, réponds false plutôt que true — mieux vaut afficher les propositions à tort que de bloquer une question à laquelle on ne peut objectivement pas répondre sans elles.",
     "Aucun champ \"selfContained\" pour les autres types (association, intrus, ordre) — la question n'est jamais concernée par ce choix.",
     "",
     ...(groundingSourcesBlock ? [
@@ -14177,6 +14191,20 @@ async function qualityControlRawQuestions({
       const targetedConstraints = [];
       if (rejectionCodes.has("DOUBLE_NEGATION")) {
         targetedConstraints.push("- DOUBLE_NEGATION : reformule entièrement la question sous une forme affirmative et directe. N’utilise aucun assemblage de négations (ne/n’, pas, plus, jamais, aucun/aucune, ni). Ne te contente pas de retirer un seul mot.");
+      }
+      // UNNECESSARY_NEGATION / AWKWARD_WORDING (correctif du 01/09/2026,
+      // audit qualité rédactionnelle des QCM) : distincts de DOUBLE_NEGATION
+      // ci-dessus — ce code peut venir du contrôle déterministe
+      // (hasUnnecessaryNegation, lib/qcm-quality.js : "PAS" en capitales ou
+      // négation d'un concept déjà négatif) OU du critique sémantique
+      // (buildSemanticReviewPrompt), les deux alimentant le même
+      // rejectionCodes ici — une seule instruction corrective suffit donc
+      // pour les deux origines.
+      if (rejectionCodes.has("UNNECESSARY_NEGATION")) {
+        targetedConstraints.push("- UNNECESSARY_NEGATION : reformule entièrement la question de manière affirmative et directe si la connaissance peut être testée sans négation. Ne te contente pas de supprimer le mot \"pas\" ou de retirer les capitales : reconstruis la question si nécessaire. Ne renonce à l'affirmatif QUE si la négation est réellement indispensable à la connaissance testée (ex. une absence, une exception ou une interdiction sans équivalent affirmatif aussi direct).");
+      }
+      if (rejectionCodes.has("AWKWARD_WORDING")) {
+        targetedConstraints.push("- AWKWARD_WORDING : réécris la question et/ou les options dans un français naturel, simple et idiomatique, sans modifier la connaissance testée ni la bonne réponse factuelle. Ne raccourcis ni n'allonge artificiellement une option correcte pour la \"corriger\" : reformule-la simplement de façon idiomatique.");
       }
       // Distracteurs plausibles (demande du 01/09/2026, suite à l'audit QCM
       // du 31/08/2026 — cas réel "rhétorique antique") : mêmes codes que
@@ -15283,20 +15311,42 @@ async function findExistingQuizMaster(candidateSlots) {
 // la raison (dépendance aux Solars déjà créés pour CET utilisateur, y
 // compris par une connaissance précédente du même import).
 async function finalizeImportedKnowledgeQuestion(question, fact, id, userId, sharedSourceDetail, documentImportId, sourceType) {
-  const sourceName = fact.slice(0, 120);
+  // Nom affiché de la connaissance : le titre du document importé (partagé
+  // par toutes les questions du même import, cf. sourceDebateId ci-dessous),
+  // jamais le fait individuel — sinon le libellé affiché dans "Ma mémoire"
+  // dépendrait arbitrairement de la première question à laquelle
+  // l'utilisateur répond correctement (correctif fragmentation du
+  // 01/09/2026, cf. rapport de diagnostic). `factSourceName` reste utilisé
+  // seulement pour la classification ci-dessous, jamais changé par ce
+  // correctif.
+  const factSourceName = fact.slice(0, 120);
+  const sourceName = String(sharedSourceDetail?.documentTitle || "").trim()
+    || buildImportParentTitleFallback("", [fact], sourceType);
   // Le placement reste propre à CETTE connaissance : la fiche documentaire
   // globale peut couvrir plusieurs domaines et ne doit pas fusionner leur
   // classification. Seul le sourceDetail stocké/affiché est partagé.
+  // Inchangé par le correctif fragmentation (01/09/2026) : le simple partage
+  // de sourceDebateId ci-dessous suffit déjà à garantir une seule
+  // connaissance visible par import — cf. recordDailyQuizEclairageAcquisition
+  // (early-return "déjà acquis" + upsert unique sur
+  // user_id/eclairage_type/eclairage_source_id), qui ne relance une
+  // classification qu'à la toute première bonne réponse de l'utilisateur
+  // pour cet import, jamais aux suivantes. Pas de nouvel appel IA introduit.
   const classificationDetail = {
     meta: "Connaissance issue d'un document importé",
     sections: [{ label: null, text: fact }],
     image: null
   };
   const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(
-    sourceType, sourceName, classificationDetail, userId, id
+    sourceType, factSourceName, classificationDetail, userId, id
   );
   const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
   return {
+    // Granularité technique inchangée : `id` (hash du fait individuel) reste
+    // le suffixe qui rend chaque question.id distinct au sein du même
+    // import — il alimente memory_items.question_id et le natural_key
+    // (slot::quizDate::questionId), donc autant de memory_items/états FSRS
+    // distincts que de questions, quel que soit sourceDebateId ci-dessous.
     id: `notion:${sourceType}:${documentImportId}:${id}-q1`,
     ...question,
     sourceType,
@@ -15307,7 +15357,16 @@ async function finalizeImportedKnowledgeQuestion(question, fact, id, userId, sha
     sourcePlacement,
     level: null,
     documentImportId,
-    sourceDebateId: id
+    // Correctif fragmentation des connaissances importées (diagnostic du
+    // 01/09/2026) : documentImportId — partagé par TOUTES les questions du
+    // même import, cf. addValidatedKnowledgeImport — remplace l'ancien `id`
+    // (hash du fait individuel) comme identité de la connaissance visible.
+    // `id` reste utilisé juste au-dessus pour la granularité technique
+    // (question.id/memory_items), jamais pour cette identité conceptuelle.
+    // Sans ce changement, chaque fait validé devenait sa propre connaissance
+    // dans "Ma mémoire" (ex. réel : import photo "Hitler", 9 connaissances
+    // visibles au lieu d'1 pour un seul import de 10 faits).
+    sourceDebateId: documentImportId
   };
 }
 
@@ -18488,9 +18547,9 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     res.json({
       slot: resolvedSlot,
       quizDate: resolvedQuizDate,
-      // Un import photo garde sourceName = fait individuel pour que chaque
-      // apprentissage reste identifiable, mais sa fiche ouvre le titre du
-      // document global partagé par toutes les connaissances de l'import.
+      // Tous les imports partagent le titre parent synthétique dans
+      // sourceName et sourceDetail.documentTitle. Le repli sur documentTitle
+      // couvre seulement d'anciens QCM antérieurs à cette harmonisation.
       label: ["photo_import", "manual_import", "pdf_import", "text_import", "url_import", "youtube_import"].includes(first.sourceType) && first.sourceDetail?.documentTitle
         ? first.sourceDetail.documentTitle
         : (first.sourceName || null),
@@ -20639,6 +20698,30 @@ function isOpinionArticleStarNameRejected(normalizedName, { solarSystemName, gal
 
 // Même mécanique que resolveOrCreateSolarSystem : retrouve une étoile existante
 // (solar_system_id, normalized_name) ou la crée, sans coupe mécanique du nom.
+//
+// Garde-fou anti-doublon SÉMANTIQUE (correctif du 01/09/2026, cf. rapport de
+// diagnostic duplication des étoiles) : entre la recherche exacte ci-dessus
+// et l'INSERT plus bas, compare le libellé proposé à TOUTES les étoiles déjà
+// existantes de CE Solar (jamais scopé à un utilisateur ici — l'identité
+// d'une étoile est partagée au niveau du Solar, cf. UNIQUE(solar_system_id,
+// normalized_name) sur la table, et §8 du diagnostic) via
+// matchExistingStarByLabel — la même comparaison déterministe sûre
+// (égalité après canonicalisation des ordinaux, ou inclusion stricte de
+// mots) que celle déjà utilisée pour la décision personnelle de placement
+// plus haut dans l'appelant. Jamais un jugement de proximité thématique :
+// "Guerres mondiales" ou "Conflits et violences" ne matchent jamais "Seconde
+// Guerre mondiale" par cette voie, seule une variante d'écriture sûre le
+// fait (cf. test/knowledge-taxonomy.test.js).
+//
+// Centralisé ICI et nulle part ailleurs : resolveOrCreateStar est la seule
+// fonction qui écrit dans `stars` (vérifié : aucun autre INSERT dans cette
+// table), donc aucun appelant ne peut contourner ce contrôle par accident.
+// Ne remplace ni ne court-circuite la logique de placement personnelle de
+// l'appelant (Galaxy/Solar déjà choisis avant cet appel, matchExistingStarByLabel
+// scopé à l'utilisateur déjà tenté avant d'en arriver là) — ce garde-fou
+// n'intervient qu'au moment précis où une INSERT dans `stars` est sur le
+// point d'avoir lieu. Coût : +1 SELECT, uniquement sur ce chemin (jamais
+// quand la recherche exacte ci-dessus a déjà trouvé une étoile).
 async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
   const { data: existing, error: selectError } = await supabase
     .from("stars")
@@ -20648,6 +20731,18 @@ async function resolveOrCreateStar(solarSystemId, name, normalizedName) {
     .maybeSingle();
   if (selectError) { console.warn("[stars] lecture échouée :", selectError.message); return null; }
   if (existing) return existing.id;
+
+  const { data: solarStars, error: solarStarsError } = await supabase
+    .from("stars")
+    .select("id, name")
+    .eq("solar_system_id", solarSystemId);
+  if (solarStarsError) {
+    console.warn("[stars] lecture étoiles du solar échouée :", solarStarsError.message);
+  } else {
+    const equivalentStarId = matchExistingStarByLabel(name, solarStars || []);
+    if (equivalentStarId) return equivalentStarId;
+  }
+
   const { data: inserted, error: insertError } = await supabase
     .from("stars")
     .insert({ solar_system_id: solarSystemId, name: cleanUniverseNodeName(name), normalized_name: normalizedName })

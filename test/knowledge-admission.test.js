@@ -166,8 +166,27 @@ test("buildFicheAndKnowledgeAdmissionPrompt : avec requireValidation, prévoit l
   assert.match(prompt, /"valid":false,"reason":"\.\.\."/);
 });
 
-test("buildFicheAndKnowledgeAdmissionPrompt : jamais de quota de connaissances candidates à atteindre", () => {
+test("buildFicheAndKnowledgeAdmissionPrompt : encourage à explorer un sujet riche jusqu'au plafond de la config (target), sans jamais en faire un quota", () => {
   const prompt = buildFicheAndKnowledgeAdmissionPrompt("Photosynthèse", null, LEVEL_CONFIG, false);
+  // `target` (10 dans LEVEL_CONFIG) doit apparaître tel quel, jamais un
+  // nombre dupliqué en dur (ex. 20) indépendant de la config fournie.
+  assert.match(prompt, /vise jusqu'à environ 10 connaissances distinctes/i);
+  assert.match(prompt, /passe en revue les différents aspects vraiment importants du sujet/i);
+  assert.match(prompt, /plafond souhaitable.*JAMAIS un quota obligatoire ni un minimum à atteindre à tout prix/i);
+  assert.match(prompt, /n'ajoute jamais un fait secondaire, redondant, anecdotique, hors-sujet ou artificiellement découpé/i);
+  assert.match(prompt, /une liste plus courte — voire vide — reste parfaitement normale/i);
+});
+
+test("buildFicheAndKnowledgeAdmissionPrompt : le plafond suit target de la config fournie, jamais une valeur dupliquée en dur", () => {
+  const promptTen = buildFicheAndKnowledgeAdmissionPrompt("Photosynthèse", null, LEVEL_CONFIG, false);
+  const promptTwenty = buildFicheAndKnowledgeAdmissionPrompt("Photosynthèse", null, { ...LEVEL_CONFIG, target: 20 }, false);
+  assert.match(promptTen, /environ 10 connaissances/);
+  assert.doesNotMatch(promptTen, /environ 20 connaissances/);
+  assert.match(promptTwenty, /environ 20 connaissances/);
+});
+
+test("buildFicheAndKnowledgeAdmissionPrompt : sans target exploitable (config défensive), retombe sur l'ancienne consigne sans nombre", () => {
+  const prompt = buildFicheAndKnowledgeAdmissionPrompt("Photosynthèse", null, { ...LEVEL_CONFIG, target: undefined }, false);
   assert.match(prompt, /ne cherche JAMAIS à atteindre un nombre donné de connaissances candidates/i);
 });
 

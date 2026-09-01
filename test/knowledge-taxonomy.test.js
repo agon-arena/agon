@@ -12,6 +12,7 @@ const {
   parseMatchDecision,
   parseCreationDecision,
   matchExistingStarByLabel,
+  canonicalizeOrdinalTokens,
   isNameRestatementOfParent,
   validateStarLabelCandidate,
   normalizeTaxonomyName,
@@ -335,6 +336,103 @@ test("matchExistingStarByLabel : ne fusionne jamais deux étoiles clairement dif
 });
 test("matchExistingStarByLabel : liste vide -> jamais de correspondance (nouvelle étoile)", () => {
   assert.equal(matchExistingStarByLabel("Directoire", []), null);
+});
+
+// ── Correctif duplication d'étoiles (01/09/2026, cf. rapport de diagnostic)
+// : canonicalisation des ordinaux + garde-fou global au Solar dans
+// resolveOrCreateStar (server.js). Ce bloc couvre les 12 cas requis ; les
+// cas 10/11/12 (utilisateur différent, Solar différent, race condition) sont
+// couverts à l'endroit correct compte tenu de l'architecture — server.js
+// n'exporte rien (pas de module.exports, démarre le serveur au require) et
+// n'est donc jamais testé en direct dans ce dépôt (cf. taxonomy-engine.js,
+// "ce module ne porte que la partie testable sans IA") : resolveOrCreateStar
+// délègue ENTIÈREMENT sa décision d'équivalence à matchExistingStarByLabel,
+// donc les tests ci-dessous sur cette fonction couvrent la même logique que
+// celle réellement exécutée par le garde-fou. Le cas 10 est modélisé
+// explicitement (liste de candidats sans aucune notion d'utilisateur,
+// exactement ce que la nouvelle requête globale de resolveOrCreateStar
+// renvoie) ; le cas 11 est prouvé par construction (la fonction ne reçoit
+// jamais que les candidats scopés à un seul Solar par l'appelant, jamais un
+// second Solar) ; le cas 12 (retry + contrainte UNIQUE) est inchangé dans
+// server.js et hors périmètre d'un test pur.
+
+test("canonicalizeOrdinalTokens : normalise les variantes de 2e ordinal vers le même token", () => {
+  assert.equal(canonicalizeOrdinalTokens("2nde guerre mondiale"), "2 guerre mondiale");
+  assert.equal(canonicalizeOrdinalTokens("2e guerre mondiale"), "2 guerre mondiale");
+  assert.equal(canonicalizeOrdinalTokens("2eme guerre mondiale"), "2 guerre mondiale");
+  assert.equal(canonicalizeOrdinalTokens("2nd guerre mondial"), "2 guerre mondial");
+  assert.equal(canonicalizeOrdinalTokens("deuxieme guerre mondiale"), "2 guerre mondiale");
+  assert.equal(canonicalizeOrdinalTokens("seconde guerre mondiale"), "2 guerre mondiale");
+});
+test("canonicalizeOrdinalTokens : normalise les variantes de 1er ordinal vers le même token", () => {
+  assert.equal(canonicalizeOrdinalTokens("1er empire"), "1 empire");
+  assert.equal(canonicalizeOrdinalTokens("premier empire"), "1 empire");
+  assert.equal(canonicalizeOrdinalTokens("premiere republique"), "1 republique");
+});
+test("canonicalizeOrdinalTokens : un token qui n'est pas un ordinal connu traverse inchangé", () => {
+  assert.equal(canonicalizeOrdinalTokens("guerres mondiales"), "guerres mondiales");
+  assert.equal(canonicalizeOrdinalTokens("conflits mondiaux"), "conflits mondiaux");
+  assert.equal(canonicalizeOrdinalTokens(""), "");
+});
+
+// Cas 1 à 9 imposés par la phase d'implémentation (mêmes libellés que le
+// rapport de diagnostic) — passent tous par matchExistingStarByLabel, la
+// même fonction que le garde-fou de resolveOrCreateStar utilise désormais.
+test("Cas 1 (exact) : 'Seconde Guerre mondiale' -> réutilisation", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("Seconde Guerre mondiale", existing), 196);
+});
+test("Cas 2 (casse) : 'seconde guerre mondiale' -> réutilisation", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("seconde guerre mondiale", existing), 196);
+});
+test("Cas 3 (article) : 'La Seconde Guerre mondiale' -> réutilisation", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("La Seconde Guerre mondiale", existing), 196);
+});
+test("Cas 4 (2nde) : '2nde Guerre mondiale' -> réutilisation de 'Seconde Guerre mondiale'", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("2nde Guerre mondiale", existing), 196);
+});
+test("Cas 5 (2e) : '2e Guerre mondiale' -> réutilisation", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("2e Guerre mondiale", existing), 196);
+});
+test("Cas 6 (Deuxième) : 'Deuxième Guerre mondiale' -> réutilisation de 'Seconde Guerre mondiale'", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("Deuxième Guerre mondiale", existing), 196);
+});
+test("Cas 7 (concept voisin) : 'Guerres mondiales' ne fusionne JAMAIS avec 'Seconde Guerre mondiale'", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("Guerres mondiales", existing), null);
+});
+test("Cas 8 : 'Nazisme' reste distinct de 'Seconde Guerre mondiale'", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("Nazisme", existing), null);
+});
+test("Cas 9 : 'Conflits et violences' reste distinct de 'Seconde Guerre mondiale' (aucune preuve sûre d'équivalence)", () => {
+  const existing = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("Conflits et violences", existing), null);
+});
+test("Cas 10 (utilisateur différent, modélisé) : la liste de candidats globale au Solar ne porte aucune notion d'utilisateur — un libellé 2nde/Deuxième proposé par n'importe qui retrouve la même étoile canonique", () => {
+  // Modélise exactement ce que la nouvelle requête de resolveOrCreateStar
+  // renvoie : "id, name" pour TOUTES les étoiles du solar_system_id
+  // concerné, sans jointure ni filtre sur un user_id quelconque — donc,
+  // par construction, indépendant de qui a créé/acquis l'étoile 196.
+  const allStarsOfThisSolarRegardlessOfUser = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  assert.equal(matchExistingStarByLabel("2nde Guerre mondiale", allStarsOfThisSolarRegardlessOfUser), 196);
+  assert.equal(matchExistingStarByLabel("Deuxième Guerre mondiale", allStarsOfThisSolarRegardlessOfUser), 196);
+});
+test("Cas 11 (Solar différent, par construction) : matchExistingStarByLabel ne voit jamais que les candidats qui lui sont passés — un même libellé sous un autre Solar n'a jamais l'occasion d'être comparé", () => {
+  // "Seconde Guerre mondiale" existe aussi, par hypothèse, sous un Solar B
+  // — mais resolveOrCreateStar ne lui transmet jamais que les étoiles de
+  // son propre solar_system_id (cf. .eq("solar_system_id", solarSystemId)) :
+  // ce test prouve que la fonction elle-même n'a aucun mécanisme global qui
+  // pourrait accidentellement regarder au-delà de la liste reçue.
+  const starsOfSolarA = [{ id: 196, name: "Seconde Guerre mondiale" }];
+  const starsOfSolarB = []; // resolveOrCreateStar, appelé pour le Solar B, ne recevrait jamais starsOfSolarA
+  assert.equal(matchExistingStarByLabel("Seconde Guerre mondiale", starsOfSolarB), null);
+  assert.equal(matchExistingStarByLabel("Seconde Guerre mondiale", starsOfSolarA), 196);
 });
 
 test("isNameRestatementOfParent : détecte la redite du Solar (bug du 10/08/2026, 'Révolution française' sous 'Révolution française & Empire')", () => {

@@ -7,6 +7,8 @@ const path = require("node:path");
 const {
   PHOTO_KNOWLEDGE_SHEET_MODEL,
   buildPhotoDocumentImportId,
+  isValidImportParentTitle,
+  buildImportParentTitleFallback,
   buildMinimalPhotoSourceDetail,
   buildPhotoKnowledgeSheetPrompt,
   generatePhotoKnowledgeSheet
@@ -28,6 +30,46 @@ test("le prompt ne contient que le titre et les connaissances finales", () => {
   assert.match(prompt, /Fait ajouté manuellement/);
   assert.doesNotMatch(prompt, /Fait supprimé/);
   assert.match(prompt, /N'utilise aucune culture générale extérieure/);
+  assert.match(prompt, /3 à 8 mots/);
+  assert.match(prompt, /60 caractères maximum/);
+  assert.match(prompt, /ne recopie jamais arbitrairement un fait individuel/);
+  assert.match(prompt, /N'énumère pas/);
+  assert.match(prompt, /n'est ni une Star taxonomique ni un Solar System/);
+});
+
+test("plusieurs faits sur le nazisme produisent un titre parent court et synthétique en un seul appel", async () => {
+  let callCount = 0;
+  const facts = [
+    "Hitler devient chancelier en janvier 1933.",
+    "Le NSDAP interdit les autres partis.",
+    "Les lois de Nuremberg organisent la persécution antisémite.",
+    "La Gestapo et les SS participent à la répression."
+  ];
+  const result = await generatePhotoKnowledgeSheet({
+    sourceTitle: "Hitler devient chancelier en janvier 1933",
+    sourceType: "photo_import",
+    knowledge: facts,
+    callOpenAI: async () => {
+      callCount += 1;
+      return JSON.stringify({ title: "Hitler et le régime nazi", synthesis: "Synthèse ancrée dans les faits.", contextSections: [] });
+    }
+  });
+  assert.equal(callCount, 1);
+  assert.equal(result.sourceDetail.documentTitle, "Hitler et le régime nazi");
+});
+
+test("la validation légère rejette un fait long recopié et une énumération manifeste", () => {
+  const longFact = "Hitler arrive au pouvoir de manière démocratique le 30 janvier 1933 et devient chancelier du Reich";
+  assert.equal(isValidImportParentTitle(longFact, [longFact]), false);
+  assert.equal(isValidImportParentTitle("Hitler, NSDAP, Gestapo, SS et lois de Nuremberg", [longFact]), false);
+  assert.equal(isValidImportParentTitle("Hitler et le régime nazi", [longFact]), true);
+});
+
+test("le fallback reste au niveau de l'import et ne reprend jamais le premier fait", () => {
+  const fact = "Hitler arrive au pouvoir de manière démocratique le 30 janvier 1933.";
+  assert.equal(buildImportParentTitleFallback("Titre du PDF", [fact], "pdf_import"), "Titre du PDF");
+  assert.equal(buildImportParentTitleFallback("", [fact], "photo_import"), "Document photographié");
+  assert.notEqual(buildMinimalPhotoSourceDetail("", [fact], "doc-1", "photo_import").documentTitle, fact);
 });
 
 test("la fiche IA conserve mot pour mot les notions finales et n'ajoute jamais d'image", async () => {
@@ -89,12 +131,10 @@ test("le câblage serveur partage la fiche ET regroupe tout l'import dans un seu
   // jamais un par fait — cf. son commentaire dans addValidatedKnowledgeImport.
   assert.match(source, /const slot = `notion:\$\{sourceType\}:\$\{documentImportId\}`;/);
   assert.match(source, /sourceDetail: sharedSourceDetail/);
-  // Chaque question garde malgré tout un id et un sourceDebateId propres à
-  // SA connaissance (pas au paquet) : plusieurs questions cohabitent donc
-  // sans collision dans le même tableau `questions` d'une seule ligne
-  // daily_quiz.
+  // Chaque question garde un id propre, tandis que l'identité parent est le
+  // documentImportId commun à tout le paquet.
   assert.match(source, /id: `notion:\$\{sourceType\}:\$\{documentImportId\}:\$\{id\}-q1`/);
-  assert.match(source, /sourceDebateId: id/);
+  assert.match(source, /sourceDebateId: documentImportId/);
 });
 
 test("photo et manuel utilisent la même orchestration avec deux provenances explicites", () => {

@@ -115,6 +115,56 @@ test("la régénération ciblée impose une correction concrète des formats obs
   assert.match(server, /la question doit être autonome, précise/);
 });
 
+// UNNECESSARY_NEGATION / AWKWARD_WORDING (correctif du 01/09/2026, audit
+// qualité rédactionnelle des QCM — cas réel "lequel n'était PAS exclu à
+// l'origine de l'application de la Déclaration des droits de l'homme et du
+// citoyen ?"). Même convention que la boucle V5 ci-dessus (WEAK_DISTRACTOR_SET
+// etc.) : ces codes peuvent venir du déterministe (lib/qcm-quality.js,
+// hasUnnecessaryNegation) OU du critique sémantique — une seule instruction
+// corrective doit exister pour les deux origines.
+for (const code of ["UNNECESSARY_NEGATION", "AWKWARD_WORDING"]) {
+  test(`régénération ciblée : ${code} possède une contrainte corrective distincte de DOUBLE_NEGATION`, () => {
+    const codePosition = server.indexOf(`rejectionCodes.has("${code}")`);
+    assert.ok(codePosition >= 0, `${code} doit être branché dans la régénération existante`);
+    assert.match(server.slice(codePosition, codePosition + 800), /targetedConstraints\.push/);
+  });
+}
+
+test("UNNECESSARY_NEGATION : la contrainte de régénération demande une reconstruction affirmative complète, pas un simple retrait de mot", () => {
+  assert.match(server, /UNNECESSARY_NEGATION : reformule entièrement la question de manière affirmative et directe/);
+  assert.match(server, /Ne te contente pas de supprimer le mot[\s\S]{0,10}pas[\s\S]{0,10}ou de retirer les capitales/);
+});
+
+test("AWKWARD_WORDING : la contrainte de régénération couvre question ET options sans toucher à la connaissance testée", () => {
+  assert.match(server, /AWKWARD_WORDING : réécris la question et\/ou les options dans un français naturel, simple et idiomatique/);
+  assert.match(server, /sans modifier la connaissance testée ni la bonne réponse factuelle/);
+});
+
+// Prompt de génération : préférence à l'affirmatif (correctif du 01/09/2026).
+test("le prompt de génération demande explicitement de privilégier l'affirmatif et interdit la négation évitable", () => {
+  assert.match(server, /PRÉFÉRENCE À L'AFFIRMATIF/);
+  assert.match(server, /privilégie toujours une formulation affirmative, directe et naturelle/);
+  assert.match(server, /La difficulté doit venir de la connaissance évaluée, jamais du décodage syntaxique de la question/);
+  assert.match(server, /Formule chaque question comme quelqu'un pourrait naturellement la poser à l'oral/);
+});
+
+test("le prompt de génération n'interdit jamais mécaniquement toute négation (négation nécessaire reste permise)", () => {
+  const start = server.indexOf("PRÉFÉRENCE À L'AFFIRMATIF");
+  const block = server.slice(start, start + 1400);
+  assert.match(block, /que si cette négation est réellement nécessaire à la connaissance testée/);
+});
+
+test("le format intrus n'est plus présenté comme signifiant automatiquement \"lequel n'est PAS\"", () => {
+  assert.match(server, /Le format intrus ne signifie pas automatiquement/);
+  assert.match(server, /Quel élément se distingue des autres/);
+});
+
+test("l'ancien exemple contradictoire (négation légitimée pour selfContained:false) a disparu, remplacé par un exemple affirmatif", () => {
+  assert.doesNotMatch(server, /Lequel de ces historiens n'a pas travaillé sur le Moyen Âge/);
+  assert.match(server, /Laquelle de ces quatre dates correspond exactement à la signature de ce traité/);
+  assert.match(server, /la comparaison entre options ne justifie jamais à elle seule une formulation négative/);
+});
+
 test("le diagnostic utilisateur expose uniquement les rejets finaux non résolus", () => {
   assert.match(server, /questionQualityMetrics\?\.unresolvedReasonCounts \|\| questionQualityMetrics\?\.reasonCounts/);
 });

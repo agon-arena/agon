@@ -53,6 +53,52 @@ test("rejette toutes/aucune des réponses et un oui/non déguisé", () => {
   assert.ok(codes(validateQuestionQuality(q("Est-ce que le Canada est un pays ?", { options: ["Oui", "Non", "Cela dépend", "Toujours"] }))).includes("ARTIFICIAL_YES_NO"));
 });
 
+// UNNECESSARY_NEGATION (correctif du 01/09/2026, suite à l'audit qualité
+// rédactionnelle des QCM — cas réel "Parmi ces groupes, lequel n'était PAS
+// exclu à l'origine de l'application de la Déclaration des droits de
+// l'homme et du citoyen ?"). Volontairement distinct de DOUBLE_NEGATION
+// (hasDoubleNegation, testé indirectement via les cas de préservation
+// ci-dessous et dans test/question-formats.test.js) : ici, une négation
+// UNIQUE mais artificiellement lourde (PAS en capitales, ou négation d'un
+// concept déjà négatif). Cf. lib/qcm-quality.js, hasUnnecessaryNegation.
+test("UNNECESSARY_NEGATION : rejette l'exemple réel exact de l'audit (« lequel n'était PAS exclu »)", () => {
+  const result = validateQuestionQuality(q(
+    "Parmi ces groupes, lequel n’était PAS exclu à l’origine de l’application de la Déclaration des droits de l’homme et du citoyen ?",
+    { type: "intrus", options: ["Les enfants", "Les esclaves", "Les femmes", "Les citoyens hommes"] }
+  ));
+  assert.ok(codes(result).includes("UNNECESSARY_NEGATION"));
+});
+
+test("UNNECESSARY_NEGATION : rejette tout \"PAS\" en capitales dans le stem, y compris hors négation-sur-concept-négatif", () => {
+  assert.ok(codes(validateQuestionQuality(q("Laquelle de ces affirmations n’est PAS correcte ?", { type: "intrus" }))).includes("UNNECESSARY_NEGATION"));
+  assert.ok(codes(validateQuestionQuality(q("Quelle option n’est PAS valide parmi celles-ci ?", { type: "intrus" }))).includes("UNNECESSARY_NEGATION"));
+});
+
+test("UNNECESSARY_NEGATION : rejette une négation minuscule empilée sur un concept déjà négatif (exclu/interdit/absent)", () => {
+  assert.ok(codes(validateQuestionQuality(q("Quel additif alimentaire n'est pas interdit dans l'Union européenne depuis 2011 ?", { type: "qcm" }))).includes("UNNECESSARY_NEGATION"));
+  assert.ok(codes(validateQuestionQuality(q("Lequel de ces sites archéologiques n'était pas absent des relevés de 1920 ?", { type: "qcm" }))).includes("UNNECESSARY_NEGATION"));
+});
+
+test("UNNECESSARY_NEGATION : ne rejette PAS une négation minuscule sans concept négatif imbriqué (préserve le format intrus courant)", () => {
+  // Cas réel de production (81 % des questions "intrus", cf. rapport §8) :
+  // ne doit jamais devenir un faux positif de cette règle.
+  const result = validateQuestionQuality(q(
+    "Parmi ces capitales, laquelle ne fait pas partie de l'Union européenne ?",
+    { type: "intrus", options: ["Paris", "Berlin", "Londres", "Madrid"] }
+  ));
+  assert.ok(!codes(result).includes("UNNECESSARY_NEGATION"));
+});
+
+test("UNNECESSARY_NEGATION : ne rejette PAS une négation réellement nécessaire (« jamais », sans « pas »)", () => {
+  const result = validateQuestionQuality(q("Quel pays n'a jamais participé aux Jeux olympiques d'été ?", { type: "qcm" }));
+  assert.ok(!codes(result).includes("UNNECESSARY_NEGATION"));
+});
+
+test("UNNECESSARY_NEGATION : ne rejette PAS une question affirmative portant intrinsèquement sur une interdiction (pas de négation syntaxique)", () => {
+  const result = validateQuestionQuality(q("Quel additif alimentaire est interdit dans l'Union européenne depuis 2011 ?", { type: "qcm" }));
+  assert.ok(!codes(result).includes("UNNECESSARY_NEGATION"));
+});
+
 test("rejette une incompatibilité grammaticale sûre dans un texte à trous", () => {
   const result = validateQuestionQuality(q("Ottawa est la ___ du Canada.", {
     type: "texte_a_trous",
