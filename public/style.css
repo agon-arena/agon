@@ -1051,7 +1051,8 @@ main.create-page {
 }
 
 .debate-card-date-badge {
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
   font-size: 10px;
   font-weight: 500;
   color: #9ca3af;
@@ -1063,6 +1064,10 @@ main.create-page {
 
 
 .debate-card h2 {
+  /* Oswald systématique, avec ou sans bandeau image (demande du 01/09/2026, "met oswald à
+     chaque fois, bandeau ou pas" — avant : Oswald seulement avec bandeau via
+     .index-card-title-banner-text, Arial sinon). */
+  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
   margin: 3px 0 4px 0;
   font-size: 18px;
   line-height: 1.25;
@@ -1072,6 +1077,8 @@ main.create-page {
 }
 
 .debate-card p {
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
   margin: 0;
   color: #6b7280;
   line-height: 1.5;
@@ -1600,6 +1607,8 @@ font-family: "Barlow Condensed", sans-serif;
   background: #243038;
   color: #ffffff;
   font-size: 12px;
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
   font-weight: 700;
   line-height: 1.2;
   cursor: pointer;
@@ -1833,7 +1842,8 @@ font-family: "Barlow Condensed", sans-serif;
   flex-direction:column;
   gap:1px;
   font-size:13px;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
   margin-top:14px;
   margin-bottom:4px;
 }
@@ -1873,7 +1883,8 @@ font-family: "Barlow Condensed", sans-serif;
   display:flex;
   justify-content:space-between;
   font-size:11px;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
   margin-top:3px;
 }
 .score-labels span:first-child{
@@ -5054,7 +5065,10 @@ body.page-debate #score-b {
    plus qu'une puce avec son nom, cliquable en un seul geste (ouvre
    Apprentissage + mémorise) — demande du 10/08/2026. */
 .debate-notions-section{
-  margin-top:24px;
+  /* 32px (au lieu de 24px) : un peu plus d'espace au-dessus (demande du 01/09/2026). */
+  margin-top:32px;
+  /* Demande du 01/09/2026, "laisse aussi plus d'espace sous les notions à mémoriser". */
+  margin-bottom:32px;
 }
 
 .debate-notions-section[hidden]{
@@ -5104,6 +5118,18 @@ body.page-debate #score-b {
   color:#8a6116;
 }
 
+/* Cartes communautés : même fond que le bouton "Entrer dans l'arène" (.debate-card-entry-
+   button, #243038) plutôt que le gris clair par défaut — demande du 01/09/2026. */
+.debate-card--community .index-card-notions-section .debate-notion-action-btn{
+  background:#243038;
+  border-color:#243038;
+  color:#ffffff;
+}
+.debate-card--community .index-card-notions-section .debate-notion-action-btn:hover{
+  background:#2e3d47;
+  border-color:#2e3d47;
+}
+
 /* Cartes accueil : mêmes éléments que sur la page arène mais réduits, la
    version pleine taille est disproportionnée dans l'espace compact d'une
    carte (demande du 31/08/2026). */
@@ -5125,6 +5151,25 @@ body.page-debate #score-b {
 .index-card-notions-section .debate-notions-title{
   font-size:11px;
   gap:5px;
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes) — pas
+     sur la page arène (règle de base .debate-notions-title, inchangée). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
+  /* Cartes actualités : même couleur ET même ombre portée que le texte de l'article — la
+     vraie règle en vigueur pour .debate-card-context-text est #d1d5db + text-shadow (ligne
+     ~24086, "body.page-home .debate-card .debate-card-context-text"), pas #1f2937 comme
+     tenté une première fois (demande du 01/09/2026, "il est en noir... je t'ai demandé de
+     le mettre de la meme couleur que le texte de l'article"). Pas sur la page arène (règle
+     de base, gris #6b7280, inchangée). */
+  color:#d1d5db !important;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9) !important;
+}
+/* Cartes communautés : noir franc, sans ombre, plutôt que la couleur+ombre du texte
+   d'article (demande du 01/09/2026, "remet du noir dans carte communauté" — !important
+   nécessaire pour gagner sur la règle actualités ci-dessus, qui en a aussi et l'emportait
+   sinon malgré sa moindre spécificité). */
+.debate-card--community .index-card-notions-section .debate-notions-title{
+  color:#111827 !important;
+  text-shadow: none !important;
 }
 .index-card-notions-section .debate-notions-list{
   gap:6px;
@@ -5133,6 +5178,9 @@ body.page-debate #score-b {
 .index-card-notions-section .debate-notion-action-btn{
   padding:4px 10px;
   font-size:11.5px;
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes) — pas
+     sur la page arène (règle de base .debate-notion-action-btn, inchangée). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
 }
 
 /* Popup de confirmation "Mémoriser" — identique à celle d'Éclairages/Ce jour
@@ -10262,7 +10310,8 @@ padding:4px 14px 12px 14px;
   background: transparent;
   border: none;
   color: #374151;
-  font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+  /* Barlow Condensed, demande du 01/09/2026 (uniformisation des polices des cartes). */
+  font-family: "Barlow Condensed", Arial, sans-serif;
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
@@ -10907,10 +10956,13 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
 }
 
 .debate-evaluation-axis {
-  margin: 12px auto 0;
+  /* 32px (au lieu de 12px) : même espace qu'en dessous de "Clique pour approfondir •
+     Mémoriser" juste au-dessus (demande du 01/09/2026). */
+  margin: 32px auto 0;
   max-width: 680px;
   text-align: center;
-  padding: 10px 16px 0;
+  /* padding-top 28px (demande du 01/09/2026, "met plutôt à 28"). */
+  padding: 28px 16px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 /* Même style visuel que .debate-notions-title (demande du 31/08/2026,
@@ -14744,7 +14796,8 @@ body.page-debate .debate-episode-nav {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 28px;
+  /* 48px (au lieu de 28px) : plus d'espace au-dessus, demande du 01/09/2026. */
+  margin-top: 48px;
   margin-bottom: 20px;
 }
 
@@ -14795,7 +14848,7 @@ body.page-debate .debate-episode-link:hover {
 @media (max-width: 768px) {
   body.page-debate .debate-episode-nav {
     gap: 6px;
-    margin-top: 22px;
+    margin-top: 40px;
     margin-bottom: 16px;
   }
 
@@ -16023,8 +16076,11 @@ body.page-debate .debate-media-swipe-hotspot {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 18%;
-  min-width: 44px;
+  /* 44px fixe (au lieu de 18% + min-width:44px) : la zone cliquable large centrait la petite
+     icône loin du bord réel du média — rapprochée du bord, comme sur les cartes de l'index
+     (.index-media-swipe-controls, padding:0 10px), demande du 01/09/2026, "rapproche les des
+     sources, elles sont trop éloignées". */
+  width: 44px;
   z-index: 5;
   display: flex;
   align-items: center;
@@ -16051,10 +16107,10 @@ body.page-debate .debate-media-swipe-hotspot span {
   -webkit-backdrop-filter: blur(3px);
 }
 body.page-debate .debate-media-swipe-hotspot-prev {
-  left: 0;
+  left: 6px;
 }
 body.page-debate .debate-media-swipe-hotspot-next {
-  right: 0;
+  right: 6px;
 }
 body.page-debate .debate-source-fallback .debate-media-swipe-hotspot,
 body.page-debate #debate-source-fallback .debate-media-swipe-hotspot {
@@ -16154,8 +16210,7 @@ body.page-debate .debate-source-link:hover {
   }
 
   body.page-debate .debate-media-swipe-hotspot {
-    width: 20%;
-    min-width: 42px;
+    width: 42px;
   }
 
   body.page-debate .debate-media-swipe-hotspot span {
@@ -16212,8 +16267,8 @@ body.page-debate .debate-source-fallback iframe[src*="twitter.com"] {
   margin-top: 0 !important;
 }
 body.page-debate .debate-score-bar {
-  background: #1a272f;
-  border: 1px solid #3a4a55;
+  /* Fond bleu très foncé et liseret retirés (demande du 01/09/2026, "enève ce fond... il y
+     a encore un liseret claire autour"). */
   border-radius: 14px;
   padding: 12px 16px;
   margin-top: 4px;
@@ -16222,7 +16277,6 @@ body.page-debate .debate-score-bar {
   margin-right: auto;
   max-width: 1100px;
   box-sizing: border-box;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 body.page-debate .score-bar {
   height: 22px;
@@ -16234,6 +16288,12 @@ body.page-debate .score-bar-label {
   font-weight: 800;
   min-width: 52px;
   text-align: center;
+  /* Petit contour gris clair, plus fin qu'avant (demande du 01/09/2026, "le contour blanc
+     est trop gros... met du gris claire plutôt") : lisibilité maintenue maintenant que le
+     fond sombre derrière la barre a été retiré. */
+  text-shadow:
+    0 0 2px #d1d5db,
+    0 0 2px #d1d5db;
 }
 body.page-debate .score-bar-label-a {
   color: var(--color-a);
@@ -17838,97 +17898,13 @@ body.page-debate .idea-source-preview-hint {
 }
 
 
-/* Page débat : boutons de swipe placés sous le média, comme sur les cartes de l’index.
-   Objectif : ne plus recouvrir les contrôles YouTube de son et d’agrandissement. */
-body.page-debate .debate-image-wrap.debate-source-swipe-enabled,
-body.page-debate #debate-image-wrap.debate-source-swipe-enabled,
-body.page-debate .debate-video-wrap.debate-source-swipe-enabled,
-body.page-debate #debate-video-wrap.debate-source-swipe-enabled,
-body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled,
-body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled,
-body.page-debate .debate-source-fallback.debate-source-swipe-enabled,
-body.page-debate #debate-source-fallback.debate-source-swipe-enabled {
-  overflow: visible !important;
-  margin-bottom: 46px !important;
-}
-
-body.page-debate .debate-media-swipe-hotspot {
-  top: auto !important;
-  bottom: -38px !important;
-  width: 34px !important;
-  min-width: 34px !important;
-  height: 30px !important;
-  padding: 0 !important;
-  border-radius: 999px !important;
-  background: rgba(15, 23, 42, 0.62) !important;
-  color: #ffffff !important;
-  opacity: 0.94 !important;
-  z-index: 9 !important;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-
-body.page-debate .debate-media-swipe-hotspot-prev {
-  left: calc(50% - 40px) !important;
-  right: auto !important;
-}
-
-body.page-debate .debate-media-swipe-hotspot-next {
-  left: calc(50% + 6px) !important;
-  right: auto !important;
-}
-
-body.page-debate .debate-media-swipe-hotspot span {
-  width: 100% !important;
-  height: 100% !important;
-  background: transparent !important;
-  font-size: 22px !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-body.page-debate .debate-media-swipe-hotspot:hover,
-body.page-debate .debate-media-swipe-hotspot:focus-visible,
-body.page-debate .debate-media-swipe-hotspot-next:hover,
-body.page-debate .debate-media-swipe-hotspot-next:focus-visible {
-  background: rgba(15, 23, 42, 0.82) !important;
-  color: #ffffff !important;
-  opacity: 1 !important;
-}
-
-@media (max-width: 768px) {
-  body.page-debate .debate-image-wrap.debate-source-swipe-enabled,
-  body.page-debate #debate-image-wrap.debate-source-swipe-enabled,
-  body.page-debate .debate-video-wrap.debate-source-swipe-enabled,
-  body.page-debate #debate-video-wrap.debate-source-swipe-enabled,
-  body.page-debate .debate-source-preview-wrap.debate-source-swipe-enabled,
-  body.page-debate #debate-source-preview-wrap.debate-source-swipe-enabled,
-  body.page-debate .debate-source-fallback.debate-source-swipe-enabled,
-  body.page-debate #debate-source-fallback.debate-source-swipe-enabled {
-    margin-bottom: 42px !important;
-  }
-
-  body.page-debate .debate-media-swipe-hotspot {
-    bottom: -34px !important;
-    width: 32px !important;
-    min-width: 32px !important;
-    height: 28px !important;
-  }
-
-  body.page-debate .debate-media-swipe-hotspot-prev {
-    left: calc(50% - 38px) !important;
-  }
-
-  body.page-debate .debate-media-swipe-hotspot-next {
-    left: calc(50% + 6px) !important;
-  }
-
-  body.page-debate .debate-media-swipe-hotspot span {
-    font-size: 20px !important;
-  }
-}
+/* Flèches de swipe entre sources : ramenées à l'intérieur du média, sur les côtés — comme
+   sur les cartes de la page index (demande du 01/09/2026, "je veux que tu les supprimes,
+   tu les remplace par deux petites flèches verticales à l'interieur meme des sources, sur
+   les côtés"). Le bloc ci-dessus (16029+) gère déjà ce positionnement par défaut ; le bloc
+   qui le sur-chargeait pour les repositionner SOUS le média (ajouté le 26/08/2026 pour ne
+   pas recouvrir les contrôles YouTube son/agrandissement) a été retiré ici — à surveiller
+   si ce chevauchement avec les contrôles YouTube redevient gênant. */
 
 
 
@@ -18491,9 +18467,14 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
 }
 .debate-card-context-extra .debate-card-positions {
   text-align: center;
+  /* Plus d'espace entre le titre et les positions (demande du 01/09/2026). */
+  margin-top: 24px;
 }
 .debate-card-context-extra .debate-card-score {
   justify-content: center;
+  /* Plus d'espace entre la barre de pourcentage et le liseret du dessous (demande du
+     01/09/2026). */
+  margin-bottom: 18px;
 }
 
 /* Wrapper : colle le bandeau sous le média sans espace */
@@ -18594,7 +18575,9 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   }
 
   .debate-card--community .debate-card-context-extra .debate-card-positions {
-    margin-top: 2px;
+    /* 6px (réduction plus nette, demande du 01/09/2026, "je ne vois pas vraiment de diff en
+       vrai" — le premier essai à 16px était trop proche de l'ancienne valeur pour se voir). */
+    margin-top: 6px !important;
   }
 
   .debate-card-context-extra .debate-card-score .score-bar {
@@ -18609,7 +18592,9 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   }
 
   .debate-card--community .debate-card-context-extra .score-labels {
-    margin-bottom: 6px;
+    /* Plus d'espace entre la barre de pourcentage et le liseret du dessous (demande du
+       01/09/2026). */
+    margin-bottom: 18px;
   }
 }
 
@@ -18625,7 +18610,9 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   }
 
   .debate-card--community .debate-card-context-extra .debate-card-positions {
-    margin-top: 1px;
+    /* 4px (réduction plus nette, demande du 01/09/2026, "je ne vois pas vraiment de diff en
+       vrai"). */
+    margin-top: 4px !important;
   }
 
   .debate-card-context-extra .debate-card-score .score-bar {
@@ -18640,7 +18627,9 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   }
 
   .debate-card--community .debate-card-context-extra .score-labels {
-    margin-bottom: 4px;
+    /* Plus d'espace entre la barre de pourcentage et le liseret du dessous (demande du
+       01/09/2026). */
+    margin-bottom: 14px;
   }
 }
 
@@ -20188,6 +20177,56 @@ body.page-home #debates-list .theme-row-section:first-child {
   box-shadow: none;
 }
 
+/* Le mode sélectionné reprend le jaune lumineux historiquement utilisé par "Ma mémoire".
+   La règle est limitée au switch principal : Actualités, Ma mémoire et Communauté ont ainsi
+   le même traitement actif, sans affecter le filtre Gauche/Tout/Droite. */
+#mnoria-cloud-mode-switch .mnoria-cloud-mode-segment-active {
+  overflow: hidden;
+  background: linear-gradient(135deg, #fff2a8 0%, #ffd447 42%, #f09a20 100%);
+  color: #1A1F24;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(122, 72, 10, 0.22),
+    0 0 8px rgba(255, 231, 126, 0.95),
+    0 0 20px rgba(255, 196, 55, 0.9),
+    0 0 36px rgba(255, 171, 35, 0.62);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+  filter: saturate(1.18) brightness(1.08);
+}
+
+#mnoria-cloud-mode-switch .mnoria-cloud-mode-segment-active:hover {
+  background: linear-gradient(135deg, #fff7c7 0%, #ffe064 42%, #f6a934 100%);
+  color: #1A1F24;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(122, 72, 10, 0.18),
+    0 0 10px rgba(255, 239, 157, 1),
+    0 0 26px rgba(255, 202, 65, 0.95),
+    0 0 44px rgba(255, 171, 35, 0.72);
+}
+
+#mnoria-cloud-mode-switch .mnoria-cloud-mode-segment-active::before {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: -70%;
+  bottom: -70%;
+  left: -45%;
+  width: 28%;
+  pointer-events: none;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.92), transparent);
+  filter: blur(1px);
+  animation: mnoria-active-tab-shine 2.1s ease-in-out infinite;
+}
+
+@keyframes mnoria-active-tab-shine {
+  0%, 20% { left: -45%; opacity: 0; }
+  30% { opacity: 1; }
+  62% { left: 118%; opacity: 0.9; }
+  63%, 100% { left: 118%; opacity: 0; }
+}
+
 .mnoria-cloud-mode-segment {
   border: none;
   background: transparent;
@@ -20235,28 +20274,12 @@ body.page-home #debates-list .theme-row-section:first-child {
   color: #1A1F24;
 }
 
-/* "Ma mémoire" reste doré en permanence, même quand un autre mode est actif : ce bouton est
-   volontairement mis en avant par rapport à ses deux voisins. La hauteur commune de la barre
-   reste inchangée ; seuls sa largeur, sa police et son fond le différencient. */
+/* "Ma mémoire" garde sa largeur légèrement supérieure, mais reprend désormais exactement
+   les mêmes couleurs inactive/active que "Actualités" et "Communauté". */
 #mnoria-cloud-mode-memoire-btn {
   padding-left: 22px;
   padding-right: 22px;
   font-size: 14px;
-  background: linear-gradient(135deg, #ffe6b3, #ffb457);
-  color: #1A1F24;
-}
-#mnoria-cloud-mode-memoire-btn:hover {
-  background: linear-gradient(135deg, #fff0cc, #ffc26f);
-  color: #1A1F24;
-}
-#mnoria-cloud-mode-memoire-btn.mnoria-cloud-mode-segment-active {
-  background: linear-gradient(135deg, #ffd166, #e99a2e);
-  color: #1A1F24;
-  box-shadow: inset 0 0 0 1px rgba(122, 72, 10, 0.28);
-}
-#mnoria-cloud-mode-memoire-btn.mnoria-cloud-mode-segment-active:hover {
-  background: linear-gradient(135deg, #ffdc85, #f0a941);
-  color: #1A1F24;
 }
 
 /* Petits traits verticaux entre les 3 segments (Bulles Actu / Bulles Mnoria / Ma mémoire), pour

@@ -71,9 +71,47 @@ test("buildSemanticReviewPrompt : le critère 'distracteurs plausibles/catégori
   assert.match(prompt, /CATEGORY_MISMATCH/);
 });
 
-test("buildSemanticReviewPrompt : le critère 'distracteurs plausibles' exclut explicitement le format intrus", () => {
+test("buildSemanticReviewPrompt : intrus garde l'exemption de catégorie mais reçoit un contrôle pédagogique propre", () => {
   const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
-  assert.match(prompt, /jamais pour "intrus"/i, "le format intrus doit être explicitement épargné par cette règle, son principe étant qu'une option diffère des 3 autres");
+  assert.match(prompt, /jamais pour "intrus"/i, "la différence de catégorie reste légitime pour un intrus");
+  assert.match(prompt, /intrus[\s\S]{0,1000}GUESSABLE_WITHOUT_KNOWLEDGE/i);
+  assert.match(prompt, /diff[ée]rence[\s\S]{0,500}(simple lecture|ton|polarit[ée])/i);
+  assert.match(prompt, /plan[èe]tes|tellurique|gazeuse/i, "un vrai intrus scientifique doit être explicitement préservé");
+});
+
+const V5_PEDAGOGICAL_CODES = [
+  "WEAK_DISTRACTOR_SET",
+  "ANSWER_SALIENCE",
+  "GUESSABLE_WITHOUT_KNOWLEDGE",
+  "AMBIGUOUS_DISTRACTOR",
+  "ARTIFICIAL_DISTRACTOR",
+  "OVERGENERALIZED_QUESTION"
+];
+
+for (const code of V5_PEDAGOGICAL_CODES) {
+  test(`V5 critic : le reason code ${code} est défini dans le prompt existant`, () => {
+    assert.match(buildSemanticReviewPrompt(sampleEntries(), {}), new RegExp(code));
+  });
+}
+
+test("V5 critic : juge l'ensemble des options et la possibilité de répondre sans knowledgeTarget", () => {
+  const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
+  assert.match(prompt, /ensemble des options/i);
+  assert.match(prompt, /principalement par (?:simple )?[ée]limination|sans (?:ma[iî]triser|conna[iî]tre) knowledgeTarget/i);
+  assert.match(prompt, /niveau de pr[ée]cision/i);
+  assert.match(prompt, /longueur[^.]{0,180}(comparable|saillante|distingue)/i);
+});
+
+test("V5 critic : distingue distracteur plausible et distracteur réellement ambigu", () => {
+  const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
+  assert.match(prompt, /plausible mais faux/i);
+  assert.match(prompt, /d[ée]fendable comme (?:une )?r[ée]ponse|raisonnablement.*correct/i);
+});
+
+test("V5 critic : refuse la sur-généralisation au-delà du knowledgeTarget ou de la source", () => {
+  const prompt = buildSemanticReviewPrompt(sampleEntries(), {});
+  assert.match(prompt, /OVERGENERALIZED_QUESTION/);
+  assert.match(prompt, /p[ée]riode|territoire|groupe concern[ée]|contexte/i);
 });
 
 // ── Contrat JSON attendu par parseSemanticReviews (lib/qcm-quality.js) —

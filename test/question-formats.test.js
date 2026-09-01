@@ -20,7 +20,8 @@ const {
   extractGroundingFields,
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
-  selectQuestionsForRequestedLevel
+  selectQuestionsForRequestedLevel,
+  isMasterEligibleQuiz
 } = require("../lib/question-formats");
 const { resolveActiveQuestionVariant } = require("../lib/spaced-repetition/question-variant");
 
@@ -1050,4 +1051,61 @@ test("§11 progression : realized (answeredCount >= questions.length) devient vr
   assert.equal(answeredCount >= served.length, true, "realized doit être vrai : les 5 questions du niveau élémentaire ont toutes été répondues");
   const answeredCountOnMaster = master.filter((q) => answeredIds.has(q.id)).length;
   assert.equal(answeredCountOnMaster >= master.length, false, "sur le master complet (comportement évité), ce même utilisateur ne serait JAMAIS 'realized' avant d'avoir répondu aux 20");
+});
+
+// ── V4.1.1 (01/09/2026, "finaliser la mutualisation avec requested_level") :
+// scénario H de la demande — un changement de niveau (Élémentaire -> Expert)
+// sur le MÊME master doit conserver les réponses déjà données, jamais
+// repartir de 0/N. Le master partagé étant classé par pedagogicalRank et le
+// serving toujours un PRÉFIXE ordonné (cf. selectQuestionsForRequestedLevel),
+// les questions répondues au niveau le plus bas restent nécessairement dans
+// le sous-ensemble d'un niveau plus large — ce test verrouille cette
+// propriété structurelle en pur, sans DB : c'est elle qui garantit la
+// continuité de progression décrite dans le rapport (5/N, jamais 0/N).
+
+test("§H V4.1.1 : les questions répondues au niveau Élémentaire (rangs 1-5) restent dans le sous-ensemble Expert (rangs 1-14) — même identités de question", () => {
+  const master = masterOf(14);
+  const elementaireServed = selectQuestionsForRequestedLevel(master, 5);
+  const expertServed = selectQuestionsForRequestedLevel(master, 20); // plafond expert=20, master n'a que 14
+  assert.equal(elementaireServed.length, 5);
+  assert.equal(expertServed.length, 14);
+  const answeredIds = new Set(elementaireServed.map((q) => q.id));
+  const stillPresentInExpert = expertServed.filter((q) => answeredIds.has(q.id));
+  assert.equal(stillPresentInExpert.length, 5, "les 5 questions répondues en Élémentaire doivent toutes réapparaître dans le sous-ensemble Expert");
+
+  // Reproduit exactement le calcul de progressPct de GET /api/users/notion-quizzes :
+  // credit=1 pour chaque question répondue, dénominateur = questions réellement servies.
+  const progressDenominator = expertServed.length;
+  const creditSum = expertServed.filter((q) => answeredIds.has(q.id)).length;
+  const progressPct = Math.round((creditSum / progressDenominator) * 100);
+  assert.equal(progressPct, Math.round((5 / 14) * 100), "la progression après passage Expert doit être 5/14 (~36%), jamais 0/14 ni 100%");
+  assert.notEqual(progressPct, 0, "jamais 0% : les réponses déjà données ne doivent jamais être perdues par un changement de niveau");
+});
+
+// ── V4.1 (01/09/2026, "mutualisation inter-niveaux") : isMasterEligibleQuiz ─
+
+test("isMasterEligibleQuiz : vrai dès que la première question porte un pedagogicalRank entier", () => {
+  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 1 }, { pedagogicalRank: 2 }]), true);
+  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 7 }]), true);
+});
+
+test("isMasterEligibleQuiz : faux pour un quiz legacy (aucun pedagogicalRank, comportement d'avant V4.0)", () => {
+  assert.equal(isMasterEligibleQuiz([{ id: "q1" }, { id: "q2" }]), false);
+});
+
+test("isMasterEligibleQuiz : faux pour un tableau vide, null, undefined ou non-tableau", () => {
+  assert.equal(isMasterEligibleQuiz([]), false);
+  assert.equal(isMasterEligibleQuiz(null), false);
+  assert.equal(isMasterEligibleQuiz(undefined), false);
+  assert.equal(isMasterEligibleQuiz("not an array"), false);
+});
+
+test("isMasterEligibleQuiz : ne regarde que la PREMIÈRE question (cohérent avec attachPedagogicalRanks, qui les tague toutes ensemble ou aucune)", () => {
+  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 1 }, { id: "sans rang, ne devrait jamais arriver en pratique" }]), true);
+});
+
+test("isMasterEligibleQuiz : pedagogicalRank non entier (corruption défensive) -> faux", () => {
+  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: "1" }]), false);
+  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 1.5 }]), false);
+  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: null }]), false);
 });

@@ -12,6 +12,7 @@ const { MODEL_PRICING_USD_PER_MILLION_TOKENS } = require("../lib/ai-usage-log");
 
 const MODEL = process.env.OPENAI_DAILY_QUIZ_MODEL || "gpt-4.1-mini";
 const CRITIC_MODEL = process.env.OPENAI_DAILY_QUIZ_CRITIC_MODEL || MODEL;
+const MODELS_WITHOUT_CUSTOM_TEMPERATURE = new Set(["gpt-5.6-luna"]);
 const FACTS = [
   "La capitale de l’Australie est Canberra.",
   "La Révolution française commence en 1789.",
@@ -27,7 +28,12 @@ async function callOpenAI(feature, model, prompt) {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, temperature: feature === "critic" ? 0.1 : 0.35, response_format: { type: "json_object" }, messages: [{ role: "user", content: prompt }] })
+    body: JSON.stringify({
+      model,
+      ...(MODELS_WITHOUT_CUSTOM_TEMPERATURE.has(model) ? {} : { temperature: feature === "critic" ? 0.1 : 0.35 }),
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content: prompt }]
+    })
   });
   const payload = await response.json();
   const elapsed = Date.now() - started;
@@ -91,17 +97,45 @@ function fixtureSet() {
   ];
 }
 
+function v5SemanticFixtureSet() {
+  const q = (sourceId, overrides = {}) => ({
+    sourceId,
+    knowledgeTarget: "Ottawa est la capitale fédérale du Canada.",
+    type: "qcm",
+    question: "Quelle est la capitale fédérale du Canada ?",
+    options: ["Ottawa", "Toronto", "Montréal", "Vancouver"],
+    correctIndex: 0,
+    explanation: "Ottawa est la capitale fédérale du Canada.",
+    ...overrides
+  });
+  return [
+    q("v5-bad-distant", { options: ["Ottawa", "Toronto", "Montréal", "Buenos Aires"], expected: "reject" }),
+    q("v5-bad-salient", { knowledgeTarget: "La photosynthèse transforme l'énergie lumineuse en énergie chimique stockée dans le glucose.", question: "Quel mécanisme décrit la photosynthèse ?", options: ["Un effet local", "Un phénomène secondaire", "La conversion de l'énergie lumineuse en énergie chimique stockée dans le glucose", "Une influence externe"], correctIndex: 2, explanation: "La photosynthèse convertit l'énergie lumineuse en énergie chimique.", expected: "reject" }),
+    q("v5-bad-artificial", { question: "Quelle ville est officiellement la capitale fédérale canadienne ?", options: ["Ottawa", "Toronto", "Montréal", "Le fédéralisme ottawien quantique"], expected: "reject" }),
+    q("v5-bad-intrus-polarity", { knowledgeTarget: "Dans certaines colonies, l'éducation diffusait la langue et des références culturelles de la puissance coloniale.", type: "intrus", question: "Quel élément est l'intrus parmi ces effets de l'éducation coloniale ?", options: ["Diffuser une langue", "Former des élites administratives", "Transmettre des références culturelles", "Garantir l'émancipation complète des colonisés"], correctIndex: 3, explanation: "L'émancipation complète ne correspond pas au point commun.", expected: "reject" }),
+    q("v5-bad-intrus-era", { knowledgeTarget: "La mécanisation transforme la production industrielle au XIXe siècle.", type: "intrus", question: "Quel élément est l'intrus parmi ces techniques industrielles du XIXe siècle ?", options: ["Machine à vapeur", "Métier mécanique", "Locomotive à vapeur", "Réseau social numérique"], correctIndex: 3, explanation: "Le réseau social numérique est contemporain.", expected: "reject" }),
+    q("v5-good-capital", { expected: "accept" }),
+    q("v5-good-history", { knowledgeTarget: "La prise de la Bastille a lieu le 14 juillet 1789.", question: "À quelle date a lieu la prise de la Bastille ?", options: ["14 juillet 1789", "20 juin 1789", "4 août 1789", "26 août 1789"], explanation: "La Bastille est prise le 14 juillet 1789.", expected: "accept" }),
+    q("v5-good-science", { knowledgeTarget: "La chlorophylle absorbe principalement la lumière rouge et bleue.", question: "Quelles couleurs la chlorophylle absorbe-t-elle principalement ?", options: ["Rouge et bleu", "Vert et jaune", "Orange et vert", "Jaune et violet"], explanation: "Elle absorbe principalement le rouge et le bleu.", expected: "accept" }),
+    q("v5-good-intrus-planets", { knowledgeTarget: "Mercure, Vénus et Mars sont telluriques, contrairement à Jupiter qui est gazeuse.", type: "intrus", question: "Quelle planète est l'intrus parmi ces planètes telluriques ?", options: ["Mercure", "Vénus", "Jupiter", "Mars"], correctIndex: 2, explanation: "Jupiter est gazeuse.", expected: "accept" }),
+    q("v5-good-intrus-animals", { knowledgeTarget: "La baleine, le dauphin et la chauve-souris sont des mammifères, contrairement au requin.", type: "intrus", question: "Quel animal est l'intrus parmi ces mammifères ?", options: ["Baleine", "Dauphin", "Requin", "Chauve-souris"], correctIndex: 2, explanation: "Le requin est un poisson.", expected: "accept" })
+  ];
+}
+
 async function runFixturesOnly() {
   const fixtures = fixtureSet();
   const deterministic = validateQuestionBatchQuality(fixtures, { requireKnowledgeTarget: true });
   const semantic = deterministic.accepted;
   const reviews = semantic.length ? await criticPayload(semantic.map((question, index) => ({ id: `fixture-${index + 1}`, ...question, sourceExcerpt: question.knowledgeTarget })), { hasIndependentSource: true }) : { reviews: [] };
+  const v5Fixtures = v5SemanticFixtureSet();
+  const v5Reviews = await criticPayload(v5Fixtures.map((question, index) => ({ id: `v5-${index + 1}`, ...question, sourceExcerpt: question.knowledgeTarget })), { hasIndependentSource: true });
   process.stdout.write(JSON.stringify({
     databaseWrites: 0,
     generationCalls: 0,
     deterministic: deterministic.decisions.map((item) => ({ sourceId: item.question.sourceId, valid: item.valid, reasonCodes: item.reasons.map((reason) => reason.code) })),
     semanticSourceIds: semantic.map((item) => item.sourceId),
     semanticReviews: reviews.reviews || [],
+    v5SemanticReviews: (v5Reviews.reviews || []).map((review, index) => ({ sourceId: v5Fixtures[index].sourceId, expected: v5Fixtures[index].expected, ...review })),
     usage
   }, null, 2) + "\n");
 }

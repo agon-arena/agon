@@ -18524,6 +18524,21 @@ function renderIndexContextPreviewText(text, expanded, isOpen = false) {
   return renderIndexContextExpandedText(rawText, isOpen);
 }
 
+// Le bot de veille mixte ne termine plus ses articles par un paragraphe signature
+// (initiales d'auteur, ex. "P. Ratsky" — retiré le 01/09/2026). Avant ce changement, la
+// devise latine / la question finale étaient repérées en comptant depuis CETTE signature
+// (toujours l'avant-dernier ou l'avant-avant-dernier paragraphe) — sans elle, ce comptage
+// tombait systématiquement sur le mauvais paragraphe : en arène libre (isOpen), la devise
+// réelle (désormais le tout dernier paragraphe) restait en texte brut, tandis que le
+// paragraphe juste au-dessus (un paragraphe de corps ordinaire) héritait à tort du style
+// gras centré ; en arène à positions, la détection échouait purement et simplement (aucun
+// style appliqué à la devise NI à la question). Corrigé en repérant la devise/la question
+// directement par leur FORME (courte phrase sans "?" pour la devise, phrase finissant par
+// "?" pour la question) plutôt que par leur position relative à une signature qui n'existe
+// plus — une signature éventuelle (contenu déjà publié avant ce changement) est quand même
+// détectée et conservée si présente, jamais requise (demande du 01/09/2026, "c'est le
+// paragraphe du dessus qui est en gras et centré... la question tout en bas... doit aussi
+// etre centré, en italique").
 function renderIndexContextExpandedText(text, isOpen = false) {
   const rawText = String(text || "");
   if (!rawText) return "";
@@ -18532,60 +18547,70 @@ function renderIndexContextExpandedText(text, isOpen = false) {
     .map((part) => part.trim())
     .filter(Boolean);
 
-  if (isOpen) {
-    const lastPart = parts[parts.length - 1] || "";
-    const latinMotto = parts[parts.length - 2] || "";
-    const hasOpenTail = parts.length >= 2;
-    if (!hasOpenTail) {
-      return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
-    }
-    const latinStart = rawText.indexOf(latinMotto);
-    const lastStart = latinStart >= 0 ? rawText.indexOf(lastPart, latinStart + latinMotto.length) : -1;
-    if (latinStart < 0 || lastStart < 0) {
-      return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
-    }
-    const beforeLatin = rawText.slice(0, latinStart);
-    const betweenLatinAndLast = rawText.slice(latinStart + latinMotto.length, lastStart).replace(/^\n{2,}/, "\n");
-    const afterLast = rawText.slice(lastStart + lastPart.length).replace(/^\n{2,}/, "\n");
-    const lastHtml = /[?？]$/.test(lastPart)
-      ? `<span class="context-reflection-question">${escapeHtml(lastPart)}</span>`
-      : escapeHtmlNl(lastPart);
-    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinMotto)}</span>${escapeHtmlNl(betweenLatinAndLast)}${lastHtml}${escapeHtmlNl(afterLast)}`;
+  const plainFallback = `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
+  if (!parts.length) return plainFallback;
+
+  const isLatinMotto = (t) => {
+    if (!t || /[?？]$/.test(t)) return false;
+    const wordCount = t.trim().split(/\s+/).filter(Boolean).length;
+    return wordCount > 0 && wordCount <= 6 && t.length <= 60;
+  };
+
+  const signaturePattern = /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/;
+  let tailParts = parts;
+  let signature = "";
+  if (parts.length >= 2 && signaturePattern.test(parts[parts.length - 1])) {
+    signature = parts[parts.length - 1];
+    tailParts = parts.slice(0, parts.length - 1);
   }
 
-  const signature = parts[parts.length - 1] || "";
-  const question = parts[parts.length - 2] || "";
-  const hasMnoriaTail = parts.length >= 3 && /[?？]$/.test(question) && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
-  const latinQuestion = hasMnoriaTail && parts.length >= 4 && !/[?？]$/.test(parts[parts.length - 3] || "")
-    ? parts[parts.length - 3]
-    : "";
-  if (!latinQuestion) {
-    return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
+  const last = tailParts[tailParts.length - 1] || "";
+  let question = "";
+  let latinMotto = "";
+  if (/[?？]$/.test(last)) {
+    question = last;
+    const candidate = tailParts[tailParts.length - 2] || "";
+    if (isLatinMotto(candidate)) latinMotto = candidate;
+  } else if (isLatinMotto(last)) {
+    latinMotto = last;
   }
 
-  const latinStart = rawText.indexOf(latinQuestion);
-  if (latinStart < 0) {
-    return `<b class="context-first-letter">${escapeHtml(rawText[0])}</b>${escapeHtmlNl(rawText.slice(1))}`;
-  }
-  const questionStart = rawText.indexOf(question, latinStart + latinQuestion.length);
-  if (questionStart < 0) {
-    const beforeLatin = rawText.slice(0, latinStart);
-    const afterLatin = rawText.slice(latinStart + latinQuestion.length);
-    return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}`;
-  }
-  const beforeLatin = rawText.slice(0, latinStart);
-  const afterLatin = rawText.slice(latinStart + latinQuestion.length, questionStart).replace(/^\n{2,}/, "\n");
-  const signatureStart = hasMnoriaTail
-    ? rawText.indexOf(signature, questionStart + question.length)
-    : -1;
-  const rawAfterQuestion = rawText.slice(questionStart + question.length, signatureStart >= 0 ? signatureStart : undefined);
-  const afterQuestion = signatureStart >= 0 && !rawAfterQuestion.trim()
-    ? ""
-    : rawAfterQuestion.replace(/^\n{2,}/, "\n");
-  const afterSignature = signatureStart >= 0
-    ? rawText.slice(signatureStart + signature.length).replace(/^\n{2,}/, "\n")
-    : "";
-  return `${beforeLatin ? `<b class="context-first-letter">${escapeHtml(beforeLatin[0])}</b>${escapeHtmlNl(beforeLatin.slice(1))}` : ""}<span class="context-latin-question">${escapeHtml(latinQuestion)}</span>${escapeHtmlNl(afterLatin)}<span class="context-debate-question">${escapeHtml(question)}</span>${escapeHtmlNl(afterQuestion)}${signatureStart >= 0 ? `<span class="context-signature">${escapeHtml(signature)}</span>${escapeHtmlNl(afterSignature)}` : ""}`;
+  if (!latinMotto && !question && !signature) return plainFallback;
+
+  // Arène libre : question de réflexion alignée à gauche (context-reflection-question,
+  // style.css). Arène à positions : question centrée en italique (context-debate-question,
+  // demande du 01/09/2026).
+  const questionClass = isOpen ? "context-reflection-question" : "context-debate-question";
+
+  // Reconstruit le HTML en découpant le texte BRUT par position (indexOf) plutôt qu'en
+  // recollant les paragraphes détectés bout à bout : préserve exactement les sauts de
+  // ligne/espaces d'origine entre les segments, comme le faisait déjà cette fonction.
+  let cursor = 0;
+  let html = "";
+  const appendPlain = (upTo) => {
+    const chunk = rawText.slice(cursor, upTo);
+    if (cursor === 0 && chunk) {
+      html += `<b class="context-first-letter">${escapeHtml(chunk[0])}</b>${escapeHtmlNl(chunk.slice(1))}`;
+    } else {
+      html += escapeHtmlNl(chunk.replace(/^\n{2,}/, "\n"));
+    }
+    cursor = upTo;
+  };
+  const appendSpecial = (segment, className) => {
+    if (!segment) return;
+    const idx = rawText.indexOf(segment, cursor);
+    if (idx < 0) return;
+    appendPlain(idx);
+    html += `<span class="${className}">${escapeHtml(segment)}</span>`;
+    cursor = idx + segment.length;
+  };
+
+  appendSpecial(latinMotto, "context-latin-question");
+  appendSpecial(question, questionClass);
+  appendSpecial(signature, "context-signature");
+  appendPlain(rawText.length);
+
+  return html;
 }
 
 function closeIndexContextPreview(button) {
@@ -22983,69 +23008,6 @@ function backToArenaTypeChoice() {
 function getCreateContextText() {
   const input = document.getElementById("context_text");
   return input ? input.value.trim().slice(0, 1800) : "";
-}
-
-function renderMnoriaArticleContextHtml(content, isOpen = false) {
-  const parts = String(content || "").split(/\n\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (!parts.length) return "";
-
-  const renderContextPart = (part, className) => {
-    return `<div class="${className}">${escapeHtmlNl(part)}</div>`;
-  };
-
-  if (isOpen) {
-    const lastPart = parts[parts.length - 1] || "";
-    const latinMotto = parts[parts.length - 2] || "";
-    const hasOpenTail = parts.length >= 2;
-    if (!hasOpenTail) {
-      return parts.map((part) => renderContextPart(part, "context-body-paragraph")).join("");
-    }
-    const bodyParts = parts.slice(0, parts.length - 2);
-    const lastLooksLikeSignature = /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(lastPart);
-    const lastClass = lastLooksLikeSignature
-      ? "context-signature"
-      : /[?？]$/.test(lastPart)
-        ? "context-reflection-question"
-        : "context-body-paragraph";
-    return bodyParts.map((part) => renderContextPart(part, "context-body-paragraph")).join("")
-      + renderContextPart(latinMotto, "context-latin-question")
-      + renderContextPart(lastPart, lastClass);
-  }
-
-  const signature = parts[parts.length - 1] || "";
-  const isSignature = parts.length >= 2 && /^(?:[A-Z]\.[A-Z]|[A-Z]\.)\s+\S+/.test(signature);
-  if (!isSignature) {
-    return parts.map((part) => renderContextPart(part, "context-body-paragraph")).join("");
-  }
-
-  const isLatinMotto = (text) => {
-    if (!text || /[?？]$/.test(text)) return false;
-    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-    return wordCount > 0 && wordCount <= 6 && text.length <= 60;
-  };
-
-  const rest = parts.slice(0, parts.length - 1);
-  const last = rest[rest.length - 1] || "";
-  let question = "";
-  let latinQuestion = "";
-  let bodyParts = rest;
-  if (/[?？]$/.test(last)) {
-    question = last;
-    const beforeQuestion = rest.slice(0, rest.length - 1);
-    const candidate = beforeQuestion[beforeQuestion.length - 1] || "";
-    bodyParts = isLatinMotto(candidate) ? beforeQuestion.slice(0, beforeQuestion.length - 1) : beforeQuestion;
-    if (isLatinMotto(candidate)) latinQuestion = candidate;
-  } else if (isLatinMotto(last)) {
-    latinQuestion = last;
-    bodyParts = rest.slice(0, rest.length - 1);
-  }
-
-  return bodyParts.map((part) => renderContextPart(part, "context-body-paragraph")).join("")
-    + (latinQuestion ? renderContextPart(latinQuestion, "context-latin-question") : "")
-    + (question ? renderContextPart(question, "context-debate-question") : "")
-    + renderContextPart(signature, "context-signature");
 }
 
 function trimDebateContextLatinBreaks(html) {

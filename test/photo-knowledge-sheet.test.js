@@ -82,11 +82,17 @@ test("la fiche minimale porte le même identifiant documentaire et toutes les no
   assert.equal(detail.sections.filter((section) => section.text.startsWith("• ")).length, 3);
 });
 
-test("le câblage serveur partage la fiche mais conserve un slot et une question par fait", () => {
+test("le câblage serveur partage la fiche ET regroupe tout l'import dans un seul paquet (un seul slot, une question par fait à l'intérieur)", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   assert.match(source, /const documentImportId = buildPhotoDocumentImportId\(sourceTitle, finalKnowledge, sourceUrl\)/);
-  assert.match(source, /const slot = `notion:\$\{sourceType\}:\$\{documentImportId\}:\$\{item\.id\}`/);
+  // Regroupement (demande du 01/09/2026) : UN SEUL slot pour tout l'import,
+  // jamais un par fait — cf. son commentaire dans addValidatedKnowledgeImport.
+  assert.match(source, /const slot = `notion:\$\{sourceType\}:\$\{documentImportId\}`;/);
   assert.match(source, /sourceDetail: sharedSourceDetail/);
+  // Chaque question garde malgré tout un id et un sourceDebateId propres à
+  // SA connaissance (pas au paquet) : plusieurs questions cohabitent donc
+  // sans collision dans le même tableau `questions` d'une seule ligne
+  // daily_quiz.
   assert.match(source, /id: `notion:\$\{sourceType\}:\$\{documentImportId\}:\$\{id\}-q1`/);
   assert.match(source, /sourceDebateId: id/);
 });

@@ -43,3 +43,24 @@ test("les logs de qualité restent agrégés et n'impriment aucun contenu privé
   assert.doesNotMatch(snippet, /knowledgeTarget|rejectedQuestion|sourceExcerpt|question:/);
   assert.match(snippet, /\.\.\.outcome\.metrics/);
 });
+
+for (const code of [
+  "WEAK_DISTRACTOR_SET",
+  "ANSWER_SALIENCE",
+  "GUESSABLE_WITHOUT_KNOWLEDGE",
+  "AMBIGUOUS_DISTRACTOR",
+  "ARTIFICIAL_DISTRACTOR",
+  "OVERGENERALIZED_QUESTION"
+]) {
+  test(`V5 régénération ciblée : ${code} possède une contrainte corrective`, () => {
+    const codePosition = serverSource.indexOf(`rejectionCodes.has("${code}")`);
+    assert.ok(codePosition >= 0, `${code} doit être branché dans la régénération existante`);
+    assert.match(serverSource.slice(codePosition, codePosition + 1800), /targetedConstraints\.push/);
+  });
+}
+
+test("V5 sélection de format : pertinence avant variété et intrus jamais imposé", () => {
+  assert.match(serverSource, /pertinence (?:p[ée]dagogique )?du format[^.]{0,180}(?:avant|prime)[^.]{0,120}vari[ée]t[ée]/i);
+  assert.match(serverSource, /intrus[^.]{0,300}point commun substantiel/i);
+  assert.match(serverSource, /aucun quota par format|jamais.*quota.*format/i);
+});

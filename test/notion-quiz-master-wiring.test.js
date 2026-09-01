@@ -75,37 +75,50 @@ test("attachPedagogicalRanks est appelé juste avant le retour final de generate
 // ── §8/§10/§11/§13 de la demande : serving par niveau appliqué à tous les
 // points de lecture/écriture concernés, jamais au stockage lui-même. ──────
 
-test("getDailyQuizQuestions applique selectQuestionsForRequestedLevel avant la mise en cache/le retour", () => {
-  assert.match(SERVER_SOURCE, /const baseQuestions = selectQuestionsForRequestedLevel\(rawQuestions, NOTION_QUIZ_LEVELS\[rawQuestions\[0\]\?\.level\]\?\.target\);/);
+test("getDailyQuizQuestions applique selectQuestionsForRequestedLevel avant la mise en cache/le retour (V4.1.1 : effectiveRequestedLevel = persistedLevel || requestedLevel || rawQuestions[0].level)", () => {
+  assert.match(SERVER_SOURCE, /const baseQuestions = selectQuestionsForRequestedLevel\(rawQuestions, NOTION_QUIZ_LEVELS\[effectiveRequestedLevel \|\| rawQuestions\[0\]\?\.level\]\?\.target\);/);
 });
 
 test("GET /api/users/notion-quizzes/fiche applique selectQuestionsForRequestedLevel avant questionCount/first", () => {
   const ficheRouteIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"');
-  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[questions[0]?.level]?.target);", ficheRouteIndex);
+  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", ficheRouteIndex);
   const firstIndex = SERVER_SOURCE.indexOf("const first = questions[0];", ficheRouteIndex);
   assert.ok(ficheRouteIndex > 0);
   assert.ok(selectIndex > ficheRouteIndex, "le filtrage doit être appliqué dans la route fiche");
   assert.ok(firstIndex > selectIndex, "`first`/questionCount doivent être dérivés APRÈS le filtrage, jamais avant");
 });
 
-test("GET /api/users/notion-quizzes (progression) applique selectQuestionsForRequestedLevel avant tous les calculs de progression", () => {
+test("GET /api/users/notion-quizzes (progression) applique selectQuestionsForRequestedLevel (V4.1.1 : effectiveLevel = persistedLevel || rawQuestions[0].level) avant tous les calculs de progression", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
-  const selectIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[rawQuestions[0]?.level]?.target);", routeIndex);
+  const selectIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
   const denominatorIndex = SERVER_SOURCE.indexOf("let progressDenominator = 0;", routeIndex);
   assert.ok(routeIndex > 0);
   assert.ok(selectIndex > routeIndex, "le filtrage doit être appliqué dans la route de progression");
   assert.ok(denominatorIndex > selectIndex, "progressDenominator doit être calculé sur le sous-ensemble servi, jamais le master complet");
 });
 
-test("POST /api/users/notion-quizzes/custom applique selectQuestionsForRequestedLevel APRÈS l'insertion en base (le stockage garde le master complet) et AVANT la réponse HTTP + triggerAutomaticNoesVideo", () => {
+test("POST /api/users/notion-quizzes/custom applique selectQuestionsForRequestedLevel APRÈS la résolution (réutilisation ou génération via ensureCustomTopicMasterGenerated, le stockage garde toujours le master complet) et AVANT la réponse HTTP + triggerAutomaticNoesVideo", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom"');
-  const insertIndex = SERVER_SOURCE.indexOf('.from("daily_quiz").insert({', routeIndex);
+  const generationCallIndex = SERVER_SOURCE.indexOf("await ensureCustomTopicMasterGenerated(masterSlot, topic, id, level, user.id);", routeIndex);
   const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[level]?.target);", routeIndex);
   const responseIndex = SERVER_SOURCE.indexOf("res.json({ ok: true, slot: effectiveSlot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length, reused });", routeIndex);
   const noesIndex = SERVER_SOURCE.indexOf("triggerAutomaticNoesVideo({ userId: user.id, slot: effectiveSlot, quizDate, questions });", routeIndex);
-  assert.ok(routeIndex > 0 && insertIndex > routeIndex && selectIndex > insertIndex, "le filtrage doit intervenir après le stockage du master complet");
+  assert.ok(routeIndex > 0 && generationCallIndex > routeIndex && selectIndex > generationCallIndex, "le filtrage doit intervenir après la résolution (réutilisation ou génération) du master complet");
   assert.ok(responseIndex > selectIndex, "la réponse HTTP doit refléter le sous-ensemble servi");
   assert.ok(noesIndex > selectIndex, "Noès ne doit recevoir que le sous-ensemble servi, jamais le master complet (section 13 de la demande)");
+});
+
+// V4.1 : le stockage du master complet a été déplacé DANS
+// ensureCustomTopicMasterGenerated/ensureNotionMasterGenerated (verrouillées
+// par identité de master) — jamais réinséré ailleurs dans la route elle-même.
+test("l'insertion daily_quiz du master complet vit dans ensureCustomTopicMasterGenerated/ensureNotionMasterGenerated, jamais réinséré directement dans les routes POST", () => {
+  const ensureCustomIndex = SERVER_SOURCE.indexOf("async function ensureCustomTopicMasterGenerated(masterSlot, topic, id, level, userId) {");
+  const ensureNotionIndex = SERVER_SOURCE.indexOf("async function ensureNotionMasterGenerated(masterSlot, sourceType, sourceDebateId, item, level, userId) {");
+  assert.ok(ensureCustomIndex > 0 && ensureNotionIndex > 0);
+  const customRouteIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom"');
+  const nextRouteIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/explore"', customRouteIndex);
+  const customRouteBody = SERVER_SOURCE.slice(customRouteIndex, nextRouteIndex > 0 ? nextRouteIndex : customRouteIndex + 6000);
+  assert.doesNotMatch(customRouteBody, /\.from\("daily_quiz"\)\.insert\(\{/, "la route ne doit plus insérer elle-même — cf. ensureCustomTopicMasterGenerated");
 });
 
 test("POST /api/users/notion-quizzes (notion de débat) applique selectQuestionsForRequestedLevel avant la réponse HTTP", () => {
@@ -133,6 +146,6 @@ test("§12 FSRS : applyFsrsReviewForDailyQuizAnswer/upsertMemoryItemForNotionAns
 
 // ── Import requis ──────────────────────────────────────────────────────
 
-test("les trois fonctions V4.0 sont bien importées depuis lib/question-formats", () => {
-  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*selectQuestionsForRequestedLevel\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
+test("les fonctions V4.0/V4.1 sont bien importées depuis lib/question-formats", () => {
+  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*selectQuestionsForRequestedLevel,\s*\n\s*isMasterEligibleQuiz\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
 });

@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260901-memoire-back-btn-removed">
+  <link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -3295,7 +3295,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260901-ai-report-btn-moved" defer></script>
+<script src="/script.min.js?v=20260901-context-no-signature" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -5681,19 +5681,22 @@
     }
 
     function adoptExploreItem(slot, quizDate, itemBtn) {
-      itemBtn.disabled = true;
-      fetch('/api/users/notion-quizzes/adopt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate })
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (!data.ok) { itemBtn.disabled = false; return; }
-          closeMesQcmExploreModal();
-          loadMesQcm();
+      if (typeof showNotionQuizLevelPicker !== 'function') return;
+      showNotionQuizLevelPicker(function (level) {
+        itemBtn.disabled = true;
+        fetch('/api/users/notion-quizzes/adopt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate, level: level })
         })
-        .catch(function () { itemBtn.disabled = false; });
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (!data.ok) { itemBtn.disabled = false; return; }
+            closeMesQcmExploreModal();
+            loadMesQcm();
+          })
+          .catch(function () { itemBtn.disabled = false; });
+      });
     }
 
     var exploreSearchDebounce = null;
@@ -6039,7 +6042,9 @@
   // cette fiche.
   function adoptCatalogRecommendation(item, btn) {
     if (!voterKey) return;
-    if (btn) btn.disabled = true;
+    if (typeof showNotionQuizLevelPicker !== 'function') return;
+    showNotionQuizLevelPicker(function (level) {
+      if (btn) btn.disabled = true;
     // Sablier immédiat (demande du 30/08/2026, "je veux un bandeau de
     // chargement qui se déclenche immédiatement") : sans lui, rien ne
     // signalait que le clic avait été pris en compte pendant les deux
@@ -6066,7 +6071,7 @@
         return fetch('/api/users/notion-quizzes/adopt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ legacyKey: voterKey, slot: data.slot, quizDate: data.quizDate })
+          body: JSON.stringify({ legacyKey: voterKey, slot: data.slot, quizDate: data.quizDate, level: level })
         }).then(function (res) { return res.json(); });
       })
       .then(function (data) {
@@ -6086,6 +6091,7 @@
         removeLoadingOverlay();
         if (btn) btn.disabled = false;
       });
+    });
   }
   // idle -> loading -> has-content | empty. Pilote à la fois l'affichage
   // (refreshLearnNextInlineVisibility) et le déclenchement du chargement

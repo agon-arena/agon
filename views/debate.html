@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260901-memoire-back-btn-removed" />
+<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -550,12 +550,12 @@ try {
 <div id="debate-context-wrap" class="debate-context-wrap" style="display:none;">
   <div id="debate-context-text" class="debate-context-text"></div>
 
+  <div id="debate-episode-nav" class="debate-episode-nav" style="display:none;"></div>
+
   <section id="debate-notions-section" class="debate-notions-section" hidden>
     <div class="debate-notions-title"><i class="fa-solid fa-brain"></i> Clique pour approfondir • Mémoriser</div>
     <div id="debate-notions-list" class="debate-notions-list"></div>
   </section>
-
-  <div id="debate-episode-nav" class="debate-episode-nav" style="display:none;"></div>
 </div>
 
 
@@ -908,6 +908,14 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 
 
 <section id="debate-list-view" class="debate-list-view" style="display:none;">
+  <button
+    type="button"
+    class="button position-argument-button"
+    onclick="openArgumentComposer()"
+  >
+    Ajouter une idée
+  </button>
+
   <div id="arguments-unified" class="arguments-list arguments-list-unified"></div>
 </section>
 
@@ -995,7 +1003,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260901-ai-report-btn-moved" defer></script>
+	<script src="/script.min.js?v=20260901-context-no-signature" defer></script>
 <script>
 (function () {
   function isInteractive(target) {

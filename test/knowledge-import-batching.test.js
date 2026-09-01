@@ -117,7 +117,7 @@ test("addValidatedKnowledgeImport : repli ciblé UNIQUEMENT sur les connaissance
   const end = SERVER_SOURCE.indexOf("\napp.post(\"/api/photo-knowledge/add\"", start);
   const body = SERVER_SOURCE.slice(start, end);
   assert.match(body, /for \(const id of missingIds\)/);
-  assert.match(body, /buildImportedKnowledgeQuestions\(pending\.item\.fact, pending\.item\.id/);
+  assert.match(body, /buildImportedKnowledgeQuestions\(pending\.fact, pending\.id/);
 });
 
 // ── Cas C (10 connaissances) : le batching est réellement utilisé, pas un simple renommage ──

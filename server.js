@@ -56,7 +56,8 @@ const {
   gradeQuizSubmissionOptionIndex,
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
-  selectQuestionsForRequestedLevel
+  selectQuestionsForRequestedLevel,
+  isMasterEligibleQuiz
 } = require("./lib/question-formats");
 const {
   buildSemanticReviewPrompt,
@@ -13175,85 +13176,73 @@ async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnow
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
     const finalKnowledge = normalizedItems.map((item) => item.fact);
     const documentImportId = buildPhotoDocumentImportId(sourceTitle, finalKnowledge, sourceUrl);
-    let sharedSourceDetail = null;
-    const results = [];
+    // Regroupement (demande du 01/09/2026, "même comportement que lors de la
+    // génération IA — ex. inca : plusieurs connaissances à mémoriser dans le
+    // même paquet") : UN SEUL slot pour tout l'import, jamais un par
+    // connaissance (contrairement à avant) — même hash `documentImportId`
+    // qu'avant (titre + connaissances EXACTEMENT soumises + URL source),
+    // donc un retry de la MÊME sélection reste idempotent (même hash → même
+    // slot → réutilisation, aucun second appel IA). Contrepartie assumée :
+    // une connaissance identique importée depuis un AUTRE document ne
+    // rejoint plus jamais un paquet existant (perdu volontairement — chaque
+    // import doit rester un paquet autonome, jamais éclaté ni fusionné avec
+    // un autre document, exactement comme deux recherches "inca" à des
+    // moments différents ne fusionnent jamais deux QCM sujet-libre).
+    const slot = `notion:${sourceType}:${documentImportId}`;
+    const resultsByItemId = new Map(); // item.id -> résultat prêt pour `results`
+    let quizDate;
+    let questions;
+    let reused = false;
 
-    // ── PASSE 1 : quel QCM existe déjà, lequel reste à générer ─────────────
-    // Détachée de la génération (contrairement à l'ancien flux tout-en-un)
-    // pour pouvoir batcher la génération des seules connaissances qui en ont
-    // réellement besoin (audit coût import photo, 24/08/2026) — un fait déjà
-    // persisté ne doit jamais entrer dans un lot de génération.
-    const existingBySlot = new Map(); // item.id -> { slot, quizDate, questions }
-    const erroredResults = new Map(); // item.id -> résultat d'erreur déjà prêt pour `results`
-    const pendingItems = []; // items sans QCM existant, à générer
+    const { data: existingQuizRows, error: existingQuizError } = await supabase
+      .from("daily_quiz")
+      .select("quiz_date, questions")
+      .eq("slot", slot)
+      .order("quiz_date", { ascending: false })
+      .limit(1);
+    if (existingQuizError) throw new Error(existingQuizError.message);
+    const existingQuiz = existingQuizRows?.[0] || null;
 
-    for (const item of normalizedItems) {
-      const slot = `notion:${sourceType}:${documentImportId}:${item.id}`;
-      try {
-        const { data: existingQuizRows, error: existingQuizError } = await supabase
-          .from("daily_quiz")
-          .select("quiz_date, questions")
-          .eq("slot", slot)
-          .order("quiz_date", { ascending: false })
-          .limit(1);
-        if (existingQuizError) throw existingQuizError;
-        const existingQuiz = existingQuizRows?.[0] || null;
-
-        if (existingQuiz) {
-          const questions = existingQuiz.questions || [];
-          existingBySlot.set(item.id, { slot, quizDate: existingQuiz.quiz_date, questions });
-          // Reprise après un import partiellement abouti : la première
-          // connaissance déjà persistée devient la source de vérité de la
-          // fiche commune pour les QCM manquants, sans nouvel appel IA.
-          const existingDetail = questions[0]?.sourceDetail;
-          if (!sharedSourceDetail && existingDetail?.documentImportId === documentImportId) {
-            sharedSourceDetail = existingDetail;
-          }
-        } else {
-          pendingItems.push({ item, slot });
-        }
-      } catch (error) {
-        console.error(`[${logLabel}:add:${item.id}]`, error.message);
-        erroredResults.set(item.id, { index: item.index, knowledge: item.fact, status: "error", error: "Ajout impossible pour cette connaissance." });
+    if (existingQuiz) {
+      quizDate = existingQuiz.quiz_date;
+      questions = existingQuiz.questions || [];
+      reused = true;
+      for (const item of normalizedItems) {
+        resultsByItemId.set(item.id, { index: item.index, knowledge: item.fact, status: "existing", slot, quizDate, questionCount: questions.length, reused: true });
       }
-    }
-
-    // ── PASSE 2 : génération, batchée par lots de NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE ──
-    // Un seul appel IA pour tout un lot au lieu d'un appel par connaissance —
-    // le gros bloc fixe décrivant les formats de question n'est ainsi payé
-    // qu'une fois par lot (au-delà, un seul appel IA ne tient pas de façon
-    // fiable). Fiche documentaire commune générée paresseusement
-    // ici, une seule fois pour tout l'import — inchangé par rapport à avant.
-    const generatedQuestionsById = new Map(); // item.id -> [question] (même forme qu'avant)
-
-    if (pendingItems.length) {
-      if (!sharedSourceDetail) {
-        const sheetResult = await generatePhotoKnowledgeSheet({
-          sourceTitle,
-          knowledge: finalKnowledge,
-          sourceType,
-          sourceUrl,
-          sourceMeta,
-          callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
-        });
-        sharedSourceDetail = sheetResult.sourceDetail;
-        if (sheetResult.usedFallback && sheetResult.error) {
-          console.warn(`[${logLabel}:${documentImportId}] fiche enrichie indisponible, fallback minimal :`, sheetResult.error.message);
-        }
+    } else {
+      // ── Génération, batchée par lots de NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE ──
+      // Un seul appel IA pour tout un lot au lieu d'un appel par connaissance —
+      // le gros bloc fixe décrivant les formats de question n'est ainsi payé
+      // qu'une fois par lot (au-delà, un seul appel IA ne tient pas de façon
+      // fiable). Fiche documentaire commune générée une seule fois pour tout
+      // l'import, partagée par toutes les questions du paquet.
+      const sheetResult = await generatePhotoKnowledgeSheet({
+        sourceTitle,
+        knowledge: finalKnowledge,
+        sourceType,
+        sourceUrl,
+        sourceMeta,
+        callOpenAI: (messages, opts) => _callOpenAI(process.env.OPENAI_API_KEY, messages, opts)
+      });
+      const sharedSourceDetail = sheetResult.sourceDetail;
+      if (sheetResult.usedFallback && sheetResult.error) {
+        console.warn(`[${logLabel}:${documentImportId}] fiche enrichie indisponible, fallback minimal :`, sheetResult.error.message);
       }
 
+      const generatedQuestionsById = new Map(); // item.id -> [question]
       const batchResultsById = new Map();
       const missingIds = [];
-      for (let start = 0; start < pendingItems.length; start += NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) {
-        const chunk = pendingItems.slice(start, start + NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE);
-        const chunkResult = await buildImportedKnowledgeQuestionsBatch(chunk.map((p) => p.item), documentImportId);
+      for (let start = 0; start < normalizedItems.length; start += NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE) {
+        const chunk = normalizedItems.slice(start, start + NOTION_QUIZ_ENUMERABLE_CHUNK_SIZE);
+        const chunkResult = await buildImportedKnowledgeQuestionsBatch(chunk, documentImportId);
         for (const [id, question] of chunkResult.resultsById) batchResultsById.set(id, question);
         missingIds.push(...chunkResult.missingIds);
       }
 
       // Chemin succès du lot : classification + mise en forme, connaissance
       // par connaissance (jamais batchée, cf. buildImportedKnowledgeQuestionsBatch).
-      for (const { item } of pendingItems) {
+      for (const item of normalizedItems) {
         const question = batchResultsById.get(item.id);
         if (!question) continue; // repris ci-dessous par le repli ciblé
         try {
@@ -13269,101 +13258,110 @@ async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnow
       // manquantes ou invalides du batch, une par une, via le chemin
       // individuel historique (génération + classification + mise en forme).
       for (const id of missingIds) {
-        const pending = pendingItems.find((p) => p.item.id === id);
+        const pending = normalizedItems.find((it) => it.id === id);
         if (!pending) continue;
         try {
-          const questions = await buildImportedKnowledgeQuestions(pending.item.fact, pending.item.id, user.id, sharedSourceDetail, documentImportId, sourceType);
-          if (questions.length) generatedQuestionsById.set(id, questions);
+          const qs = await buildImportedKnowledgeQuestions(pending.fact, pending.id, user.id, sharedSourceDetail, documentImportId, sourceType);
+          if (qs.length) generatedQuestionsById.set(id, qs);
         } catch (error) {
           console.warn(`[${logLabel}:${documentImportId}] repli individuel échoué pour ${id} :`, error.message);
         }
       }
-    }
 
-    // ── PASSE 3 : persistance + liaison, connaissance par connaissance ─────
-    // Comportement strictement identique à l'ancien flux tout-en-un (même
-    // gestion de la course à l'insertion, même contenu de `results`) — seule
-    // la provenance de `questions` change (déjà généré en passe 2, jamais un
-    // nouvel appel IA ici).
-    for (const item of normalizedItems) {
-      if (erroredResults.has(item.id)) {
-        results.push(erroredResults.get(item.id));
-        continue;
-      }
-      const slot = `notion:${sourceType}:${documentImportId}:${item.id}`;
-      try {
-        let quizDate;
-        let questions;
-        let reused = false;
-
-        const existing = existingBySlot.get(item.id);
-        if (existing) {
-          quizDate = existing.quizDate;
-          questions = existing.questions;
-          reused = true;
+      // Paquet unique : toutes les questions générées avec succès rejoignent
+      // le même tableau `questions`, dans une seule ligne `daily_quiz` — une
+      // connaissance dont la génération a échoué (batch ET repli individuel)
+      // est exclue du paquet plutôt que de le bloquer entièrement.
+      questions = [];
+      for (const item of normalizedItems) {
+        const qs = generatedQuestionsById.get(item.id);
+        if (qs && qs.length) {
+          questions.push(...qs);
         } else {
-          questions = generatedQuestionsById.get(item.id);
-          if (!questions || !questions.length) throw new Error("Génération de la question impossible.");
-          quizDate = parisDateKey();
-
-          const { error: insertError } = await supabase.from("daily_quiz").insert({
-            quiz_date: quizDate,
-            slot,
-            questions,
-            source_debate_ids: []
-          });
-          if (insertError) {
-            if (insertError.code !== "23505") throw insertError;
-            const { data: raceRows, error: raceError } = await supabase
-              .from("daily_quiz")
-              .select("quiz_date, questions")
-              .eq("slot", slot)
-              .order("quiz_date", { ascending: false })
-              .limit(1);
-            if (raceError) throw raceError;
-            const raceQuiz = raceRows?.[0];
-            if (!raceQuiz) throw insertError;
-            quizDate = raceQuiz.quiz_date;
-            questions = raceQuiz.questions || questions;
-            reused = true;
-          }
+          resultsByItemId.set(item.id, { index: item.index, knowledge: item.fact, status: "error", error: "Ajout impossible pour cette connaissance." });
         }
+      }
 
-        const { data: existingLink, error: existingLinkError } = await supabase
-          .from("user_notion_quizzes")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("quiz_date", quizDate)
-          .eq("slot", slot)
-          .maybeSingle();
-        if (existingLinkError) throw existingLinkError;
-
-        if (!existingLink) {
-          const { error: linkError } = await supabase.from("user_notion_quizzes").upsert(
-            { user_id: user.id, quiz_date: quizDate, slot },
-            { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
-          );
-          if (linkError) throw linkError;
-        }
-
-        results.push({
-          index: item.index,
-          knowledge: item.fact,
-          status: existingLink ? "existing" : "added",
+      if (questions.length) {
+        quizDate = parisDateKey();
+        const { error: insertError } = await supabase.from("daily_quiz").insert({
+          quiz_date: quizDate,
           slot,
-          quizDate,
-          questionCount: questions.length,
-          reused
+          questions,
+          source_debate_ids: []
         });
-      } catch (error) {
-        console.error(`[${logLabel}:add:${item.id}]`, error.message);
-        results.push({ index: item.index, knowledge: item.fact, status: "error", error: "Ajout impossible pour cette connaissance." });
+        if (insertError) {
+          if (insertError.code !== "23505") throw insertError;
+          // Course avec un autre visiteur ayant soumis EXACTEMENT la même
+          // sélection entre-temps (même hash documentImportId) : on relit sa
+          // génération plutôt que la nôtre.
+          const { data: raceRows, error: raceError } = await supabase
+            .from("daily_quiz")
+            .select("quiz_date, questions")
+            .eq("slot", slot)
+            .order("quiz_date", { ascending: false })
+            .limit(1);
+          if (raceError) throw raceError;
+          const raceQuiz = raceRows?.[0];
+          if (!raceQuiz) throw insertError;
+          quizDate = raceQuiz.quiz_date;
+          questions = raceQuiz.questions || questions;
+          reused = true;
+        }
+
+        for (const item of normalizedItems) {
+          if (resultsByItemId.has(item.id)) continue; // déjà en erreur ci-dessus
+          resultsByItemId.set(item.id, { index: item.index, knowledge: item.fact, status: "added", slot, quizDate, questionCount: questions.length, reused });
+        }
       }
     }
+
+    if (questions && questions.length) {
+      const { data: existingLink, error: existingLinkError } = await supabase
+        .from("user_notion_quizzes")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("quiz_date", quizDate)
+        .eq("slot", slot)
+        .maybeSingle();
+      if (existingLinkError) throw existingLinkError;
+
+      if (!existingLink) {
+        const { error: linkError } = await supabase.from("user_notion_quizzes").upsert(
+          { user_id: user.id, quiz_date: quizDate, slot },
+          { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+        );
+        if (linkError) throw linkError;
+      }
+    }
+
+    // Ordre d'origine préservé (index de soumission), même si "added" et
+    // "error" ont été déterminés à des étapes différentes ci-dessus.
+    const results = normalizedItems.map((item) =>
+      resultsByItemId.get(item.id) || { index: item.index, knowledge: item.fact, status: "error", error: "Ajout impossible pour cette connaissance." }
+    );
 
     const addedCount = results.filter((item) => item.status === "added").length;
     const existingCount = results.filter((item) => item.status === "existing").length;
     const errorCount = results.filter((item) => item.status === "error").length;
+
+    // Notification push (demande du 01/09/2026, même mécanisme que
+    // /api/users/notion-quizzes/custom) : uniquement si au moins une
+    // connaissance a été réellement générée (jamais si tout était déjà en
+    // mémoire) — la génération IA (PASSE 2 ci-dessus) peut prendre plusieurs
+    // minutes pour un import de plusieurs connaissances, pendant lesquelles
+    // l'utilisateur a pu quitter la page. Un seul push pour tout l'import
+    // (jamais un par connaissance) — même texte que le résumé déjà affiché
+    // côté client (cf. views/photo-knowledge.html).
+    if (addedCount > 0) {
+      const readyMessage = `${addedCount} connaissance${addedCount > 1 ? "s" : ""} ajoutée${addedCount > 1 ? "s" : ""} à ta mémoire${sourceTitle ? ` (« ${sourceTitle} »)` : ""}.`;
+      createNotification({
+        user_key: validation.legacyKey,
+        type: "notion_quiz_ready",
+        message: readyMessage
+      }).catch((error) => console.error(`[${logLabel}:${documentImportId}] notification push :`, error.message));
+    }
+
     return { status: 200, body: { ok: errorCount === 0, documentImportId, addedCount, existingCount, errorCount, results } };
   } catch (error) {
     console.error(`Erreur ajout ${logLabel}:`, error.message);
@@ -13568,11 +13566,13 @@ function parisStartOfDayIso(date = new Date()) {
 // prête vraiment pas au format suggéré (cf. consigne plus bas).
 // "vrai_faux" retiré le 16/08/2026 (section 5, interdiction absolue — ~50%
 // de réussite au hasard structurel) : ses 3 créneaux sont redistribués vers
-// texte_a_trous et intrus, jusque-là sous-représentés par rapport à qcm.
+// texte_a_trous, jusque-là sous-représenté par rapport à qcm. Depuis V5,
+// "intrus" n'est plus assigné à l'aveugle : il reste disponible mais son
+// choix exige l'examen du knowledgeTarget et d'un point commun substantiel.
 const DAILY_QUIZ_FORMAT_ROTATION_POOL = [
   "qcm", "qcm", "texte_a_trous", "qcm", "texte_a_trous",
-  "intrus", "qcm", "association", "qcm", "qcm_multi",
-  "qcm", "ordre", "intrus", "qcm", "intrus"
+  "qcm", "qcm", "association", "qcm", "qcm_multi",
+  "qcm", "ordre", "texte_a_trous", "qcm", "qcm"
 ];
 
 // `excludeTypes` (demande du 13/08/2026, étendu le 16/08/2026) : retire un
@@ -13669,6 +13669,8 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     "QUALITÉ OBLIGATOIRE : pour un QCM simple, une seule option doit être défendable et chaque distracteur doit être incontestablement faux au regard de la connaissance/source. Interdits : options sémantiquement équivalentes, \"toutes les réponses\", \"aucune de ces réponses\", double négation et piège de langage.",
     "La question doit être claire et autonome sans relire la fiche. La difficulté doit venir du savoir testé, jamais d'une formulation confuse. Avant de répondre, vérifie silencieusement la cohérence entre correctIndex/correctIndexes, le texte de la ou des bonnes options et l'explication.",
     "Respecte strictement knowledgeTarget. Si le format suggéré ne convient pas naturellement, abandonne-le au profit d'un QCM simple solide plutôt que de forcer une association, un ordre, un intrus ou un choix multiple artificiel.",
+    "La pertinence pédagogique du format prime toujours sur la variété. Il n'existe aucun quota par format : un lot peut contenir beaucoup de QCM, peu de formats composites, aucun ordre et aucun intrus si les connaissances ne s'y prêtent pas.",
+    "N'utilise spontanément le format intrus QUE si les quatre options sont des éléments naturellement comparables et si les trois non-intrus partagent un point commun substantiel que l'utilisateur doit réellement connaître. N'utilise jamais intrus quand la quatrième option ressort déjà par son ton, sa polarité, son époque, son registre ou une opposition sémantique visible à la simple lecture.",
     "",
     "=== Format suggéré, question par question (dans l'ordre) ===",
     "Pour garantir une vraie variété — ne surtout pas produire uniquement des \"qcm\" — voici un format suggéré pour chacune des " + questionCount + " questions" + (includeVariants ? " (uniquement pour variants[0], la variante principale — n'influence pas le choix des variantes suivantes, cf. plus bas)" : "") + " :",
@@ -14186,6 +14188,24 @@ async function qualityControlRawQuestions({
       // lib/grounding-source-expansion.js et son test dédié).
       if (["IMPLAUSIBLE_DISTRACTOR", "CATEGORY_MISMATCH"].some((code) => rejectionCodes.has(code))) {
         targetedConstraints.push("- IMPLAUSIBLE_DISTRACTOR / CATEGORY_MISMATCH : remplace au moins le(s) distracteur(s) fautif(s) par d'autres appartenant STRICTEMENT à la même catégorie conceptuelle que la bonne réponse (même nature, même époque, même registre — ex. si la bonne réponse est un nom de personne, les distracteurs sont d'autres noms de personnes plausibles dans ce contexte précis), et globalement comparables en longueur/précision à la bonne réponse. N'utilise jamais un élément hors-sujet, anachronique ou d'une autre catégorie, même s'il est incontestablement faux — un distracteur trop facile à éliminer par simple bon sens catégoriel ne teste aucune connaissance réelle. Cette règle ne s'applique jamais au format \"intrus\", dont le principe même est qu'une option diffère légitimement des 3 autres.");
+      }
+      if (rejectionCodes.has("WEAK_DISTRACTOR_SET")) {
+        targetedConstraints.push("- WEAK_DISTRACTOR_SET : régénère l'ensemble des options avec trois alternatives toutes crédibles et de force comparable, proches de la bonne réponse par catégorie, époque, contexte, précision et registre. Une seule option décorative ou trop éloignée suffit à invalider l'ensemble.");
+      }
+      if (rejectionCodes.has("ANSWER_SALIENCE")) {
+        targetedConstraints.push("- ANSWER_SALIENCE : reformule TOUTES les options pour que la bonne réponse ne se distingue ni par sa longueur, ni par son niveau de détail, son registre, son vocabulaire ou sa précision. Ne cherche pas une égalité typographique mécanique, mais supprime tout indice de forme permettant de la repérer.");
+      }
+      if (rejectionCodes.has("GUESSABLE_WITHOUT_KNOWLEDGE")) {
+        targetedConstraints.push("- GUESSABLE_WITHOUT_KNOWLEDGE : reconstruis le stem et les options afin que la réponse exige réellement knowledgeTarget, jamais une simple élimination, du bon sens ou une opposition évidente. Pour un intrus, sa différence doit reposer sur une propriété à connaître, pas sur le ton, la polarité, l'époque ou le registre ; abandonne intrus pour un qcm simple si aucun vrai ensemble comparable n'existe.");
+      }
+      if (rejectionCodes.has("AMBIGUOUS_DISTRACTOR")) {
+        targetedConstraints.push("- AMBIGUOUS_DISTRACTOR : remplace toute option également défendable par une alternative plausible mais incontestablement fausse dans le contexte précis. Vérifie qu'une seule réponse reste correcte.");
+      }
+      if (rejectionCodes.has("ARTIFICIAL_DISTRACTOR")) {
+        targetedConstraints.push("- ARTIFICIAL_DISTRACTOR : remplace tout pseudo-concept, institution inventée, combinaison arbitraire ou causalité fantaisiste par une erreur réelle et pédagogiquement identifiable du même domaine.");
+      }
+      if (rejectionCodes.has("OVERGENERALIZED_QUESTION")) {
+        targetedConstraints.push("- OVERGENERALIZED_QUESTION : restreins explicitement le stem et la réponse au contexte réellement supporté par knowledgeTarget et la source — période, territoire, groupe ou situation — sans transformer un cas partiel en règle générale.");
       }
       if (["INVALID_ORDER_COUNT", "invalidOrderCount"].some((code) => rejectionCodes.has(code))) {
         targetedConstraints.push("- INVALID_ORDER_COUNT / invalidOrderCount : abandonne obligatoirement le type ordre pour cette question. Produis à la place un qcm simple avec exactement 4 options distinctes et un seul correctIndex valide. Cette interdiction remplace toute consigne antérieure de rotation ou de diversité des formats.");
@@ -15209,6 +15229,43 @@ function normalizeCustomTopicKey(topic) {
   return crypto.createHash("sha1").update(normalized).digest("hex").slice(0, 16);
 }
 
+// ── V4.1 (01/09/2026, "mutualisation inter-niveaux du master QCM") ─────────
+// Identité de MASTER : un slot nu (sans suffixe ":niveau"), indépendant du
+// niveau réellement demandé — un même sujet/une même notion partage
+// désormais UN SEUL corpus maître quel que soit le niveau (Élémentaire/
+// Avancé/Expert) qui l'a déclenché. Le niveau réellement demandé reste
+// entièrement porté par l'appelant (slot legacy ":niveau" pour la recherche
+// exacte historique, `level` pour le serving) — jamais encodé ici.
+function buildCustomTopicMasterSlot(id) {
+  return `notion:custom:${id}`;
+}
+function buildNotionMasterSlot(sourceType, sourceDebateId) {
+  return `notion:${sourceType}:${sourceDebateId}`;
+}
+
+// Recherche un master déjà généré parmi une liste de slots candidats (le
+// slot nu V4.1 ET, pour compatibilité, chacun des slots historiques encore
+// suffixés ":elementaire"/":avance"/":expert" — un master a pu être créé
+// avant l'introduction du slot nu, cf. isMasterEligibleQuiz). Un seul
+// candidat éligible suffit : peu importe lequel, ils portent tous le même
+// corpus maître complet pour ce sujet. N'écrit jamais rien, ne fait aucun
+// appel IA — l'appelant reste responsable de la génération si rien n'est
+// trouvé (cf. ensureCustomTopicMasterGenerated/ensureNotionMasterGenerated).
+async function findExistingQuizMaster(candidateSlots) {
+  const { data: rows, error } = await supabase
+    .from("daily_quiz")
+    .select("slot, quiz_date, questions")
+    .in("slot", candidateSlots)
+    .order("quiz_date", { ascending: false });
+  if (error) throw new Error(error.message);
+  for (const row of rows || []) {
+    if (isMasterEligibleQuiz(row.questions)) {
+      return { slot: row.slot, quizDate: row.quiz_date, questions: row.questions };
+    }
+  }
+  return null;
+}
+
 // Import photo : une connaissance déjà sélectionnée à partir de la
 // transcription ET validée explicitement par l'utilisateur entre directement
 // dans le générateur commun de questions. On ne relance ni une admission ni
@@ -15453,13 +15510,21 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
 
 // Niveau 2 de déduplication des recherches "sujet libre" (audit du
 // 24/08/2026, cf. lib/topic-dedup.js) : appelé uniquement quand le niveau 1
-// (slot exact) n'a rien trouvé. Ne fait jamais d'appel IA — relit seulement
-// ce qui existe déjà, au même niveau pédagogique, et applique le gate mots
-// structurants + quasi-inclusion des tokens avant de proposer une
+// (slot exact/master, cf. findExistingQuizMaster) n'a rien trouvé. Ne fait
+// jamais d'appel IA — relit seulement ce qui existe déjà et applique le gate
+// mots structurants + quasi-inclusion des tokens avant de proposer une
 // réutilisation. Une seule ligne par slot (la plus récente), même principe
 // que GET /explore ci-dessous ; volume actuel très faible (quelques
 // dizaines de sujets libres), donc pas de pagination nécessaire ici non
 // plus — à revoir si le volume grossit significativement.
+// V4.1 (01/09/2026) : deux familles de candidats, jamais mélangées à
+// l'aveugle. Un master (pedagogicalRank présent, cf. isMasterEligibleQuiz)
+// est cherché à N'IMPORTE QUEL niveau — il est toujours au moins aussi
+// riche qu'un QCM legacy. Seulement s'il n'y en a aucun, repli EXACTEMENT
+// sur le comportement V4.0/antérieur : reformulation équivalente au même
+// niveau pédagogique uniquement, jamais un master (ne jamais assouplir cette
+// partie du filtre : un QCM sans pedagogicalRank n'a par construction que la
+// taille fixe d'UN niveau, l'utiliser pour un autre serait tronqué/faux).
 async function findEquivalentGeneratedCustomTopic(topic, level) {
   const { data: rows, error } = await supabase
     .from("daily_quiz")
@@ -15473,15 +15538,20 @@ async function findEquivalentGeneratedCustomTopic(topic, level) {
     if (!existing || row.quiz_date > existing.quiz_date) latestBySlot.set(row.slot, row);
   }
 
-  const candidates = [];
+  const masterCandidates = [];
+  const legacyCandidates = [];
   for (const row of latestBySlot.values()) {
-    if (parseCustomTopicSlotLevel(row.slot) !== level) continue;
     const topicText = row.questions?.[0]?.searchTopic || row.questions?.[0]?.sourceName || null;
     if (!topicText) continue;
-    candidates.push({ slot: row.slot, quizDate: row.quiz_date, questions: row.questions, topicText });
+    const candidate = { slot: row.slot, quizDate: row.quiz_date, questions: row.questions, topicText };
+    if (isMasterEligibleQuiz(row.questions)) {
+      masterCandidates.push(candidate);
+    } else if (parseCustomTopicSlotLevel(row.slot) === level) {
+      legacyCandidates.push(candidate);
+    }
   }
 
-  return findEquivalentCustomTopic(topic, candidates);
+  return findEquivalentCustomTopic(topic, masterCandidates) || findEquivalentCustomTopic(topic, legacyCandidates);
 }
 
 /* ================================================================= */
@@ -17145,7 +17215,59 @@ if (
 const _dailyQuizQuestionsCache = new Map();
 const DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function getDailyQuizQuestions(quizDate, slot, voterKey) {
+// V4.1.1 (01/09/2026, "finaliser la mutualisation avec requested_level") :
+// lecture SEULE (jamais d'upsert/création d'utilisateur, contrairement à
+// resolveLegacyUser) du niveau que CET utilisateur a persisté pour CETTE
+// adoption — même patron que resolveLegacyUserForComprehension (select id
+// simple, aucun effet de bord) : appelée sur le chemin de lecture le plus
+// chaud (/today), elle ne doit jamais créer de ligne `users` pour un simple
+// visiteur anonyme qui consulte sans avoir adopté. Jamais mise en cache
+// séparément (volontaire, cf. section 16 de la demande) : un changement de
+// niveau (POST .../custom ou .../notion-quizzes) doit être visible
+// IMMÉDIATEMENT sur le prochain /today, sans fenêtre de staleness — seul le
+// CONTENU (par (date, slot, niveau effectif)) reste mis en cache plus bas,
+// jamais la résolution du niveau lui-même.
+async function resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot) {
+  if (!String(slot || "").startsWith("notion:")) return null;
+  const key = String(voterKey || "").trim();
+  if (!key) return null;
+  const { data: user, error: userError } = await supabase
+    .from("users").select("id").eq("legacy_key", key).maybeSingle();
+  if (userError) {
+    console.warn("[notion-quiz] résolution utilisateur (niveau persistant) :", userError.message);
+    return null;
+  }
+  if (!user) return null;
+  const { data: rows, error: linkError } = await supabase
+    .from("user_notion_quizzes")
+    .select("requested_level")
+    .eq("user_id", user.id)
+    .eq("quiz_date", quizDate)
+    .eq("slot", slot)
+    .order("added_at", { ascending: false })
+    .limit(1);
+  if (linkError) {
+    console.warn("[notion-quiz] lecture requested_level :", linkError.message);
+    return null;
+  }
+  return resolveNotionQuizLevel(rows?.[0]?.requested_level).level;
+}
+
+// requestedLevel (V4.1, 01/09/2026, "mutualisation inter-niveaux") :
+// paramètre HTTP explicite, fourni par l'appelant quand il connaît le niveau
+// réellement demandé pour CETTE session (ex. &level= sur /today, /results ;
+// body.level sur /answer, /practice-answer). V4.1.1 (section 8 de la
+// demande) : ce n'est plus la seule source — le niveau PERSISTÉ de
+// l'adoption (user_notion_quizzes.requested_level, cf.
+// resolvePersistedNotionRequestedLevel) prime désormais dessus dès qu'il
+// existe, pour qu'un visiteur ayant adopté ce master en Élémentaire ne se
+// voie jamais servir Expert à cause d'un paramètre &level= périmé/étranger —
+// `requestedLevel` ne reste donc un simple repli/aperçu que pour un slot
+// jamais adopté par ce visiteur (ou sans voterKey). Absent des deux —
+// repli strict sur le comportement V4.0 (niveau lu sur
+// `rawQuestions[0]?.level`), jamais une régression pour un appelant qui ne
+// fournit ni l'un ni l'autre.
+async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
   // "Renforcement des connaissances" : jamais de ligne daily_quiz à lire,
   // uniquement les repasses de répétition espacée dues aujourd'hui pour ce
   // visiteur (cf. fetchCultureGeneraleReviewInjectionForToday) — pas de
@@ -17169,7 +17291,17 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey) {
     return questions;
   }
 
-  const cacheKey = `${quizDate}:${slot}`;
+  // V4.1.1 : le niveau persisté de l'adoption prime sur `requestedLevel`
+  // (cf. commentaires ci-dessus) — TOUJOURS résolu à neuf (jamais mis en
+  // cache lui-même), pour que la clé de cache ci-dessous reflète
+  // immédiatement tout changement de niveau.
+  const persistedLevel = await resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot);
+  const effectiveRequestedLevel = persistedLevel || requestedLevel || null;
+
+  // V4.1 : clé de cache incluant le niveau EFFECTIF (cf. commentaire de
+  // requestedLevel ci-dessus) — vide (jamais undefined) quand absent, pour
+  // rester strictement identique à l'ancienne clé dans ce cas.
+  const cacheKey = `${quizDate}:${slot}:${effectiveRequestedLevel || ""}`;
   const cached = _dailyQuizQuestionsCache.get(cacheKey);
   if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) {
     return cached.questions;
@@ -17188,10 +17320,12 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey) {
   // master moderne (Éclairages/Histoire, Comprendre, parallele-historique,
   // renforcement — déjà sortis plus haut —, et tout notion:custom/
   // notion:debat-notion généré avant cette version). Le plafond réutilise
-  // NOTION_QUIZ_LEVELS[level].target — jamais un nombre dupliqué ici — lu sur
-  // le niveau STOCKÉ (homogène pour tout le quiz tant que la mutualisation
-  // inter-niveaux n'existe pas, cf. section 14 de la demande V4.0).
-  const baseQuestions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[rawQuestions[0]?.level]?.target);
+  // NOTION_QUIZ_LEVELS[level].target — jamais un nombre dupliqué ici.
+  // `effectiveRequestedLevel` (V4.1 + V4.1.1), quand résolu, prime sur le
+  // niveau STOCKÉ sur les questions — nécessaire dès qu'un même master
+  // partagé est consulté par des visiteurs à des niveaux différents ; repli
+  // sur `rawQuestions[0]?.level` sinon, comportement V4.0 inchangé.
+  const baseQuestions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[effectiveRequestedLevel || rawQuestions[0]?.level]?.target);
   _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
   return baseQuestions;
 }
@@ -17339,7 +17473,11 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     // ce cas (pas de session anonyme possible, rien à montrer sans historique).
     const quizDate = resolveDailyQuizRequestDate(slot, req.query.date);
     const voterKey = String(req.query.voterKey || "").trim();
-    const questions = await getDailyQuizQuestions(quizDate, slot, voterKey);
+    // V4.1 : niveau réellement demandé pour CETTE session, quand le client
+    // le connaît (cf. commentaire de requestedLevel dans getDailyQuizQuestions)
+    // — absent, comportement V4.0 inchangé.
+    const requestedLevel = resolveNotionQuizLevel(req.query.level).level;
+    const questions = await getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel);
     res.json({ date: quizDate, slot, label: getDailyQuizSlotLabel(slot), questions: questions.map(stripQuestionForClient) });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
@@ -17354,7 +17492,10 @@ app.get("/api/daily-quiz/results", async (req, res) => {
     const quizDate = resolveDailyQuizRequestDate(slot, req.query.date);
     if (!voterKey) return res.json({ date: quizDate, answers: [] });
 
-    const questionsForSlot = await getDailyQuizQuestions(quizDate, slot, voterKey);
+    // V4.1 : même repli que /today (cf. commentaire de requestedLevel dans
+    // getDailyQuizQuestions).
+    const requestedLevel = resolveNotionQuizLevel(req.query.level).level;
+    const questionsForSlot = await getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel);
     const questionsById = new Map(questionsForSlot.map((q) => [q.id, q]));
     if (!questionsById.size) return res.json({ date: quizDate, answers: [] });
 
@@ -17410,6 +17551,88 @@ app.get("/api/daily-quiz/results", async (req, res) => {
 
 const NOTION_QUIZ_SOURCE_TYPES = new Set(["histoire", "debat-notion", ...CULTURE_GENERALE_ECLAIRAGES_TYPES]);
 
+// V4.1 (01/09/2026, "mutualisation inter-niveaux") : verrou de génération en
+// mémoire, keyed par identité de MASTER (slot nu, indépendant du niveau) —
+// même principe que _cultureGeneraleComprehensionGenerationPromises
+// (pipeline Comprendre) : deux requêtes concurrentes sur le même sujet, même
+// à des niveaux différents (ex. Élémentaire et Expert lancés en même temps),
+// attendent la MÊME promesse au lieu de déclencher deux générations IA
+// identiques. Une seule Map partagée entre sujets libres et notions de
+// débat : leurs slots ne se recouvrent jamais (préfixes "notion:custom:" vs
+// "notion:<sourceType>:"), donc aucun risque de collision de clé. La
+// contrainte unique sur daily_quiz(quiz_date, slot) reste le dernier filet
+// inter-processus (plusieurs workers Node) — cf. le code 23505 ci-dessous.
+const _notionQuizMasterGenerationPromises = new Map();
+
+async function ensureCustomTopicMasterGenerated(masterSlot, topic, id, level, userId) {
+  const pending = _notionQuizMasterGenerationPromises.get(masterSlot);
+  if (pending) return pending;
+  const generation = (async () => {
+    const result = await buildCustomTopicQuiz(topic, id, level, userId);
+    if (result.error) return result;
+    // searchTopic : l'intitulé exact tapé par le créateur, cf. commentaire
+    // original de POST /api/users/notion-quizzes/custom (comportement
+    // inchangé, seulement déplacé ici avec la génération elle-même).
+    const questions = result.questions.map((q) => ({ ...q, searchTopic: topic }));
+    const quizDate = parisDateKey();
+    const { error: insertError } = await supabase.from("daily_quiz").insert({
+      quiz_date: quizDate,
+      slot: masterSlot,
+      questions,
+      source_debate_ids: []
+    });
+    if (!insertError) return { questions, quizDate, slot: masterSlot };
+    if (insertError.code !== "23505") throw new Error(insertError.message);
+    // Course avec un autre visiteur/worker ayant tapé le même sujet
+    // entre-temps (cf. POST /api/users/notion-quizzes, même règle) : on
+    // relit sa génération plutôt que la nôtre.
+    const { data: raceRow, error: raceError } = await supabase
+      .from("daily_quiz").select("quiz_date, questions")
+      .eq("slot", masterSlot).order("quiz_date", { ascending: false }).limit(1).maybeSingle();
+    if (raceError) throw new Error(raceError.message);
+    return { questions: raceRow?.questions || questions, quizDate: raceRow?.quiz_date || quizDate, slot: masterSlot };
+  })();
+  _notionQuizMasterGenerationPromises.set(masterSlot, generation);
+  try {
+    return await generation;
+  } finally {
+    if (_notionQuizMasterGenerationPromises.get(masterSlot) === generation) {
+      _notionQuizMasterGenerationPromises.delete(masterSlot);
+    }
+  }
+}
+
+async function ensureNotionMasterGenerated(masterSlot, sourceType, sourceDebateId, item, level, userId) {
+  const pending = _notionQuizMasterGenerationPromises.get(masterSlot);
+  if (pending) return pending;
+  const generation = (async () => {
+    const questions = await buildNotionQuestions(sourceType, sourceDebateId, item, level, userId);
+    if (!questions.length) return { questions: [] };
+    const quizDate = parisDateKey();
+    const { error: insertError } = await supabase.from("daily_quiz").insert({
+      quiz_date: quizDate,
+      slot: masterSlot,
+      questions,
+      source_debate_ids: []
+    });
+    if (!insertError) return { questions, quizDate, slot: masterSlot };
+    if (insertError.code !== "23505") throw new Error(insertError.message);
+    const { data: raceRow, error: raceError } = await supabase
+      .from("daily_quiz").select("quiz_date, questions")
+      .eq("slot", masterSlot).order("quiz_date", { ascending: false }).limit(1).maybeSingle();
+    if (raceError) throw new Error(raceError.message);
+    return { questions: raceRow?.questions || questions, quizDate: raceRow?.quiz_date || quizDate, slot: masterSlot };
+  })();
+  _notionQuizMasterGenerationPromises.set(masterSlot, generation);
+  try {
+    return await generation;
+  } finally {
+    if (_notionQuizMasterGenerationPromises.get(masterSlot) === generation) {
+      _notionQuizMasterGenerationPromises.delete(masterSlot);
+    }
+  }
+}
+
 // Clic sur "Mémoriser" (Éclairages ou Ce jour dans l'Histoire) : crée un QCM
 // indépendant et nommé sur cette seule notion, ou rejoint celui déjà généré
 // par un autre visiteur (contenu partagé, cf. buildNotionQuestions) — jamais
@@ -17436,56 +17659,63 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     // invalider le cache déjà en base ni les acquisitions déjà enregistrées.
     const { level } = resolveNotionQuizLevel(req.body?.level);
     const slot = `notion:${sourceType}:${sourceDebateId}${level ? `:${level}` : ""}`;
+    const masterSlot = buildNotionMasterSlot(sourceType, sourceDebateId);
 
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
     let questions;
-    // Recherche par slot SEUL, sans filtrer sur quizDate (même règle que
-    // POST /api/users/notion-quizzes/custom, cf. son commentaire) : le
-    // client (views/eclairages.html memorizeNotion) n'envoie jamais de
-    // quizDate, qui retombait donc sur aujourd'hui — un visiteur mémorisant
-    // une notion déjà mémorisée par un AUTRE visiteur un jour antérieur ne
-    // retrouvait jamais la ligne existante (recherche exacte sur (quiz_date,
-    // slot)) et déclenchait une régénération IA complète, avec une
-    // formulation différente et donc un jeu de MemoryItems totalement
-    // déconnecté de l'historique déjà accumulé sur cette même notion —
-    // trouvaille de l'audit du 16/08/2026 (aucune occurrence encore observée
-    // en base au moment du correctif, mais un chemin de code réellement
-    // atteignable). `quizDate` réajusté sur la ligne trouvée quand elle
-    // existe, pour que le lien user_notion_quizzes pointe vers la bonne date.
-    const { data: existingQuizRows, error: existingQuizError } = await supabase
-      .from("daily_quiz")
-      .select("quiz_date, questions")
-      .eq("slot", slot)
-      .order("quiz_date", { ascending: false })
-      .limit(1);
-    if (existingQuizError) throw new Error(existingQuizError.message);
-    const existingQuiz = existingQuizRows?.[0] || null;
+    let effectiveSlot = slot;
+    // V4.1 (01/09/2026, mutualisation inter-niveaux) : un master déjà généré
+    // pour cette notion — à N'IMPORTE QUEL niveau — est prioritaire, même
+    // principe que POST /api/users/notion-quizzes/custom ci-dessous (cf. son
+    // commentaire pour le détail). Couvre aussi bien un nouveau master (slot
+    // nu) qu'un ancien master V4.0 encore suffixé par son niveau d'origine.
+    const existingMaster = await findExistingQuizMaster([
+      masterSlot,
+      ...Object.keys(NOTION_QUIZ_LEVELS).map((lvl) => `notion:${sourceType}:${sourceDebateId}:${lvl}`)
+    ]);
+    // existingQuiz : vrai dès qu'une réutilisation (master ou legacy exact)
+    // a été trouvée — sert uniquement à décider la notification push
+    // plus bas (jamais sur une génération fraîche, déjà signalée).
+    let existingQuiz = existingMaster;
 
-    if (existingQuiz) {
-      questions = existingQuiz.questions || [];
-      quizDate = existingQuiz.quiz_date;
+    if (existingMaster) {
+      questions = existingMaster.questions || [];
+      quizDate = existingMaster.quizDate;
+      effectiveSlot = existingMaster.slot;
     } else {
-      questions = await buildNotionQuestions(sourceType, sourceDebateId, item, level, user.id);
-      if (!questions.length) return res.status(502).json({ ok: false, error: "Génération du QCM impossible pour le moment." });
+      // Recherche par slot SEUL, sans filtrer sur quizDate (comportement
+      // V4.0 et antérieur inchangé, cf. POST /api/users/notion-quizzes/custom) :
+      // le client (views/eclairages.html memorizeNotion) n'envoie jamais de
+      // quizDate, qui retombait donc sur aujourd'hui — un visiteur mémorisant
+      // une notion déjà mémorisée par un AUTRE visiteur un jour antérieur ne
+      // retrouvait jamais la ligne existante (recherche exacte sur (quiz_date,
+      // slot)) et déclenchait une régénération IA complète, avec une
+      // formulation différente et donc un jeu de MemoryItems totalement
+      // déconnecté de l'historique déjà accumulé sur cette même notion —
+      // trouvaille de l'audit du 16/08/2026. `quizDate` réajusté sur la ligne
+      // trouvée quand elle existe, pour que le lien user_notion_quizzes
+      // pointe vers la bonne date.
+      const { data: existingQuizRows, error: existingQuizError } = await supabase
+        .from("daily_quiz")
+        .select("quiz_date, questions")
+        .eq("slot", slot)
+        .order("quiz_date", { ascending: false })
+        .limit(1);
+      if (existingQuizError) throw new Error(existingQuizError.message);
+      existingQuiz = existingQuizRows?.[0] || null;
 
-      const { error: insertError } = await supabase.from("daily_quiz").insert({
-        quiz_date: quizDate,
-        slot,
-        questions,
-        source_debate_ids: []
-      });
-      if (insertError) {
-        // Course avec un autre visiteur ayant cliqué "Mémoriser" sur la même
-        // notion entre-temps : on relit sa génération plutôt que la nôtre.
-        if (insertError.code === "23505") {
-          const { data: raceRow, error: raceError } = await supabase
-            .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
-          if (raceError) throw new Error(raceError.message);
-          questions = raceRow?.questions || questions;
-        } else {
-          throw new Error(insertError.message);
-        }
+      if (existingQuiz) {
+        questions = existingQuiz.questions || [];
+        quizDate = existingQuiz.quiz_date;
+      } else {
+        // Génération réelle — verrou en mémoire keyed par identité de master
+        // (masterSlot, indépendant du niveau), cf. ensureNotionMasterGenerated.
+        const result = await ensureNotionMasterGenerated(masterSlot, sourceType, sourceDebateId, item, level, user.id);
+        if (!result.questions.length) return res.status(502).json({ ok: false, error: "Génération du QCM impossible pour le moment." });
+        questions = result.questions;
+        quizDate = result.quizDate;
+        effectiveSlot = result.slot;
       }
     }
 
@@ -17495,15 +17725,41 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     // dans getDailyQuizQuestions.
     questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[level]?.target);
 
+    // Observabilité coût (V4.1, section 12 de la demande) : ligne simple,
+    // aucune infrastructure de métriques dédiée — distingue une réutilisation
+    // (0 appel IA/Brave) d'une génération réelle.
+    console.info(`[notion-quizzes:${sourceType}:${sourceDebateId}] ${existingQuiz ? "masterReused" : "masterGenerated"} level=${level || "?"} slot=${effectiveSlot} questionCount=${questions.length}`);
+
+    // V4.1.1 (01/09/2026, "finaliser la mutualisation avec requested_level") :
+    // le niveau réellement demandé par CET utilisateur pour CETTE adoption
+    // — jamais le niveau de génération du master. Plus de `ignoreDuplicates`
+    // : une ré-adoption du même master à un autre niveau (ex. Élémentaire
+    // puis Expert) doit mettre à jour la ligne existante plutôt que d'être
+    // silencieusement ignorée (comportement upsert par défaut, la contrainte
+    // unique restant (user_id, quiz_date, slot), inchangée — cf. audit
+    // empirique confirmant qu'aucune ligne dupliquée n'est créée).
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
       .upsert(
-        { user_id: user.id, quiz_date: quizDate, slot },
-        { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+        { user_id: user.id, quiz_date: quizDate, slot: effectiveSlot, requested_level: level },
+        { onConflict: "user_id,quiz_date,slot" }
       );
     if (linkError) throw new Error(linkError.message);
 
-    res.json({ ok: true, slot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length });
+    res.json({ ok: true, slot: effectiveSlot, quizDate, label: questions[0]?.sourceName || null, questionCount: questions.length });
+
+    // Notification push (demande du 01/09/2026, même mécanisme que
+    // /api/users/notion-quizzes/custom) : uniquement si le QCM vient d'être
+    // réellement généré (jamais `existingQuiz`, déjà répondu instantanément).
+    if (!existingQuiz) {
+      const readyLabel = questions[0]?.sourceName || item?.title || item?.name || "Nouvel apprentissage";
+      const readyCount = questions.length;
+      createNotification({
+        user_key: validation.legacyKey,
+        type: "notion_quiz_ready",
+        message: `« ${readyLabel} » est prêt, ${readyCount} question${readyCount > 1 ? "s" : ""} à mémoriser.`
+      }).catch((error) => console.error("[notion-quizzes] notification push :", error.message));
+    }
   } catch (error) {
     console.error("[notion-quizzes] création :", error.message);
     res.status(500).json({ ok: false, error: error.message });
@@ -17533,86 +17789,89 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     const id = normalizeCustomTopicKey(topic);
     const { level } = resolveNotionQuizLevel(req.body?.level);
     const slot = `notion:custom:${id}${level ? `:${level}` : ""}`;
+    const masterSlot = buildCustomTopicMasterSlot(id);
 
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
     let questions;
     let reused = false;
     // Slot effectivement utilisé pour le rattachement utilisateur et la
-    // réponse — égal à `slot` sauf en cas de réutilisation niveau 2 (cf.
-    // plus bas), où on pointe alors vers le slot déjà existant plutôt que
-    // celui, jamais inséré, dérivé de la formulation de CETTE recherche.
+    // réponse — égal à `slot` sauf en cas de réutilisation master/niveau 2
+    // (cf. plus bas), où on pointe alors vers le slot déjà existant plutôt
+    // que celui, jamais inséré, dérivé de la formulation de CETTE recherche.
     let effectiveSlot = slot;
-    // Le slot porte à la fois la clé normalisée du sujet ET le niveau choisi
-    // (donc sa plage de nombre de questions). La recherche doit couvrir tout
-    // l'historique : auparavant elle était limitée à `quizDate`, si bien que
-    // le même sujet au même niveau était inutilement régénéré dès le
-    // lendemain. Une seule ligne suffit et limite fortement l'egress JSONB.
-    const { data: existingQuizRows, error: existingQuizError } = await supabase
-      .from("daily_quiz")
-      .select("quiz_date, questions")
-      .eq("slot", slot)
-      .order("quiz_date", { ascending: false })
-      .limit(1);
-    if (existingQuizError) throw new Error(existingQuizError.message);
-    const existingQuiz = existingQuizRows?.[0] || null;
 
-    if (existingQuiz) {
-      questions = existingQuiz.questions || [];
-      // On redonne exactement le QCM existant : même niveau et donc
-      // exactement le même nombre de questions, sans aucun appel à l'IA.
-      quizDate = existingQuiz.quiz_date;
+    // V4.1 (01/09/2026, mutualisation inter-niveaux) : un master déjà généré
+    // pour ce sujet — à N'IMPORTE QUEL niveau — est prioritaire sur toute
+    // autre réutilisation, y compris la recherche exacte au même niveau
+    // ci-dessous : il est toujours au moins aussi riche (cf.
+    // isMasterEligibleQuiz, présence de pedagogicalRank). Couvre aussi bien
+    // un nouveau master (slot nu) qu'un ancien master V4.0 encore suffixé
+    // par son niveau d'origine (:elementaire/:avance/:expert).
+    const existingMaster = await findExistingQuizMaster([
+      masterSlot,
+      ...Object.keys(NOTION_QUIZ_LEVELS).map((lvl) => `notion:custom:${id}:${lvl}`)
+    ]);
+    if (existingMaster) {
+      questions = existingMaster.questions || [];
+      quizDate = existingMaster.quizDate;
+      effectiveSlot = existingMaster.slot;
       reused = true;
     } else {
-      // Niveau 2 (dedup locale sans IA, audit du 24/08/2026, cf.
-      // lib/topic-dedup.js) : le slot exact n'existe pas, mais un sujet déjà
-      // généré au même niveau peut être une reformulation manifestement
-      // équivalente (articles, pluriel, tournure interrogative...). Le gate
-      // mots structurants + quasi-inclusion des tokens ne matche jamais deux
-      // intentions pédagogiques différentes ; en cas de doute, pas de match
-      // — on régénère normalement plutôt que de risquer de servir le
-      // mauvais QCM (cf. principe de sécurité du chantier).
-      const equivalent = await findEquivalentGeneratedCustomTopic(topic, level);
-      if (equivalent) {
-        questions = equivalent.questions || [];
-        quizDate = equivalent.quizDate;
-        effectiveSlot = equivalent.slot;
+      // Niveau 1 historique (comportement V4.0 et antérieur inchangé) :
+      // recherche exacte au même niveau, pour tout QCM qui ne serait pas
+      // encore un master (jamais atteint pour un sujet déjà mutualisé, cf.
+      // ci-dessus). Le slot porte à la fois la clé normalisée du sujet ET le
+      // niveau choisi ; la recherche couvre tout l'historique (pas de filtre
+      // quizDate), une seule ligne suffit et limite fortement l'egress JSONB.
+      const { data: existingQuizRows, error: existingQuizError } = await supabase
+        .from("daily_quiz")
+        .select("quiz_date, questions")
+        .eq("slot", slot)
+        .order("quiz_date", { ascending: false })
+        .limit(1);
+      if (existingQuizError) throw new Error(existingQuizError.message);
+      const existingQuiz = existingQuizRows?.[0] || null;
+
+      if (existingQuiz) {
+        questions = existingQuiz.questions || [];
+        // On redonne exactement le QCM existant : même niveau et donc
+        // exactement le même nombre de questions, sans aucun appel à l'IA.
+        quizDate = existingQuiz.quiz_date;
         reused = true;
       } else {
-        const result = await buildCustomTopicQuiz(topic, id, level, user.id);
-        if (result.error) {
-          const code = result.code || (result.error === "rejected" ? "CONTENT_UNUSABLE" : "INTERNAL_ERROR");
-          const publicError = publicGenerationError(code, result.reason);
-          const safeDiagnostics = result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : null;
-          console.warn(`[notion-quizzes:custom:${id}] response stage=${result.stage || "subject_validation"} code=${publicError.body.code}${safeDiagnostics ? ` diagnostics=${JSON.stringify(safeDiagnostics)}` : ""}`);
-          return res.status(publicError.status).json({ ...publicError.body, ...(safeDiagnostics ? { diagnostics: safeDiagnostics } : {}) });
-        }
-        // searchTopic : l'intitulé exact tapé par le créateur dans la barre de
-        // recherche, distinct de sourceName (repris/reformulé par l'IA, cf.
-        // buildLeveledFicheAndQuizPrompt) — affiché sous le titre dans
-        // "Explorer les apprentissages disponibles" (demande du 13/08/2026),
-        // pas de colonne dédiée sur daily_quiz : porté par chaque question,
-        // même principe que sourceName/sourceType déjà dupliqués ainsi.
-        questions = result.questions.map((q) => ({ ...q, searchTopic: topic }));
-
-        const { error: insertError } = await supabase.from("daily_quiz").insert({
-          quiz_date: quizDate,
-          slot,
-          questions,
-          source_debate_ids: []
-        });
-        if (insertError) {
-          // Course avec un autre visiteur ayant tapé le même sujet entre-temps
-          // (cf. POST /api/users/notion-quizzes, même règle) : on relit sa
-          // génération plutôt que la nôtre.
-          if (insertError.code === "23505") {
-            const { data: raceRow, error: raceError } = await supabase
-              .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
-            if (raceError) throw new Error(raceError.message);
-            questions = raceRow?.questions || questions;
-          } else {
-            throw new Error(insertError.message);
+        // Niveau 2 (dedup locale sans IA, audit du 24/08/2026, cf.
+        // lib/topic-dedup.js) : depuis V4.1, priorise un master équivalent
+        // trouvé à N'IMPORTE QUEL niveau ; à défaut, comportement V4.0
+        // inchangé (reformulation équivalente au même niveau uniquement,
+        // cf. findEquivalentGeneratedCustomTopic). Le gate mots structurants
+        // + quasi-inclusion des tokens ne matche jamais deux intentions
+        // pédagogiques différentes ; en cas de doute, pas de match — on
+        // régénère normalement plutôt que de risquer de servir le mauvais QCM.
+        const equivalent = await findEquivalentGeneratedCustomTopic(topic, level);
+        if (equivalent) {
+          questions = equivalent.questions || [];
+          quizDate = equivalent.quizDate;
+          effectiveSlot = equivalent.slot;
+          reused = true;
+        } else {
+          // Génération réelle — verrou en mémoire keyed par identité de
+          // master (masterSlot, indépendant du niveau) : deux requêtes
+          // concurrentes sur le même sujet à des niveaux différents (ex.
+          // Élémentaire puis Expert lancés en même temps) attendent la même
+          // promesse au lieu de déclencher deux générations IA identiques —
+          // cf. ensureCustomTopicMasterGenerated.
+          const result = await ensureCustomTopicMasterGenerated(masterSlot, topic, id, level, user.id);
+          if (result.error) {
+            const code = result.code || (result.error === "rejected" ? "CONTENT_UNUSABLE" : "INTERNAL_ERROR");
+            const publicError = publicGenerationError(code, result.reason);
+            const safeDiagnostics = result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : null;
+            console.warn(`[notion-quizzes:custom:${id}] response stage=${result.stage || "subject_validation"} code=${publicError.body.code}${safeDiagnostics ? ` diagnostics=${JSON.stringify(safeDiagnostics)}` : ""}`);
+            return res.status(publicError.status).json({ ...publicError.body, ...(safeDiagnostics ? { diagnostics: safeDiagnostics } : {}) });
           }
+          questions = result.questions;
+          quizDate = result.quizDate;
+          effectiveSlot = result.slot;
         }
       }
     }
@@ -17626,11 +17885,20 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     // déjà stocké par l'insert ci-dessus.
     questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[level]?.target);
 
+    // Observabilité coût (V4.1, section 12 de la demande) : ligne simple,
+    // aucune infrastructure de métriques dédiée — distingue une réutilisation
+    // (0 appel IA/Brave) d'une génération réelle.
+    console.info(`[notion-quizzes:custom:${id}] ${reused ? "masterReused" : "masterGenerated"} level=${level || "?"} slot=${effectiveSlot} questionCount=${questions.length}`);
+
+    // V4.1.1 : même règle que POST /api/users/notion-quizzes ci-dessus — le
+    // niveau réellement demandé par cette adoption, jamais le niveau de
+    // génération du master ; plus de `ignoreDuplicates`, une ré-adoption au
+    // même master à un autre niveau met à jour la ligne existante.
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
       .upsert(
-        { user_id: user.id, quiz_date: quizDate, slot: effectiveSlot },
-        { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+        { user_id: user.id, quiz_date: quizDate, slot: effectiveSlot, requested_level: level },
+        { onConflict: "user_id,quiz_date,slot" }
       );
     if (linkError) throw new Error(linkError.message);
 
@@ -17640,6 +17908,24 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     // dans daily_quiz et son lien utilisateur dans user_notion_quizzes.
     // La réponse HTTP est déjà envoyée ; Noès travaille en arrière-plan.
     triggerAutomaticNoesVideo({ userId: user.id, slot: effectiveSlot, quizDate, questions });
+
+    // Notification push (demande du 01/09/2026) : uniquement pour une
+    // génération fraîche (jamais `reused`, où la réponse est déjà instantanée
+    // et l'utilisateur reste sur place) — la génération IA peut prendre
+    // plusieurs minutes, pendant lesquelles l'utilisateur a pu quitter la
+    // page ; le message affiché par showNotionQuizReadyModal (côté client)
+    // ne suffit alors plus, d'où ce push OS en complément, jamais à la place.
+    // createNotification gère déjà l'insert in-app ET l'envoi Web Push réel
+    // (cf. server.js:4376) — même mécanisme que pour learning_digest.
+    if (!reused) {
+      const readyLabel = questions[0]?.sourceName || topic;
+      const readyCount = questions.length;
+      createNotification({
+        user_key: validation.legacyKey,
+        type: "notion_quiz_ready",
+        message: `« ${readyLabel} » est prêt, ${readyCount} question${readyCount > 1 ? "s" : ""} à mémoriser.`
+      }).catch((error) => console.error(`[notion-quizzes:custom:${id}] notification push :`, error.message));
+    }
   } catch (error) {
     // Hors des appels IA, cette route ne dépend que de Supabase (résolution
     // utilisateur, lecture/insertion du QCM et rattachement). Le détail brut
@@ -17749,6 +18035,8 @@ app.post("/api/users/notion-quizzes/adopt", rateLimit("users", 30), async (req, 
   try {
     const validation = validateLegacyKey(req.body?.legacyKey);
     if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+    const level = resolveNotionQuizLevel(req.body?.level).level;
+    if (!level) return res.status(400).json({ ok: false, error: "Niveau d'approfondissement invalide." });
 
     const slot = String(req.body?.slot || "").trim();
     const quizDate = String(req.body?.quizDate || "").trim();
@@ -17770,8 +18058,8 @@ app.post("/api/users/notion-quizzes/adopt", rateLimit("users", 30), async (req, 
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
       .upsert(
-        { user_id: user.id, quiz_date: quizDate, slot },
-        { onConflict: "user_id,quiz_date,slot", ignoreDuplicates: true }
+        { user_id: user.id, quiz_date: quizDate, slot, requested_level: level },
+        { onConflict: "user_id,quiz_date,slot" }
       );
     if (linkError) throw new Error(linkError.message);
 
@@ -17865,9 +18153,11 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (userError) throw new Error(userError.message);
     if (!userRow) return res.json({ quizzes: [] });
 
+    // requested_level (V4.1.1) : niveau persisté pour CETTE adoption — cf.
+    // son usage plus bas, priorité sur le niveau stocké sur les questions.
     const { data: links, error: linksError } = await supabase
       .from("user_notion_quizzes")
-      .select("quiz_date, slot, added_at")
+      .select("quiz_date, slot, added_at, requested_level")
       .eq("user_id", userRow.id)
       .order("added_at", { ascending: false });
     if (linksError) throw new Error(linksError.message);
@@ -17982,8 +18272,18 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // inProgress, progressPct) doivent porter sur le nombre de questions
       // réellement SERVIES à ce niveau, jamais sur le corpus maître complet
       // stocké — no-op strict pour tout quiz sans pedagogicalRank (cf.
-      // commentaire complet dans getDailyQuizQuestions).
-      const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[rawQuestions[0]?.level]?.target);
+      // commentaire complet dans getDailyQuizQuestions). V4.1.1 (section 7 de
+      // la demande) : le niveau PERSISTÉ de CETTE adoption
+      // (link.requested_level, validé via resolveNotionQuizLevel — défensif,
+      // la contrainte CHECK en base garantit déjà NULL/elementaire/avance/
+      // expert) prime sur le niveau stocké sur les questions — c'est ce qui
+      // permet à deux utilisateurs sur le MÊME master d'avoir des
+      // questionCount/progressPct totalement indépendants. Repli sur
+      // `rawQuestions[0]?.level` pour toute ligne legacy (requested_level
+      // NULL), comportement V4.0 strictement inchangé dans ce cas.
+      const persistedLevel = resolveNotionQuizLevel(link.requested_level).level;
+      const effectiveLevel = persistedLevel || rawQuestions[0]?.level || null;
+      const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
       let creditSum = 0;
       let answeredCount = 0;
       // Distinct de answeredCount (qui inclut aussi les questions passées, cf.
@@ -18073,6 +18373,11 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // retrouvée par son identité (linkType/linkSourceId) plutôt que par (slot, date).
     const linkType = String(req.query.linkType || "").trim();
     const linkSourceId = String(req.query.linkSourceId || "").trim();
+    // V4.1 : niveau réellement demandé pour CETTE consultation de fiche,
+    // quand le client le connaît (cf. commentaire de requestedLevel dans
+    // getDailyQuizQuestions) — absent, repli sur `questions[0].level`
+    // (comportement V4.0 inchangé).
+    const requestedLevel = resolveNotionQuizLevel(req.query.level).level;
 
     let questions;
     let resolvedSlot = slot;
@@ -18101,15 +18406,9 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     }
     if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
 
-    // Serving par niveau (V4.0, 01/09/2026, section 10 de la demande) : la
-    // fiche ne renvoie désormais que le sous-ensemble réellement servi à ce
-    // niveau — no-op strict pour tout quiz sans pedagogicalRank (cf.
-    // commentaire complet dans getDailyQuizQuestions). `questionCount`
-    // ci-dessous reflète donc ce sous-ensemble, jamais le corpus maître
-    // complet stocké en base.
-    questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[questions[0]?.level]?.target);
-
-    const first = questions[0];
+    // Résolution du propriétaire des liens (comportement V4.0 inchangé,
+    // seulement déplacée plus tôt) — réutilisée aussi, V4.1.1, pour lire le
+    // niveau persisté de son adoption (cf. juste en dessous).
     let linkOwnerUserId = null;
     const linkKeyValidation = validateLegacyKey(req.query?.legacyKey);
     if (!linkKeyValidation.error) {
@@ -18121,6 +18420,36 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       if (linkOwnerError) console.warn("[notion-quizzes] propriétaire des liens introuvable :", linkOwnerError.message);
       linkOwnerUserId = linkOwner?.id || null;
     }
+
+    // V4.1.1 (section 8 de la demande) : le niveau PERSISTÉ de l'adoption de
+    // ce visiteur (quand `legacyKey` identifie une adoption existante) prime
+    // sur `requestedLevel` (query `&level=`, simple repli/aperçu pour un
+    // visiteur qui n'a pas encore adopté ce master, ou consulte sans clé) —
+    // même priorité que getDailyQuizQuestions/resolvePersistedNotionRequestedLevel.
+    let persistedLevel = null;
+    if (linkOwnerUserId) {
+      const { data: linkRows, error: linkLevelError } = await supabase
+        .from("user_notion_quizzes")
+        .select("requested_level")
+        .eq("user_id", linkOwnerUserId)
+        .eq("quiz_date", resolvedQuizDate)
+        .eq("slot", resolvedSlot)
+        .order("added_at", { ascending: false })
+        .limit(1);
+      if (linkLevelError) console.warn("[notion-quizzes] lecture requested_level (fiche) :", linkLevelError.message);
+      persistedLevel = resolveNotionQuizLevel(linkRows?.[0]?.requested_level).level;
+    }
+
+    // Serving par niveau (V4.0, 01/09/2026, section 10 de la demande) : la
+    // fiche ne renvoie désormais que le sous-ensemble réellement servi à ce
+    // niveau — no-op strict pour tout quiz sans pedagogicalRank (cf.
+    // commentaire complet dans getDailyQuizQuestions). `questionCount`
+    // ci-dessous reflète donc ce sous-ensemble, jamais le corpus maître
+    // complet stocké en base.
+    const effectiveLevel = persistedLevel || requestedLevel || questions[0]?.level || null;
+    questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
+
+    const first = questions[0];
     const links = first.sourceType && first.sourceDebateId
       ? await fetchCultureGeneraleNotionLinks(first.sourceType, String(first.sourceDebateId), linkOwnerUserId)
       : [];
@@ -18135,12 +18464,14 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
         ? first.sourceDetail.documentTitle
         : (first.sourceName || null),
       sourceType: first.sourceType || null,
-      // Niveau choisi à la génération (elementaire/avance/expert, cf.
-      // NOTION_QUIZ_LEVELS) — absent (null) pour le flux historique
-      // Éclairages/Ce jour dans l'Histoire, qui n'a jamais proposé ce choix
-      // (cf. NOTION_QUIZ_LEGACY_LEVEL_CONFIG). Affiché sous le titre de la
-      // fiche avec questionCount, cf. views/qcm-du-jour.html.
-      level: first.level || null,
+      // Niveau réellement servi (elementaire/avance/expert, cf.
+      // NOTION_QUIZ_LEVELS) — `requestedLevel` (V4.1) quand fourni, sinon le
+      // niveau stocké sur les questions (comportement V4.0 inchangé) ; absent
+      // (null) pour le flux historique Éclairages/Ce jour dans l'Histoire, qui
+      // n'a jamais proposé ce choix (cf. NOTION_QUIZ_LEGACY_LEVEL_CONFIG).
+      // Affiché sous le titre de la fiche avec questionCount, cf.
+      // views/qcm-du-jour.html.
+      level: effectiveLevel,
       questionCount: questions.length,
       themes: primaryTheme ? [primaryTheme] : [],
       sourceDetail: first.sourceDetail || null,
@@ -20847,11 +21178,14 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     }
 
     const todayKey = resolveDailyQuizRequestDate(slot, req.body?.quizDate);
+    // V4.1 : même repli que /today (cf. commentaire de requestedLevel dans
+    // getDailyQuizQuestions).
+    const requestedLevel = resolveNotionQuizLevel(req.body?.level).level;
     // Indépendantes l'une de l'autre : parallélisées plutôt qu'attendues en
     // séquence (questions quasi toujours servies depuis le cache mémoire,
     // donc en pratique un seul aller-retour Supabase réel ici, pas deux).
     const [questions, existingAnswerResult] = await Promise.all([
-      getDailyQuizQuestions(todayKey, slot, voterKey),
+      getDailyQuizQuestions(todayKey, slot, voterKey, requestedLevel),
       supabase.from("daily_quiz_answers").select("option_index")
         .eq("quiz_date", todayKey).eq("voter_key", voterKey).eq("question_id", questionId).maybeSingle()
     ]);
@@ -21125,7 +21459,10 @@ app.post("/api/daily-quiz/practice-answer", rateLimit("daily-quiz-answer", 60), 
     }
 
     const todayKey = resolveDailyQuizRequestDate(slot, req.body?.quizDate);
-    const questions = await getDailyQuizQuestions(todayKey, slot, voterKey);
+    // V4.1 : même repli que /today (cf. commentaire de requestedLevel dans
+    // getDailyQuizQuestions).
+    const requestedLevel = resolveNotionQuizLevel(req.body?.level).level;
+    const questions = await getDailyQuizQuestions(todayKey, slot, voterKey, requestedLevel);
     const question = questions.find((q) => q.id === questionId);
     if (!question) return res.status(404).json({ error: "QCM introuvable." });
 
