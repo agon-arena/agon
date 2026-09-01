@@ -1084,9 +1084,9 @@ test("§H V4.1.1 : les questions répondues au niveau Élémentaire (rangs 1-5) 
 
 // ── V4.1 (01/09/2026, "mutualisation inter-niveaux") : isMasterEligibleQuiz ─
 
-test("isMasterEligibleQuiz : vrai dès que la première question porte un pedagogicalRank entier", () => {
-  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 1 }, { pedagogicalRank: 2 }]), true);
-  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 7 }]), true);
+test("isMasterEligibleQuiz : exige au moins 15 questions toutes classées", () => {
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 15 }, (_, index) => ({ pedagogicalRank: index + 1 }))), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 14 }, (_, index) => ({ pedagogicalRank: index + 1 }))), false);
 });
 
 test("isMasterEligibleQuiz : faux pour un quiz legacy (aucun pedagogicalRank, comportement d'avant V4.0)", () => {
@@ -1100,8 +1100,10 @@ test("isMasterEligibleQuiz : faux pour un tableau vide, null, undefined ou non-t
   assert.equal(isMasterEligibleQuiz("not an array"), false);
 });
 
-test("isMasterEligibleQuiz : ne regarde que la PREMIÈRE question (cohérent avec attachPedagogicalRanks, qui les tague toutes ensemble ou aucune)", () => {
-  assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 1 }, { id: "sans rang, ne devrait jamais arriver en pratique" }]), true);
+test("isMasterEligibleQuiz : refuse un corpus dont une question n'est pas classée", () => {
+  const questions = Array.from({ length: 15 }, (_, index) => ({ pedagogicalRank: index + 1 }));
+  delete questions[10].pedagogicalRank;
+  assert.equal(isMasterEligibleQuiz(questions), false);
 });
 
 test("isMasterEligibleQuiz : pedagogicalRank non entier (corruption défensive) -> faux", () => {

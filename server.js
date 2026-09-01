@@ -57,7 +57,8 @@ const {
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
   selectQuestionsForRequestedLevel,
-  isMasterEligibleQuiz
+  isMasterEligibleQuiz,
+  MIN_MASTER_QUESTIONS
 } = require("./lib/question-formats");
 const {
   buildSemanticReviewPrompt,
@@ -13856,7 +13857,7 @@ const NOTION_QUIZ_LEVELS = {
   },
   expert: {
     label: "Expert",
-    target: 20, max: 22, min: 1,
+    target: 20, max: 22, min: MIN_MASTER_QUESTIONS,
     // Enrichi le 01/09/2026 (V4.0, "corpus maître de 20 questions") : cette
     // configuration sert désormais TOUJOURS de profondeur de génération
     // interne (cf. MASTER_GENERATION_DEPTH_CONFIG plus bas), quel que soit le
@@ -14818,11 +14819,12 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         parsed = candidate;
         break;
       }
-      if (parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig)) {
+      const parsedCandidate = parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig);
+      if (parsedCandidate && parsedCandidate.candidates.length >= min) {
         parsed = candidate;
         break;
       }
-      console.warn(`[notion-quiz:${id}] fiche non conforme (tentative ${attempt}/${contentAttempts}).`);
+      console.warn(`[notion-quiz:${id}] fiche non conforme ou corpus trop court (tentative ${attempt}/${contentAttempts}, minimum=${min}).`);
     } catch (error) {
       console.warn(`[notion-quiz:${id}] JSON fiche invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
     }
@@ -17634,6 +17636,28 @@ const NOTION_QUIZ_SOURCE_TYPES = new Set(["histoire", "debat-notion", ...CULTURE
 // inter-processus (plusieurs workers Node) — cf. le code 23505 ci-dessous.
 const _notionQuizMasterGenerationPromises = new Map();
 
+// Résout une collision d'insertion sans laisser un ancien petit corpus
+// bloquer toutes les générations futures. Un master complet créé par un
+// autre worker gagne toujours ; seul un corpus devenu inéligible est remplacé.
+async function resolveMasterInsertConflict(masterSlot, questions, fallbackQuizDate) {
+  const { data: raceRow, error: raceError } = await supabase
+    .from("daily_quiz").select("quiz_date, questions")
+    .eq("slot", masterSlot).order("quiz_date", { ascending: false }).limit(1).maybeSingle();
+  if (raceError) throw new Error(raceError.message);
+  if (isMasterEligibleQuiz(raceRow?.questions)) {
+    return { questions: raceRow.questions, quizDate: raceRow.quiz_date || fallbackQuizDate, slot: masterSlot };
+  }
+  // Cas réel : Expressionnisme demandé en Expert, mais seulement 4 questions
+  // avaient été stockées. La génération conforme remplace ce corpus précis.
+  const replacementDate = raceRow?.quiz_date || fallbackQuizDate;
+  const { error: replaceError } = await supabase.from("daily_quiz")
+    .update({ questions, source_debate_ids: [] })
+    .eq("slot", masterSlot)
+    .eq("quiz_date", replacementDate);
+  if (replaceError) throw new Error(replaceError.message);
+  return { questions, quizDate: replacementDate, slot: masterSlot };
+}
+
 async function ensureCustomTopicMasterGenerated(masterSlot, topic, id, level, userId) {
   const pending = _notionQuizMasterGenerationPromises.get(masterSlot);
   if (pending) return pending;
@@ -17656,11 +17680,7 @@ async function ensureCustomTopicMasterGenerated(masterSlot, topic, id, level, us
     // Course avec un autre visiteur/worker ayant tapé le même sujet
     // entre-temps (cf. POST /api/users/notion-quizzes, même règle) : on
     // relit sa génération plutôt que la nôtre.
-    const { data: raceRow, error: raceError } = await supabase
-      .from("daily_quiz").select("quiz_date, questions")
-      .eq("slot", masterSlot).order("quiz_date", { ascending: false }).limit(1).maybeSingle();
-    if (raceError) throw new Error(raceError.message);
-    return { questions: raceRow?.questions || questions, quizDate: raceRow?.quiz_date || quizDate, slot: masterSlot };
+    return resolveMasterInsertConflict(masterSlot, questions, quizDate);
   })();
   _notionQuizMasterGenerationPromises.set(masterSlot, generation);
   try {
@@ -17687,11 +17707,7 @@ async function ensureNotionMasterGenerated(masterSlot, sourceType, sourceDebateI
     });
     if (!insertError) return { questions, quizDate, slot: masterSlot };
     if (insertError.code !== "23505") throw new Error(insertError.message);
-    const { data: raceRow, error: raceError } = await supabase
-      .from("daily_quiz").select("quiz_date, questions")
-      .eq("slot", masterSlot).order("quiz_date", { ascending: false }).limit(1).maybeSingle();
-    if (raceError) throw new Error(raceError.message);
-    return { questions: raceRow?.questions || questions, quizDate: raceRow?.quiz_date || quizDate, slot: masterSlot };
+    return resolveMasterInsertConflict(masterSlot, questions, quizDate);
   })();
   _notionQuizMasterGenerationPromises.set(masterSlot, generation);
   try {

@@ -146,6 +146,6 @@ test("§12 FSRS : applyFsrsReviewForDailyQuizAnswer/upsertMemoryItemForNotionAns
 
 // ── Import requis ──────────────────────────────────────────────────────
 
-test("les fonctions V4.0/V4.1 sont bien importées depuis lib/question-formats", () => {
-  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*selectQuestionsForRequestedLevel,\s*\n\s*isMasterEligibleQuiz\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
+test("les fonctions V4.0/V4.1 et le plancher master sont bien importés depuis lib/question-formats", () => {
+  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*selectQuestionsForRequestedLevel,\s*\n\s*isMasterEligibleQuiz,\s*\n\s*MIN_MASTER_QUESTIONS\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
 });

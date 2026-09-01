@@ -33954,17 +33954,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.pathname === "/create") {
     initCreate();
   }
-  // "Ma mémoire" plein écran (/mon-univers) n'a plus cet indicateur "suite ↓"
-  // (demande du 30/08/2026, "je n'en veux pas") : cette page est toujours en
-  // page-memory-only (fixed, overflow:hidden, jamais de vrai scroll de
-  // fenêtre — cf. mon-univers.html), ce hint de scroll de page n'y avait de
-  // toute façon aucun sens.
-  // Scores et contributions ainsi que Meilleures idées utilisent une page
-  // autonome : aucun voile flou ni indicateur « suite » ne doit recouvrir
-  // leur contenu.
-  if (location.pathname === "/notifications") {
-    attachPageScrollFadeHint('#f3f4f6', { contentEndSelector: 'main.container.home-page' });
-  }
+  // Les pages autonomes, notamment Notifications et « Ma mémoire » plein
+  // écran, ne doivent recevoir aucun voile dégradé ni indicateur « suite ».
 
   if (document.body.classList.contains('is-standalone')) {
     requestAnimationFrame(() => {
