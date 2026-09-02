@@ -25,22 +25,40 @@ test("MASTER_GENERATION_DEPTH_CONFIG est un alias direct de NOTION_QUIZ_LEVELS.e
   assert.match(SERVER_SOURCE, /const MASTER_GENERATION_DEPTH_CONFIG = NOTION_QUIZ_LEVELS\.expert;/);
 });
 
-test("buildNotionQuestions (branche niveau) passe generationDepthConfig, jamais levelConfig directement, à generateNotionLevelQuiz — et transmet `level` en 7e argument", () => {
+// generateNotionLevelQuiz(..., classificationContext = null) (V1 latence,
+// 02/09/2026, cf. audit read-only) : 8e paramètre optionnel qui fait lancer
+// classifyCultureGeneraleKnowledgePlacementWithAI EN PARALLÈLE du pipeline
+// qualité (au lieu de l'appeler séquentiellement après, comme avant) —
+// les regex ci-dessous sont mises à jour pour ce seul ajout, `level` reste
+// bien le 7e argument positionnel (inchangé).
+
+test("buildNotionQuestions (branche niveau) passe generationDepthConfig, jamais levelConfig directement, à generateNotionLevelQuiz — et transmet `level` en 7e argument, classificationContext en 8e", () => {
   assert.match(
     SERVER_SOURCE,
-    /const generationDepthConfig = NOTION_QUIZ_LEVELS\[level\] \? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;\s*\n\s*const result = await generateNotionLevelQuiz\(apiKey, subject, contextHint, id, generationDepthConfig, false, level\);/
+    /const generationDepthConfig = NOTION_QUIZ_LEVELS\[level\] \? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;\s*\n[\s\S]{0,900}?const result = await generateNotionLevelQuiz\(apiKey, subject, contextHint, id, generationDepthConfig, false, level, \{ sourceType, userId \}\);/
   );
 });
 
-test("buildCustomTopicQuiz passe generationDepthConfig, jamais levelConfig directement, à generateNotionLevelQuiz — et transmet `level` en 7e argument", () => {
+test("buildCustomTopicQuiz passe generationDepthConfig, jamais levelConfig directement, à generateNotionLevelQuiz — et transmet `level` en 7e argument, classificationContext en 8e", () => {
   assert.match(
     SERVER_SOURCE,
-    /const generationDepthConfig = NOTION_QUIZ_LEVELS\[level\] \? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;\s*\n\s*const result = await generateNotionLevelQuiz\(apiKey, topic, null, id, generationDepthConfig, true, level\);/
+    /const generationDepthConfig = NOTION_QUIZ_LEVELS\[level\] \? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;\s*\n[\s\S]{0,900}?const result = await generateNotionLevelQuiz\(apiKey, topic, null, id, generationDepthConfig, true, level, \{ sourceType: "custom", userId \}\);/
   );
 });
 
-test("generateNotionLevelQuiz accepte requestedLevel en 7e paramètre", () => {
-  assert.match(SERVER_SOURCE, /async function generateNotionLevelQuiz\(apiKey, subject, contextHint, id, levelConfig, requireValidation, requestedLevel\)/);
+test("generateNotionLevelQuiz accepte requestedLevel en 7e paramètre et classificationContext en 8e (optionnel, défaut null)", () => {
+  assert.match(SERVER_SOURCE, /async function generateNotionLevelQuiz\(apiKey, subject, contextHint, id, levelConfig, requireValidation, requestedLevel, classificationContext = null\)/);
+});
+
+test("classification (V1 latence) : sourcePlacementPromise est awaitée par l'appelant, jamais un second appel direct à classifyCultureGeneraleKnowledgePlacementWithAI pour la branche niveau/sujet libre", () => {
+  // Un seul appel réel à classifyCultureGeneraleKnowledgePlacementWithAI pour
+  // CES DEUX chemins (il en existe un 3e, légitime et non concerné : la
+  // branche legacy Éclairages/Histoire de buildNotionQuestions, qui n'appelle
+  // jamais generateNotionLevelQuiz et gardait déjà son propre Promise.all).
+  const calls = SERVER_SOURCE.match(/classifyCultureGeneraleKnowledgePlacementWithAI\(/g) || [];
+  assert.ok(calls.length >= 3, "définition + legacy Éclairages/Histoire + l'appel interne à generateNotionLevelQuiz");
+  assert.match(SERVER_SOURCE, /const sourcePlacement = await sourcePlacementPromise;/g);
+  assert.equal((SERVER_SOURCE.match(/const sourcePlacement = await sourcePlacementPromise;/g) || []).length, 2, "buildNotionQuestions (branche niveau) et buildCustomTopicQuiz, jamais un troisième site");
 });
 
 // ── §6 de la demande : questionsRequested reste accepted.length, JAMAIS
@@ -66,7 +84,12 @@ test("rankAdmittedKnowledge est appelé sur `accepted` avant la boucle de géné
 
 test("attachPedagogicalRanks est appelé juste avant le retour final de generateNotionLevelQuiz (en aval de toute régénération/expansion V3.2)", () => {
   const attachIndex = SERVER_SOURCE.indexOf("validated = attachPedagogicalRanks(validated, rankedKnowledge);");
-  const returnIndex = SERVER_SOURCE.indexOf("return { sourceName, sourceDetail, validated };");
+  // sourcePlacementPromise (V1 latence, 02/09/2026) : ajoutée à l'objet
+  // retourné, jamais un remplacement de `validated` — le log
+  // [qcm-generation-timing] est placé AVANT attachPedagogicalRanks
+  // précisément pour que cette adjacence reste vraie (cf. son commentaire
+  // dans server.js).
+  const returnIndex = SERVER_SOURCE.indexOf("return { sourceName, sourceDetail, validated, sourcePlacementPromise };");
   assert.ok(attachIndex > 0, "attachPedagogicalRanks doit être appelé dans generateNotionLevelQuiz");
   assert.ok(returnIndex > attachIndex, "le retour final doit suivre l'attachement des rangs");
   assert.ok(returnIndex - attachIndex < 400, "l'attachement doit se faire juste avant le retour, sans logique intermédiaire qui pourrait rejouer/réordonner `validated`");

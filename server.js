@@ -12944,6 +12944,14 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
   // final) — les tentatives 429/5xx/réseau retentées ci-dessous ne sont
   // jamais facturées par OpenAI, donc jamais elles-mêmes loguées.
   const feature = opts.feature || null;
+  // opts.generationId (instrumentation coût/génération QCM, 01/09/2026) :
+  // identifiant commun à tous les appels IA d'une même génération QCM
+  // (fiche, admission, critique, sélection de sources, régénération ciblée,
+  // expansion V3.2 — cf. lib/ai-usage-log.js et le "id"/"sourceId" déjà
+  // propagé dans tout le pipeline notion-quiz). Optionnel : les appelants
+  // hors pipeline QCM ne le fournissent pas et gardent un comportement
+  // strictement inchangé (colonne generation_id NULL en base).
+  const generationId = opts.generationId || null;
   const startedAt = Date.now();
 
   // Diagnostic temporaire (01/09/2026) : model_not_found sur gpt-5.6-luna en
@@ -12971,7 +12979,7 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
     } catch (fetchErr) {
       // Timeout (AbortError) ou réseau — on retente sauf au dernier essai
       if (attempt === MAX_ATTEMPTS) {
-        recordAiUsage(supabase, { feature, model, latencyMs: Date.now() - startedAt, success: false, error: fetchErr.message });
+        recordAiUsage(supabase, { feature, model, generationId, latencyMs: Date.now() - startedAt, success: false, error: fetchErr.message });
         throw Object.assign(fetchErr, { status: 502 });
       }
       await new Promise(r => setTimeout(r, 1000 * attempt));
@@ -12987,13 +12995,13 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
 
     if (!r.ok) {
       const body = await r.text().catch(() => "");
-      recordAiUsage(supabase, { feature, model, latencyMs: Date.now() - startedAt, success: false, error: body || "Erreur OpenAI." });
+      recordAiUsage(supabase, { feature, model, generationId, latencyMs: Date.now() - startedAt, success: false, error: body || "Erreur OpenAI." });
       throw Object.assign(new Error(body || "Erreur OpenAI."), { status: 502 });
     }
 
     const data = await r.json();
     const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
-    recordAiUsage(supabase, { feature, model, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - startedAt, success: true });
+    recordAiUsage(supabase, { feature, model, generationId, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - startedAt, success: true });
     return data?.choices?.[0]?.message?.content || "";
   }
 }
@@ -14168,22 +14176,55 @@ async function qualityControlRawQuestions({
   // strictement inchangé pour tous les autres appelants). Simplement
   // relayé à runQuestionQualityPipeline, qui applique
   // validateQuestionGrounding lui-même (cf. lib/qcm-quality.js).
-  groundingSources
+  groundingSources,
+  // generationId (instrumentation coût, 01/09/2026) : optionnel, transmis
+  // uniquement par les appelants du pipeline "création d'un apprentissage"
+  // (cf. lib/ai-usage-log.js) — absent partout ailleurs, comportement
+  // strictement inchangé pour tous les autres appelants.
+  generationId
 }) {
   const startedAt = Date.now();
+  // onCycle (V1 latence, 02/09/2026, cf. audit read-only) : un log par cycle
+  // qualité, jamais une décision — aucun early stop introduit ici (hors
+  // périmètre V1). Noms de clés EXACTS demandés par l'audit
+  // (semantic_review_cycle_N_ms / regeneration_cycle_N_ms) pour rester
+  // greppables tels quels dans les logs de production. Best-effort et
+  // silencieux (même philosophie que recordAiUsage) : ne doit jamais
+  // ralentir ni interrompre une génération réelle.
+  const onCycle = ({ cycleIndex, questionsIn, deterministicAccepted, semanticAccepted, rejected, cumulativeAccepted, reviewMs, regenerationMs }) => {
+    try {
+      const payload = {
+        generationId,
+        route,
+        cycleIndex,
+        questionsIn,
+        deterministicAccepted,
+        semanticAccepted,
+        rejected,
+        cumulativeAccepted
+      };
+      payload[`semantic_review_cycle_${cycleIndex}_ms`] = reviewMs;
+      if (regenerationMs != null) payload[`regeneration_cycle_${cycleIndex}_ms`] = regenerationMs;
+      console.info("[qcm-quality-cycle]", JSON.stringify(payload));
+    } catch (_) {
+      // jamais bloquant ni remonté — cf. commentaire ci-dessus
+    }
+  };
   const outcome = await runQuestionQualityPipeline(rawQuestions, {
     semanticReviewEnabled: QCM_SEMANTIC_REVIEW_ENABLED,
     maxRetries: QCM_SEMANTIC_REVIEW_MAX_RETRIES,
     maxTechnicalRetries: QCM_CRITIC_TECHNICAL_MAX_RETRIES,
     context,
     groundingSources,
+    onCycle,
     reviewSemantic: async ({ entries, context: reviewContext }) => {
       const content = await _callOpenAI(apiKey, [{ role: "user", content: buildSemanticReviewPrompt(entries, reviewContext) }], {
         model: DAILY_QUIZ_CRITIC_MODEL,
         temperature: 0.1,
         responseFormat: { type: "json_object" },
         timeoutMs: timeoutMs || 90_000,
-        feature: "question_semantic_review"
+        feature: "question_semantic_review",
+        generationId
       });
       return JSON.parse(content);
     },
@@ -14296,7 +14337,8 @@ async function qualityControlRawQuestions({
         temperature: 0.35,
         responseFormat: { type: "json_object" },
         timeoutMs: timeoutMs || 90_000,
-        feature: "question_targeted_regeneration"
+        feature: "question_targeted_regeneration",
+        generationId
       });
       const parsed = JSON.parse(content);
       return Array.isArray(parsed?.questions) ? parsed.questions.slice(0, rejectionPayload.length) : [];
@@ -14469,7 +14511,8 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.2,
       responseFormat: { type: "json_object" },
-      feature: "web_search_source_selection"
+      feature: "web_search_source_selection",
+      generationId: id
     });
     selected = parseSourceSelectionResponse(content, qualified);
   } catch (error) {
@@ -14601,7 +14644,8 @@ async function expandWebSearchGroundingSources(apiKey, subject, id, topicContext
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.2,
       responseFormat: { type: "json_object" },
-      feature: "web_search_source_selection_expansion"
+      feature: "web_search_source_selection_expansion",
+      generationId: id
     });
     selected = parseSourceSelectionResponse(content, qualified, MAX_NEW_SOURCES_PER_EXPANSION);
   } catch (error) {
@@ -14713,7 +14757,8 @@ async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, i
       temperature: 0.4,
       responseFormat: { type: "json_object" },
       timeoutMs,
-      feature: "question_generation_source_expansion"
+      feature: "question_generation_source_expansion",
+      generationId: id
     });
     const questionsParsed = JSON.parse(content);
     // Même chaîne qualité que le premier passage — RIEN n'est assoupli ici :
@@ -14730,7 +14775,8 @@ async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, i
         sourceExcerptFor: (_sourceId, q) => String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200)
       },
       groundingSources: mergedGroundingSourcesMap,
-      metricsSink: (metrics) => { expansionMetrics = metrics; }
+      metricsSink: (metrics) => { expansionMetrics = metrics; },
+      generationId: id
     });
     const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], missingKnowledge.length, missingKnowledge.length);
     const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, missingKnowledge);
@@ -14779,7 +14825,16 @@ async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, i
 // génération elle-même, qui reste entièrement pilotée par `levelConfig`) —
 // absent, retombe sur `levelConfig.level` (comportement strictement
 // inchangé pour tout appelant qui ne le fournit pas).
-async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, requireValidation, requestedLevel) {
+async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelConfig, requireValidation, requestedLevel, classificationContext = null) {
+  // functionStartedAt (V1 latence, 02/09/2026, cf. audit read-only) : sert
+  // uniquement à calculer total_generation_ms au retour final (succès
+  // uniquement dans cette V1 — les retours d'échec restent inchangés, cf.
+  // rapport). classificationContext ({ sourceType, userId }, optionnel et
+  // défensif) : permet de lancer la classification taxonomy en parallèle du
+  // pipeline qualité (cf. plus bas) — absent, aucune classification n'est
+  // lancée ici et l'appelant reste responsable de la sienne, comme avant ce
+  // correctif.
+  const functionStartedAt = Date.now();
   const { target, instruction, max, min } = levelConfig;
   const timeoutMs = Math.min(120_000, 45_000 + target * 3_000);
   // TEMPORAIRE — diagnostic duplication/pénurie de connaissances (02/09/2026,
@@ -14807,8 +14862,13 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
   // éventuelle et reste donc volontairement basé sur le grounding initial
   // uniquement — l'enrichissement V3.2 ne concerne que les questions
   // manquantes, jamais le contenu de la fiche elle-même.
+  const groundingStartedAt = Date.now();
   let grounding = await resolveWebSearchGrounding(apiKey, subject, id);
+  const groundingMs = Date.now() - groundingStartedAt;
 
+  // knowledge_generation_ms (V1 latence) : mesure le temps total de cette
+  // boucle (toutes tentatives incluses), jamais seulement la dernière.
+  const ficheStartedAt = Date.now();
   let parsed;
   for (let attempt = 1; attempt <= contentAttempts; attempt++) {
     let content;
@@ -14818,7 +14878,8 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         temperature: 0.4,
         responseFormat: { type: "json_object" },
         timeoutMs,
-        feature: "knowledge_generation"
+        feature: "knowledge_generation",
+        generationId: id
       });
     } catch (error) {
       const code = classifyAiError(error);
@@ -14850,6 +14911,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       console.warn(`[notion-quiz:${id}] JSON fiche invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
     }
   }
+  const knowledgeGenerationMs = Date.now() - ficheStartedAt;
   if (!parsed) return generationFailure("CONTENT_UNUSABLE", "fiche_parsing");
   if (requireValidation && parsed?.valid === false) {
     const reason = String(parsed?.reason || "").trim().slice(0, 300);
@@ -14885,6 +14947,10 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         return null;
       })
     : Promise.resolve(null);
+  // knowledge_verification_ms (V1 latence) : mesure uniquement cette boucle
+  // (toutes tentatives incluses) — la recherche d'image tourne en parallèle
+  // via imagePromise ci-dessus et n'est jamais comptée ici.
+  const verificationStartedAt = Date.now();
   for (let attempt = 1; attempt <= contentAttempts; attempt++) {
     let verifyContent;
     try {
@@ -14892,7 +14958,15 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
-        feature: "knowledge_verification"
+        // Aligné sur les autres appels de cette même génération (audit de
+        // vitesse du 01/09/2026) : retombait auparavant sur le défaut 45s de
+        // _callOpenAI, seul appel du pipeline maître à ne pas recevoir le
+        // timeoutMs scalé sur `target` (jusqu'à 120s pour target=20) — jamais
+        // observé en échec en pratique (max mesuré 15s), correctif préventif
+        // pur, aucun changement de comportement en dehors d'un vrai dépassement.
+        timeoutMs,
+        feature: "knowledge_verification",
+        generationId: id
       });
     } catch (error) {
       const code = classifyAiError(error);
@@ -14916,6 +14990,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       console.warn(`[notion-quiz:${id}] JSON vérification invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
     }
   }
+  const knowledgeVerificationMs = Date.now() - verificationStartedAt;
   resolvedImage = await imagePromise;
   sourceDetail.image = resolvedImage;
   // Traçabilité (jamais affiché nulle part pour l'instant, cf. discussion du
@@ -14936,6 +15011,41 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
     return generationFailure("KNOWLEDGE_REJECTED", "knowledge_verification", { reason: "Aucune connaissance suffisamment fiable et importante n'a été trouvée sur ce sujet." });
   }
 
+  // Classification taxonomy lancée EN PARALLÈLE (V1 latence, 02/09/2026, cf.
+  // audit read-only) — dès que sourceName/sourceDetail sont figés ci-dessus,
+  // donc AVANT question_generation/qualityControlRawQuestions/l'expansion
+  // V3.2 qui suivent : classifyCultureGeneraleKnowledgePlacementWithAI ne
+  // dépend que de sourceType/sourceName/sourceDetail/userId/id, jamais de
+  // `validated` (vérifié dans son code : aucune lecture de `validated` ni
+  // d'aucune variable produite plus bas). Promise CONSERVÉE, jamais awaitée
+  // ici — seul l'appelant (buildNotionQuestions/buildCustomTopicQuiz)
+  // l'attend, au moment où sourcePlacement est réellement nécessaire pour
+  // construire sa réponse (même principe que imagePromise plus haut :
+  // lancée tôt, consommée tard). Un seul appel, jamais rejoué : l'appelant
+  // doit utiliser CETTE promise, jamais rappeler
+  // classifyCultureGeneraleKnowledgePlacementWithAI lui-même.
+  // classificationContext optionnel (défensif) : absent, sourcePlacementPromise
+  // reste null et l'appelant garde l'entière responsabilité de sa propre
+  // classification (comportement strictement identique à avant ce correctif).
+  // .catch(() => {}) sur cette Promise (jamais sur celle retournée à
+  // l'appelant) : évite uniquement l'avertissement Node "unhandledRejection"
+  // pendant la longue attente parallèle (question_generation + pipeline
+  // qualité + expansion V3.2 peuvent durer plusieurs minutes avant que
+  // l'appelant n'atteigne son propre await) — l'erreur réelle reste
+  // intégralement propagée à CET await, une Promise déjà résolue/rejetée
+  // pouvant être awaitée/catchée plusieurs fois sans effet de bord.
+  let sourcePlacementPromise = null;
+  if (classificationContext) {
+    const classificationStartedAt = Date.now();
+    sourcePlacementPromise = classifyCultureGeneraleKnowledgePlacementWithAI(
+      classificationContext.sourceType, sourceName, sourceDetail, classificationContext.userId, id
+    ).then((placement) => {
+      console.info("[qcm-classification-timing]", JSON.stringify({ generationId: id, route: "free_search", classification_ms: Date.now() - classificationStartedAt }));
+      return placement;
+    });
+    sourcePlacementPromise.catch(() => {});
+  }
+
   // Classement pédagogique (V4.0, 01/09/2026 — "corpus maître de 20
   // questions") : calculé UNE FOIS ici, à partir du signal importance déjà
   // produit et vérifié par l'admission (jamais un nouveau scoring, jamais
@@ -14949,6 +15059,12 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
 
   let validated = [];
   let questionQualityMetrics = null;
+  // Instrumentation (V1 latence, cf. audit) : renseignées uniquement si la
+  // boucle question_generation/expansion ci-dessous est réellement atteinte
+  // — restent `null` sur tout retour d'échec antérieur (fiche/vérification),
+  // jamais confondues avec "0 ms".
+  let questionGenerationMs = null;
+  let sourceExpansionMs = null;
   // Une seule génération initiale : les reprises sont désormais exclusivement
   // ciblées dans qualityControlRawQuestions. Rejouer ce lot entier ici
   // régénérerait aussi les questions déjà acceptées, contrairement au contrat V2.
@@ -14965,13 +15081,16 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
     const formatBlock = buildQuestionFormatsPromptBlock("sourceId", accepted.length, true, undefined, grounding?.identifiedSourcesBlock || null);
     const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, accepted, instruction, formatBlock);
     try {
+      const questionGenerationStartedAt = Date.now();
       const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
         responseFormat: { type: "json_object" },
         timeoutMs,
-        feature: "question_generation"
+        feature: "question_generation",
+        generationId: id
       });
+      questionGenerationMs = Date.now() - questionGenerationStartedAt;
       const questionsParsed = JSON.parse(content);
       const qualityApproved = await qualityControlRawQuestions({
         apiKey,
@@ -14992,7 +15111,8 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
           sourceExcerptFor: (_sourceId, q) => String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200)
         },
         groundingSources: groundingSourcesMap,
-        metricsSink: (metrics) => { questionQualityMetrics = metrics; }
+        metricsSink: (metrics) => { questionQualityMetrics = metrics; },
+        generationId: id
       });
       // filterQuestionsToAdmittedKnowledge (demande du 17/08/2026) : garde-fou
       // structurel en plus de la consigne de prompt — retire toute question dont
@@ -15017,10 +15137,12 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       // effectivement trouvé et exploité de nouvelles sources.
       let expansionSummary = null;
       if (questionQualityMetrics && grounding?.identifiedSources?.length) {
+        const expansionStartedAt = Date.now();
         const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions({
           apiKey, subject, id, instruction, timeoutMs,
           grounding, accepted, validated, questionQualityMetrics
         });
+        sourceExpansionMs = Date.now() - expansionStartedAt;
         validated = expansionOutcome.validated;
         grounding = expansionOutcome.grounding;
         expansionSummary = expansionOutcome.expansionSummary;
@@ -15086,12 +15208,35 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
     });
   }
 
+  // total_generation_ms (V1 latence, cf. audit) : couvre grounding → fiche →
+  // vérification → génération/qualité/expansion, JAMAIS la classification —
+  // celle-ci tourne en parallèle et peut se terminer après ce retour (cf.
+  // sourcePlacementPromise ci-dessus), mesurée séparément par
+  // [qcm-classification-timing] et corrélable via generationId. Les cycles
+  // qualité détaillés (semantic_review_cycle_N_ms/regeneration_cycle_N_ms)
+  // sont déjà loggés séparément par [qcm-quality-cycle]
+  // (qualityControlRawQuestions), également corrélables via generationId —
+  // jamais dupliqués ici. Placé AVANT le rattachement du classement
+  // pédagogique ci-dessous à dessein : ne dépend d'aucun champ de
+  // `validated`, et cela laisse le rattachement immédiatement suivi du
+  // retour final, sans logique intermédiaire qui pourrait rejouer/réordonner
+  // `validated` (cf. test/notion-quiz-master-wiring.test.js).
+  console.info("[qcm-generation-timing]", JSON.stringify({
+    generationId: id,
+    route: "free_search",
+    grounding_ms: groundingMs,
+    knowledge_generation_ms: knowledgeGenerationMs,
+    knowledge_verification_ms: knowledgeVerificationMs,
+    question_generation_ms: questionGenerationMs,
+    source_expansion_ms: sourceExpansionMs,
+    total_generation_ms: Date.now() - functionStartedAt
+  }));
   // Rattachement final du classement pédagogique (V4.0) — jamais avant, pour
   // ne rattacher un rang qu'aux questions réellement survivantes après tout
   // le pipeline qualité/grounding/expansion.
   validated = attachPedagogicalRanks(validated, rankedKnowledge);
   console.info(`[notion-quiz-master:${id}] requestedLevel=${requestedLevel || levelConfig.level || "?"} generationDepthTarget=${target} admittedKnowledgeCount=${accepted.length} masterQuestionCount=${validated.length}`);
-  return { sourceName, sourceDetail, validated };
+  return { sourceName, sourceDetail, validated, sourcePlacementPromise };
 }
 
 async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, userId) {
@@ -15132,13 +15277,27 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
     // aucun niveau connu (défensif, ne devrait pas arriver ici) — comportement
     // strictement inchangé dans ce cas.
     const generationDepthConfig = NOTION_QUIZ_LEVELS[level] ? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;
-    const result = await generateNotionLevelQuiz(apiKey, subject, contextHint, id, generationDepthConfig, false, level);
+    // classificationContext (V1 latence, 02/09/2026, cf. audit read-only) :
+    // fait lancer la classification taxonomy PAR generateNotionLevelQuiz
+    // lui-même, dès que sourceName/sourceDetail y sont figés — en parallèle
+    // du reste de son pipeline (question_generation/qualité/expansion),
+    // jamais après. `result.sourcePlacementPromise` (ci-dessous) est cette
+    // MÊME Promise, jamais rappelée : un seul appel réel à
+    // classifyCultureGeneraleKnowledgePlacementWithAI, comme avant ce
+    // correctif.
+    const result = await generateNotionLevelQuiz(apiKey, subject, contextHint, id, generationDepthConfig, false, level, { sourceType, userId });
     if (result.error) {
       console.warn(`[notion-quiz:${sourceType}:${id}] ${result.error} : ${result.reason || "fiche ou QCM invalide."}`);
       return [];
     }
-    const { sourceName, sourceDetail, validated } = result;
-    const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail, userId, id);
+    const { sourceName, sourceDetail, validated, sourcePlacementPromise } = result;
+    // Awaitée ICI seulement, au moment où sourcePlacement est réellement
+    // nécessaire pour construire la réponse (même endroit qu'avant ce
+    // correctif) — mais la Promise a déjà été lancée bien plus tôt par
+    // generateNotionLevelQuiz, donc déjà (ou presque déjà) résolue la
+    // plupart du temps : le pipeline qualité, plus long, aura tourné en
+    // parallèle pendant ce temps.
+    const sourcePlacement = await sourcePlacementPromise;
     const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
     return validated.map((q, index) => ({
       id: `notion:${sourceType}:${id}-${level}-q${index + 1}`,
@@ -15185,7 +15344,8 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.3,
         responseFormat: { type: "json_object" },
-        feature: "knowledge_generation"
+        feature: "knowledge_generation",
+        generationId: id
       }),
       classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourceName, sourceDetail, userId, id)
     ]);
@@ -15221,7 +15381,8 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" },
-      feature: "question_generation"
+      feature: "question_generation",
+      generationId: id
     });
     parsed = JSON.parse(content);
     parsed.questions = await qualityControlRawQuestions({
@@ -15232,7 +15393,8 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
       context: {
         hasIndependentSource: true,
         sourceExcerptFor: (_sourceId, question) => String(question?.knowledgeTarget || "").slice(0, 1200)
-      }
+      },
+      generationId: id
     });
   } catch (error) {
     console.error(`[notion-quiz:${sourceType}:${id}] génération des questions :`, error.message);
@@ -15580,7 +15742,17 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
   // buildNotionQuestions ci-dessus — profondeur TOUJOURS master pour un
   // niveau reconnu, `levelConfig` réel conservé pour `level`/le serving.
   const generationDepthConfig = NOTION_QUIZ_LEVELS[level] ? MASTER_GENERATION_DEPTH_CONFIG : levelConfig;
-  const result = await generateNotionLevelQuiz(apiKey, topic, null, id, generationDepthConfig, true, level);
+  // classificationContext: { sourceType: "custom", userId } (V1 latence,
+  // 02/09/2026, cf. audit read-only) : fait lancer la classification
+  // taxonomy PAR generateNotionLevelQuiz lui-même, dès que sourceName/
+  // sourceDetail y sont figés — en parallèle du reste de son pipeline
+  // (question_generation/qualité/expansion), jamais après.
+  // `result.sourcePlacementPromise` (ci-dessous) est cette MÊME Promise,
+  // jamais rappelée : un seul appel réel à
+  // classifyCultureGeneraleKnowledgePlacementWithAI, comme avant ce
+  // correctif. "custom" reste le sourceType littéral déjà utilisé ici avant
+  // ce correctif — comportement de classification strictement inchangé.
+  const result = await generateNotionLevelQuiz(apiKey, topic, null, id, generationDepthConfig, true, level, { sourceType: "custom", userId });
   if (result.error) {
     // `reason` conservé (pas seulement pour "rejected") : POST
     // /api/users/notion-quizzes/custom l'affiche aussi sur un "failed" avec
@@ -15590,13 +15762,16 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
     console.warn(`[notion-quizzes:custom:${id}] stage=${result.stage || "subject_validation"} code=${result.code || result.error} : ${result.reason || "échec contrôlé."}`);
     return result;
   }
-  const { sourceName, sourceDetail, validated } = result;
+  const { sourceName, sourceDetail, validated, sourcePlacementPromise } = result;
   // Contrairement à buildNotionQuestions, ce chemin (sujet libre, hors "Expert"
   // énumérable) codait en dur sourceThemes:[] — jamais classé, quel que soit le
   // contenu (bug distinct du budget de tokens insuffisant, cf.
   // fetchGpt5JsonContentWithRetry) : constaté en pratique le 12/08/2026, cause
   // principale des sujets libres tombés dans "Autres" sur "Mes apprentissages".
-  const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI("custom", sourceName, sourceDetail, userId, id);
+  // Awaitée ICI seulement (même endroit qu'avant ce correctif) — la Promise a
+  // déjà été lancée bien plus tôt par generateNotionLevelQuiz, en parallèle
+  // du pipeline qualité (cf. son commentaire).
+  const sourcePlacement = await sourcePlacementPromise;
   const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
   const questions = validated.map((q, index) => ({
     id: `notion:custom:${id}${level ? `-${level}` : ""}-q${index + 1}`,
@@ -19407,7 +19582,7 @@ function flattenCultureGeneraleDetail(detail) {
 // raisonnement peut être épuisé avant la moindre sortie JSON). Chaque
 // tentative est donc instrumentée individuellement (1 requête API = 1 log),
 // et pas seulement l'issue finale de la fonction.
-async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, { reasoningEffort = "low", initialBudget = 1200, feature = null } = {}) {
+async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, { reasoningEffort = "low", initialBudget = 1200, feature = null, generationId = null } = {}) {
   let budget = initialBudget;
   for (let attempt = 1; attempt <= 4; attempt++) {
     const startedAt = Date.now();
@@ -19424,13 +19599,13 @@ async function fetchGpt5JsonContentWithRetry(apiKey, model, prompt, logPrefix, {
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
-      recordAiUsage(supabase, { feature, model, latencyMs: Date.now() - startedAt, success: false, error: body || `openai http ${r.status}` });
+      recordAiUsage(supabase, { feature, model, generationId, latencyMs: Date.now() - startedAt, success: false, error: body || `openai http ${r.status}` });
       throw new Error(`openai http ${r.status}`);
     }
     const data = await r.json();
     const content = data?.choices?.[0]?.message?.content;
     const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
-    recordAiUsage(supabase, { feature, model, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - startedAt, success: true });
+    recordAiUsage(supabase, { feature, model, generationId, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - startedAt, success: true });
     if (content) return content;
     console.warn(`${logPrefix} réponse IA vide (tentative ${attempt}/4, budget=${budget}) : finish_reason=${data?.choices?.[0]?.finish_reason}`);
     budget *= 2;
@@ -19605,7 +19780,7 @@ async function fetchCultureGeneraleSeedSolars() {
 // La création de Galaxy reste hors périmètre (§19 : encore plus rare qu'un
 // Solar) — le choix porte toujours sur KNOWLEDGE_GALAXY_DEFINITIONS, jamais
 // une Galaxy inventée.
-async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, sourceDetail, userSolars) {
+async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, sourceDetail, userSolars, generationId = null) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
@@ -19673,7 +19848,7 @@ async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, 
     const isGpt5 = /^gpt-5/.test(OPINION_ARTICLE_CATEGORY_MODEL);
     let content;
     if (isGpt5) {
-      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[knowledge-taxonomy match]", { reasoningEffort: "medium", initialBudget: 1200, feature: "knowledge_classification" });
+      content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[knowledge-taxonomy match]", { reasoningEffort: "medium", initialBudget: 1200, feature: "knowledge_classification", generationId });
     } else {
       const requestStartedAt = Date.now();
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -19689,13 +19864,13 @@ async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, 
       });
       if (!r.ok) {
         const errBody = await r.text().catch(() => "");
-        recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, latencyMs: Date.now() - requestStartedAt, success: false, error: errBody || `openai http ${r.status}` });
+        recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, generationId, latencyMs: Date.now() - requestStartedAt, success: false, error: errBody || `openai http ${r.status}` });
         throw new Error(`openai http ${r.status}`);
       }
       const data = await r.json();
       content = data?.choices?.[0]?.message?.content;
       const { inputTokens, outputTokens, cachedTokens } = extractUsage(data?.usage);
-      recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
+      recordAiUsage(supabase, { feature: "knowledge_classification", model: OPINION_ARTICLE_CATEGORY_MODEL, generationId, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - requestStartedAt, success: true });
     }
     const raw = content ? JSON.parse(content) : null;
     const galaxyDef = findKnowledgeGalaxyDefinition(raw?.galaxy);
@@ -21152,7 +21327,7 @@ async function classifyCultureGeneraleKnowledgePlacementWithAI(sourceType, sourc
   // Galaxy, cf. §1 du plan) — lu une seule fois, réutilisé par le MATCH
   // fusionné Galaxy+Solar ci-dessous.
   const userSolars = await fetchUserActiveKnowledgeSolars(userId);
-  const match = await matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, sourceDetail, userSolars);
+  const match = await matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, sourceDetail, userSolars, sourceDebateId);
   if (!match?.galaxy) return null;
 
   const galaxy = match.galaxy;

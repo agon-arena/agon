@@ -8,7 +8,8 @@ const {
   validateQuestionBatchQuality,
   parseSemanticReviews,
   runQuestionQualityPipeline,
-  validateFinalShuffledQuestion
+  validateFinalShuffledQuestion,
+  buildSemanticReviewPrompt
 } = require("../lib/qcm-quality");
 
 function q(question = "Quelle est la capitale du Canada ?", overrides = {}) {
@@ -632,4 +633,459 @@ test("hasIndependentSource omis (comportement par défaut, imports/Éclairages/C
   });
   assert.equal(result.accepted.length, 0, "par défaut (hasIndependentSource non explicitement false), une source doit être jugée disponible par le critique");
   assert.equal(result.rejected[0].reasons[0].code, "NOT_GROUNDED_IN_SOURCE");
+});
+
+// ── V1 latence (02/09/2026, cf. audit read-only "MNORIA — Optimisation
+// vitesse QCM V1 conservatrice") : instrumentation par cycle (options.onCycle)
+// — purement additive, jamais une décision. Ces tests couvrent précisément
+// les points A/B/H/I de la demande : forme exacte du payload par cycle,
+// cumulativeAccepted correct après chaque review, plafond de cycles
+// INCHANGÉ (toujours 3 reviews / 2 régénérations maximum), et surtout
+// qu'AUCUN early stop n'a été introduit — le pipeline continue à régénérer
+// tant qu'il reste des rejets, même une fois MIN_MASTER_QUESTIONS-like
+// atteint côté appelant (cette fonction ne connaît d'ailleurs même pas ce
+// seuil, qui vit exclusivement dans generateNotionLevelQuiz).
+
+test("V1 — onCycle reçoit exactement 3 appels (cycles 0,1,2), cumulativeAccepted progresse sans early stop malgré des rejets qui persistent jusqu'au plafond", async () => {
+  // q1/q2 acceptées dès le cycle 0 et plus jamais rejugées. q3 est rejetée à
+  // CHAQUE cycle (y compris ses deux remplacements) : la boucle doit quand
+  // même aller jusqu'au bout de son budget (maxRetries=2 par défaut) plutôt
+  // que de s'arrêter dès que 2 questions sont déjà bonnes.
+  const q1 = q("Quelle ville est la capitale fédérale du Canada ?", { sourceId: "c1" });
+  const q2 = q("Où se situe la capitale du Canada ?", { sourceId: "c2" });
+  const q3 = q("Quelle est la population d'Ottawa ?", { sourceId: "c3" });
+  let reviewCallIndex = 0;
+  let regenerateCalls = 0;
+  const cycles = [];
+  const result = await runQuestionQualityPipeline([q1, q2, q3], {
+    onCycle: (payload) => cycles.push(payload),
+    reviewSemantic: async ({ entries }) => {
+      reviewCallIndex += 1;
+      return {
+        reviews: entries.map((entry) => {
+          // Le sourceId "c3" (et ses remplacements successifs, régénérés à
+          // partir de lui) reste toujours refusé ; c1/c2 ne réapparaissent
+          // jamais dans un cycle suivant (déjà acceptées définitivement).
+          const isThirdSlot = entry.sourceId === "c3";
+          return {
+            id: entry.id,
+            verdict: isThirdSlot ? "reject" : "accept",
+            reasonCodes: isThirdSlot ? ["AMBIGUOUS_DISTRACTOR"] : [],
+            expectedCorrectIndexes: [0],
+            targetsKnowledge: true,
+            groundedInSource: true
+          };
+        })
+      };
+    },
+    regenerate: async ({ rejected, attempt }) => {
+      regenerateCalls += 1;
+      return rejected.map(() => q(`Remplacement c3 tentative ${attempt}`, { sourceId: "c3" }));
+    }
+  });
+
+  assert.equal(reviewCallIndex, 3, "3 critiques : cycle initial + 2 régénérations, jamais moins, jamais plus");
+  assert.equal(regenerateCalls, 2, "2 régénérations maximum (QCM_SEMANTIC_REVIEW_MAX_RETRIES par défaut) — plafond inchangé");
+  assert.equal(result.metrics.regenerationCycles, 2);
+  assert.equal(cycles.length, 3, "un appel onCycle par cycle réellement exécuté, jamais par tentative technique interne");
+
+  // cycle 0 : q1+q2 acceptées, q3 rejetée — 2 questions déjà bonnes, mais la
+  // boucle continue quand même (aucun early stop sur un quelconque seuil).
+  assert.equal(cycles[0].cycleIndex, 0);
+  assert.equal(cycles[0].questionsIn, 3);
+  assert.equal(cycles[0].deterministicAccepted, 3, "les 3 candidats passent le contrôle déterministe/grounding avant le critique sémantique");
+  assert.equal(cycles[0].semanticAccepted, 2);
+  assert.equal(cycles[0].rejected, 1);
+  assert.equal(cycles[0].cumulativeAccepted, 2);
+  assert.equal(cycles[0].regenerationMs, null, "aucune régénération n'a encore eu lieu avant le tout premier cycle");
+  assert.equal(typeof cycles[0].reviewMs, "number");
+  assert.ok(cycles[0].reviewMs >= 0);
+
+  // cycle 1 : le remplacement de q3 est de nouveau rejeté — cumulativeAccepted
+  // reste à 2 (pas de régression), la boucle continue malgré tout.
+  assert.equal(cycles[1].cycleIndex, 1);
+  assert.equal(cycles[1].questionsIn, 1);
+  assert.equal(cycles[1].deterministicAccepted, 1);
+  assert.equal(cycles[1].semanticAccepted, 0);
+  assert.equal(cycles[1].rejected, 1);
+  assert.equal(cycles[1].cumulativeAccepted, 2, "aucune progression ce cycle, mais la boucle ne s'arrête PAS pour autant");
+  assert.equal(typeof cycles[1].regenerationMs, "number", "la régénération qui a produit les candidats de ce cycle est bien mesurée");
+  assert.ok(cycles[1].regenerationMs >= 0);
+  assert.equal(typeof cycles[1].reviewMs, "number");
+
+  // cycle 2 : dernier essai, encore rejeté — la boucle s'arrête ici UNIQUEMENT
+  // parce que cycles(2) >= maxRetries(2), jamais parce qu'un seuil de qualité
+  // aurait été atteint (il ne l'a d'ailleurs jamais été pour ce 3e slot).
+  assert.equal(cycles[2].cycleIndex, 2);
+  assert.equal(cycles[2].cumulativeAccepted, 2);
+  assert.equal(cycles[2].rejected, 1);
+  assert.equal(typeof cycles[2].regenerationMs, "number");
+  assert.equal(result.accepted.length, 2, "q1/q2 seulement : le 3e slot n'a jamais été récupéré, comme le montre déjà unresolvedReasonCounts");
+  assert.ok(Object.keys(result.metrics.unresolvedReasonCounts).length >= 1);
+});
+
+test("V1 — MIN_MASTER_QUESTIONS-like : même largement dépassé après le premier cycle, la boucle continue tant qu'il reste des rejets (aucun early stop)", async () => {
+  // 5 questions initiales, une seule rejetée au cycle 0 (donc 4/5 déjà
+  // acceptées — au-delà d'un seuil d'acceptabilité hypothétique comme 15/20
+  // à l'échelle réelle). La boucle doit malgré tout dérouler son cycle 1
+  // complet pour la question restante, jamais s'arrêter parce que "4 sur 5,
+  // c'est déjà suffisant".
+  // Options/textes réellement distincts (jamais un simple suffixe numérique)
+  // pour ne pas déclencher DUPLICATE_QUESTION côté validateur déterministe —
+  // lexicalSimilarity ignore les jetons de 2 caractères ou moins, un simple
+  // "Question 1"/"Question 2" partagerait donc un jeton "question" identique
+  // à 100 % et serait perçu comme un doublon, ce qui n'est pas ce que ce
+  // test veut exercer.
+  const items = [
+    q("Quelle est la capitale du Canada ?", { sourceId: "s1", options: ["Ottawa", "Toronto", "Montréal", "Vancouver"] }),
+    q("Quelle est la capitale de la France ?", { sourceId: "s2", options: ["Paris", "Lyon", "Marseille", "Nice"], knowledgeTarget: "Paris est la capitale de la France." }),
+    q("Quelle est la capitale de l'Allemagne ?", { sourceId: "s3", options: ["Berlin", "Munich", "Hambourg", "Cologne"], knowledgeTarget: "Berlin est la capitale de l'Allemagne." }),
+    q("Quelle est la capitale de l'Italie ?", { sourceId: "s4", options: ["Rome", "Milan", "Naples", "Turin"], knowledgeTarget: "Rome est la capitale de l'Italie." }),
+    q("Quelle est la capitale de l'Espagne ?", { sourceId: "s5", options: ["Madrid", "Barcelone", "Séville", "Valence"], knowledgeTarget: "Madrid est la capitale de l'Espagne." })
+  ];
+  const cycles = [];
+  let regenerateCalls = 0;
+  let reviewCallCount = 0;
+  const result = await runQuestionQualityPipeline(items, {
+    onCycle: (payload) => cycles.push(payload),
+    // "s5" n'est rejetée qu'à la toute première critique (cycle 0) — son
+    // remplacement, produit par regenerate ci-dessous, est accepté dès le
+    // cycle 1 : exactement le scénario "une seule régénération suffit".
+    reviewSemantic: async ({ entries }) => {
+      reviewCallCount += 1;
+      const isFirstReview = reviewCallCount === 1;
+      return {
+        reviews: entries.map((entry) => ({
+          id: entry.id,
+          verdict: isFirstReview && entry.sourceId === "s5" ? "reject" : "accept",
+          reasonCodes: isFirstReview && entry.sourceId === "s5" ? ["WEAK_DISTRACTOR_SET"] : [],
+          expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+        }))
+      };
+    },
+    regenerate: async ({ rejected }) => {
+      regenerateCalls += 1;
+      return rejected.map(() => q("Dans quelle ville siège le gouvernement espagnol ?", {
+        sourceId: "s5",
+        options: ["Madrid", "Barcelone", "Séville", "Valence"],
+        knowledgeTarget: "Madrid est la capitale de l'Espagne."
+      }));
+    }
+  });
+  assert.equal(cycles[0].cumulativeAccepted, 4);
+  assert.equal(regenerateCalls, 1, "la régénération de la 5e question a bien eu lieu malgré les 4 déjà acceptées");
+  assert.equal(cycles.length, 2, "cycle 0 (4 accept + 1 reject) puis cycle 1 (le remplacement, accepté cette fois, referme la boucle normalement)");
+  assert.equal(result.accepted.length, 5);
+});
+
+test("V1 — onCycle absent (comportement historique) : aucun changement, même trajectoire que les tests existants", async () => {
+  // Verrou de non-régression explicite : un appelant qui ne fournit pas
+  // onCycle (tous les appelants existants avant ce correctif) doit obtenir
+  // une sortie strictement identique à avant son introduction.
+  const result = await runQuestionQualityPipeline([q()], {
+    maxRetries: 0,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: [{ id: entries[0].id, verdict: "accept", reasonCodes: [], expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true }]
+    })
+  });
+  assert.equal(result.accepted.length, 1);
+});
+
+test("V1 — une erreur levée par onCycle ne fait jamais échouer ni dévier la génération (best-effort, silencieux)", async () => {
+  const result = await runQuestionQualityPipeline([q()], {
+    maxRetries: 0,
+    onCycle: () => { throw new Error("panne de télémétrie simulée"); },
+    reviewSemantic: async ({ entries }) => ({
+      reviews: [{ id: entries[0].id, verdict: "accept", reasonCodes: [], expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true }]
+    })
+  });
+  assert.equal(result.accepted.length, 1, "la panne de onCycle ne doit ni bloquer ni corrompre l'issue réelle de la génération");
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// V1 corrective — audit QCM "Stalinisme" (02/09/2026, daily_quiz.id=358)
+// ══════════════════════════════════════════════════════════════════════════
+// Deux nouveaux contrôles déterministes (REORDERED_DUPLICATE_OPTION,
+// CROSS_QUESTION_ANSWER_REUSE, cf. lib/qcm-quality.js) + un renforcement
+// textuel du prompt du critique sémantique (buildSemanticReviewPrompt,
+// CATEGORY_MISMATCH/GUESSABLE_WITHOUT_KNOWLEDGE/AMBIGUOUS_DISTRACTOR) et du
+// prompt du générateur (buildQuestionsFromKnowledgePrompt,
+// lib/knowledge-admission.js). Zéro appel IA ajouté, zéro modification du
+// modèle Luna, du nombre de cycles, du grounding, de V3.2 ou du ranking
+// pédagogique.
+
+// ── REORDERED_DUPLICATE_OPTION ──────────────────────────────────────────
+
+test("REORDERED_DUPLICATE_OPTION : rejette deux options qui réordonnent exactement les mêmes faits (cas réel QCM Stalinisme)", () => {
+  const result = validateQuestionQuality(q(
+    "Quelle succession d’événements correspond à l’ascension de Joseph Staline ?",
+    {
+      options: [
+        "Lénine meurt en 1924, Staline devient secrétaire général en 1922, puis il consolide son pouvoir à la fin des années 1920",
+        "Staline consolide son pouvoir à la fin des années 1920, devient secrétaire général en 1922, puis Lénine meurt en 1924",
+        "Staline devient secrétaire général en 1924, Lénine meurt en 1922, puis il consolide son pouvoir à la fin des années 1920",
+        "Il devient secrétaire général en 1922, Lénine meurt en 1924, puis Staline consolide son pouvoir à la fin des années 1920"
+      ],
+      correctIndex: 3
+    }
+  ));
+  assert.ok(codes(result).includes("REORDERED_DUPLICATE_OPTION"));
+});
+
+test("REORDERED_DUPLICATE_OPTION : n'est PAS déclenché par deux options développées mais réellement distinctes (dates/ordinaux différents)", () => {
+  const result = validateQuestionQuality(q(
+    "Quel plan quinquennal soviétique donne la priorité à l’industrie lourde dès son lancement en 1928 ?",
+    {
+      options: [
+        "Le premier plan quinquennal, lancé en 1928, donne la priorité à l’industrie lourde",
+        "Le second plan quinquennal, lancé en 1933, poursuit la priorité donnée à l’industrie lourde",
+        "Le troisième plan quinquennal, interrompu en 1941, maintient cette même priorité",
+        "La Nouvelle Politique économique, abandonnée en 1928, privilégiait au contraire l’agriculture"
+      ],
+      correctIndex: 0
+    }
+  ));
+  assert.ok(!codes(result).includes("REORDERED_DUPLICATE_OPTION"));
+});
+
+test("REORDERED_DUPLICATE_OPTION : jamais déclenché sur des options courtes de type étiquette (sous le plancher de 4 tokens)", () => {
+  const result = validateQuestionQuality(q("Quelle institution est la principale police politique soviétique ?", {
+    options: ["Le NKVD", "Le Goulag", "La direction stalinienne", "Le Parti communiste soviétique"],
+    correctIndex: 0
+  }));
+  assert.ok(!codes(result).includes("REORDERED_DUPLICATE_OPTION"));
+});
+
+test("REORDERED_DUPLICATE_OPTION : s'applique aussi au format qcm_multi", () => {
+  const result = validateQuestionQuality(q(
+    "Quelles successions d’événements sont chronologiquement correctes ?",
+    {
+      type: "qcm_multi",
+      options: [
+        "Il devient secrétaire général en 1922, Lénine meurt en 1924, puis Staline consolide son pouvoir à la fin des années 1920",
+        "Lénine meurt en 1924, Staline devient secrétaire général en 1922, puis il consolide son pouvoir à la fin des années 1920",
+        "L’Allemagne nazie envahit l’Union soviétique le 22 juin 1941",
+        "Le premier plan quinquennal donne la priorité à l’industrie lourde à partir de 1928"
+      ],
+      correctIndexes: [0, 2]
+    }
+  ));
+  assert.ok(codes(result).includes("REORDERED_DUPLICATE_OPTION"));
+});
+
+// ── CROSS_QUESTION_ANSWER_REUSE ─────────────────────────────────────────
+
+test("CROSS_QUESTION_ANSWER_REUSE : rejette une mauvaise option qui reprend le knowledgeTarget d'une autre question du lot (cas réel QCM Stalinisme)", () => {
+  const barbarossa = q("Que se produit-il le 22 juin 1941, après la rupture du pacte germano-soviétique de 1939 ?", {
+    sourceId: "stalinisme-barbarossa",
+    options: [
+      "Nikita Khrouchtchev présente son rapport secret au XXe congrès du Parti",
+      "L’Union soviétique établit ou soutient des régimes communistes en Europe orientale",
+      "Joseph Staline meurt et une réorganisation du pouvoir s’ouvre",
+      "L’Allemagne nazie envahit l’Union soviétique"
+    ],
+    correctIndex: 3,
+    knowledgeTarget: "L’Allemagne nazie envahit l’Union soviétique le 22 juin 1941, après la rupture du pacte germano-soviétique de 1939."
+  });
+  const stalineDeath = q("Quelle date marque la mort de Joseph Staline ?", {
+    sourceId: "stalinisme-mort",
+    options: ["Le 5 mars 1953", "Le 22 juin 1941", "En 1924", "En février 1956"],
+    correctIndex: 0,
+    knowledgeTarget: "Joseph Staline meurt le 5 mars 1953, ce qui ouvre une période de réorganisation du pouvoir soviétique."
+  });
+  const batch = validateQuestionBatchQuality([barbarossa, stalineDeath]);
+  const decision = batch.decisions.find((d) => d.question === stalineDeath);
+  assert.ok(decision.reasons.some((r) => r.code === "CROSS_QUESTION_ANSWER_REUSE"));
+  // Fait annexe confirmé par ce même fixture (repris tel quel du QCM réel
+  // audité) : le troisième distracteur de `barbarossa` ("Joseph Staline
+  // meurt et une réorganisation du pouvoir s'ouvre") reprend lui aussi,
+  // presque mot pour mot, le knowledgeTarget de `stalineDeath` — un TROISIÈME
+  // recyclage inter-questions dans ce même lot, distinct de celui repéré
+  // lors de l'audit initial. Les deux questions sont donc légitimement
+  // flaguées ici, chacune à cause de SA PROPRE mauvaise option.
+  const otherDecision = batch.decisions.find((d) => d.question === barbarossa);
+  assert.ok(otherDecision.reasons.some((r) => r.code === "CROSS_QUESTION_ANSWER_REUSE"));
+});
+
+test("CROSS_QUESTION_ANSWER_REUSE : n'invalide jamais rétroactivement la question SOURCE d'une reprise, seule la question qui reprend est marquée invalide", () => {
+  // Fixture volontairement à sens unique (contrairement au test précédent,
+  // qui reprend fidèlement les données réelles où la reprise est
+  // bidirectionnelle) : ici, seule `copycat` reprend `original`, jamais
+  // l'inverse — permet de vérifier isolément l'asymétrie du contrôle.
+  const original = q("Quel événement se produit le 22 juin 1941 ?", {
+    sourceId: "asymmetrie-original",
+    options: ["Un traité de paix est signé", "Une révolution éclate à Moscou", "Un putsch militaire échoue", "L’Allemagne nazie envahit l’Union soviétique"],
+    correctIndex: 3,
+    knowledgeTarget: "L’Allemagne nazie envahit l’Union soviétique le 22 juin 1941."
+  });
+  const copycat = q("Quelle date marque la mort de Joseph Staline ?", {
+    sourceId: "asymmetrie-copycat",
+    options: ["Le 5 mars 1953", "Le 22 juin 1941", "Le 14 juillet 1789", "Le 11 novembre 1918"],
+    correctIndex: 0,
+    knowledgeTarget: "Joseph Staline meurt le 5 mars 1953."
+  });
+  const batch = validateQuestionBatchQuality([original, copycat]);
+  const originalDecision = batch.decisions.find((d) => d.question === original);
+  const copycatDecision = batch.decisions.find((d) => d.question === copycat);
+  assert.ok(copycatDecision.reasons.some((r) => r.code === "CROSS_QUESTION_ANSWER_REUSE"));
+  assert.ok(!originalDecision.reasons.some((r) => r.code === "CROSS_QUESTION_ANSWER_REUSE"));
+  assert.equal(batch.accepted.length, 1);
+  assert.equal(batch.accepted[0], original);
+});
+
+test("CROSS_QUESTION_ANSWER_REUSE : couvre aussi une mauvaise option réduite à une seule année isolée (exception documentée à 1 token)", () => {
+  const lenineDeath = q("En quelle année meurt Vladimir Lénine ?", {
+    sourceId: "stalinisme-lenine",
+    options: ["En 1922", "En 1924", "En 1928", "En 1936"],
+    correctIndex: 1,
+    knowledgeTarget: "Vladimir Lénine meurt en 1924."
+  });
+  const stalineDeath = q("Quelle date marque la mort de Joseph Staline ?", {
+    sourceId: "stalinisme-mort",
+    options: ["Le 5 mars 1953", "Le 22 juin 1941", "En 1924", "En février 1956"],
+    correctIndex: 0,
+    knowledgeTarget: "Joseph Staline meurt le 5 mars 1953."
+  });
+  const batch = validateQuestionBatchQuality([lenineDeath, stalineDeath]);
+  const decision = batch.decisions.find((d) => d.question === stalineDeath);
+  assert.ok(decision.reasons.some((r) => r.code === "CROSS_QUESTION_ANSWER_REUSE"));
+});
+
+test("CROSS_QUESTION_ANSWER_REUSE : n'est PAS déclenché par une simple proximité thématique sous le seuil de containment (0.8)", () => {
+  const politicalTransformation = q("Quelle transformation politique caractérise le stalinisme ?", {
+    sourceId: "stalinisme-transfo",
+    options: [
+      "La planification économique est instaurée et l’industrie lourde devient prioritaire",
+      "Les exploitations agricoles sont regroupées dans des fermes collectives ou d’État",
+      "La censure et la propagande encadrent la vie politique et sociale",
+      "Le monopole politique du Parti communiste est maintenu et le pouvoir est davantage centralisé autour de la direction stalinienne"
+    ],
+    correctIndex: 3,
+    knowledgeTarget: "Le stalinisme conserve le monopole politique du Parti communiste et renforce fortement la centralisation du pouvoir autour de la direction stalinienne."
+  });
+  const nkvd = q("Quelle institution est la principale police politique soviétique pendant la Grande Terreur ?", {
+    sourceId: "stalinisme-nkvd",
+    options: ["Le NKVD", "Le Goulag", "Un tribunal militaire spécial", "Le Parti communiste soviétique"],
+    correctIndex: 0,
+    knowledgeTarget: "Le NKVD est la principale police politique soviétique pendant la Grande Terreur de 1936-1938."
+  });
+  const batch = validateQuestionBatchQuality([politicalTransformation, nkvd]);
+  const decision = batch.decisions.find((d) => d.question === nkvd);
+  assert.ok(!decision.reasons.some((r) => r.code === "CROSS_QUESTION_ANSWER_REUSE"), "« Le Parti communiste soviétique » reste un intitulé générique, insuffisamment proche du knowledgeTarget de l'autre question (containment ≈ 0.67 < 0.8)");
+});
+
+test("CROSS_QUESTION_ANSWER_REUSE : une question isolée (lot d'une seule question) n'est jamais concernée", () => {
+  const result = validateQuestionBatchQuality([q()]);
+  assert.equal(result.accepted.length, 1);
+  assert.ok(!result.decisions[0].reasons.some((r) => r.code === "CROSS_QUESTION_ANSWER_REUSE"));
+});
+
+// ── Prompt du critique sémantique : renforcements textuels présents ────────
+
+test("buildSemanticReviewPrompt : contient le renforcement CATEGORY_MISMATCH par écho de domaine du stem", () => {
+  const prompt = buildSemanticReviewPrompt([], {});
+  assert.match(prompt, /CATEGORY_MISMATCH.*cas du distracteur vrai mais hors catégorie/s);
+  assert.match(prompt, /si le stem demande une institution, les 4 options doivent être plausiblement des institutions/);
+});
+
+test("buildSemanticReviewPrompt : contient les 4 canaux explicites de GUESSABLE_WITHOUT_KNOWLEDGE", () => {
+  const prompt = buildSemanticReviewPrompt([], {});
+  assert.match(prompt, /TYPE GRAMMATICAL OU SÉMANTIQUE/);
+  assert.match(prompt, /PORTÉE LOGIQUE du stem/);
+});
+
+test("buildSemanticReviewPrompt : contient la comparaison pairwise explicite d'AMBIGUOUS_DISTRACTOR", () => {
+  const prompt = buildSemanticReviewPrompt([], {});
+  assert.match(prompt, /comparaison pairwise obligatoire/);
+  assert.match(prompt, /secrétaire général.*mort de Lénine.*consolidation du pouvoir/s);
+});
+
+// ── Wiring bout-en-bout (critique MOCKÉ — aucun appel IA réel, cf. le même
+// principe documenté que les tests "critique mockée" et "motif pédagogique
+// fictif" plus haut : la qualité réelle du jugement du modèle ne peut pas
+// être testée ici, seulement que le pipeline achemine correctement un
+// verdict de rejet motivé par ces codes renforcés, sans effet de bord sur
+// les questions voisines) ─────────────────────────────────────────────────
+
+test("wiring : un stem demandant une institution avec une seule institution parmi les options est refusé (GUESSABLE_WITHOUT_KNOWLEDGE, critique mockée)", async () => {
+  const institutionQuestion = q("Quel terme désigne l’appareil soviétique administrant un vaste réseau de camps et de colonies de travail forcé ?", {
+    sourceId: "stalinisme-goulag",
+    options: ["Le NKVD", "La Grande Terreur", "Le réalisme socialiste", "Le Goulag"],
+    correctIndex: 3,
+    knowledgeTarget: "Le Goulag est l’appareil soviétique qui administre un vaste réseau de camps et de colonies de travail forcé."
+  });
+  const result = await runQuestionQualityPipeline([institutionQuestion], {
+    maxRetries: 0,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: [{
+        id: entries[0].id,
+        verdict: "reject",
+        reasonCodes: ["GUESSABLE_WITHOUT_KNOWLEDGE"],
+        expectedCorrectIndexes: [3],
+        targetsKnowledge: true,
+        groundedInSource: true,
+        comment: "Seule une option est effectivement une institution ; les trois autres sont un événement et une doctrine artistique, identifiables sans connaître le sujet."
+      }]
+    })
+  });
+  assert.equal(result.accepted.length, 0);
+  assert.equal(result.rejected[0].reasons[0].code, "GUESSABLE_WITHOUT_KNOWLEDGE");
+});
+
+test("wiring : un stem politique avec une seule réponse politique et trois réponses d'autres domaines est refusé (CATEGORY_MISMATCH, critique mockée)", async () => {
+  const domainEchoQuestion = q("Quelle transformation politique caractérise le stalinisme ?", {
+    sourceId: "stalinisme-transfo",
+    options: [
+      "La planification économique est instaurée et l’industrie lourde devient prioritaire",
+      "Les exploitations agricoles sont regroupées dans des fermes collectives ou d’État",
+      "La censure et la propagande encadrent la vie politique et sociale",
+      "Le monopole politique du Parti communiste est maintenu et le pouvoir est davantage centralisé"
+    ],
+    correctIndex: 3,
+    knowledgeTarget: "Le stalinisme conserve le monopole politique du Parti communiste et renforce fortement la centralisation du pouvoir."
+  });
+  const result = await runQuestionQualityPipeline([domainEchoQuestion], {
+    maxRetries: 0,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: [{
+        id: entries[0].id,
+        verdict: "reject",
+        reasonCodes: ["CATEGORY_MISMATCH"],
+        expectedCorrectIndexes: [3],
+        targetsKnowledge: true,
+        groundedInSource: true,
+        comment: "Les trois distracteurs sont vrais mais économique/agricole/culturel : seule l'option politique répond au domaine nommé par le stem, réponse trouvable par simple appariement lexical."
+      }]
+    })
+  });
+  assert.equal(result.accepted.length, 0);
+  assert.equal(result.rejected[0].reasons[0].code, "CATEGORY_MISMATCH");
+});
+
+test("acceptation : une question réellement discriminante n'est rejetée par aucun des deux nouveaux contrôles déterministes, malgré des distracteurs thématiquement proches", () => {
+  const moscowTrials = q("Comment peut-on caractériser les procès de Moscou de 1936 à 1938 ?", {
+    sourceId: "stalinisme-proces",
+    options: [
+      "Des procès économiques consacrés au premier plan quinquennal et à l’industrie lourde",
+      "Des audiences consacrées à l’application du réalisme socialiste dans les arts",
+      "Des procédures administratives visant les paysans classés parmi les « koulaks »",
+      "Des procès politiques publics visant notamment d’anciens dirigeants bolcheviques accusés de complots contre le régime"
+    ],
+    correctIndex: 3,
+    knowledgeTarget: "Les procès de Moscou de 1936 à 1938 sont des procès politiques publics visant notamment d’anciens dirigeants bolcheviques accusés de complots contre le régime."
+  });
+  const destalinisation = q("Quelle situation caractérise la déstalinisation ?", {
+    sourceId: "stalinisme-destaline",
+    options: [
+      "Elle réduit certaines formes de terreur et le culte de la personnalité sans supprimer le parti unique ni l’économie planifiée",
+      "Elle remplace l’économie planifiée par la Nouvelle Politique économique et le parti unique par plusieurs partis",
+      "Elle maintient toutes les formes de terreur et supprime le culte de la personnalité",
+      "Elle supprime le parti unique et l’économie planifiée tout en renforçant la terreur"
+    ],
+    correctIndex: 0,
+    knowledgeTarget: "La déstalinisation réduit certaines formes de terreur et le culte de la personnalité, mais maintient le parti unique et l’économie planifiée soviétique."
+  });
+  const batch = validateQuestionBatchQuality([moscowTrials, destalinisation]);
+  assert.equal(batch.accepted.length, 2);
+  assert.equal(batch.rejected.length, 0);
 });
