@@ -2371,6 +2371,30 @@ function cacheUniverseEmptyState(empty) {
   } catch {}
 }
 
+// Le rate limiter serveur (bucket "users" partagé par IP, 30 req/60s, cf. server.js
+// rateLimit) est mutualisé entre tous les endpoints /api/users/* — un aller-retour rapide
+// Ma mémoire → Communauté → Ma mémoire (chacun refaisant plusieurs appels de ce bucket)
+// peut suffire à le dépasser. Un 429 y est donc transitoire, pas une vraie panne : une
+// seule nouvelle tentative après un court délai suffit, plutôt que de masquer le cadre "Ma
+// mémoire" pour un pic passager (constaté le 02/09/2026 via diagnostic, "http 429").
+async function fetchIntellectualUniverseWithRetry(modeToken, retriesLeft) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UNIVERSE_FETCH_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`/api/users/intellectual-universe?legacyKey=${encodeURIComponent(getKey())}`, { cache: "no-store", signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  if (response.status === 429 && retriesLeft > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    if (modeToken !== window._mnoriaCloudModeToken) throw new Error("http 429");
+    return fetchIntellectualUniverseWithRetry(modeToken, retriesLeft - 1);
+  }
+  if (!response.ok) throw new Error("http " + response.status);
+  return response.json();
+}
+
 // ---- Chargement (un seul appel réseau, jamais relancé à la navigation dans la scène) ----
 async function loadUniverse() {
   // Jeton partagé avec script.js (toggleMnoriaCloud/setPoliticalCloudGroup/setMemoireCloudMode) :
@@ -2413,16 +2437,7 @@ async function loadUniverse() {
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), UNIVERSE_FETCH_TIMEOUT_MS);
-    let response;
-    try {
-      response = await fetch(`/api/users/intellectual-universe?legacyKey=${encodeURIComponent(getKey())}`, { cache: "no-store", signal: controller.signal });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    if (!response.ok) throw new Error("http " + response.status);
-    universeData = await response.json();
+    universeData = await fetchIntellectualUniverseWithRetry(modeToken, 1);
   } catch (error) {
     console.warn("[mon-univers] chargement échoué :", error.message);
     if (modeToken !== window._mnoriaCloudModeToken) return;

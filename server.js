@@ -12,6 +12,11 @@ const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 const { recordAiUsage, extractUsage } = require("./lib/ai-usage-log");
 const { recordNotionQuizGenerationFailure, fetchRecentNotionQuizFailures } = require("./lib/notion-quiz-generation-failures");
+const {
+  NOTION_QUIZ_STALE_AFTER_MS,
+  notionQuizGenerationIdentity,
+  isOrphanedNotionQuizGeneration
+} = require("./lib/notion-quiz-stale-generation");
 const { buildGroundingMetricsSummary, recordQcmGroundingMetrics } = require("./lib/qcm-grounding-metrics");
 const { validateLegacyKey, resolveLegacyUser } = require("./lib/users");
 const { buildMemoryItemNaturalKey } = require("./lib/spaced-repetition/memory-model");
@@ -14541,29 +14546,80 @@ function parseFicheAndKnowledgeCandidates(parsed, fallbackName, levelConfig) {
 // sourceDetail.groundingDiagnostic pour rester interrogeable en base
 // (Supabase) longtemps après l'appel, jamais affiché à l'utilisateur.
 // Budget d'appels (section 16 de la demande, jamais dépassé) : au plus 2
-// appels Brave (recherche de base + UNE relance ciblée optionnelle) et
-// TOUJOURS exactement 1 appel IA (sélection finale) — aucun appel IA
-// supplémentaire pour "comprendre le sujet" : topicContext est calculé par
-// simple recoupement lexical déterministe (lib/source-scoring.js), jamais
-// par un modèle.
-const WEB_SEARCH_GROUNDING_TIMEOUT_MS = 8000;
+// appels Brave "logiques" (recherche de base + UNE relance ciblée
+// optionnelle) et TOUJOURS exactement 1 appel IA (sélection finale) — aucun
+// appel IA supplémentaire pour "comprendre le sujet" : topicContext est
+// calculé par simple recoupement lexical déterministe
+// (lib/source-scoring.js), jamais par un modèle. Correctif du 02/09/2026
+// (robustesse, diagnostic "Stoïcisme") : chacun de ces 2 appels logiques peut
+// désormais lui-même retenter UNE fois en cas de timeout/erreur réseau/erreur
+// HTTP récupérable (cf. braveSearchRaw plus bas) — au plus 4 requêtes HTTP
+// réelles vers Brave dans le pire cas, jamais plus.
+const WEB_SEARCH_GROUNDING_TIMEOUT_MS = 12000;
 const WEB_SEARCH_PAGE_FETCH_TIMEOUT_MS = 8000;
 
-async function braveSearchRaw(query, braveKey, id) {
+// Une seule tentative Brave, sans retry — jamais appelée directement par
+// resolveWebSearchGrounding (cf. braveSearchRaw plus bas, seul point d'entrée
+// public). Distingue explicitement 4 issues (diagnostic du 02/09/2026, cas
+// réel "Stoïcisme" : un timeout ponctuel faisait générer tout un QCM sans
+// grounding, indiscernable dans les logs d'une réponse Brave valide à 0
+// résultat) :
+// - { ok:true, results } : réponse HTTP 2xx, résultats normalisés (peut être
+//   un tableau vide — une réponse valide à 0 résultat n'est PAS une erreur,
+//   cf. zero_results ci-dessous, jamais retentée).
+// - { ok:false, kind:"timeout" } : AbortSignal.timeout() a déclenché
+//   l'annulation — fetch() rejette alors avec un DOMException
+//   name="TimeoutError" (vérifié en conditions réelles sur cette version de
+//   Node), jamais confondu avec une autre exception réseau.
+// - { ok:false, kind:"network_error" } : toute autre exception levée par
+//   fetch() avant réception d'une réponse HTTP (DNS, connexion refusée,
+//   réinitialisée...).
+// - { ok:false, kind:"http_error", recoverable } : une réponse HTTP a bien
+//   été reçue mais avec un statut d'erreur — `recoverable` distingue un statut
+//   potentiellement transitoire (5xx, 429 — panne/quota côté Brave, une
+//   relance a du sens) d'un statut qui ne le sera jamais (401/403/400... —
+//   même clé, même requête : une relance échouerait identiquement).
+async function braveSearchAttempt(query, braveKey, id, timeoutMs) {
+  let res;
   try {
-    const res = await fetch(buildBraveSearchUrl(query, WEB_SEARCH_RAW_RESULTS_COUNT), {
+    res = await fetch(buildBraveSearchUrl(query, WEB_SEARCH_RAW_RESULTS_COUNT), {
       headers: { Accept: "application/json", "X-Subscription-Token": braveKey },
-      signal: AbortSignal.timeout(WEB_SEARCH_GROUNDING_TIMEOUT_MS)
+      signal: AbortSignal.timeout(timeoutMs)
     });
-    if (!res.ok) {
-      console.warn(`[web-search-grounding:${id}] Brave a répondu ${res.status}.`);
-      return [];
-    }
-    return normalizeBraveResults(await res.json());
   } catch (error) {
-    console.warn(`[web-search-grounding:${id}] recherche Brave :`, error.message);
-    return [];
+    const kind = error?.name === "TimeoutError" ? "timeout" : "network_error";
+    console.warn(`[web-search-grounding:${id}] Brave (${kind}) :`, error.message);
+    return { ok: false, kind, detail: error.message };
   }
+  if (!res.ok) {
+    const recoverable = res.status >= 500 || res.status === 429;
+    console.warn(`[web-search-grounding:${id}] Brave a répondu ${res.status} (http_error, ${recoverable ? "récupérable" : "non récupérable"}).`);
+    return { ok: false, kind: "http_error", recoverable, detail: `HTTP ${res.status}` };
+  }
+  const results = normalizeBraveResults(await res.json());
+  if (!results.length) {
+    console.info(`[web-search-grounding:${id}] Brave a répondu correctement mais sans résultat exploitable (zero_results).`);
+  }
+  return { ok: true, results };
+}
+
+// Point d'entrée public, SEUL appelé par resolveWebSearchGrounding — même
+// signature et même contrat de retour qu'avant ce correctif (toujours un
+// tableau, jamais un objet ni une exception, comportement best-effort
+// inchangé). Ajoute UNE seule relance automatique, et seulement quand elle a
+// une chance réelle de changer l'issue : timeout, erreur réseau, ou erreur
+// HTTP récupérable (5xx/429) — JAMAIS sur une réponse valide à 0 résultat
+// (zero_results, cf. point 4 de la demande : Brave a répondu correctement,
+// retenter ne changerait rien) ni sur une erreur HTTP non récupérable (même
+// requête, même clé → échec identique garanti).
+async function braveSearchRaw(query, braveKey, id) {
+  const first = await braveSearchAttempt(query, braveKey, id, WEB_SEARCH_GROUNDING_TIMEOUT_MS);
+  if (first.ok) return first.results;
+  const shouldRetry = first.kind === "timeout" || first.kind === "network_error" || (first.kind === "http_error" && first.recoverable);
+  if (!shouldRetry) return [];
+  console.info(`[web-search-grounding:${id}] Brave (${first.kind}) — une seule relance automatique.`);
+  const second = await braveSearchAttempt(query, braveKey, id, WEB_SEARCH_GROUNDING_TIMEOUT_MS);
+  return second.ok ? second.results : [];
 }
 
 async function resolveWebSearchGrounding(apiKey, subject, id) {
@@ -18570,11 +18626,14 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
   try {
     const validation = validateLegacyKey(req.query?.legacyKey);
     if (validation.error) return res.status(400).json({ ready: [], failed: [], error: validation.error });
-    const slots = [...new Set(String(req.query?.slots || "")
+    const requestedSlots = String(req.query?.slots || "")
       .split(",")
       .map((slot) => slot.trim())
-      .filter((slot) => slot.startsWith("notion:") && slot.length <= 500))]
+      .filter((slot) => slot.startsWith("notion:") && slot.length <= 500)
       .slice(0, 20);
+    const requestedStartedAt = String(req.query?.startedAt || "").split(",");
+    const startedAtBySlot = new Map(requestedSlots.map((slot, index) => [slot, Number(requestedStartedAt[index])]));
+    const slots = [...new Set(requestedSlots)];
     if (!slots.length) return res.json({ ready: [], failed: [] });
 
     const { data: user, error: userError } = await supabase
@@ -18588,13 +18647,8 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
     // autre suffixe. Pour le suivi uniquement, toutes ces variantes décrivent
     // la même génération : sinon le navigateur attend indéfiniment un slot
     // qui ne sera volontairement jamais inséré.
-    const customSlotIdentity = (slot) => String(slot || "").replace(
-      /:(?:elementaire|avance|expert)$/,
-      ""
-    );
     const lookupSlots = [...new Set(slots.flatMap((slot) => {
-      if (!slot.startsWith("notion:custom:")) return [slot];
-      const identity = customSlotIdentity(slot);
+      const identity = notionQuizGenerationIdentity(slot);
       return [identity, ...Object.keys(NOTION_QUIZ_LEVELS).map((level) => `${identity}:${level}`)];
     }))];
 
@@ -18605,13 +18659,10 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
       .in("slot", lookupSlots);
     if (rowsError) throw new Error(rowsError.message);
     const ready = slots.flatMap((requestedSlot) => {
-      const requestedIdentity = requestedSlot.startsWith("notion:custom:")
-        ? customSlotIdentity(requestedSlot)
-        : requestedSlot;
-      const row = (rows || []).find((candidate) => {
-        if (!requestedSlot.startsWith("notion:custom:")) return candidate.slot === requestedSlot;
-        return customSlotIdentity(candidate.slot) === requestedIdentity;
-      });
+      const requestedIdentity = notionQuizGenerationIdentity(requestedSlot);
+      const row = (rows || []).find((candidate) =>
+        notionQuizGenerationIdentity(candidate.slot) === requestedIdentity
+      );
       // Renvoyer le slot demandé, et non le slot physique trouvé : c'est la
       // clé exacte enregistrée dans le localStorage que le client doit retirer.
       return row ? [{ slot: requestedSlot, quizDate: row.quiz_date }] : [];
@@ -18627,14 +18678,47 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
     // (notion:custom:*, seule route qui enregistre un échec aujourd'hui) —
     // cf. son commentaire dans POST .../custom.
     const readySlots = new Set(ready.map((row) => row.slot));
-    const pendingCustomSlots = slots.filter((slot) => slot.startsWith("notion:custom:") && !readySlots.has(slot));
-    const failureIdentities = [...new Set(pendingCustomSlots.map((slot) => customSlotIdentity(slot)))];
+    const pendingSlots = slots.filter((slot) => !readySlots.has(slot));
+    const failureIdentities = [...new Set(pendingSlots.map(notionQuizGenerationIdentity))];
     const failures = await fetchRecentNotionQuizFailures(supabase, failureIdentities);
     const failureByIdentity = new Map(failures.map((row) => [row.identity, row]));
-    const failed = pendingCustomSlots.flatMap((requestedSlot) => {
-      const failure = failureByIdentity.get(customSlotIdentity(requestedSlot));
+    const failed = pendingSlots.flatMap((requestedSlot) => {
+      const failure = failureByIdentity.get(notionQuizGenerationIdentity(requestedSlot));
       return failure ? [{ slot: requestedSlot, code: failure.code || null }] : [];
     });
+
+    // Un restart détruit la Map de promesses, sans passer par le catch de la
+    // route qui aurait inscrit l'échec. Le timestamp du marqueur persistant
+    // est donc envoyé par le client au polling. On ne conclut à l'orphelin
+    // qu'après 15 min ET si aucune promesse n'est active dans ce processus,
+    // aucun daily_quiz n'existe et aucun échec n'est déjà connu.
+    const { data: quizRows, error: quizRowsError } = await supabase
+      .from("daily_quiz")
+      .select("slot")
+      .in("slot", lookupSlots);
+    if (quizRowsError) throw new Error(quizRowsError.message);
+    const quizIdentities = new Set((quizRows || []).map((row) => notionQuizGenerationIdentity(row.slot)));
+    const alreadyFailedSlots = new Set(failed.map((row) => row.slot));
+    const stale = pendingSlots.filter((requestedSlot) => {
+      const identity = notionQuizGenerationIdentity(requestedSlot);
+      return !alreadyFailedSlots.has(requestedSlot) && isOrphanedNotionQuizGeneration({
+        startedAt: startedAtBySlot.get(requestedSlot),
+        isActive: _notionQuizMasterGenerationPromises.has(identity),
+        quizExists: quizIdentities.has(identity),
+        failureExists: failureByIdentity.has(identity),
+        staleAfterMs: NOTION_QUIZ_STALE_AFTER_MS
+      });
+    });
+    if (stale.length) {
+      await Promise.all([...new Set(stale.map(notionQuizGenerationIdentity))].map((identity) =>
+        recordNotionQuizGenerationFailure(supabase, {
+          identity,
+          code: "GENERATION_INTERRUPTED",
+          reason: "Génération devenue orpheline après disparition du processus actif."
+        })
+      ));
+      stale.forEach((slot) => failed.push({ slot, code: "GENERATION_INTERRUPTED" }));
+    }
 
     res.json({ ready, failed });
   } catch (error) {

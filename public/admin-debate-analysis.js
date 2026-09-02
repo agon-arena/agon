@@ -2294,7 +2294,13 @@
   }
 
   // ── Countdown ────────────────────────────────────────────────────────
-  async function initCountdown(debateId) {
+  let countdownTickTimer = null;
+
+  async function initCountdown(debateId, progressSlotAttempt = 0) {
+    if (countdownTickTimer) {
+      clearTimeout(countdownTickTimer);
+      countdownTickTimer = null;
+    }
     const slot = document.getElementById('debate-ai-countdown-slot');
     // Jamais de repli sur `slot` (demande du 01/09/2026, "cette information continue
     // d'apparaître sous le cadre avec titre flottant sticky") : #debate-ai-progress-slot est
@@ -2338,19 +2344,36 @@
       }
 
       if (hasPending) {
+        // Le compte à rebours reste sous le titre ET remplace désormais
+        // « Encore X contributions… » au même emplacement sous le barème IA.
+        // renderEvaluationAxis peut créer ce second emplacement quelques
+        // instants après ce script : retenter brièvement pour poser la copie.
+        if (!progressSlot) {
+          if (progressSlotAttempt < 8) {
+            setTimeout(() => initCountdown(debateId, progressSlotAttempt + 1), 250);
+          }
+        }
         const target = new Date(json.scheduledAt).getTime();
-        const badge  = document.createElement('span');
-        badge.className = 'ada-countdown-badge';
-        if (slot) slot.appendChild(badge);
-        _visObs.observe(badge);
+        const countdownTargets = [slot, progressSlot].filter(Boolean);
+        const badges = countdownTargets.map((countdownTarget) => {
+          countdownTarget.innerHTML = '';
+          const badge = document.createElement('span');
+          badge.className = 'ada-countdown-badge';
+          countdownTarget.appendChild(badge);
+          _visObs.observe(badge);
+          return { badge, isUnderRubric: countdownTarget === progressSlot };
+        });
 
         const tick = () => {
           const secs = Math.max(0, Math.round((target - Date.now()) / 1000));
           if (secs <= 0) {
-            badge.textContent = 'Mise à jour de l\'analyse en cours…';
+            badges.forEach(({ badge }) => { badge.textContent = 'Mise à jour de l\'analyse en cours…'; });
           } else {
-            badge.textContent = 'Prochaine analyse dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
-            setTimeout(tick, 1000);
+            const text = 'Prochaine analyse dans : ' + String(secs).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' secondes';
+            badges.forEach(({ badge, isUnderRubric }) => {
+              badge.textContent = text + (isUnderRubric ? '.' : '');
+            });
+            countdownTickTimer = setTimeout(tick, 1000);
           }
         };
         tick();

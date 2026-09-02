@@ -36,6 +36,27 @@ test('la connaissance ouverte conserve son ancrage et sa suppression', () => {
   assert.match(source, /data-action="delete"/);
 });
 
+test('les rubriques de Mes acquis reprennent les icônes thématiques d’Explorer', () => {
+  const renderer = functionSource('renderMesAcquisList', 'loadMesAcquis');
+  const iconMapper = functionSource('getMesAcquisThemeIconClass', 'renderMesAcquisList');
+  assert.match(renderer, /getMesAcquisThemeIconClass\(theme\).*qcm-mesqcm-theme-icon/);
+  assert.match(iconMapper, /'Politique': 'fa-scale-balanced'/);
+  assert.match(iconMapper, /'International': 'fa-globe'/);
+  assert.match(iconMapper, /'Culture - arts': 'fa-palette'/);
+  assert.match(iconMapper, /'Histoire': 'fa-landmark'/);
+  assert.match(iconMapper, /'Sciences - technologie': 'fa-flask'/);
+  assert.match(page, /\.qcm-mesqcm-theme-icon\s*\{/);
+});
+
+test('les anciens libellés Culture et Arts sont réunis dans une seule rubrique', () => {
+  const normalizer = functionSource('normalizeMesAcquisThemeLabel', 'renderMesAcquisList');
+  const renderer = functionSource('renderMesAcquisList', 'loadMesAcquis');
+  assert.match(normalizer, /key === 'culture'/);
+  assert.match(normalizer, /key === 'arts et culture'/);
+  assert.match(normalizer, /return 'Culture - arts'/);
+  assert.match(renderer, /primaryTheme = normalizeMesAcquisThemeLabel\(primaryTheme\)/);
+});
+
 test('le serveur transmet le niveau effectif de chaque apprentissage', () => {
   const routeStart = server.indexOf('app.get("/api/users/notion-quizzes",');
   const routeEnd = server.indexOf('app.get("/api/users/notion-quizzes/fiche",', routeStart);

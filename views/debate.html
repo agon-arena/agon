@@ -106,7 +106,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified" />
+<link rel="stylesheet" href="/style.min.css?v=20260902-sticky-countdown-down-1" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -162,19 +162,6 @@
     }
   }
   @media (max-width: 768px) {
-    body.page-debate .topbar-app-icon--mobile {
-      width: 104px !important;
-      height: 104px !important;
-      border-radius: 16px !important;
-      margin: 0 !important;
-      /* Fixe par rapport à l'écran plutôt que des marges négatives dans la
-         grille (ancienne approche) : celle-ci débordait déjà légèrement de
-         l'écran sur mobile, même sans y toucher. */
-      position: fixed !important;
-      top: 8px !important;
-      right: 8px !important;
-      z-index: 2 !important;
-    }
     body.is-standalone.page-debate .topbar {
       padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
     }
@@ -330,8 +317,6 @@ try {
     >
       <i class="fa-solid fa-power-off"></i>
     </button>
-
-    <img src="/appmnoria-192.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
 
     <div class="admin-controls-row" data-admin style="display:none;">
       <div class="admin-topbar-menu" id="admin-topbar-menu">
@@ -938,9 +923,9 @@ Un argument = une idée. Si vous en avez plusieurs, publiez-les séparément."
 
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
-  <a href="/" id="debate-bottom-nav-explorer" class="home-bottom-nav-item" aria-label="Explorer">
-    <i class="fa-regular fa-compass"></i>
-    <span>Explorer</span>
+  <a href="/" id="debate-bottom-nav-explorer" class="home-bottom-nav-item" aria-label="Accueil">
+    <i class="fa-solid fa-house"></i>
+    <span>Accueil</span>
   </a>
 
   <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="event.preventDefault(); openDebateIframeModal('/create')">
@@ -1003,7 +988,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260901-context-no-signature" defer></script>
+	<script src="/script.min.js?v=20260902-active-og-side-arrows" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -1056,7 +1041,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom"></script>
-<script src="/admin-debate-analysis.js?v=20260901-more-space-below-btn"></script>
+<script src="/admin-debate-analysis.js?v=20260902-countdown-bottom-period"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

@@ -1612,6 +1612,13 @@
       text-align: left;
       cursor: pointer;
     }
+    .qcm-mesqcm-theme-icon {
+      flex: 0 0 22px;
+      width: 22px;
+      color: #516776;
+      font-size: 17px;
+      text-align: center;
+    }
     .qcm-mesqcm-theme-toggle:hover,
     .qcm-mesqcm-theme-toggle:focus-visible,
     .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-toggle {
@@ -1659,7 +1666,11 @@
     }
     .qcm-mesqcm-theme-panel {
       display: none;
-      padding: 14px 10px 10px;
+      /* Pas d'inset horizontal (demande du 02/09/2026, "alignés d'une rubrique
+         à l'autre") : sinon le tableau ici est plus étroit de 20px que celui
+         de "Comprendre les liens" (qui n'a pas ce panneau-carte), et les
+         colonnes État/Niveau ne tombent plus au même endroit sur la page. */
+      padding: 14px 0 10px;
     }
     .qcm-mesqcm-theme-group.is-open .qcm-mesqcm-theme-panel {
       display: block;
@@ -1786,9 +1797,37 @@
     }
     .qcm-mesqcm-table {
       width: 100%;
+      table-layout: fixed;
       border-collapse: collapse;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 14px;
+    }
+    /* Largeurs de colonnes fixes et identiques sur tous les tableaux
+       .qcm-mesqcm-table (une table indépendante par rubrique/thématique et par
+       page de pagination) — sans ça, table-layout:auto calcule une largeur de
+       colonne différente selon le contenu de chaque table, et les colonnes
+       Apprentissage/État/Niveau ne tombent plus aux mêmes positions d'une
+       rubrique à l'autre. */
+    .qcm-mesqcm-table th:nth-child(1),
+    .qcm-mesqcm-table td:nth-child(1) {
+      width: 52%;
+    }
+    .qcm-mesqcm-table th:nth-child(2),
+    .qcm-mesqcm-table td:nth-child(2) {
+      width: 24%;
+    }
+    .qcm-mesqcm-table th:nth-child(3),
+    .qcm-mesqcm-table td:nth-child(3) {
+      width: 24%;
+    }
+    /* État et Niveau centrés (nom/valeur au-dessus du chiffre/sous-libellé,
+       l'un au-dessus de l'autre, plutôt que collés au bord gauche de la
+       colonne — demande du 02/09/2026), en-têtes inclus. */
+    .qcm-mesqcm-table th:nth-child(2),
+    .qcm-mesqcm-table td:nth-child(2),
+    .qcm-mesqcm-table th:nth-child(3),
+    .qcm-mesqcm-table td:nth-child(3) {
+      text-align: center;
     }
     .qcm-mesqcm-td-check {
       width: 32px;
@@ -1866,11 +1905,13 @@
       cursor: not-allowed;
     }
     .qcm-mesqcm-table td {
+      box-sizing: border-box;
       padding: 10px;
       border-bottom: 1px solid #eef1f3;
       vertical-align: middle;
     }
     .qcm-mesqcm-table th {
+      box-sizing: border-box;
       padding: 8px 10px;
       border-bottom: 1px solid #000000;
       color: #000000;
@@ -1888,6 +1929,7 @@
       font-size: 12px;
       line-height: 1.08;
       font-weight: 700;
+      text-align: center;
       white-space: nowrap;
     }
     .qcm-mesqcm-state.is-realized {
@@ -1911,7 +1953,7 @@
     .qcm-mesqcm-level {
       display: inline-flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: center;
       gap: 1px;
       color: #374151;
       font-size: 12px;
@@ -2251,15 +2293,19 @@
       row-gap: 6px;
       column-gap: 8px;
     }
-    /* Contour légèrement doré (demande du 30/08/2026) : même teinte pour tous
-       les sujets proposés, catalogue comme propositions IA — la distinction
-       is-ai-proposal (liseré différent) a été volontairement abandonnée,
-       cf. plus bas. */
+    /* Contour neutre (corrigé le 02/09/2026 : le doré utilisé jusque-là, cf. ancienne
+       demande du 02/09/2026, doré pastel) — même teinte neutre pour tous les sujets
+       proposés, catalogue comme propositions IA — la distinction is-ai-proposal (liseré
+       différent) reste volontairement abandonnée, cf. plus bas. */
     .qcm-learn-next-inline-item {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       padding: 6px 14px;
-      border: 1px solid #e7d9c2;
+      border: 1px solid #f0d9a0;
       border-radius: 999px;
-      background: #fffaf2;
+      background: #fdf3dd;
       font: inherit;
       font-size: 13px;
       font-weight: 600;
@@ -2268,9 +2314,15 @@
       cursor: pointer;
       transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
+    .qcm-learn-next-inline-icon {
+      flex: 0 0 auto;
+      width: 15px;
+      font-size: 13px;
+      text-align: center;
+    }
     .qcm-learn-next-inline-item:hover,
     .qcm-learn-next-inline-item:focus-visible {
-      background: #f5ecd9;
+      background: #fbe9c6;
     }
     /* Le temps de l'adoption (fiche + adopt, cf. adoptCatalogRecommendation) :
        même langage que .qcm-custom-search-btn:disabled ailleurs sur la page. */
@@ -3322,7 +3374,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260901-context-no-signature" defer></script>
+<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -3875,77 +3927,6 @@
   }
   var qcmPanelCloseButton = document.getElementById('qcm-panel-close');
   if (qcmPanelCloseButton) qcmPanelCloseButton.onclick = returnToLearningOverview;
-
-  function shuffleArrayCopy(arr) {
-    var copy = arr.slice();
-    for (var i = copy.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var tmp = copy[i]; copy[i] = copy[j]; copy[j] = tmp;
-    }
-    return copy;
-  }
-
-  // Choix de l'ordre avant de faire/refaire un QCM (demande du 13/08/2026,
-  // étendue le même jour au tout premier lancement, pas seulement "Refaire")
-  // — même gabarit visuel que showNotionQuizLevelPicker (public/script.js),
-  // classes .notion-level-picker-* partagées via style.min.css.
-  function showQuizOrderPicker(onSelect) {
-    var overlay = document.createElement('div');
-    overlay.className = 'notion-level-picker-overlay';
-    var modal = document.createElement('div');
-    modal.className = 'notion-level-picker-modal';
-    var closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'notion-level-picker-close';
-    closeBtn.setAttribute('aria-label', 'Fermer');
-    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-    modal.appendChild(closeBtn);
-    var title = document.createElement('p');
-    title.className = 'notion-level-picker-title';
-    title.textContent = 'Dans quel ordre faire ce QCM ?';
-    modal.appendChild(title);
-
-    [
-      { shuffled: false, name: 'Ordre normal', desc: 'Les questions dans le même ordre que la première fois' },
-      { shuffled: true, name: 'Ordre aléatoire', desc: 'Les questions mélangées' }
-    ].forEach(function (opt) {
-      var optionBtn = document.createElement('button');
-      optionBtn.type = 'button';
-      optionBtn.className = 'notion-level-picker-option';
-      var nameSpan = document.createElement('span');
-      nameSpan.className = 'notion-level-picker-option-name';
-      nameSpan.textContent = opt.name;
-      var descSpan = document.createElement('span');
-      descSpan.className = 'notion-level-picker-option-desc';
-      descSpan.textContent = opt.desc;
-      optionBtn.appendChild(nameSpan);
-      optionBtn.appendChild(descSpan);
-      optionBtn.addEventListener('click', function () {
-        close();
-        onSelect(opt.shuffled);
-      });
-      modal.appendChild(optionBtn);
-    });
-
-    var cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'notion-level-picker-cancel';
-    cancelBtn.textContent = 'Annuler';
-    modal.appendChild(cancelBtn);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    positionFicheClose(overlay);
-
-    function close() {
-      overlay.remove();
-      document.removeEventListener('keydown', onKeydown);
-    }
-    function onKeydown(e) { if (e.key === 'Escape') close(); }
-    document.addEventListener('keydown', onKeydown);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-    cancelBtn.addEventListener('click', close);
-    closeBtn.addEventListener('click', close);
-  }
 
   function pct(count, total) {
     if (!total) return 0;
@@ -5279,7 +5260,8 @@
       return;
     }
     var slots = pending.map(function (item) { return item.slot; }).join(',');
-    fetch('/api/users/notion-quizzes/generation-status?legacyKey=' + encodeURIComponent(voterKey) + '&slots=' + encodeURIComponent(slots), { cache: 'no-store' })
+    var startedAt = pending.map(function (item) { return Number(item.startedAt) || 0; }).join(',');
+    fetch('/api/users/notion-quizzes/generation-status?legacyKey=' + encodeURIComponent(voterKey) + '&slots=' + encodeURIComponent(slots) + '&startedAt=' + encodeURIComponent(startedAt), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (currentCategory !== 'mesqcm' || currentSlot) return;
@@ -5476,6 +5458,7 @@
       CONTENT_UNUSABLE: 'Le contenu généré n’a pas pu être exploité. Essaie de préciser le sujet.',
       KNOWLEDGE_REJECTED: 'Aucune connaissance suffisamment fiable et importante n’a été trouvée sur ce sujet.',
       QCM_UNUSABLE: 'La fiche a été créée, mais ses questions n’ont pas pu être validées. Réessaie ou précise le sujet.',
+      GENERATION_INTERRUPTED: 'La génération a été interrompue par un redémarrage du serveur. Tu peux la relancer.',
       STORAGE_TEMPORARY: 'L’apprentissage n’a pas pu être enregistré pour le moment. Réessaie dans quelques instants.'
     };
     return messages[code] || fallback || 'Une erreur inattendue a interrompu la génération. Réessaie dans quelques instants.';
@@ -6229,6 +6212,42 @@
   function learnNextItemKey(item) {
     return item.isAiProposal ? ('ai:' + item.gapSignature + ':' + item.title) : (item.subjectType + ':' + item.subjectSourceId);
   }
+  function learnNextThemeIconClass(item) {
+    var sourceTypeIcons = {
+      histoire: 'fa-landmark',
+      parallele: 'fa-landmark',
+      pensee: 'fa-brain',
+      mecanisme: 'fa-users',
+      concept: 'fa-brain',
+      citation: 'fa-language',
+      oeuvre: 'fa-palette',
+      latin: 'fa-language'
+    };
+    var suggestedTheme = String(item && (item.suggestedTheme || item.theme || item.category) || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    var themeIcons = [
+      [/histoire|civilisation|archeolog/, 'fa-landmark'],
+      [/politique|justice/, 'fa-scale-balanced'],
+      [/international|geograph/, 'fa-globe'],
+      [/economie|emploi/, 'fa-briefcase'],
+      [/societe|education|sociolog/, 'fa-users'],
+      [/science|technolog/, 'fa-flask'],
+      [/climat|environnement/, 'fa-leaf'],
+      [/culture|art/, 'fa-palette'],
+      [/philosoph/, 'fa-brain'],
+      [/langue|lettre|litterat/, 'fa-language'],
+      [/media|divertissement/, 'fa-tv'],
+      [/sport|loisir/, 'fa-futbol'],
+      [/sante|bien etre|medecin/, 'fa-heart-pulse'],
+      [/vie personnelle|mode de vie/, 'fa-house'],
+      [/jeun/, 'fa-star']
+    ];
+    for (var i = 0; i < themeIcons.length; i++) {
+      if (themeIcons[i][0].test(suggestedTheme)) return themeIcons[i][1];
+    }
+    return sourceTypeIcons[String(item && item.subjectType || '')] || 'fa-layer-group';
+  }
   function renderLearnNextInlineSkeleton() {
     if (!learnNextInlineList) return;
     learnNextInlineList.innerHTML =
@@ -6253,7 +6272,8 @@
     // content:center).
     learnNextInlineList.innerHTML = learnNextVisible.map(function (item, i) {
       return '<button type="button" class="qcm-learn-next-inline-item" data-index="' + i + '">' +
-        escapeHtml(item.name || item.title || 'Connaissance') +
+        '<i class="fa-solid ' + learnNextThemeIconClass(item) + ' qcm-learn-next-inline-icon" aria-hidden="true"></i>' +
+        '<span>' + escapeHtml(item.name || item.title || 'Connaissance') + '</span>' +
       '</button>';
     }).join('');
     learnNextInlineList.querySelectorAll('.qcm-learn-next-inline-item').forEach(function (btn) {
@@ -6802,6 +6822,50 @@
     renderMessage("Tu n'as encore rien réalisé — les apprentissages que tu termines apparaîtront ici, classés par thématique.");
   }
 
+  // Même association thématique → icône que dans le menu « Explorer » de
+  // la page d'accueil. Le pictogramme générique couvre les anciennes
+  // thématiques qui ne font pas partie de la taxonomie actuelle.
+  function getMesAcquisThemeIconClass(theme) {
+    var iconsByTheme = {
+      'Politique': 'fa-scale-balanced',
+      'International': 'fa-globe',
+      'Économie - emploi': 'fa-briefcase',
+      'Société - éducation': 'fa-users',
+      'Sciences - technologie': 'fa-flask',
+      'Climat - environnement': 'fa-leaf',
+      'Justice - faits divers': 'fa-scale-balanced',
+      'Culture - arts': 'fa-palette',
+      'Histoire': 'fa-landmark',
+      'Philosophie - sciences sociales': 'fa-brain',
+      'Langues et Lettres': 'fa-language',
+      'Médias - divertissements': 'fa-tv',
+      'Sports - loisirs': 'fa-futbol',
+      'Santé - bien-être': 'fa-heart-pulse',
+      'Vie personnelle - modes de vie': 'fa-house',
+      'Espace jeunes': 'fa-star',
+      'Arènes sous tension': 'fa-bolt'
+    };
+    return iconsByTheme[String(theme || '').trim()] || 'fa-layer-group';
+  }
+
+  // Certains acquis historiques ont reçu le nom d'une sous-branche
+  // ("Culture", "Arts" ou "Arts et culture") alors que la rubrique
+  // officielle d'Explorer est unique. La normalisation reste purement
+  // visuelle : elle regroupe les cartes sans réécrire leurs données.
+  function normalizeMesAcquisThemeLabel(theme) {
+    var raw = String(theme || '').trim();
+    var key = raw
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/&/g, ' et ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+    if (key === 'culture' || key === 'arts' || key === 'arts et culture' || key === 'culture et arts') {
+      return 'Culture - arts';
+    }
+    return raw;
+  }
+
   // "Mes acquis" : tous les apprentissages (réalisés ou non), classés par thématique — même
   // contenu que l'ancienne section "Tous mes apprentissages" de Découvrir, déplacé ici le
   // 16/08/2026.
@@ -6822,6 +6886,7 @@
       }
       var primaryTheme = Array.isArray(q.themes) ? q.themes.filter(Boolean)[0] : null;
       if (!primaryTheme) { untagged.push(q); return; }
+      primaryTheme = normalizeMesAcquisThemeLabel(primaryTheme);
       (byTheme[primaryTheme] = byTheme[primaryTheme] || []).push(q);
     });
     var themeNames = Object.keys(byTheme).sort(function (a, b) { return a.localeCompare(b, 'fr', { sensitivity: 'base' }); });
@@ -6837,6 +6902,7 @@
         var themeQuizzes = byTheme[theme].slice().sort(compareMesQcmByStateThenName);
         html += '<section class="qcm-mesqcm-theme-group">';
         html += '<button type="button" class="qcm-mesqcm-theme-toggle" aria-expanded="false">';
+        html += '<i class="fa-solid ' + getMesAcquisThemeIconClass(theme) + ' qcm-mesqcm-theme-icon" aria-hidden="true"></i>';
         html += '<span>' + escapeHtml(theme) + '</span>';
         html += '<span class="qcm-mesqcm-theme-count">' + themeQuizzes.length + '</span>';
         html += '<span class="qcm-mesqcm-theme-action"><span class="qcm-mesqcm-theme-action-open">Masquer</span></span>';
@@ -7201,12 +7267,7 @@
         });
         overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
           closeMesQcmActionModal();
-          // Choix de l'ordre dès le premier lancement (demande du
-          // 13/08/2026, jusqu'ici réservé à "Refaire") — même popup, même
-          // style.
-          showQuizOrderPicker(function (shuffled) {
-            loadSlot(q.slot, q.quizDate, q.label, shuffled);
-          });
+          loadSlot(q.slot, q.quizDate, q.label);
         });
         overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
           closeMesQcmActionModal();
@@ -7455,7 +7516,7 @@
   // pour "renforcement", toujours calculé sur aujourd'hui côté serveur.
   // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
   // la place de "Connaissances" générique.
-  function loadSlot(slotKey, quizDate, label, shuffled) {
+  function loadSlot(slotKey, quizDate, label) {
     document.body.classList.remove('qcm-discover-overview');
     // Efface tout de suite l'image du QCM précédent (demande du 18/08/2026) :
     // sinon elle resterait affichée en fond le temps du fetch ci-dessous,
@@ -7504,7 +7565,6 @@
         questions = Array.isArray(data.questions) ? data.questions : [];
         originalQuestions = questions.slice();
         preloadQuestionImages(questions);
-        if (shuffled) questions = shuffleArrayCopy(questions);
         if (data.label && !label) titleText.textContent = data.label;
         if (!questions.length) {
           renderMessage(currentCategory === 'renforcement'

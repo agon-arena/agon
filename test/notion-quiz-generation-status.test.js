@@ -172,9 +172,26 @@ test("generation-status : un échec ne peut jamais masquer un slot devenu ready 
   const routeEnd = server.indexOf('app.get("/api/users/notion-quizzes",', routeStart);
   const route = server.slice(routeStart, routeEnd);
   assert.match(route, /const readySlots = new Set\(ready\.map\(\(row\) => row\.slot\)\);/);
-  assert.match(route, /pendingCustomSlots = slots\.filter\(\(slot\) => slot\.startsWith\("notion:custom:"\) && !readySlots\.has\(slot\)\)/);
+  assert.match(route, /pendingSlots = slots\.filter\(\(slot\) => !readySlots\.has\(slot\)\)/);
   assert.match(route, /fetchRecentNotionQuizFailures\(supabase, failureIdentities\)/);
   assert.match(route, /res\.json\(\{ ready, failed \}\);/);
+});
+
+test("generation-status détecte uniquement un pending ancien devenu orphelin", () => {
+  const routeStart = server.indexOf('app.get("/api/users/notion-quizzes/generation-status"');
+  const routeEnd = server.indexOf('app.get("/api/users/notion-quizzes",', routeStart);
+  const route = server.slice(routeStart, routeEnd);
+  assert.match(route, /startedAtBySlot/);
+  assert.match(route, /_notionQuizMasterGenerationPromises\.has\(identity\)/);
+  assert.match(route, /\.from\("daily_quiz"\)[\s\S]*?\.select\("slot"\)/);
+  assert.match(route, /failureExists: failureByIdentity\.has\(identity\)/);
+  assert.match(route, /code: "GENERATION_INTERRUPTED"/);
+  assert.match(route, /recordNotionQuizGenerationFailure/);
+});
+
+test("les deux pollings transmettent le startedAt persistant au backend", () => {
+  assert.match(view, /&startedAt=' \+ encodeURIComponent\(startedAt\)/);
+  assert.match(script, /&startedAt=\$\{encodeURIComponent\(startedAtParam\)\}/);
 });
 
 // ─── Scénario 1 (rapide réussie) : le chemin succès n'est pas touché ───

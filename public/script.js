@@ -1071,7 +1071,8 @@ function checkPendingNotionQuizzesReadiness() {
   if (!voterKeyForReadinessCheck) return;
   notionQuizReadinessCheckInFlight = true;
   const slotsParam = pending.map((item) => item.slot).join(",");
-  fetchJSON(`${API}/users/notion-quizzes/generation-status?legacyKey=${encodeURIComponent(voterKeyForReadinessCheck)}&slots=${encodeURIComponent(slotsParam)}`, { cache: "no-store" })
+  const startedAtParam = pending.map((item) => Number(item.startedAt) || 0).join(",");
+  fetchJSON(`${API}/users/notion-quizzes/generation-status?legacyKey=${encodeURIComponent(voterKeyForReadinessCheck)}&slots=${encodeURIComponent(slotsParam)}&startedAt=${encodeURIComponent(startedAtParam)}`, { cache: "no-store" })
     .then((data) => {
       const readySlots = new Set((data.ready || []).map((row) => row.slot));
       const failedSlots = new Set((data.failed || []).map((row) => row.slot));
@@ -13315,7 +13316,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
   } else {
     cardTag = "div";
     cardAttributes = `class="debate-source-card" ${sourcePanelAttrs} role="button" tabindex="0" style="display:block; overflow:hidden; border-radius:0; background:#ffffff; border:1px solid #e5e7eb; box-shadow:0 10px 28px rgba(15,23,42,0.08); color:inherit; cursor:pointer;"`;
-    openSourceHtml = `<div>
+    openSourceHtml = `<div class="debate-source-open-action">
           <a
             class="debate-source-link"
             href="${escapeAttribute(safeUrl)}"
@@ -13357,7 +13358,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
         <span class="debate-source-card-image-domain-badge">${escapeHtml(badgeLabel)}</span>
       </div>
       ` : ``}
-     <div class="debate-source-card-body" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
+     <div class="debate-source-card-body${openSourceHtml ? ' debate-source-card-body--with-open-action' : ''}" style="padding:8px 16px 14px; display:flex; flex-direction:column; gap:6px; min-width:0;">
         <div class="debate-source-card-domain" style="font-size:12px; line-height:1.4; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; white-space:normal; overflow-wrap:break-word; word-break:break-word; min-width:0;">${escapeHtml(domain)}</div>
         <div class="debate-source-card-title" style="font-size:18px; line-height:1.35; font-weight:800; color:#111827;">${escapeHtml(title)}</div>
         ${description ? `<div class="debate-source-card-description" style="font-size:14px; line-height:1.55; color:#4b5563;">${escapeHtml(description)}</div>` : ""}
@@ -17778,7 +17779,7 @@ async function saveAdminCardEdit(debateId, btn) {
             btn.setAttribute('data-debate-id', String(debateId));
             btn.setAttribute('aria-expanded', 'false');
             btn.setAttribute('onclick', 'event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)');
-            btn.textContent = 'Voir plus';
+            btn.innerHTML = INDEX_CONTEXT_TOGGLE_COLLAPSED_HTML;
             contextWrap.appendChild(btn);
           } else if (!needsToggle && ctxToggle) {
             ctxToggle.remove();
@@ -18546,11 +18547,15 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
           data-debate-id="${debateId}"
           aria-expanded="false"
           onclick="event.preventDefault(); event.stopPropagation(); toggleIndexContextPreview(this)"
-        ><span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span></button>
+        >${INDEX_CONTEXT_TOGGLE_COLLAPSED_HTML}</button>
       ` : ""}
     </div>
   `;
 }
+
+const INDEX_CONTEXT_TOGGLE_CHEVRON_HTML = '<i class="fa-solid fa-chevron-down debate-card-context-chevron" aria-hidden="true"></i>';
+const INDEX_CONTEXT_TOGGLE_COLLAPSED_HTML = `<span>Voir plus</span>${INDEX_CONTEXT_TOGGLE_CHEVRON_HTML}`;
+const INDEX_CONTEXT_TOGGLE_EXPANDED_HTML = `<span>Voir moins</span>${INDEX_CONTEXT_TOGGLE_CHEVRON_HTML}`;
 
 function renderIndexContextPreviewText(text, expanded, isOpen = false) {
   const rawText = String(text || "");
@@ -18664,7 +18669,7 @@ function closeIndexContextPreview(button) {
   }
   if (metaEl) metaEl.classList.remove('is-open');
   if (article) article.classList.remove('index-card-context-open');
-  button.innerHTML = '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
+  button.innerHTML = INDEX_CONTEXT_TOGGLE_COLLAPSED_HTML;
   button.setAttribute('aria-expanded', 'false');
   updateIndexRowContextOpenState(article?.closest?.('.theme-horizontal-row'));
 }
@@ -18870,8 +18875,8 @@ function toggleIndexContextPreview(button) {
   }
 
   button.innerHTML = nextExpanded
-    ? 'Voir moins'
-    : '<span>Voir plus</span><span class="debate-card-context-toggle-dots">···</span>';
+    ? INDEX_CONTEXT_TOGGLE_EXPANDED_HTML
+    : INDEX_CONTEXT_TOGGLE_COLLAPSED_HTML;
   button.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
   if (nextExpanded) {
     reserveIndexRowHeightForContextOpen(article, metaEl);
@@ -19826,8 +19831,14 @@ function setMemoireCloudMode(enable, skipSync = false) {
   const caption = document.querySelector('#mnoria-tag-trends-section .mnoria-tag-trends-caption');
   // En entrant dans Ma mémoire, le contenu n'est pas encore connu : garde la légende masquée
   // jusqu'à ce que mon-univers.js confirme qu'au moins un niveau contient des éléments.
-  // Les modes Actu/Mnoria, eux, repartent immédiatement avec leur légende visible.
-  if (caption) caption.hidden = _memoireCloudMode;
+  // En sortie, ne PAS la démasquer ici : setMemoireCloudMode(false, ...) n'est appelé que
+  // depuis setMnoriaCloudMode, toujours suivi d'un toggleMnoriaCloud() qui pose le texte de la
+  // vraie destination (Actu/Communauté) après son fetch — démasquer immédiatement montrait
+  // encore l'ancien texte "Ma mémoire" (plus long) le temps du fetch, faussant le calcul de
+  // marge --mnoria-home-first-row-mt (espace d'abord trop grand puis qui rétrécit une fois le
+  // vrai texte posé, demande du 02/09/2026). toggleMnoriaCloud démasque lui-même la légende
+  // une fois son texte final posé (cf. plus bas, mêmes branches success/échec).
+  if (caption && _memoireCloudMode) caption.hidden = true;
   if (_memoireCloudMode) {
     if (beforeEl) beforeEl.hidden = false;
     if (afterEl) afterEl.hidden = false;
@@ -19896,7 +19907,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260901-solar-group-envelopes').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260902-retry-429').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         _memoireModuleLoadPromise = null;
@@ -20118,6 +20129,10 @@ function toggleMnoriaCloud(targetMnoriaMode = !_mnoriaCloudMode) {
       const trends = await resolveActuBubbleTrends();
       if (token !== _mnoriaCloudSwitchToken) return;
       if (!trends.length) {
+        // Démasque quand même la légende (cf. commentaire dans setMemoireCloudMode) : sinon,
+        // venant de "Ma mémoire", elle resterait masquée indéfiniment puisque ce cas d'échec
+        // ne pose jamais de nouveau texte.
+        if (caption) caption.hidden = false;
         finishMnoriaCloudSwitchLoading(token, container);
         return;
       }
@@ -20132,7 +20147,13 @@ function toggleMnoriaCloud(targetMnoriaMode = !_mnoriaCloudMode) {
       syncPoliticalCloudSwitch();
       container.classList.remove('mnoria-cloud-political-left', 'mnoria-cloud-political-right');
       document.getElementById('mnoria-political-cloud-switch')?.removeAttribute('hidden');
-      if (caption && _mnoriaCloudOriginalCaptionHtml !== null) caption.innerHTML = _mnoriaCloudOriginalCaptionHtml;
+      if (caption) {
+        if (_mnoriaCloudOriginalCaptionHtml !== null) caption.innerHTML = _mnoriaCloudOriginalCaptionHtml;
+        // Démasque une fois le texte "Bulles Actu" posé (cf. commentaire dans
+        // setMemoireCloudMode) : venant de "Ma mémoire", la légende était restée masquée pour
+        // ne pas montrer l'ancien texte "Ma mémoire" le temps de ce fetch.
+        caption.hidden = false;
+      }
       window.__mnoriaSyncMobileBottomNavViewport?.();
       // La légende change de hauteur entre les modes : resynchronise la hauteur de la
       // section desktop pour que le cloud (flex:1) — donc le cadre — reste identique.
@@ -20171,6 +20192,10 @@ function toggleMnoriaCloud(targetMnoriaMode = !_mnoriaCloudMode) {
       // mémoire" (setMnoriaCloudMode, skipSync), rien d'autre ne l'aurait fait — sans ça, "Ma
       // mémoire" restait affiché comme actif alors qu'on n'y est plus.
       syncMnoriaCloudModeSwitch();
+      // Démasque quand même la légende (cf. commentaire dans setMemoireCloudMode) : sinon,
+      // venant de "Ma mémoire", elle resterait masquée indéfiniment puisque ce cas d'échec
+      // ne pose jamais de nouveau texte.
+      if (caption) caption.hidden = false;
       finishMnoriaCloudSwitchLoading(token, container);
       return;
     }
@@ -20224,6 +20249,12 @@ function toggleMnoriaCloud(targetMnoriaMode = !_mnoriaCloudMode) {
     if (caption) {
       if (_mnoriaCloudOriginalCaptionHtml === null) _mnoriaCloudOriginalCaptionHtml = caption.innerHTML;
       caption.textContent = "Les arènes créées par la communauté les plus tendues.";
+      // Démasque seulement maintenant que le texte final est posé (cf. commentaire dans
+      // setMemoireCloudMode) : venant de "Ma mémoire", la légende était restée masquée pour ne
+      // pas montrer l'ancien texte "Ma mémoire" (plus long) le temps de ce fetch — sinon
+      // l'espace calculé au-dessus des arènes communauté apparaissait d'abord trop grand puis
+      // rétrécissait une fois ce texte posé.
+      caption.hidden = false;
       window.__mnoriaSyncMobileBottomNavViewport?.();
     }
     // La légende passe de 2 lignes (Actu) à 1 ligne (Mnoria) : resynchronise la hauteur
@@ -25809,9 +25840,9 @@ function showDebateNotionMemorizeExplainer(notionName, isGenerating = false) {
 // vingtaine d'éléments, l'utilisateur est invité (cf. NOTION_LEVEL_PICKER_HINT
 // ci-dessous) à diviser son sujet en plusieurs créations plus précises.
 const NOTION_QUIZ_LEVEL_OPTIONS = [
-  { level: "elementaire", name: "Élémentaire", desc: "3 à 6 questions" },
-  { level: "avance", name: "Avancé", desc: "8 à 12 questions" },
-  { level: "expert", name: "Expert", desc: "Une vingtaine de questions" }
+  { level: "elementaire", name: "Élémentaire", desc: "Les bases essentielles" },
+  { level: "avance", name: "Avancé", desc: "Une vue plus complète" },
+  { level: "expert", name: "Expert", desc: "Une couverture détaillée" }
 ];
 const NOTION_LEVEL_PICKER_HINT = "Pour mémoriser plus de 20 éléments, fais plusieurs créations plutôt qu'une seule — ex. les capitales d'Europe de l'Ouest, d'Europe de l'Est, d'Afrique du Nord, etc.";
 
@@ -25930,7 +25961,21 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
         finishPendingNotionQuizGeneration(pendingSlot);
         explainer.ready();
       })
-      .catch(() => {
+      .catch((error) => {
+        // Distingue un échec réellement confirmé par le backend (réponse HTTP non-2xx
+        // avec un vrai corps JSON de notre serveur, cf. fetchJSON plus haut : error.status
+        // ET error.code sont alors renseignés) d'un cas ambigu — AbortError (fetchJSON
+        // applique par défaut un timeout client de 12s, bien plus court qu'une génération
+        // IA de plusieurs minutes), coupure réseau, ou une réponse non-JSON d'un
+        // intermédiaire externe (proxy) où error.status est défini mais error.code ne
+        // l'est pas. Même principe que startCustomTopicGeneration (views/qcm-du-jour.html,
+        // correctifs UX "Marxisme" 01/09/2026 et "Maoïsme" 02/09/2026) : un cas ambigu ne
+        // prouve jamais que la génération a échoué — le marqueur persistant et le bouton
+        // restent en l'état, le sondage global déjà existant (checkPendingNotionQuizzesReadiness,
+        // plus haut dans ce fichier) reste seul en charge jusqu'à ready (ou, si un jour
+        // ajouté côté serveur pour cette route, failed).
+        const confirmedFailure = !!error && typeof error.status === "number" && !!error.code;
+        if (!confirmedFailure) return;
         finishPendingNotionQuizGeneration(pendingSlot);
         explainer.failed();
         btn.setAttribute("data-memorized", "false");
@@ -26403,13 +26448,13 @@ function ensureDebateMediaSwipeHotspots(element) {
     prevButton.className = "debate-media-swipe-hotspot debate-media-swipe-hotspot-prev";
     prevButton.setAttribute("aria-label", "Voir le média précédent");
     prevButton.innerHTML = '<span aria-hidden="true">‹</span>';
-    prevButton.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      await stepDebateSourceHistory(-1, true);
-    });
     element.appendChild(prevButton);
   }
+  prevButton.onclick = async (event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    await stepDebateSourceHistory(-1, true);
+  };
 
   let nextButton = element.querySelector(".debate-media-swipe-hotspot-next");
   if (!nextButton) {
@@ -26418,12 +26463,73 @@ function ensureDebateMediaSwipeHotspots(element) {
     nextButton.className = "debate-media-swipe-hotspot debate-media-swipe-hotspot-next";
     nextButton.setAttribute("aria-label", "Voir le média suivant");
     nextButton.innerHTML = '<span aria-hidden="true">›</span>';
-    nextButton.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      await stepDebateSourceHistory(1, true);
-    });
     element.appendChild(nextButton);
+  }
+  nextButton.onclick = async (event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    await stepDebateSourceHistory(1, true);
+  };
+}
+
+function syncDebateSourceCarouselDots() {
+  const total = currentDebateSourceHistoryItems.length;
+  let dots = document.getElementById("debate-source-carousel-dots");
+
+  if (total <= 1 || currentDebateSourceHistoryIndex < 0) {
+    dots?.remove();
+    return;
+  }
+
+  if (!dots) {
+    dots = document.createElement("div");
+    dots.id = "debate-source-carousel-dots";
+    dots.className = "theme-carousel-dots debate-source-carousel-dots";
+    dots.setAttribute("aria-label", "Choisir une source");
+  }
+
+  const dotCount = Math.min(10, total);
+  const activeDotIndex = dotCount <= 1
+    ? 0
+    : Math.round((currentDebateSourceHistoryIndex / (total - 1)) * (dotCount - 1));
+
+  dots.innerHTML = "";
+  for (let dotIndex = 0; dotIndex < dotCount; dotIndex += 1) {
+    const targetIndex = dotCount <= 1
+      ? 0
+      : Math.round((dotIndex / (dotCount - 1)) * (total - 1));
+    const dot = document.createElement("button");
+    dot.type = "button";
+    dot.className = `theme-carousel-dot debate-source-carousel-dot${dotIndex === activeDotIndex ? " is-active" : ""}`;
+    dot.setAttribute("aria-label", `Voir la source ${targetIndex + 1} sur ${total}`);
+    dot.setAttribute("aria-current", dotIndex === activeDotIndex ? "true" : "false");
+    dot.addEventListener("click", async () => {
+      const nextItem = currentDebateSourceHistoryItems[targetIndex];
+      if (!nextItem || targetIndex === currentDebateSourceHistoryIndex) return;
+      await loadDebateMediaHistoryItem(nextItem);
+      currentDebateSourceHistoryIndex = targetIndex;
+      syncDebateMediaHistoryActiveButton(nextItem);
+      syncDebateSourceSwipeAvailability();
+    });
+    dots.appendChild(dot);
+  }
+
+  const currentItem = currentDebateSourceHistoryItems[currentDebateSourceHistoryIndex];
+  const candidates = currentItem?.type === "image"
+    ? [document.getElementById("debate-image-wrap")]
+    : currentItem?.type === "video"
+      ? [document.getElementById("debate-video-wrap")]
+      : [document.getElementById("debate-source-fallback"), document.getElementById("debate-source-preview-wrap")];
+  const activeMedia = candidates.find((element) => element && getComputedStyle(element).display !== "none");
+  if (activeMedia) {
+    const ogCardBody = activeMedia.classList.contains("debate-source-fallback-og")
+      ? activeMedia.querySelector(".debate-source-card-body")
+      : null;
+    if (ogCardBody) {
+      ogCardBody.appendChild(dots);
+    } else {
+      activeMedia.insertAdjacentElement("afterend", dots);
+    }
   }
 }
 
@@ -26437,10 +26543,17 @@ function syncDebateSourceSwipeAvailability() {
     document.getElementById("debate-source-fallback")
   ].forEach((element) => {
     if (!element) return;
-    ensureDebateMediaSwipeHotspots(element);
+    const hotspotHost = element.classList.contains("debate-source-fallback-og")
+      ? element.querySelector(".debate-source-card-image-wrap") || element
+      : element;
+    ensureDebateMediaSwipeHotspots(hotspotHost);
+    hotspotHost.classList.toggle("debate-source-swipe-enabled", isEnabled);
+    hotspotHost.dataset.sourceSwipeEnabled = isEnabled ? "1" : "0";
     element.classList.toggle("debate-source-swipe-enabled", isEnabled);
     element.dataset.sourceSwipeEnabled = isEnabled ? "1" : "0";
   });
+
+  syncDebateSourceCarouselDots();
 }
 
 function setDebateSourceHistoryItems(items = [], activeItem = null) {
@@ -27206,6 +27319,7 @@ function initDebateMediaHistory(debate) {
   const sessionHtml = groupedSources.map((group) => {
     const hasActive = group.sources.some((src) => src.index === initialActiveSourceIdx);
     const count = group.sources.length;
+    const menuRowCount = Math.min(15, count);
     const itemsHtml = group.sources.map((src) => {
       const isActive = src.index === initialActiveSourceIdx;
       return `<button type="button" class="debate-media-source-menu-item${isActive ? ' active' : ''}" data-source-url="${escapeAttribute(src.url)}" data-item-type="source" data-item-url="${escapeAttribute(src.url)}" title="${escapeAttribute(src.url)}">
@@ -27217,7 +27331,7 @@ function initDebateMediaHistory(debate) {
       <button type="button" class="debate-media-history-btn debate-media-source-group-toggle${hasActive ? ' active' : ''}" aria-haspopup="true" aria-expanded="false">
         ${group.icon ? `<i class="fa-solid ${group.icon}" style="flex-shrink:0;font-size:11px"></i>` : ''}<span>${escapeHtml(group.label)}</span><span class="debate-session-count">${count}</span>
       </button>
-      <div class="debate-media-source-menu" role="menu">
+      <div class="debate-media-source-menu" role="menu" style="grid-template-rows:repeat(${menuRowCount}, minmax(32px, auto))">
         ${itemsHtml}
       </div>
     </div>`;
@@ -27282,6 +27396,12 @@ function initDebateMediaHistory(debate) {
         }
       });
       if (group) {
+        // L'origine du menu absolu est le groupe : convertir le centre réel
+        // de la page en coordonnée locale garantit un centrage exact, même
+        // depuis les boutons Gauche/Droite et avec une scrollbar desktop.
+        const groupLeft = group.getBoundingClientRect().left;
+        const pageCenter = document.documentElement.clientWidth / 2;
+        group.style.setProperty('--debate-media-menu-center-left', `${Math.round(pageCenter - groupLeft)}px`);
         group.classList.toggle('open', willOpen);
         groupToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
       }
@@ -27743,6 +27863,7 @@ async function renderInstagramSourcePreview(sourceUrl, sourcePreviewData = null)
     setDebateSourcePreviewLoadingElement(sourceLoading, true, "Chargement du post Instagram…");
   }
 
+  sourceFallback.classList.remove("debate-source-fallback-og", "debate-source-fallback-x");
   sourceFallback.classList.add("debate-source-fallback-instagram");
   sourceFallback.innerHTML = `
     <div
@@ -27885,6 +28006,7 @@ async function renderXSourcePreview(sourceUrl, sourcePreviewData = null) {
     setDebateSourcePreviewLoadingElement(sourceLoading, true, "Chargement du post X…");
   }
 
+  sourceFallback.classList.remove("debate-source-fallback-og", "debate-source-fallback-instagram");
   sourceFallback.classList.add("debate-source-fallback-x");
   sourceFallback.innerHTML = `
     <div class="debate-source-x-embed" id="debate-source-x-embed"></div>
@@ -28070,7 +28192,7 @@ function resetDebateSourcePreview() {
   }
 
   if (sourceFallback) {
-    sourceFallback.classList.remove("debate-source-fallback-x", "debate-source-fallback-instagram");
+    sourceFallback.classList.remove("debate-source-fallback-x", "debate-source-fallback-instagram", "debate-source-fallback-og");
     sourceFallback.innerHTML = "";
     sourceFallback.style.display = "none";
   }
@@ -28097,6 +28219,8 @@ function showDebateSourceFallback(sourceUrl, preview = null) {
 
   const fallbackPreview = normalizeSourcePreviewData(preview, sourceUrl);
 
+  sourceFallback.classList.remove("debate-source-fallback-x", "debate-source-fallback-instagram");
+  sourceFallback.classList.add("debate-source-fallback-og");
   sourceFallback.innerHTML = buildSourcePreviewCardHtml(fallbackPreview, sourceUrl, {
     fallbackImage: getIndexDefaultFallbackImage(getDebateId())
   });
@@ -28240,6 +28364,12 @@ function applyDebateCachedPreview(debate) {
     renderDebateImage(imageUrl);
     renderDebateSourcePreview(sourceUrl, null);
   }
+  // Le cache transmis par la carte d'accueil contient déjà source_url et
+  // media_extras : construire immédiatement Gauche/Généraliste/Droite avec
+  // ces données, sans attendre le second appel /api/debates/:id. Le rendu
+  // complet repassera ensuite ici avec les données fraîches et remplacera
+  // proprement ce sélecteur (initDebateMediaHistory est idempotente).
+  initDebateMediaHistory(d);
   if (isOpenDebate(d)) {
     const titleA = document.getElementById("title-a");
     const titleB = document.getElementById("title-b");
@@ -29521,7 +29651,15 @@ function renderDebateAiProgressInlineFromAnalysis(debateId) {
       const hasReady = !hasPending && !!(json.raw || json.status === "ready");
       const remaining = Number(json.contributionsRemaining);
 
-      if (hasPending || !Number.isFinite(remaining) || remaining < 0) {
+      if (hasPending) {
+        // initCountdown (admin-debate-analysis.js) place le décompte dans ce
+        // même slot, à la place de « Encore X contributions… ». Les rendus
+        // différés ci-dessous ne doivent pas effacer un décompte déjà monté.
+        if (!slot.querySelector(".ada-countdown-badge")) slot.innerHTML = "";
+        return;
+      }
+
+      if (!Number.isFinite(remaining) || remaining < 0) {
         slot.innerHTML = "";
         return;
       }
@@ -35564,11 +35702,17 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
   // bulles), avec le même écart fixe des deux côtés du bouton — demande du
   // 16/08/2026 (harmoniser mobile classique/standalone, chacun symétrique à
   // 24px). Idempotent d'une passe à l'autre, même principe que plus bas.
+  // Communauté (Bulles Mnoria) masque aussi "Autres actus" (même
+  // syncMnoriaCloudModeSwitch) : même absence de contentBottomDoc, donc même
+  // calage symétrique 24px — demande du 02/09/2026, "même écart qu'en Ma
+  // mémoire" entre la légende Communauté et le bandeau du dessous.
   const isMemoireMode = body.classList.contains('mnoria-memoire-cloud-mode');
+  const isSortBarSymmetricMode = isMemoireMode || _mnoriaCloudMode;
   const sortBar = document.querySelector('.index-explorer-topbar');
   const firstRowForSort = document.querySelector('#debates-list .theme-row-section');
-  if (isMemoireMode && sortBar && firstRowForSort) {
+  if (isSortBarSymmetricMode && sortBar && firstRowForSort) {
     const MNORIA_SORT_BTN_GAP = 24;
+    const MNORIA_SORT_BTN_BOTTOM_GAP = 21;
     const sectionBottomDoc = section.getBoundingClientRect().bottom + scrollY;
     const sortRect = sortBar.getBoundingClientRect();
     const sortTopDoc = sortRect.top + scrollY;
@@ -35581,7 +35725,7 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
     const bandDocTopForSort = bandElForSort.getBoundingClientRect().top + scrollY;
     const currentBandMarginTop = parseFloat(window.getComputedStyle(firstRowForSort).marginTop) || 0;
     const sortBottomDocAfterFix = sectionBottomDoc + MNORIA_SORT_BTN_GAP + sortRect.height;
-    const bandTargetTopFromSort = sortBottomDocAfterFix + MNORIA_SORT_BTN_GAP;
+    const bandTargetTopFromSort = sortBottomDocAfterFix + MNORIA_SORT_BTN_BOTTOM_GAP;
     const nextBandMarginTop = Math.round(currentBandMarginTop + (bandTargetTopFromSort - bandDocTopForSort));
     if (Number.isFinite(nextBandMarginTop)) {
       root.style.setProperty('--mnoria-home-first-row-mt', `${nextBandMarginTop}px`);

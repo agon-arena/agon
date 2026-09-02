@@ -1215,29 +1215,43 @@ font-family: "Barlow Condensed", sans-serif;
 .debate-card-context-toggle {
   position: relative;
   z-index: 3;
-  padding: 0;
-  border: none;
+  padding: 4px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
   background: transparent;
   color: #6b7280;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   width: fit-content;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 1px;
+  gap: 6px;
   justify-self: center;
   margin: 2px 0 4px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .debate-card-context-toggle:hover {
-  text-decoration: underline;
+  background: #f0f2f4;
 }
 
 .debate-card-context-toggle[aria-expanded="true"] {
   color: #6b7280;
   margin: 14px 0 18px;
+}
+
+/* Chevron : même icône dans les deux états, orientation portée par aria-expanded
+   plutôt que deux marquages HTML différents (demande du 02/09/2026, remplace les
+   points de suspension "···" par un chevron qui pivote à l'ouverture). */
+.debate-card-context-chevron {
+  font-size: 9px;
+  transition: transform 0.2s ease;
+}
+
+.debate-card-context-toggle[aria-expanded="true"] .debate-card-context-chevron {
+  transform: rotate(180deg);
 }
 
 .debate-card-source{
@@ -2328,6 +2342,32 @@ font-family: "Barlow Condensed", sans-serif;
   display:none;
   margin-top:14px;
   width:100%;
+  position:relative;
+  overflow:hidden;
+}
+
+/* Transition douce entre le haut de l'image et le fond de la page derrière
+   les onglets Gauche/Généraliste/Droite (.debate-media-history) juste
+   au-dessus — même logique que le fondu image→texte de la carte Open Graph
+   (.debate-source-card-image-wrap::before) : la couleur part de la teinte du
+   fond (#f3f4f6, cf. .page-debate .debate-hero) et se fond dans l'image,
+   plutôt qu'une simple coupure nette (demande du 02/09/2026, "transition
+   douce entre image et fond du derrière", pas juste un calque posé sur
+   l'image). */
+.debate-image-wrap::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  height:40px;
+  z-index:2;
+  pointer-events:none;
+  background:linear-gradient(
+    to bottom,
+    rgba(243, 244, 246, 0.95) 0%,
+    rgba(243, 244, 246, 0) 100%
+  );
 }
 
 .debate-image{
@@ -2504,21 +2544,22 @@ select:focus {
 .debate-hero{
   position: relative;
   background: transparent;
-  padding: 14px 0 0 0;
+  padding: 0;
   margin-bottom: 14px;
+  margin-top: -6px;
   border-bottom: none;
 }
 
 @media (max-width: 768px) {
   .debate-hero {
-    margin-top: 20px;
+    margin-top: -6px;
   }
 }
 #debate-source-preview-wrap,
 .debate-source-preview-wrap,
 #debate-source-fallback,
 .debate-source-fallback{
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 @media (max-width: 768px) {
@@ -2526,7 +2567,7 @@ select:focus {
   .debate-source-preview-wrap,
   #debate-source-fallback,
   .debate-source-fallback {
-    margin-top: 20px;
+    margin-top: 0;
   }
 }
 
@@ -5071,6 +5112,19 @@ body.page-debate #score-b {
   margin-bottom:32px;
 }
 
+/* Liseret discret au-dessus du titre, même couleur que celui déjà en place
+   sous le bloc (.debate-evaluation-axis, plus bas dans .debate-hero) —
+   rgba(255,255,255,0.07), pas #e5e7eb : .debate-hero a un fond sombre ici
+   (page débat), alors que #e5e7eb est pensé pour les cartes à fond clair et
+   y ressortait en blanc vif au lieu de rester discret (demande du 02/09/2026). */
+body.page-debate .debate-notions-section {
+  /* 32px : même espace que celui entre les pastilles de notions et le
+     liseret d'en dessous (.debate-evaluation-axis, margin-top:32px —
+     demande du 02/09/2026). */
+  padding-top: 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
 .debate-notions-section[hidden]{
   display:none;
 }
@@ -5118,8 +5172,10 @@ body.page-debate #score-b {
   color:#8a6116;
 }
 
-/* Cartes communautés : même fond que le bouton "Entrer dans l'arène" (.debate-card-entry-
-   button, #243038) plutôt que le gris clair par défaut — demande du 01/09/2026. */
+/* Cartes communautés : bleu pétrole = la vraie couleur de fond de la page index derrière
+   les cartes (html background en mobile/standalone, cf. règle tout en bas du fichier,
+   #243038 — demande du 02/09/2026, un essai précédent avec un bleu inventé #1b4f5c ne
+   correspondait pas au fond réel et a été corrigé). */
 .debate-card--community .index-card-notions-section .debate-notion-action-btn{
   background:#243038;
   border-color:#243038;
@@ -5138,15 +5194,24 @@ body.page-debate #score-b {
   margin-bottom:20px;
   padding-top:4px;
   padding-bottom:10px;
-  border-top:1px solid #e5e7eb;
-  border-bottom:1px solid #e5e7eb;
+  /* Même couleur que les liserets de la page débat (rgba(255,255,255,0.07),
+     cf. .debate-notions-section / .debate-evaluation-axis) — demande du
+     02/09/2026. Pas #e5e7eb (pensé pour fond clair) : ces cartes actualité
+     ont un fond sombre (#243038, cf. body.page-home .debate-card). Les
+     cartes communauté ci-dessous gardent leur propre liseret, inchangé. */
+  border-top:1px solid rgba(255, 255, 255, 0.07);
+  border-bottom:1px solid rgba(255, 255, 255, 0.07);
 }
 
-/* Arènes communautés uniquement (demande du 31/08/2026) : liseret bleu
-   pétrole plutôt que le gris clair des cartes actualités. */
+/* Arènes communautés : ces cartes ont un fond BLANC (body.page-home-mobile
+   .debate-card--community { background:#ffffff !important }, contrairement
+   aux cartes actualité qui sont sombres #243038) — le blanc translucide
+   rgba(255,255,255,0.07) posé le 02/09/2026 y était donc invisible (blanc
+   sur blanc). Même logique de teinte que sur fond sombre mais inversée :
+   une touche sombre discrète plutôt qu'un liseret clair marqué. */
 .debate-card--community .index-card-notions-section{
-  border-top:2px solid #243038;
-  border-bottom:2px solid #243038;
+  border-top:2px solid rgba(36, 48, 56, 0.14);
+  border-bottom:2px solid rgba(36, 48, 56, 0.14);
 }
 .index-card-notions-section .debate-notions-title{
   font-size:11px;
@@ -6419,6 +6484,234 @@ body.page-debate .topbar::after {
   transform: translateY(-1px);
 }
 
+/* Action placée immédiatement sous les informations de la source, mais
+   alignée sur le bord droit de la carte. */
+.debate-source-open-action {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  min-width: 0;
+}
+
+.debate-source-card-body.debate-source-card-body--with-open-action {
+  padding-bottom: 8px !important;
+}
+
+/* Open Graph de la page Débat : traitement immersif inspiré des médias de
+   l'index. Les doubles bordures/ombres disparaissent ; le visuel se fond dans
+   la page grâce à un halo périphérique et à des dégradés internes. */
+/* Desktop : la carte est nettement plus étroite que le conteneur central de
+   la page, avec des marges latérales visibles de chaque côté. Le plein bord
+   (calc(50% - 50vw), cf. media query mobile plus bas) est réservé au mobile. */
+body.page-debate .debate-source-fallback.debate-source-fallback-og,
+body.page-debate #debate-source-fallback.debate-source-fallback-og {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  width: 100%;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Mobile : plein bord, la carte sort du conteneur central (.container =
+   min(100%, 94/96%)) et va d'un bord à l'autre de l'écran. */
+@media (max-width: 768px) {
+  body.page-debate .debate-source-fallback.debate-source-fallback-og,
+  body.page-debate #debate-source-fallback.debate-source-fallback-og {
+    width: 100vw;
+    max-width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+  }
+}
+
+body.page-debate .debate-source-fallback-og::before {
+  content: none;
+}
+
+body.page-debate .debate-source-fallback-og > .debate-source-card {
+  position: relative;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding-top: 0 !important;
+  box-sizing: border-box !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Aucun bandeau clair avant la photo : le fondu pétrole est posé directement
+   sur le haut de l'image, dans ::after de son wrapper plus bas. */
+body.page-debate .debate-source-fallback-og > .debate-source-card::after {
+  content: none;
+}
+
+/* Même traitement que les médias immersifs de l'index (aspect-ratio plus
+   haut) : l'image occupe davantage d'espace dans la carte, maintenant
+   plein bord. */
+body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap {
+  position: relative;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  aspect-ratio: 16 / 10 !important;
+}
+
+@media (max-width: 768px) {
+  body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap {
+    aspect-ratio: 4 / 3 !important;
+  }
+}
+
+/* Sur l'Open Graph, les flèches vivent désormais DANS le visuel supérieur :
+   elles ne sont plus centrées sur toute la carte (image + texte), ce qui les
+   plaçait trop bas. !important nécessaire : la règle générique
+   #debate-source-fallback .debate-media-swipe-hotspot { bottom:56px } (id,
+   donc plus spécifique) gagnait sinon sur ce simple sélecteur de classes et
+   réduisait bottom à 56px, écrasant les flèches (hauteur quasi nulle,
+   invisibles) dans le visuel image de l'Open Graph. */
+body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap .debate-media-swipe-hotspot {
+  top: 0 !important;
+  bottom: 0 !important;
+  opacity: 0.68 !important;
+  z-index: 20 !important;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+}
+
+/* Boutons plus transparents sur l'Open Graph de la page débat uniquement,
+   afin de moins masquer la photo pendant le défilement des sources. */
+body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap .debate-media-swipe-hotspot span {
+  background: rgba(255, 255, 255, 0.28) !important;
+  color: rgba(26, 26, 46, 0.78) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(1px) !important;
+  -webkit-backdrop-filter: blur(1px) !important;
+  pointer-events: none;
+}
+
+body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap .debate-media-swipe-hotspot:hover,
+body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap .debate-media-swipe-hotspot:focus-visible {
+  opacity: 0.82 !important;
+}
+
+body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    #243038 0%,
+    rgba(36, 48, 56, 0) 100%
+  );
+}
+
+/* Fondu de l'image elle-même vers le blanc du bloc texte juste en dessous :
+   la couleur part de transparent et se termine exactement sur la même
+   teinte que le premier stop du dégradé de .debate-source-card-body
+   ci-dessous, pour qu'aucune ligne de contraste ne subsiste à la jonction. */
+body.page-debate .debate-source-fallback-og .debate-source-card-image-wrap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.96) 100%
+  );
+}
+
+/* Fondu bas très léger (dernier ~10px avant padding-bottom), même logique
+   discrète que le halo du haut ci-dessus. */
+body.page-debate .debate-source-fallback-og .debate-source-card-body {
+  position: relative;
+  z-index: 10;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.96) 0%,
+    rgba(255, 255, 255, 0.96) calc(100% - 10px),
+    rgba(36, 48, 56, 0.1) 100%
+  ) !important;
+  padding-top: 0 !important;
+  padding-bottom: 14px !important;
+}
+
+/* Titre de l'article réduit sur les Open Graph de la page débat uniquement.
+   Le nom du média (.debate-source-card-domain) conserve sa taille dédiée. */
+body.page-debate .debate-source-fallback-og .debate-source-card-title {
+  font-size: 18px !important;
+  line-height: 1.28 !important;
+  margin-top: -2px !important;
+}
+
+/* Nom du média (ex. "Mediapart") : premier élément sous l'image, agrandi et
+   remonté pour rester au plus près — voire légèrement recouvrir — le fondu
+   de l'image, au lieu d'apparaître plus bas dans le bloc texte plein blanc. */
+body.page-debate .debate-source-fallback-og .debate-source-card-domain {
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  color: #243038 !important;
+  margin-top: -8px !important;
+}
+
+/* Bouton "Ouvrir la source" : plus discret sur l'Open Graph. */
+body.page-debate .debate-source-fallback-og .debate-source-link {
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  border-radius: 6px !important;
+}
+body.page-debate .debate-source-fallback-og .debate-source-open-action {
+  margin-top: 2px;
+}
+
+/* Pagination des sources : mêmes points que les carrousels de l'index,
+   placés directement sous le média/Open Graph actuellement visible. */
+body.page-debate .debate-source-carousel-dots {
+  position: relative;
+  z-index: 18;
+  width: min(700px, 100%);
+  margin: -3px auto 10px;
+  gap: 16px;
+}
+
+/* Sur l'Open Graph, les points vivent DANS le cadre blanc, sous le bouton
+   "Ouvrir la source" (cf. syncDebateSourceCarouselDots dans script.js qui
+   les ajoute à la fin de .debate-source-card-body) plutôt qu'en dehors de
+   la carte. */
+body.page-debate .debate-source-fallback-og .debate-source-card-body .debate-source-carousel-dots {
+  width: 100%;
+  margin: 8px 0 0;
+  z-index: auto;
+}
+
+body.page-debate .debate-source-carousel-dot {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 .mnoria-source-panel-is-open {
   overflow: hidden !important;
 }
@@ -7464,7 +7757,7 @@ body.page-home-mobile #index-active-filters {
    --mnoria-home-first-row-mt, cf. syncMnoriaHomeTrendsCaptionAnchor). */
 body.page-home .index-explorer-topbar,
 body.page-home-mobile .index-explorer-topbar {
-  margin-bottom: -10px;
+  margin-bottom: -13px;
 }
 
 /* Liseret fin au-dessus du bouton, pour marquer la séparation avec ce qui
@@ -9930,10 +10223,11 @@ padding:4px 14px 12px 14px;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  padding: 8px 0 4px;
+  padding: 4px 0 4px;
   position: relative;
   z-index: 20;
 }
+
 
 .debate-media-source-group {
   position: relative;
@@ -9956,8 +10250,10 @@ padding:4px 14px 12px 14px;
   width: max-content;
   min-width: 0;
   max-width: min(220px, calc(100vw - 24px));
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: repeat(15, minmax(32px, auto));
+  grid-auto-flow: column;
+  grid-auto-columns: 132px;
   gap: 4px;
   padding: 6px;
   border-radius: 12px;
@@ -10002,6 +10298,30 @@ padding:4px 14px 12px 14px;
   .debate-media-source-group[data-source-orientation="neutral"].open .debate-media-source-menu {
     transform: translateX(-50%) translateY(0);
   }
+}
+
+/* Les listes de médias peuvent être longues : elles avancent verticalement
+   par séries de 15, puis ouvrent une nouvelle colonne. Ce verrou final passe
+   après les anciens alignements Gauche/Généraliste/Droite afin de centrer le
+   panneau dans la fenêtre, quel que soit le bouton qui l'a ouvert. */
+#debate-media-history .debate-media-source-group .debate-media-source-menu,
+#debate-media-history .debate-media-source-group[data-source-orientation="left"] .debate-media-source-menu,
+#debate-media-history .debate-media-source-group[data-source-orientation="neutral"] .debate-media-source-menu,
+#debate-media-history .debate-media-source-group[data-source-orientation="right"] .debate-media-source-menu {
+  left: var(--debate-media-menu-center-left, 50%);
+  right: auto;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+#debate-media-history .debate-media-source-group.open .debate-media-source-menu,
+#debate-media-history .debate-media-source-group[data-source-orientation="left"].open .debate-media-source-menu,
+#debate-media-history .debate-media-source-group[data-source-orientation="neutral"].open .debate-media-source-menu,
+#debate-media-history .debate-media-source-group[data-source-orientation="right"].open .debate-media-source-menu {
+  transform: translateX(-50%) translateY(0);
 }
 
 /* Bouton Droite : aligner le menu à droite pour éviter le débordement */
@@ -11025,6 +11345,49 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   font-size: inherit !important;
   opacity: 1 !important;
 }
+/* Pastille historique sous le bloc titre : 2px plus bas. La règle mobile
+   injectée par admin-debate-analysis.js la remontait de 6px ; elle ne l'est
+   donc plus que de 4px sur ce format. */
+body.page-debate #debate-ai-countdown-slot .ada-countdown-badge {
+  position: relative !important;
+  top: 2px !important;
+}
+@media (max-width: 768px), (display-mode: standalone) {
+  body.page-debate #debate-ai-countdown-slot .ada-countdown-badge {
+    top: -4px !important;
+  }
+}
+/* Après scroll, debate-topbar-hidden correspond à l'état où le bloc titre
+   reste collé en sticky : abaisser alors la pastille d'1px supplémentaire. */
+body.page-debate.debate-topbar-hidden #debate-ai-countdown-slot .ada-countdown-badge {
+  top: 3px !important;
+}
+@media (max-width: 768px), (display-mode: standalone) {
+  body.page-debate.debate-topbar-hidden #debate-ai-countdown-slot .ada-countdown-badge {
+    top: -3px !important;
+  }
+}
+/* Sous le barème, le compte à rebours est une ligne de texte au même titre que
+   « Encore X contributions… » : la pastille animée est conservée uniquement
+   dans sa copie située sous le titre de l'arène. */
+body.page-debate #debate-ai-progress-slot .ada-countdown-badge {
+  display: inline !important;
+  position: static !important;
+  top: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+  animation: none !important;
+  font: inherit !important;
+  font-style: italic !important;
+  line-height: inherit !important;
+  white-space: normal !important;
+}
 /* Le chiffre restant, mis en avant (demande du 01/09/2026, "le nombre... plus gros, afin de
    le rendre plus visible") : plus grand que le reste du texte, italique (demande du
    01/09/2026, "met le numéro en italique"), blanc franc pour ressortir davantage. Après la
@@ -11061,7 +11424,7 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
 
 .debate-context-wrap {
   display: none;
-  margin: 18px auto 14px auto;
+  margin: 6px auto 14px auto;
   max-width: 860px;
 }
 
@@ -11083,7 +11446,7 @@ body.page-debate .similar-debates-results .debate-source-card-image-domain-badge
   }
 
   .debate-context-wrap {
-    margin: 16px auto 12px auto;
+    margin: 6px auto 12px auto;
     max-width: 100%;
   }
 
@@ -14853,8 +15216,8 @@ body.page-debate .debate-episode-link:hover {
   }
 
   body.page-debate .debate-episode-link {
-    min-height: 28px;
-    padding: 4px 8px;
+    min-height: 24px;
+    padding: 2px 8px;
     font-size: 0.72rem;
     line-height: 1.15;
   }
@@ -15471,6 +15834,20 @@ body.page-debate .column-header {
     min-height: 32px !important;
     width: 70% !important;
   }
+  /* Bouton inférieur de la vue liste uniquement : même largeur que la
+     colonne d'idées #arguments-unified et centré dans son conteneur. Les
+     boutons du bloc-titre et des deux en-têtes de position restent à 70 %. */
+  body.page-debate #debate-list-view > .position-argument-button {
+    display: block;
+    width: 100% !important;
+    margin-right: auto;
+    margin-left: auto;
+    box-sizing: border-box;
+  }
+  /* Rapproche légèrement ce bouton de la colonne d'idées en dessous. */
+  body.page-debate #debate-list-view {
+    gap: 12px;
+  }
 }
 
 body.page-debate .comments-block .button-small {
@@ -16028,7 +16405,7 @@ body.page-debate.debate-title-hidden .debate-hero-outer {
 /* Fond de la zone open graph / vidéo = couleur du fond de page */
 body.page-debate .debate-hero {
   background: transparent;
-  margin-top: 8px !important;
+  margin-top: 4px !important;
   padding-top: 0 !important;
 }
 body.page-debate .debate-source-preview-wrap,
@@ -16288,12 +16665,11 @@ body.page-debate .score-bar-label {
   font-weight: 800;
   min-width: 52px;
   text-align: center;
-  /* Petit contour gris clair, plus fin qu'avant (demande du 01/09/2026, "le contour blanc
-     est trop gros... met du gris claire plutôt") : lisibilité maintenue maintenant que le
-     fond sombre derrière la barre a été retiré. */
-  text-shadow:
-    0 0 2px #d1d5db,
-    0 0 2px #d1d5db;
+  /* Contour gris net : l'ancien text-shadow à rayon 2px formait un halo qui
+     brouillait les chiffres, surtout aux extrémités de la barre sur mobile. */
+  text-shadow: none;
+  -webkit-text-stroke: 0.45px #d1d5db;
+  paint-order: stroke fill;
 }
 body.page-debate .score-bar-label-a {
   color: var(--color-a);
@@ -18733,12 +19109,6 @@ body.page-home-mobile .debate-card .debate-source-card-image-wrap {
   }
 }
 
-.debate-card-context-toggle-dots {
-  font-size: 11px;
-  letter-spacing: 2px;
-  opacity: 0.6;
-}
-
 /* ─── Rubriques thématiques — page d'accueil ─────────────────────── */
 
 /*
@@ -19573,11 +19943,6 @@ body.page-home-mobile .debate-card-context-toggle[aria-expanded="true"] {
   margin: 10px 0 12px !important;
 }
 
-body.page-home .debate-card-context-toggle-dots,
-body.page-home-mobile .debate-card-context-toggle-dots {
-  line-height: 0.85 !important;
-}
-
 body.page-home .debate-card-context-text,
 body.page-home .debate-card-context-text p,
 body.page-home-mobile .debate-card-context-text,
@@ -19999,8 +20364,12 @@ body.page-home-mobile .debate-card-mnoria-badge {
      logique symétrique ci-dessus) est masqué, cette logique ne s'applique donc
      pas (cf. guard contentBottomDoc dans syncMnoriaHomeTrendsCaptionAnchor). Le
      bouton Trier/Rechercher est alors calé à 24px sous le nuage de bulles,
-     mesuré en direct — même fonction JS, bloc dédié. */
-  body.is-standalone.page-home-mobile.mnoria-memoire-cloud-mode .index-explorer-topbar {
+     mesuré en direct — même fonction JS, bloc dédié. Communauté (Bulles
+     Mnoria) masque aussi "Autres actus" : même calage (demande du 02/09/2026,
+     même écart qu'en Ma mémoire) — pas de classe body dédiée à ce mode, d'où
+     le :has() sur le conteneur des bulles. */
+  body.is-standalone.page-home-mobile.mnoria-memoire-cloud-mode .index-explorer-topbar,
+  body.is-standalone.page-home-mobile:has(#mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria) .index-explorer-topbar {
     margin-top: var(--mnoria-home-sort-btn-mt, -4px) !important;
   }
 
@@ -20008,15 +20377,18 @@ body.page-home-mobile .debate-card-mnoria-badge {
      (@media max-width:768px, hors mode Ma mémoire) : ici le bandeau doit
      suivre la mesure JS ci-dessus (24px sous le bouton), pas rester à 0.
      Sélecteur volontairement plus spécifique (4 classes) pour gagner. */
-  body.is-standalone.page-home-mobile.mnoria-memoire-cloud-mode #debates-list .theme-row-section:first-child {
+  body.is-standalone.page-home-mobile.mnoria-memoire-cloud-mode #debates-list .theme-row-section:first-child,
+  body.is-standalone.page-home-mobile:has(#mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria) #debates-list .theme-row-section:first-child {
     margin-top: var(--mnoria-home-first-row-mt, -4px) !important;
   }
 
   /* Mobile navigateur (hors standalone), mode "Ma mémoire" : 24px avant le
      bouton, harmonisé avec les 24px après (margin-bottom plus haut) et avec
      le standalone ci-dessus. Valeur statique ici (pas de mesure JS possible
-     sans le fold instable du standalone) : base -4px + 14px. */
-  body.page-home-mobile.mnoria-memoire-cloud-mode:not(.is-standalone) .index-explorer-topbar {
+     sans le fold instable du standalone) : base -4px + 14px. Même valeur en
+     Communauté (demande du 02/09/2026, même écart qu'en Ma mémoire). */
+  body.page-home-mobile.mnoria-memoire-cloud-mode:not(.is-standalone) .index-explorer-topbar,
+  body.page-home-mobile:not(.is-standalone):has(#mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria) .index-explorer-topbar {
     margin-top: 10px !important;
   }
 }
@@ -20125,7 +20497,7 @@ body.page-home #debates-list .theme-row-section:first-child {
     /* Espace en dessous (vers #debates-list) resserré pour retrouver le même
        équilibre qu'en Ma mémoire (demande du 17/08/2026, "réglé pour ma
        mémoire mais pas pour actualité et communauté"). */
-    margin-bottom: -24px;
+    margin-bottom: -27px;
   }
 }
 
@@ -24142,15 +24514,28 @@ body.page-home-mobile .debate-card .context-first-letter {
   font-weight: 800 !important;
 }
 
-/* Texte contexte et toggle */
+/* Texte contexte */
 body.page-home .debate-card .debate-card-context-text,
 body.page-home-mobile .debate-card .debate-card-context-text,
 body.page-home .debate-card .debate-card-context-text p,
-body.page-home-mobile .debate-card .debate-card-context-text p,
-body.page-home .debate-card .debate-card-context-toggle,
-body.page-home-mobile .debate-card .debate-card-context-toggle {
+body.page-home-mobile .debate-card .debate-card-context-text p {
   color: #d1d5db !important;
   text-shadow: 0 2px 6px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9) !important;
+}
+
+/* Toggle "Voir plus/moins" : pilule claire semi-transparente plutôt que texte nu
+   (demande du 02/09/2026) — juste le contour, sans fond, sur le bleu nuit #243038
+   des cartes actu (fond retiré le 02/09/2026, "enlève le fond... laisse le petit
+   contour"). */
+body.page-home .debate-card .debate-card-context-toggle,
+body.page-home-mobile .debate-card .debate-card-context-toggle {
+  background: transparent !important;
+  border-color: rgba(255,255,255,0.2) !important;
+  color: #d1d5db !important;
+}
+body.page-home .debate-card .debate-card-context-toggle:hover,
+body.page-home-mobile .debate-card .debate-card-context-toggle:hover {
+  background: rgba(255,255,255,0.15) !important;
 }
 
 /* Centrage badges en page index */
@@ -24295,6 +24680,18 @@ body.page-home-mobile .index-card-media-with-title .debate-card-local-image {
     margin-left: auto !important;
     margin-right: 0 !important;
   }
+}
+
+/* Même traitement qu'en desktop ci-dessus (padding-top:0), jamais étendu au
+   mobile jusqu'ici : le média restait décalé de 16px (padding de base de
+   .debate-card) sous une bande blanche visible uniquement en mobile —
+   demande du 02/09/2026, capture à l'appui ("ceci se produit en mobile,
+   pas en desktop"). Left/right restent gérés par le débordement en marge
+   négative de .index-card-media-with-title (ligne ~24557), pas par ce
+   padding-top:0 seul (contrairement au desktop qui, lui, passe aussi
+   padding-left/right à 0). */
+body.page-home-mobile .debate-card.has-title-banner {
+  padding-top: 0 !important;
 }
 
 body.page-home .debate-card-source,
@@ -24483,9 +24880,17 @@ body.page-home-mobile .theme-horizontal-row {
 }
 
 /* --- Jauge politique --- */
+body.page-debate #political-gauge-container:not(:empty) {
+  /* Padding volontairement placé sur le conteneur : contrairement à la marge
+     du wrapper, il ne peut pas fusionner avec la marge du bloc précédent. */
+  padding-top: 6px;
+}
+
 .political-gauge-wrap {
   text-align: center;
-  margin: 16px auto 13px;
+  /* Même respiration que celle entre le cadre supérieur et la barre de
+     pourcentage : 16px avant les deux cadres de positions. */
+  margin: 16px auto 16px;
   max-width: 480px;
   padding: 0 16px;
 }
@@ -24692,13 +25097,20 @@ body.page-debate .debate-top-add-button {
 }
 
 /* Cartes communauté : bouton "Voir plus" — même souci que le titre (couleur claire
-   #d1d5db + text-shadow noir épais, pensés pour fond sombre) : illisible/flou sur le
-   fond clair #e9ebec. */
+   #d1d5db, pensée pour fond sombre) : illisible sur le fond clair #ffffff des
+   cartes communauté. Juste le contour, sans fond (demande du 02/09/2026). */
 .debate-card.debate-card--community .debate-card-context-toggle,
 body.page-home .debate-card.debate-card--community .debate-card-context-toggle,
 body.page-home-mobile .debate-card.debate-card--community .debate-card-context-toggle {
+  background: transparent !important;
+  border-color: #e5e7eb !important;
   color: #000000 !important;
   text-shadow: none !important;
+}
+.debate-card.debate-card--community .debate-card-context-toggle:hover,
+body.page-home .debate-card.debate-card--community .debate-card-context-toggle:hover,
+body.page-home-mobile .debate-card.debate-card--community .debate-card-context-toggle:hover {
+  background: #e9ebec !important;
 }
 
 /* Cartes communauté : retire le flou (backdrop-filter) du placeholder "Chargement de
@@ -24771,19 +25183,56 @@ body.page-home-mobile .debate-card.debate-card--community .debate-source-card-bo
 }
 
 /* Bandeau titre (has-title-banner, cas source-only) : même fond + dégradés qui
-   se fondent dans #ffffff au lieu du bleu nuit #243038 par défaut. */
+   se fondent dans #ffffff au lieu du bleu nuit #243038 par défaut.
+   margin-top remis à 0 (au lieu de -8px, valeur par défaut pensée pour un
+   bandeau sombre bien collé à l'image) : ce chevauchement de 8px, avec un
+   fond opaque sans transition sur son propre bord, tombait au milieu du
+   fondu de .index-card-media-with-title::after et créait une arête nette
+   à cet endroit précis, quel que soit le réglage du dégradé lui-même
+   (demande du 02/09/2026, "ça n'a rien changé" — cause trouvée ici). */
 .debate-card.debate-card--community .index-card-title-banner,
 body.page-home .debate-card.debate-card--community .index-card-title-banner,
 body.page-home-mobile .debate-card.debate-card--community .index-card-title-banner {
   background: #ffffff !important;
+  margin-top: 0 !important;
 }
 
+/* Sur fond blanc, un dégradé à 2 arrêts (transparent -> blanc) va vite à
+   pleine opacité sur ses derniers pixels : l'œil perçoit cette accélération
+   comme un trait net juste avant la jonction avec le bloc texte en dessous
+   (lui aussi blanc), même avec une hauteur généreuse (34px) — demande du
+   02/09/2026, capture à l'appui. Plusieurs arrêts intermédiaires (courbe
+   adoucie façon "ease") au lieu d'une interpolation linéaire brute lissent
+   la transition. Sur fond sombre #243038 (cartes actualité), le contraste
+   image/fond est moins marqué et l'effet ne se voit pas : 18px + 2 arrêts
+   simples y restent inchangés. */
+/* Voile du haut retiré (demande du 02/09/2026, "enlève aussi le voile en
+   haut de la carte communauté") : content:none plutôt qu'un fondu blanc. */
 .debate-card.debate-card--community .index-card-media-with-title::before {
-  background: linear-gradient(to top, transparent, #ffffff) !important;
+  content: none !important;
 }
 
 .debate-card.debate-card--community .index-card-media-with-title::after {
-  background: linear-gradient(to bottom, transparent, #ffffff) !important;
+  height: 40px !important;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.15) 30%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0.85) 85%,
+    #ffffff 100%
+  ) !important;
+}
+
+/* La pastille source doit rester entièrement dans la partie nette de l'image.
+   Le fondu Communauté occupe les 40 derniers pixels : les positions globales
+   (20px mobile / 30px desktop) plaçaient son bord inférieur dans ce fondu,
+   avec un résultat particulièrement visible sur certaines images claires. */
+.debate-card.debate-card--community .debate-source-card-image-domain-badge,
+body.page-home .debate-card.debate-card--community .debate-source-card-image-domain-badge,
+body.page-home-mobile .debate-card.debate-card--community .debate-source-card-image-domain-badge {
+  top: auto !important;
+  bottom: 48px !important;
 }
 
 /* Cartes communauté (demande du 31/08/2026) : .debate-card::after assombrit les
@@ -25504,6 +25953,16 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.is-standalone.page-debate .debate-video-wrap.debate-source-swipe-enabled {
     margin-bottom: calc(var(--mnoria-debate-legacy-media-shift-y, 0px) + 42px) !important;
   }
+
+  /* Sur l'Open Graph (traitement immersif), les flèches ‹ › vivent DÉSORMAIS
+     à l'intérieur du visuel image (top:0/bottom:0 sur .debate-source-card-
+     image-wrap) et ne dépassent plus sous la carte — la réservation de 42px
+     ci-dessus est donc obsolète ici et éloignait l'article de la carte
+     inutilement en standalone (demande du 02/09/2026, "remonte l'article"). */
+  body.is-standalone.page-debate #debate-source-fallback.debate-source-fallback-og.debate-source-swipe-enabled,
+  body.is-standalone.page-debate .debate-source-fallback.debate-source-fallback-og.debate-source-swipe-enabled {
+    margin-bottom: var(--mnoria-debate-legacy-media-shift-y, 0px) !important;
+  }
 }
 
 /* YouTube page débat mobile : ne pas appliquer l'extension de hauteur réservée
@@ -25537,7 +25996,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   body.page-debate:not(.debate-embedded-frame) .mobile-back-button {
-    bottom: 34px !important;
+    bottom: 40px !important;
     transform: none !important;
   }
 
@@ -25547,7 +26006,12 @@ body.page-create-mobile .create-card .create-submit-helper {
      la position réelle du bandeau .home-bottom-nav, donc les deux restent
      alignés sur la même ligne quel que soit l'état de la barre Safari. */
   body.page-debate.debate-embedded-frame .mobile-back-button {
-    bottom: var(--mnoria-dock-button-bottom, 34px) !important;
+    bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 24px) !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
+    font-size: 16px !important;
     transform: none !important;
   }
 
@@ -25573,14 +26037,16 @@ body.page-create-mobile .create-card .create-submit-helper {
   /* Centré (demande du 01/09/2026, "centre le bouton compteur de voix, au centre, juste
      au-dessus du bandeau blanc du bas") : 50% au lieu de 80%, même transform:translateX(-50%)
      déjà en place pour le centrage exact. */
-  /* +12px (demande du 01/09/2026, "en mobile remonte le un peu") : 50px au lieu de 38px, et
-     +14px au lieu de +2px pour la variante embarquée (même écart). */
+  /* Laisse désormais une marge nette au-dessus du liseré horizontal dégradé,
+     en direct comme dans la variante embarquée. */
   body.page-debate:not(.debate-embedded-frame) #voices-float-badge {
     left: 50% !important;
     right: auto !important;
-    bottom: 50px !important;
-    height: 42px !important;
-    min-height: 42px !important;
+    bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 24px) !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 5px 11px !important;
+    font-size: 16px !important;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -25591,9 +26057,11 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.debate-embedded-frame #voices-float-badge {
     left: 50% !important;
     right: auto !important;
-    bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 14px) !important;
-    height: 42px !important;
-    min-height: 42px !important;
+    bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 24px) !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 5px 11px !important;
+    font-size: 16px !important;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -27729,4 +28197,17 @@ html body .home-bottom-nav .home-bottom-nav-item span {
    !important déjà posées sur ce sélecteur, page par page. */
 .mobile-back-button {
   display: none !important;
+}
+
+/* Verrou final mobile : le bouton visible de fermeture de l'iframe appartient
+   au document parent (et non à la .mobile-back-button interne, masquée
+   ci-dessus). Le remonter au même niveau que le compteur de voix le place
+   entièrement au-dessus du liseré horizontal dégradé. */
+@media (max-width: 768px) {
+  #debate-iframe-modal.open #debate-iframe-modal-close,
+  body:has(#debate-iframe-modal.open) #debate-iframe-modal-close {
+    top: auto !important;
+    bottom: 88px !important;
+    transform: none !important;
+  }
 }

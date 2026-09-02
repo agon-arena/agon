@@ -1,7 +1,6 @@
-// Invalidation du 01/09/2026 (v237) : ajout du postMessage "mnoria:play-notification-gong"
-// dans le handler push (cf. plus bas) — changer cette version vide l'ancien cache statique
-// et force l'activation du nouveau service worker.
-const SW_VERSION = "20260901-notification-gong-v237";
+// Invalidation du 02/09/2026 (v277) : espace sous « Trier / Rechercher »
+// réduit de 3px dans les trois modes de la page d'accueil.
+const SW_VERSION = "20260902-index-sort-bottom-gap-v277";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
