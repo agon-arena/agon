@@ -5222,14 +5222,27 @@
 
     if (currentCategory !== 'mesqcm' || currentSlot || customSearchGenerationActive) return pending;
     if (!pending.length) {
+      if (pendingNotionQuizPollId) {
+        clearTimeout(pendingNotionQuizPollId);
+        pendingNotionQuizPollId = null;
+      }
+      // Ne jamais écraser un échec confirmé qu'on vient d'afficher (setCustomSearchStatus(..., true),
+      // cf. refreshPendingNotionQuizList/startCustomTopicGeneration) — quel que soit l'appelant qui
+      // déclenche cette synchronisation générique juste après (correctif du 02/09/2026, incident
+      // "Maoïsme" : un vrai échec QCM_UNUSABLE retire déjà le marqueur "en cours" AVANT d'afficher
+      // son message rouge, donc `pending` est déjà vide ici — sans cette garde sur le DOM lui-même,
+      // ce même bloc effaçait ce message dans la foulée, quasi instantanément). On s'appuie sur la
+      // classe is-error déjà posée par setCustomSearchStatus plutôt que sur un état séparé à
+      // synchroniser : robuste à n'importe quel appelant, présent ou futur.
+      if (customSearchStatus.classList.contains('is-error')) {
+        pendingNotionQuizStatusVisible = false;
+        stopPieSpinner();
+        return pending;
+      }
       if (pendingNotionQuizStatusVisible) {
         pendingNotionQuizStatusVisible = false;
         setCustomSearchStatus('', false);
         stopPieSpinner();
-      }
-      if (pendingNotionQuizPollId) {
-        clearTimeout(pendingNotionQuizPollId);
-        pendingNotionQuizPollId = null;
       }
       return pending;
     }
@@ -5548,13 +5561,29 @@
             customSearchBtn.disabled = false;
             customSearchInput.disabled = false;
             if (result.invalidJson) {
-              if (pendingCustomSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-                window.mnoriaFinishPendingNotionQuizGeneration(pendingCustomSlot);
-              }
+              // Réponse HTTP reçue mais corps illisible (pas du JSON) : sur cette route, le
+              // serveur ne répond JAMAIS autrement qu'en JSON valide sur un chemin qu'il gère
+              // lui-même (succès, échec métier via publicGenerationError, ou son catch général
+              // STORAGE_TEMPORARY, cf. server.js POST /api/users/notion-quizzes/custom) — un
+              // corps illisible ne peut donc venir que d'un intermédiaire externe (timeout du
+              // proxy Render sur cette requête initiale très longue, coupure...), jamais d'un
+              // vrai échec applicatif. Même traitement que la coupure réseau ci-dessous
+              // (correctif UX du 01/09/2026, incident "Marxisme") : on ne sait pas si la
+              // génération a réellement échoué, donc pas de message rouge et pas de
+              // finishPendingNotionQuizGeneration — le marqueur persistant et le sondage
+              // periodique de generation-status restent seuls en charge jusqu'à ready ou failed
+              // (correctif du 02/09/2026, incident "Maoïsme" : cette branche avait été oubliée
+              // par le correctif Marxisme, qui n'avait couvert que le .catch() plus bas —
+              // c'est elle qui affichait le faux message rouge furtif tout en effaçant le
+              // marqueur "en cours de création").
+              console.warn('[qcm-generation] réponse HTTP illisible, statut=' + result.status + ' — génération non confirmée en échec, sondage generation-status conservé.');
               customTopicGenerationLabel = '';
-              if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
-              var httpReference = Number(result.status) ? ' (HTTP ' + Number(result.status) + ')' : '';
-              setCustomSearchStatus('Le serveur a interrompu la génération' + httpReference + '. Réessaie dans quelques instants.', true);
+              if (currentCategory === 'mesqcm' && !currentSlot) {
+                renderMesQcmList(currentMesQcmQuizzes);
+                refreshPendingNotionQuizList(true);
+              } else {
+                setCustomSearchStatus('Génération du QCM « ' + topic + ' » toujours en cours en arrière-plan — cela peut prendre plusieurs minutes. Tu seras prévenu·e dès qu’il sera prêt.', false);
+              }
               return;
             }
             if (!result.data.ok) {
