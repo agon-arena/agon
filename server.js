@@ -13685,6 +13685,21 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     // options échoue mécaniquement, même si cette consigne était ignorée.
     "INTERDICTION ABSOLUE : ne génère JAMAIS de question vrai/faux, oui/non, correct/incorrect, ni aucune formulation binaire équivalente qui donnerait artificiellement ~50% de chances de réussite au hasard — même sous un nom ou une apparence différente (ex. un \"qcm\" réduit à 2 options \"Vrai\"/\"Faux\", une question fermée dont la réponse est oui ou non). Toute question, quel que soit son format, doit toujours proposer au moins 3 options distinctes et sémantiquement plausibles (ou reposer sur un vrai appariement/une vraie séquence pour association/ordre).",
     "QUALITÉ OBLIGATOIRE : pour un QCM simple, une seule option doit être défendable et chaque distracteur doit être incontestablement faux au regard de la connaissance/source. Interdits : options sémantiquement équivalentes, \"toutes les réponses\", \"aucune de ces réponses\", double négation et piège de langage.",
+    // V2 pipeline QCM (02/09/2026, audit instrumenté "Taoïsme") : version
+    // COURTE et opérationnelle, côté générateur, de règles déjà connues du
+    // critique sémantique (buildSemanticReviewPrompt, lib/qcm-quality.js)
+    // mais jamais explicitées ici jusqu'à présent — objectif : produire de
+    // meilleurs candidats dès le premier appel plutôt que de compter sur le
+    // critique + la régénération pour les corriger après coup. Volontairement
+    // condensé (jamais les longs paragraphes du critique) : chaque ligne
+    // correspond à un ou plusieurs reason codes déterministes/sémantiques
+    // déjà existants (ARTIFICIAL_DISTRACTOR, IMPLAUSIBLE_DISTRACTOR,
+    // CATEGORY_MISMATCH, GUESSABLE_WITHOUT_KNOWLEDGE, AMBIGUOUS_DISTRACTOR,
+    // REORDERED_DUPLICATE_OPTION) — aucun nouveau code, aucun seuil changé.
+    "Homogénéité des distracteurs : quand c'est pertinent, chaque distracteur doit appartenir à la MÊME catégorie que la bonne réponse (personne ↔ personne, date ↔ date, institution ↔ institution, concept ↔ concept, lieu ↔ lieu, événement ↔ événement) — jamais une bonne réponse reconnaissable simplement parce que les 3 autres options sont d'une autre nature.",
+    "Distracteurs plausibles : chaque distracteur doit être une erreur crédible pour quelqu'un qui connaît mal le sujet — jamais un pseudo-concept, une institution ou un nom inventés, une formulation absurde, ou une option manifestement hors sujet. Faux, mais plausible.",
+    "Non devinable sans connaissance : la bonne réponse ne doit jamais se repérer par sa seule forme grammaticale, un écho lexical évident avec la question, une longueur ou une précision nettement différentes des autres options, ou par élimination immédiate des distracteurs.",
+    "Options réellement distinctes : deux options ne doivent jamais exprimer essentiellement la même information avec seulement un ordre des mots, un ordre des éléments ou une reformulation superficielle différents.",
     "La question doit être claire et autonome sans relire la fiche. La difficulté doit venir du savoir testé, jamais d'une formulation confuse. Avant de répondre, vérifie silencieusement la cohérence entre correctIndex/correctIndexes, le texte de la ou des bonnes options et l'explication.",
     // Préférence à l'affirmatif (correctif du 01/09/2026, suite à l'audit
     // qualité rédactionnelle des QCM — cas réel "Parmi ces groupes, lequel
@@ -14157,6 +14172,102 @@ function validateNarrativeQuizQuestions(rawQuestions, validSourceIds, maxTotal, 
   return valid;
 }
 
+// ── Compaction des payloads de régénération (V2 pipeline QCM, 02/09/2026,
+// audit instrumenté "Taoïsme") ────────────────────────────────────────────
+// L'audit a montré que question_targeted_regeneration reçoit aujourd'hui, en
+// plus du basePrompt complet (inchangé dans cette V2), le texte INTÉGRAL de
+// chaque question déjà acceptée (question+4 options) et l'objet BRUT complet
+// de chaque question rejetée (variants, explanation, selfContained inclus)
+// — alors que ni l'un ni l'autre n'est nécessaire à ce que regenerate()
+// demande réellement à Luna (cf. targetedConstraints juste en dessous :
+// éviter la duplication/le recyclage, corriger un motif précis, produire un
+// remplacement tracé aux sources). Les deux fonctions ci-dessous construisent
+// une projection minimale, couvrant les 6 formats réellement supportés
+// (QUESTION_FORMAT_DEFS plus haut) — jamais un raccourci qui ne vaudrait que
+// pour qcm/texte_a_trous/intrus (options+correctIndex) : qcm_multi a
+// correctIndexes (plusieurs réponses), association n'a ni options ni
+// correctIndex (pairs), ordre non plus (items, qui EST la réponse).
+
+// Réponse correcte d'UNE variante, sous forme texte — jamais son
+// options/correctIndex bruts, dont regenerate() n'a pas besoin pour éviter
+// la duplication/le recyclage (cf. CROSS_QUESTION_ANSWER_REUSE,
+// lib/qcm-quality.js, qui compare déjà des réponses texte, jamais des
+// indices). Toujours calculée sur la variante PRINCIPALE (variants[0] si
+// présent, sinon la question elle-même) — même convention que
+// getPrimaryQuestionVariant (lib/qcm-quality.js, non dupliquée ici pour ne
+// pas ajouter un nouvel export à un module qu'aucune autre partie de ce
+// correctif ne touche).
+function summarizeCorrectAnswerText(primaryVariant) {
+  const options = Array.isArray(primaryVariant?.options) ? primaryVariant.options : [];
+  if (primaryVariant?.type === "qcm_multi") {
+    const indexes = Array.isArray(primaryVariant.correctIndexes) ? primaryVariant.correctIndexes.map(Number) : [];
+    const texts = indexes.map((i) => options[i]).filter((v) => v != null && String(v).trim());
+    return texts.length ? texts.join(" / ") : null;
+  }
+  if (["qcm", "texte_a_trous", "intrus"].includes(primaryVariant?.type)) {
+    const index = Number(primaryVariant?.correctIndex);
+    return Number.isInteger(index) && options[index] != null ? String(options[index]) : null;
+  }
+  if (primaryVariant?.type === "association" && Array.isArray(primaryVariant.pairs)) {
+    const text = primaryVariant.pairs.map((p) => `${p?.left ?? ""} → ${p?.right ?? ""}`).join(" ; ");
+    return text || null;
+  }
+  if (primaryVariant?.type === "ordre" && Array.isArray(primaryVariant.items)) {
+    const text = primaryVariant.items.join(" → ");
+    return text || null;
+  }
+  return null;
+}
+
+// Question déjà ACCEPTÉE : representation minimale suffisante pour empêcher
+// une régénération de la dupliquer ou d'en recycler la réponse — jamais son
+// texte complet ni ses distracteurs (aucune des règles de regenerate() ne
+// s'appuie dessus).
+function summarizeAcceptedQuestionForRegeneration(question) {
+  const primary = Array.isArray(question?.variants) && question.variants.length ? question.variants[0] : question;
+  return {
+    knowledgeTarget: question?.knowledgeTarget || null,
+    correctAnswerText: summarizeCorrectAnswerText(primary)
+  };
+}
+
+// Variante compactée d'une question REJETÉE : conserve tout le contenu réel
+// (type/question/options/correctIndex(es)/pairs/items selon le format) —
+// nécessaire pour que Luna sache CE qu'il faut corriger — retire seulement
+// explanation/selfContained/retrievalMode, jamais utiles pour comprendre ou
+// corriger un motif de rejet.
+function compactRejectedVariant(variant) {
+  return {
+    type: variant?.type,
+    question: variant?.question,
+    options: variant?.options,
+    correctIndex: variant?.correctIndex,
+    correctIndexes: variant?.correctIndexes,
+    pairs: variant?.pairs,
+    items: variant?.items
+  };
+}
+
+// Question REJETÉE complète : `variants` est CONSERVÉ (jamais retiré, malgré
+// sa taille) — validateQuestionQuality juge CHAQUE variante indépendamment
+// (cf. lib/qcm-quality.js validateQuestionBatchQuality, `variants.forEach`),
+// donc un rejet peut venir d'une variante secondaire, jamais seulement de la
+// première ; retirer variants risquerait de faire regénérer un remplacement
+// incomplet (moins de variantes qu'avant) sans que Luna sache combien il en
+// manque. supporting_claim/source_ids sont conservés sans condition : une
+// question rejetée pour un motif GROUNDING_* doit rester reconstructible à
+// partir des mêmes preuves (cf. targetedConstraints GROUNDING_* plus bas, qui
+// demandent explicitement de revenir aux passages SOURCE_N déjà cités).
+function compactQuestionForRegeneration(question) {
+  const hasVariants = Array.isArray(question?.variants) && question.variants.length;
+  const compact = hasVariants
+    ? { variants: question.variants.map(compactRejectedVariant) }
+    : compactRejectedVariant(question);
+  if (question?.supporting_claim) compact.supporting_claim = question.supporting_claim;
+  if (Array.isArray(question?.source_ids) && question.source_ids.length) compact.source_ids = question.source_ids;
+  return compact;
+}
+
 // Chaîne V2 commune à toutes les sorties fraîchement générées. Elle reçoit
 // les objets BRUTS (avant validateQuestionItemCore et donc avant shuffle),
 // exécute validation déterministe + critique sémantique, puis régénère
@@ -14233,16 +14344,16 @@ async function qualityControlRawQuestions({
         replacementIndex: index,
         sourceId: entry.question?.sourceId || entry.question?.sourceDebateId || null,
         knowledgeTarget: entry.question?.knowledgeTarget || null,
-        rejectedQuestion: entry.question,
+        rejectedQuestion: compactQuestionForRegeneration(entry.question),
         reasonCodes: entry.reasons.map((item) => item.code),
         reasonMessages: entry.reasons.map((item) => item.message)
       }));
-      const acceptedPayload = accepted.map((question) => ({
-        sourceId: question?.sourceId || question?.sourceDebateId || null,
-        knowledgeTarget: question?.knowledgeTarget || null,
-        question: question?.question || question?.variants?.[0]?.question || null,
-        options: question?.options || question?.variants?.[0]?.options || null
-      }));
+      // V2 pipeline QCM (02/09/2026) : représentation minimale, cf.
+      // summarizeAcceptedQuestionForRegeneration ci-dessus — remplace l'ancien
+      // {sourceId, knowledgeTarget, question, options complets}, dont
+      // regenerate() ne se sert nulle part (seul le texte de ce bloc, jamais
+      // sa structure, est lu par Luna pour éviter duplication/recyclage).
+      const acceptedPayload = accepted.map(summarizeAcceptedQuestionForRegeneration);
       const rejectionCodes = new Set(rejectionPayload.flatMap((entry) => entry.reasonCodes));
       const targetedConstraints = [];
       if (rejectionCodes.has("DOUBLE_NEGATION")) {
