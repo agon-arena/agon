@@ -1,6 +1,8 @@
-// Invalidation du 02/09/2026 (v277) : espace sous « Trier / Rechercher »
-// réduit de 3px dans les trois modes de la page d'accueil.
-const SW_VERSION = "20260902-index-sort-bottom-gap-v277";
+// Invalidation du 03/09/2026 : purge du cache de navigation /apprentissage
+// susceptible de resservir, via cachedFallback, une ancienne version de la
+// page antérieure au câblage de la route progressive (audit read-only du
+// 03/09/2026 — cf. server.js POST /api/users/notion-quizzes/custom/progressive).
+const SW_VERSION = "20260903-progressive-routing-fix";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

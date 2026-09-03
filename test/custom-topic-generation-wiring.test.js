@@ -59,10 +59,10 @@ test("un sujet libre reste suivi après avoir quitté la page", () => {
   assert.match(view, /mnoriaStartPendingNotionQuizGeneration\(\{ slot: pendingCustomSlot, label: topic \}\)/);
   assert.ok(
     view.indexOf("mnoriaStartPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic })")
-      < view.indexOf("fetch('/api/users/notion-quizzes/custom'"),
+      < view.indexOf("fetch(creationEndpoint,"),
     "le marqueur persistant doit être écrit avant l'appel de génération"
   );
-  const catchStart = view.indexOf(".catch(function () {", view.indexOf("fetch('/api/users/notion-quizzes/custom'"));
+  const catchStart = view.indexOf(".catch(function () {", view.indexOf("fetch(creationEndpoint,"));
   const catchEnd = view.indexOf("          });", catchStart);
   assert.doesNotMatch(view.slice(catchStart, catchEnd), /mnoriaFinishPendingNotionQuizGeneration/);
 });
@@ -81,7 +81,7 @@ test("le suivi reconnaît toutes les variantes de niveau d'un même master mutua
 test("la fenêtre Générer avec l’IA se ferme automatiquement dès que la génération est lancée", () => {
   const generationStart = view.indexOf("mnoriaStartPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic })");
   const modalClose = view.indexOf("closeAiGenerateModal();", generationStart);
-  const requestStart = view.indexOf("fetch('/api/users/notion-quizzes/custom'", generationStart);
+  const requestStart = view.indexOf("fetch(creationEndpoint,", generationStart);
   assert.ok(generationStart >= 0, "le suivi persistant doit être lancé");
   assert.ok(modalClose > generationStart, "la fenêtre doit se fermer après l'inscription du suivi en cours");
   assert.ok(modalClose < requestStart, "la fenêtre doit disparaître sans attendre la fin de la requête IA");

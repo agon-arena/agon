@@ -102,9 +102,30 @@ test("K — V3.2 inchangée : expandGroundingAndRegenerateMissingQuestions reço
     SERVER_SOURCE,
     /const expansionStartedAt = Date\.now\(\);\s*\n\s*const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions\(\{\s*\n\s*apiKey, subject, id, instruction, timeoutMs,\s*\n\s*grounding, accepted, validated, questionQualityMetrics\s*\n\s*\}\);\s*\n\s*sourceExpansionMs = Date\.now\(\) - expansionStartedAt;/
   );
-  // Un seul site d'appel réel (hors sa propre définition) : jamais rejoué
-  // deux fois, jamais un second chemin d'expansion introduit.
-  assert.equal((SERVER_SOURCE.match(/await expandGroundingAndRegenerateMissingQuestions\(\{/g) || []).length, 1);
+  // Génération progressive (Phase 1, 02/09/2026 ; parallélisation
+  // fiche/questions, 03/09/2026 ; sur-génération initiale, 03/09/2026 suite) :
+  // un second site d'appel, dans generateElementaryBlock (désormais dans sa
+  // tâche `questionsTask` interne), réutilise V3.2 TEL QUEL pour le bloc
+  // élémentaire (cf. rapport section 10) — mêmes 9 champs, `instruction`/
+  // `accepted` toujours aliasés (levelConfig.instruction/admittedKnowledge),
+  // et `grounding` aliasé en `currentGrounding` (variable locale à la tâche,
+  // pour ne jamais muter le paramètre `grounding` de la fonction depuis une
+  // tâche parallèle). Jamais un second chemin d'expansion réinventé, jamais
+  // rejoué deux fois pour un même appelant. Seul `questionQualityMetrics`
+  // (9e champ) est désormais un objet dérivé — { ...questionQualityMetrics,
+  // finalAccepted: validated.length } — plutôt que la variable brute, cf.
+  // audit latence "Empire carolingien" (rapport sur-génération initiale,
+  // section 5) : `validated.length` est déjà consolidé à une question par
+  // connaissance DISTINCTE à ce point, jamais le nombre brut de candidats
+  // acceptés par le pipeline qualité (qui peut dépasser le nombre de
+  // connaissances elementary avec la sur-génération) — sans cette
+  // correction, shouldExpandGroundingSources calculerait un ratio
+  // artificiellement gonflé (ex. 4/8 au lieu de 4/5).
+  assert.match(
+    SERVER_SOURCE,
+    /const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions\(\{\s*\n\s*apiKey, subject, id, instruction: levelConfig\.instruction, timeoutMs,\s*\n\s*grounding: currentGrounding, accepted: admittedKnowledge, validated,\s*\n\s*questionQualityMetrics: \{ \.\.\.questionQualityMetrics, finalAccepted: validated\.length \}\s*\n\s*\}\);/
+  );
+  assert.equal((SERVER_SOURCE.match(/await expandGroundingAndRegenerateMissingQuestions\(\{/g) || []).length, 2, "1 site legacy + 1 site progressif (bloc élémentaire), jamais plus");
 });
 
 // ── F : les arguments transmis à classifyCultureGeneraleKnowledgePlacementWithAI

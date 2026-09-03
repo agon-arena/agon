@@ -29,6 +29,41 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
+<script id="mnoria-early-debate-analysis-prefetch">
+(function () {
+  try {
+    var debateId = new URLSearchParams(location.search).get('id');
+    if (!debateId) return;
+    var embeddedSummary = __DEBATE_AI_SUMMARY_JSON__;
+    if (embeddedSummary) {
+      window.__mnoriaEarlyAnalysisFetch = {
+        debateId: String(debateId),
+        promise: Promise.resolve({
+          r: { ok: true, status: 200, statusText: 'OK' },
+          json: embeddedSummary
+        })
+      };
+      return;
+    }
+    var key = localStorage.getItem('key') || '';
+    var token = localStorage.getItem('admin_token') || '';
+    var url = '/api/debates/' + encodeURIComponent(debateId) + '/analysis?summary=1'
+      + (key ? '&key=' + encodeURIComponent(key) : '');
+    window.__mnoriaEarlyAnalysisFetch = {
+      debateId: String(debateId),
+      promise: fetch(url, { headers: token ? { 'x-admin-token': token } : {} })
+        .then(function (response) {
+          return response.json().catch(function () { return {}; }).then(function (json) {
+            return {
+              r: { ok: response.ok, status: response.status, statusText: response.statusText },
+              json: json
+            };
+          });
+        })
+    };
+  } catch (_) {}
+})();
+</script>
 <style id="mnoria-idle-home-guard-style">html.mnoria-idle-home-redirecting body{visibility:hidden!important;}</style>
 <script id="mnoria-idle-home-guard">
 (function(){
@@ -106,7 +141,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260902-sticky-countdown-down-1" />
+<link rel="stylesheet" href="/style.min.css?v=20260903-mobile-improvement-option-fit" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -252,7 +287,7 @@ try {
   >
   <a href="/" class="home-topbar-menu-item" id="home-topbar-explorer-link">
       <i class="fa-solid fa-compass"></i>
-      <span>Explorer les arènes</span>
+      <span>Accueil</span>
     </a>
 
   <a href="/create" class="home-topbar-menu-item" id="home-topbar-create-link">
@@ -444,7 +479,7 @@ try {
 
 </div>
 
-<div id="debate-ai-countdown-slot"></div>
+<div id="debate-ai-countdown-slot">__DEBATE_AI_BADGE_HTML__</div>
 
 <div id="debate-image-lightbox" class="debate-image-lightbox" style="display:none;" aria-hidden="true">
   <button
@@ -988,7 +1023,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260902-active-og-side-arrows" defer></script>
+	<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
 <script>
 (function () {
   function isInteractive(target) {
@@ -1041,7 +1076,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 <script src="/political-gauge.js?v=20260602-political-gauge-ideas-lines"></script>
 <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom"></script>
-<script src="/admin-debate-analysis.js?v=20260902-countdown-bottom-period"></script>
+<script src="/admin-debate-analysis.js?v=20260903-analysis-badge-early"></script>
 <script>
 // Remplace les anciens libellés "Favorable/Défavorable à l’idée" dans les commentaires
 // par les nouveaux libellés validés, sans toucher au rendu principal de script.js.

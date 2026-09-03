@@ -49,6 +49,8 @@ const {
   validateQcmMultiOptions,
   validateOrderItems,
   validateQuestionItemCoreBase,
+  validateEditedQuestionStructure,
+  mergeEditedQuestionsPayload,
   validateAltVariant,
   validateQuestionItemCore,
   validateKnowledgeCandidates,
@@ -64,7 +66,11 @@ const {
   attachPedagogicalRanks,
   selectQuestionsForRequestedLevel,
   isMasterEligibleQuiz,
-  MIN_MASTER_QUESTIONS
+  MIN_MASTER_QUESTIONS,
+  MIN_ELEMENTARY_READY_QUESTIONS,
+  ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE,
+  computeElementaryCandidateDistribution,
+  selectOneQuestionPerKnowledgeTarget
 } = require("./lib/question-formats");
 const {
   buildSemanticReviewPrompt,
@@ -76,8 +82,25 @@ const {
   buildFicheAndKnowledgeAdmissionPrompt,
   buildKnowledgeVerificationPrompt,
   applyKnowledgeVerificationDecisions,
-  sanitizeImageSearchQuery
+  sanitizeImageSearchQuery,
+  buildElementaryFichePrompt
 } = require("./lib/knowledge-admission");
+// Génération progressive (Phase 1, 02/09/2026 ; taille FLEXIBLE, 02/09/2026
+// suite) — cf. lib/notion-quiz-curriculum.js pour le détail de chaque
+// fonction (toutes pures, testées séparément).
+const {
+  MIN_PROGRESSIVE_CURRICULUM,
+  buildCurriculumPrompt,
+  parseCurriculumItems,
+  findNearDuplicates: findNearDuplicateCurriculumKnowledge,
+  normalizeCurriculumOrder,
+  assignCurriculumLevels,
+  missingCurriculumCount,
+  buildCurriculumRepairPrompt,
+  parseCurriculumRepairAdditions,
+  mergeCurriculumAdditions,
+  selectCurriculumLevel
+} = require("./lib/notion-quiz-curriculum");
 const { findEquivalentCustomTopic, parseCustomTopicSlotLevel } = require("./lib/topic-dedup");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
 const {
@@ -91,6 +114,7 @@ const {
   buildIdentifiedSources,
   formatIdentifiedSourcesBlock,
   appendIdentifiedSources,
+  buildPublicGroundingSources,
   WEB_SEARCH_RAW_RESULTS_COUNT
 } = require("./lib/web-search-grounding");
 const {
@@ -582,12 +606,19 @@ function replaceMetaPlaceholders(template, meta) {
     .replace(/&/g, "\\u0026")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
+  const debateAiSummary = meta?.debateAiSummary || null;
+  const debateAiSummaryJson = JSON.stringify(debateAiSummary).replace(/</g, "\\u003c");
+  const debateAiBadgeHtml = debateAiSummary?.hasReport && debateAiSummary?.status !== "scheduled" && debateAiSummary?.status !== "generating"
+    ? '<span class="ada-countdown-ready is-visible" style="cursor:pointer" title="Voir l\'analyse"><img src="/sablier2-64.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>'
+    : "";
   return String(template || "")
     .replaceAll("__META_TITLE__", escapeMetaContent(meta.title || "Mnoria"))
     .replaceAll("__META_DESCRIPTION__", escapeMetaContent(meta.description || ""))
     .replaceAll("__META_URL__", escapeMetaContent(meta.url || ""))
     .replaceAll("__META_IMAGE__", escapeMetaContent(meta.image || ""))
     .replaceAll("__META_IMAGE_ALT__", escapeMetaContent(meta.imageAlt || "Mnoria"))
+    .replaceAll("__DEBATE_AI_SUMMARY_JSON__", debateAiSummaryJson)
+    .replaceAll("__DEBATE_AI_BADGE_HTML__", debateAiBadgeHtml)
     .replaceAll("__VEILLE_URL__", VEILLE_URL)
     .replaceAll("__VEILLE_MEDIAS_JSON__", mediasJsonForScript);
 }
@@ -628,7 +659,13 @@ function buildDebateMeta(req, debate) {
     description,
     url: debateUrl,
     image: ogImageUrl,
-    imageAlt: question
+    imageAlt: question,
+    debateAiSummary: {
+      status: String(debate?.ai_analysis_status || "none"),
+      scheduledAt: debate?.ai_analysis_scheduled_at || null,
+      generatedAt: debate?.ai_analysis_generated_at || null,
+      hasReport: String(debate?.ai_analysis_status || "none") === "ready" || !!debate?.ai_analysis_generated_at
+    }
   };
 }
 
@@ -2850,7 +2887,16 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "source_url",
   "image_url",
   "video_url",
-  "media_extras",
+  // Colonne calculée PostgREST (cf. data/migration-debates-media-extras-preview.sql,
+  // exécutée le 03/09/2026) : renvoie media_extras tronqué aux 20 derniers
+  // items CÔTÉ SQL, avant que les octets ne sortent de Supabase — media_extras
+  // n'a aucune limite côté écriture (bot de veille) et pouvait atteindre 263
+  // items/94 Ko sur un seul débat très suivi. Alias `media_extras` conservé
+  // côté réponse JSON : aucun changement côté client, et trimDebateMediaExtrasForList
+  // (ci-dessus) continue de tourner dessus sans problème (devient quasi no-op
+  // en pratique, laissée en filet). La page débat individuelle
+  // (DEBATE_DETAIL_SELECT_COLUMNS) garde l'historique complet, inchangée.
+  "media_extras:media_extras_list_preview",
   "keywords",
   "cloud_label",
   "story_id",
@@ -2877,6 +2923,56 @@ const DEBATES_LIST_SELECT_COLUMNS = [
 // lui seul ~11 Mo sur l'ensemble de la table au 10/08/2026, cf. audit egress)
 // n'est relu qu'une fois les identifiants finalement affichés connus.
 const DEBATES_RANKING_SELECT_COLUMNS = "id,created_at,bumped_at";
+
+// Audit egress du 03/09/2026 : media_extras (moyenne 5-6 Ko/ligne, jusqu'à 94 Ko sur
+// certaines arènes fusionnées plusieurs fois par Certamen) est devenu le premier poste
+// egress (72% du volume Supabase sur 20h). Or public/script.js (getIndexDebateMediaItems)
+// n'affiche jamais, sur les cartes accueil/carousels, que les entrées type!=="source" et
+// les entrées "source" du DERNIER lot ajouté (même clé added_at/is_new que source_url
+// courant) — tous les lots "source" plus anciens sont déjà invisibles côté client, donc
+// purs déchets sur cette route liste. Reproduit ici la même logique de sélection de lot
+// pour ne jamais transmettre ce qui ne sera de toute façon pas affiché. La route détail
+// (DEBATE_DETAIL_SELECT_COLUMNS, initDebateMediaHistory côté client) n'est PAS concernée :
+// elle affiche l'historique complet et continue de recevoir media_extras intact.
+function trimDebateMediaExtrasForList(mediaExtras, sourceUrl) {
+  const extras = Array.isArray(mediaExtras) ? mediaExtras : [];
+  if (!extras.length) return extras;
+
+  const nonSourceExtras = extras.filter((e) => e && String(e.type || "").trim() !== "source");
+  const sourceExtras = extras.filter((e) => e && String(e.type || "").trim() === "source" && e.url);
+  if (!sourceExtras.length) return nonSourceExtras;
+
+  const batchKey = (e) => e.added_at || (e.is_new ? "__isnew__" : "__nodate__");
+  const currentSourceUrl = String(sourceUrl || "").trim();
+  const activeEntry = sourceExtras.find((e) => e.url === currentSourceUrl);
+  const referenceEntry = activeEntry || [...sourceExtras].sort((a, b) => {
+    const ka = batchKey(a), kb = batchKey(b);
+    if (ka === kb) return 0;
+    if (ka === "__nodate__") return 1;
+    if (kb === "__nodate__") return -1;
+    if (ka === "__isnew__") return -1;
+    if (kb === "__isnew__") return 1;
+    return kb.localeCompare(ka);
+  })[0];
+  const activeBatchKey = batchKey(referenceEntry);
+  let activeBatchSourceExtras = sourceExtras.filter((e) => batchKey(e) === activeBatchKey);
+
+  // Filet complémentaire : un même lot peut lui-même contenir des dizaines/centaines de
+  // sources (ex. arène 2613 — 263 sources d'un seul lot Certamen, jusqu'à 94 Ko à elle
+  // seule) — bien au-delà de ce qu'une carte accueil affiche jamais en pratique (swipe
+  // manuel, un slide à la fois). Garde les plus récentes par date d'article ; sans date
+  // exploitable, conserve l'ordre déjà présent (le plus souvent récent → ancien).
+  const MAX_LIST_SOURCE_EXTRAS = 20;
+  if (activeBatchSourceExtras.length > MAX_LIST_SOURCE_EXTRAS) {
+    const withParsedDate = activeBatchSourceExtras.map((e) => ({ e, t: e.date ? new Date(e.date).getTime() : NaN }));
+    const sortable = withParsedDate.every((x) => Number.isFinite(x.t));
+    if (sortable) withParsedDate.sort((a, b) => b.t - a.t);
+    activeBatchSourceExtras = withParsedDate.slice(0, MAX_LIST_SOURCE_EXTRAS).map((x) => x.e);
+  }
+
+  if (!activeBatchSourceExtras.length && !nonSourceExtras.length) return sourceExtras.slice(0, MAX_LIST_SOURCE_EXTRAS);
+  return [...nonSourceExtras, ...activeBatchSourceExtras];
+}
 
 // getDebateById est appelé sur (quasi) chaque vue de débat (route la plus
 // chaude de l'API, ~1300 appels/jour) : ai_analysis et popularity_analysis
@@ -6130,25 +6226,41 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       cultureGeneraleNotionKey(a.eclairage_type, a.eclairage_source_id)
     ));
     const acquiredSourceIds = [...new Set(eclairageAcquisitions.map((a) => String(a.eclairage_source_id)))];
-    let knowledgeLinks = [];
-    if (acquiredSourceIds.length) {
-      const linkColumns = "id,type_a,source_id_a,type_b,source_id_b";
-      const [linksFromA, linksFromB] = await Promise.all([
-        fetchAllSupabaseRowsIn(acquiredSourceIds, (idsChunk) =>
-          supabase.from("culture_generale_notion_links").select(linkColumns)
-            .in("source_id_a", idsChunk).order("id", { ascending: true })
-        ),
-        fetchAllSupabaseRowsIn(acquiredSourceIds, (idsChunk) =>
-          supabase.from("culture_generale_notion_links").select(linkColumns)
-            .in("source_id_b", idsChunk).order("id", { ascending: true })
-        )
-      ]);
-      const linksError = linksFromA.error || linksFromB.error;
-      if (linksError) {
-        // La mémoire reste utilisable si la migration des liens n'est pas encore appliquée :
-        // seule sa couche décorative relationnelle est alors omise.
-        console.warn("[intellectual universe] liens indisponibles :", linksError.message);
-      } else {
+    const neededSolarSystemIds = new Set();
+    const neededStarIds = new Set();
+    for (const a of eclairageAcquisitions) {
+      if (a.solar_system_id) neededSolarSystemIds.add(a.solar_system_id);
+      if (a.star_id) neededStarIds.add(a.star_id);
+    }
+
+    // Les 4 blocs ci-dessous (liens entre connaissances, fiches "Mes acquis",
+    // systèmes solaires, étoiles) sont mutuellement indépendants — aucun ne lit
+    // le résultat d'un autre. Exécutés en parallèle (demande du 03/09/2026, "le
+    // texte de Ma mémoire met trop de temps à apparaître" : ils tournaient
+    // jusqu'ici en série, chaque aller-retour Supabase ajoutant sa propre
+    // latence à la suivante) plutôt qu'enchaînés un par un — même logique
+    // interne inchangée pour chacun, seulement regroupée en promesses.
+    const [knowledgeLinks, acquisFicheByKey, solarSystemById, starById] = await Promise.all([
+      (async () => {
+        if (!acquiredSourceIds.length) return [];
+        const linkColumns = "id,type_a,source_id_a,type_b,source_id_b";
+        const [linksFromA, linksFromB] = await Promise.all([
+          fetchAllSupabaseRowsIn(acquiredSourceIds, (idsChunk) =>
+            supabase.from("culture_generale_notion_links").select(linkColumns)
+              .in("source_id_a", idsChunk).order("id", { ascending: true })
+          ),
+          fetchAllSupabaseRowsIn(acquiredSourceIds, (idsChunk) =>
+            supabase.from("culture_generale_notion_links").select(linkColumns)
+              .in("source_id_b", idsChunk).order("id", { ascending: true })
+          )
+        ]);
+        const linksError = linksFromA.error || linksFromB.error;
+        if (linksError) {
+          // La mémoire reste utilisable si la migration des liens n'est pas encore appliquée :
+          // seule sa couche décorative relationnelle est alors omise.
+          console.warn("[intellectual universe] liens indisponibles :", linksError.message);
+          return [];
+        }
         const seenLinkIds = new Set();
         const acquiredLinkRows = [...(linksFromA.data || []), ...(linksFromB.data || [])]
           .filter((link) => {
@@ -6183,7 +6295,7 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
           }
         }
 
-        knowledgeLinks = acquiredLinkRows
+        return acquiredLinkRows
           .filter((link) => validatedSlots.has(slotByLinkId.get(link.id)))
           .map((link) => ({
             typeA: link.type_a,
@@ -6191,51 +6303,43 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
             typeB: link.type_b,
             sourceIdB: String(link.source_id_b)
           }));
-      }
-    }
-
-    // La fenêtre ouverte depuis une étoile doit mener à la même fiche détaillée
-    // que "Mes acquis". Réutilise donc sa résolution (y compris pour les anciens
-    // acquis), indexée par la clé stable type + source. Le texte aplati conservé
-    // dans user_article_acquisitions reste le repli si la source historique n'est
-    // plus relisible : la mémoire ne perd jamais complètement sa fiche.
-    let acquisFicheByKey = new Map();
-    try {
-      const acquisWithSourceIds = await fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
-      acquisFicheByKey = new Map(acquisWithSourceIds.map((item) => [
-        `${item.sourceType}:${item.sourceDebateId}`,
-        item
-      ]));
-    } catch (error) {
-      console.warn("[intellectual universe] fiches acquis indisponibles :", error.message);
-    }
-
-    const neededSolarSystemIds = new Set();
-    const neededStarIds = new Set();
-    for (const a of eclairageAcquisitions) {
-      if (a.solar_system_id) neededSolarSystemIds.add(a.solar_system_id);
-      if (a.star_id) neededStarIds.add(a.star_id);
-    }
-
-    let solarSystemById = new Map();
-    if (neededSolarSystemIds.size) {
-      const { data: solarSystemRows, error: solarSystemsError } = await supabase
-        .from("solar_systems")
-        .select("id, name, galaxy")
-        .in("id", [...neededSolarSystemIds]);
-      if (solarSystemsError) throw new Error(solarSystemsError.message);
-      solarSystemById = new Map((solarSystemRows || []).map((s) => [s.id, s]));
-    }
-
-    let starById = new Map();
-    if (neededStarIds.size) {
-      const { data: starRows, error: starsError } = await supabase
-        .from("stars")
-        .select("id, name")
-        .in("id", [...neededStarIds]);
-      if (starsError) throw new Error(starsError.message);
-      starById = new Map((starRows || []).map((s) => [s.id, s]));
-    }
+      })(),
+      // La fenêtre ouverte depuis une étoile doit mener à la même fiche détaillée
+      // que "Mes acquis". Réutilise donc sa résolution (y compris pour les anciens
+      // acquis), indexée par la clé stable type + source. Le texte aplati conservé
+      // dans user_article_acquisitions reste le repli si la source historique n'est
+      // plus relisible : la mémoire ne perd jamais complètement sa fiche.
+      (async () => {
+        try {
+          const acquisWithSourceIds = await fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
+          return new Map(acquisWithSourceIds.map((item) => [
+            `${item.sourceType}:${item.sourceDebateId}`,
+            item
+          ]));
+        } catch (error) {
+          console.warn("[intellectual universe] fiches acquis indisponibles :", error.message);
+          return new Map();
+        }
+      })(),
+      (async () => {
+        if (!neededSolarSystemIds.size) return new Map();
+        const { data: solarSystemRows, error: solarSystemsError } = await supabase
+          .from("solar_systems")
+          .select("id, name, galaxy")
+          .in("id", [...neededSolarSystemIds]);
+        if (solarSystemsError) throw new Error(solarSystemsError.message);
+        return new Map((solarSystemRows || []).map((s) => [s.id, s]));
+      })(),
+      (async () => {
+        if (!neededStarIds.size) return new Map();
+        const { data: starRows, error: starsError } = await supabase
+          .from("stars")
+          .select("id, name")
+          .in("id", [...neededStarIds]);
+        if (starsError) throw new Error(starsError.message);
+        return new Map((starRows || []).map((s) => [s.id, s]));
+      })()
+    ]);
 
     const galaxyBuckets = new Map();
     const unclassified = [];
@@ -8137,7 +8241,12 @@ app.get("/api/debates", async (req, res) => {
         // complète (fenêtre de quelques millisecondes) — écartée plutôt que de renvoyer
         // une carte à moitié vide.
         if (!fullRow) return null;
-        return { ...enrichDebateWithStoredImage(fullRow), ...row, ...applyCanonicalNotions(fullRow) };
+        return {
+          ...enrichDebateWithStoredImage(fullRow),
+          ...row,
+          ...applyCanonicalNotions(fullRow),
+          media_extras: trimDebateMediaExtrasForList(fullRow.media_extras, fullRow.source_url)
+        };
       })
       .filter(Boolean)
       .map((row) => {
@@ -12230,18 +12339,30 @@ app.post("/api/admin/veille/merge", requireAdmin, rateLimit("veille-publish", 30
 // Lecture publique du rapport stocké
 app.get("/api/debates/:id/analysis", rateLimit("analysis-read", 240), async (req, res) => {
   const { id } = req.params;
+  const summaryOnly = String(req.query.summary || "") === "1";
   // Arènes fusionnées (admin "Sujets en attente") : l'analyse n'existe que sur
   // l'arène canonique — on la relit depuis là, quelle que soit l'arène visitée.
   const canonicalId = resolveSharedDebateId(id) || String(id);
   const clientKey = getRequestClientKey(req);
   const { data, error } = await supabase
     .from("debates")
-    .select("ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at, ai_analysis_last_score, popularity_analysis, evaluation_axis_hidden, evaluation_axis, type, creator_key")
+    .select(summaryOnly
+      ? "ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at"
+      : "ai_analysis, ai_analysis_status, ai_analysis_scheduled_at, ai_analysis_generated_at, ai_analysis_last_score, popularity_analysis, evaluation_axis_hidden, evaluation_axis, type, creator_key")
     .eq("id", canonicalId)
     .single();
   if (error || !data) {
     console.error("[analysis GET]", id, error?.message || "no data");
     return res.status(404).json({ error: error?.message || "Débat introuvable." });
+  }
+  if (summaryOnly) {
+    const status = data.ai_analysis_status || "none";
+    return res.json({
+      status,
+      scheduledAt: data.ai_analysis_scheduled_at || null,
+      generatedAt: data.ai_analysis_generated_at || null,
+      hasReport: status === "ready" || !!data.ai_analysis_generated_at
+    });
   }
   const fullAnalysis = data.ai_analysis || null;
   let raw = extractAnalysisScoringRaw(fullAnalysis);
@@ -13540,6 +13661,15 @@ function isValidDailyQuizSlot(slot) {
     || String(slot || "").startsWith("notion:");
 }
 
+// Copie personnelle forkée d'un apprentissage édité (demande du 02/09/2026,
+// POST /api/users/notion-quizzes/edit-questions) : jamais mutualisée avec
+// d'autres visiteurs, contrairement à tout autre slot "notion:*". Le
+// préfixe embarque le user_id pour que la propriété soit vérifiable par
+// simple préfixe de chaîne, sans aller-retour DB supplémentaire.
+function isOwnedPrivateNotionSlot(slot, userId) {
+  return typeof slot === "string" && userId && slot.startsWith(`notion:private:${userId}:`);
+}
+
 function parisDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Paris",
@@ -13703,7 +13833,16 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     // REORDERED_DUPLICATE_OPTION) — aucun nouveau code, aucun seuil changé.
     "Homogénéité des distracteurs : quand c'est pertinent, chaque distracteur doit appartenir à la MÊME catégorie que la bonne réponse (personne ↔ personne, date ↔ date, institution ↔ institution, concept ↔ concept, lieu ↔ lieu, événement ↔ événement) — jamais une bonne réponse reconnaissable simplement parce que les 3 autres options sont d'une autre nature.",
     "Distracteurs plausibles : chaque distracteur doit être une erreur crédible pour quelqu'un qui connaît mal le sujet — jamais un pseudo-concept, une institution ou un nom inventés, une formulation absurde, ou une option manifestement hors sujet. Faux, mais plausible.",
-    "Non devinable sans connaissance : la bonne réponse ne doit jamais se repérer par sa seule forme grammaticale, un écho lexical évident avec la question, une longueur ou une précision nettement différentes des autres options, ou par élimination immédiate des distracteurs.",
+    // Contraire caricatural (audit réel "Les oiseaux migrateurs", 03/09/2026
+    // — cas observé : "permanent/sans changement", "occasionnel/imprévisible",
+    // "une seule fois" comme distracteurs d'une bonne réponse "régulier,
+    // périodique, saisonnier" — trois antonymes stylisés de la bonne réponse,
+    // éliminables par pure opposition logique sans connaître le sujet).
+    // Renforce, sans le dupliquer, "Distracteurs plausibles" ci-dessus : ce
+    // n'est pas la plausibilité individuelle qui pêchait dans ce cas réel,
+    // mais la construction en opposés de la bonne réponse.
+    "Jamais de contraire caricatural : ne construis pas les distracteurs comme de simples opposés stylisés de la bonne réponse (ex. \"permanent\"/\"occasionnel\"/\"unique\" face à \"régulier et périodique\") — chacun doit rester un candidat sérieux dans le même espace de réponses (même nature, précision et plausibilité comparables), jamais une antithèse facile à écarter sans connaître le sujet. Avant de valider la question, vérifie silencieusement qu'une personne ignorant le fait ne pourrait pas la résoudre par élimination ou bon sens seul.",
+    "Non devinable sans connaissance : la bonne réponse ne doit jamais se repérer par sa seule forme grammaticale, un écho lexical évident avec la question (ex. un mot de l'énoncé, comme \"saison\", repris uniquement dans la bonne option, comme \"saisonnière\"), une longueur ou une précision nettement différentes des autres options, ou par élimination immédiate des distracteurs.",
     "Options réellement distinctes : deux options ne doivent jamais exprimer essentiellement la même information avec seulement un ordre des mots, un ordre des éléments ou une reformulation superficielle différents.",
     "La question doit être claire et autonome sans relire la fiche. La difficulté doit venir du savoir testé, jamais d'une formulation confuse. Avant de répondre, vérifie silencieusement la cohérence entre correctIndex/correctIndexes, le texte de la ou des bonnes options et l'explication.",
     // Préférence à l'affirmatif (correctif du 01/09/2026, suite à l'audit
@@ -13801,7 +13940,21 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
       "AUTO-VÉRIFICATION SILENCIEUSE avant chaque sortie : « Un correcteur strict peut-il identifier la bonne réponse en utilisant uniquement ce supporting_claim et les choix proposés ? » Si non, ne rends PAS la question en l'état : reviens au passage SOURCE_N et reconstruis la question ET la bonne réponse autour d'un fait explicitement soutenu. Ne fabrique jamais après coup une justification adaptée artificiellement à une question déjà choisie.",
       "La question reste naturelle, pédagogique, variée et adaptée au niveau demandé : une paraphrase fidèle est permise et la difficulté doit venir de la connaissance, jamais d'une formulation obscure. Seule la preuve documentaire doit être explicite ; aucune extraction littérale de la question n'est exigée.",
       "Pour chaque connaissance (au niveau du \"knowledgeTarget\", pas de chaque variante — toutes les variantes d'une même connaissance partagent la même preuve), ajoute deux champs :",
-      "- \"supporting_claim\" : l'affirmation factuelle précise établie par les sources (paraphrase fidèle acceptée), qui contient à elle seule l'information nécessaire pour sélectionner la bonne réponse de chaque variante — jamais une reformulation vague, un résumé du thème ni une simple mention du même sujet ; n'ajoute aucun détail absent et ne fusionne pas plusieurs sources pour créer un fait nouveau qu'aucune n'établit explicitement.",
+      // Correctif du 02/09/2026 (audit "Platon", GROUNDING_CLAIM_NOT_GROUNDED_IN_SOURCE
+      // ×9) : l'ancienne formulation "(paraphrase fidèle acceptée)" encourageait une
+      // paraphrase libre, alors que validateQuestionGrounding (lib/question-grounding-
+      // validation.js) mesure un recouvrement LEXICAL brut entre supporting_claim et le
+      // texte des sources citées (MIN_CLAIM_SOURCE_OVERLAP=0.35, ni fuzzy matching, ni
+      // synonymes, ni stemming — jamais modifié par ce correctif). Une reformulation
+      // factuellement fidèle mais lexicalement éloignée de la source pouvait donc être
+      // rejetée alors qu'elle suivait pourtant fidèlement la consigne du prompt. Ce champ
+      // aligne uniquement l'INSTRUCTION sur ce que le validateur teste réellement — jamais
+      // l'inverse (le contrôle lui-même reste strictement inchangé, cf. commentaire
+      // ci-dessus). Ne concerne QUE supporting_claim : le champ "question" (ligne
+      // "aucune extraction littérale de la question n'est exigée", juste au-dessus)
+      // reste volontairement libre — c'est la preuve, jamais la formulation de la
+      // question elle-même, que le validateur compare au texte source.
+      "- \"supporting_claim\" : l'affirmation factuelle précise établie par les sources — reste LEXICALEMENT PROCHE du ou des passages sources qui établissent le fait : conserve les noms propres importants, les dates et nombres pertinents, ainsi que les concepts et termes factuels clés tels qu'ils apparaissent dans la source, sans les remplacer inutilement par des synonymes, périphrases ou reformulations éloignées qui portent la même information. Une légère reformulation de la syntaxe et des mots de liaison reste admise, et rien n'oblige à recopier une phrase entière mot pour mot — mais la paraphrase doit rester légère et fidèle lexicalement à la source, jamais une reformulation libre. Contient à elle seule l'information nécessaire pour sélectionner la bonne réponse de chaque variante — jamais une reformulation vague, un résumé du thème ni une simple mention du même sujet ; n'ajoute aucun détail absent et ne fusionne pas plusieurs sources pour créer un fait nouveau qu'aucune n'établit explicitement.",
       "- \"source_ids\" : un tableau des identifiants SOURCE_N (jamais l'URL, jamais un identifiant inventé) dont le contenu soutient RÉELLEMENT cette affirmation précise — au maximum 3, uniquement celles qui participent effectivement à la preuve, jamais la liste complète des sources disponibles \"par précaution\".",
       "La précision de la question ne doit JAMAIS dépasser la précision réellement disponible dans les sources (ex. si une source dit \"environ 66 millions d'années\", ne pose jamais une question exigeant \"66,04 millions d'années\").",
       "Si les sources fournies ne permettent pas de créer suffisamment de questions ainsi tracées, génère moins de questions plutôt que d'inventer ou d'extrapoler — moins de questions fiables vaut toujours mieux que plus de questions dont certaines sont douteuses.",
@@ -13881,7 +14034,13 @@ const NOTION_QUIZ_LEVELS = {
   elementaire: {
     label: "Élémentaire",
     target: 5, max: 6, min: 1,
-    instruction: "Niveau élémentaire : ne retiens que les quelques faits vraiment essentiels du sujet — questions simples et directement accessibles, vocabulaire courant, pour poser les bases sans détail secondaire.",
+    // "Élémentaire ≠ évident" (audit réel "Les oiseaux migrateurs",
+    // 03/09/2026) : la simplicité voulue ici porte sur le CHOIX du fait
+    // (fondamental plutôt que secondaire), jamais sur la construction de la
+    // question elle-même — des distracteurs absurdes ou des contraires
+    // caricaturaux ne rendent pas une question "élémentaire", ils la rendent
+    // triviale.
+    instruction: "Niveau élémentaire : ne retiens que les quelques faits vraiment essentiels du sujet — questions simples et directement accessibles, vocabulaire courant, pour poser les bases sans détail secondaire. \"Élémentaire\" signifie une connaissance fondamentale à acquérir, jamais une question évidente : les distracteurs restent sérieux et plausibles, la simplicité vient du fait choisi, jamais d'un piège facile à éliminer sans le connaître.",
     sectionsRange: "1 à 2", maxSections: 2, sectionTextLimit: 600,
     lengthHint: "reste très brève, l'essentiel condensé en quelques phrases par bloc."
   },
@@ -14297,7 +14456,34 @@ async function qualityControlRawQuestions({
   // uniquement par les appelants du pipeline "création d'un apprentissage"
   // (cf. lib/ai-usage-log.js) — absent partout ailleurs, comportement
   // strictement inchangé pour tous les autres appelants.
-  generationId
+  generationId,
+  // reviewFeature/regenerationFeature (Phase 1 génération progressive,
+  // 02/09/2026) : noms de feature optionnels pour ai_usage_log — par défaut
+  // strictement les mêmes chaînes qu'avant ce correctif ("question_semantic_
+  // review"/"question_targeted_regeneration"), donc AUCUN changement pour
+  // tout appelant existant qui ne les fournit pas. Seul le bloc élémentaire
+  // progressif (generateElementaryBlock) les surcharge, pour distinguer
+  // "elementary_semantic_review"/"elementary_targeted_regeneration" dans
+  // ai_usage_log — jamais un changement de comportement, uniquement
+  // l'étiquette journalisée.
+  reviewFeature = "question_semantic_review",
+  regenerationFeature = "question_targeted_regeneration",
+  // earlyStopAtAccepted (qualité > quantité, 03/09/2026, bloc élémentaire
+  // progressif UNIQUEMENT) : optionnel, absent pour tout appelant existant —
+  // AUCUN changement de comportement ailleurs. Relayé tel quel à
+  // runQuestionQualityPipeline (lib/qcm-quality.js), qui n'arrête la boucle
+  // qu'APRÈS avoir validé et comptabilisé le cycle courant, jamais en
+  // assouplissant un critère de validation.
+  earlyStopAtAccepted,
+  // earlyStopCountFn/filterRejectedForRegeneration/onInitialBatchAccepted
+  // (sur-génération initiale du bloc élémentaire, 03/09/2026, cf.
+  // generateElementaryBlock) : simples relais optionnels vers
+  // runQuestionQualityPipeline, absents pour tout appelant existant — AUCUN
+  // changement de comportement ailleurs (cf. lib/qcm-quality.js pour le
+  // détail de chacun).
+  earlyStopCountFn,
+  filterRejectedForRegeneration,
+  onInitialBatchAccepted
 }) {
   const startedAt = Date.now();
   // onCycle (V1 latence, 02/09/2026, cf. audit read-only) : un log par cycle
@@ -14307,7 +14493,7 @@ async function qualityControlRawQuestions({
   // greppables tels quels dans les logs de production. Best-effort et
   // silencieux (même philosophie que recordAiUsage) : ne doit jamais
   // ralentir ni interrompre une génération réelle.
-  const onCycle = ({ cycleIndex, questionsIn, deterministicAccepted, semanticAccepted, rejected, cumulativeAccepted, reviewMs, regenerationMs }) => {
+  const onCycle = ({ cycleIndex, questionsIn, deterministicAccepted, semanticAccepted, rejected, cumulativeAccepted, reviewMs, regenerationMs, deterministicReasonCounts, semanticReasonCounts }) => {
     try {
       const payload = {
         generationId,
@@ -14317,7 +14503,14 @@ async function qualityControlRawQuestions({
         deterministicAccepted,
         semanticAccepted,
         rejected,
-        cumulativeAccepted
+        cumulativeAccepted,
+        // deterministicReasonCounts/semanticReasonCounts (observabilité,
+        // 03/09/2026, audit réel "Les oiseaux migrateurs") : codes de rejet
+        // agrégés de CE cycle, séparés par origine — jamais de texte de
+        // question ni de contenu utilisateur, uniquement des codes et des
+        // compteurs.
+        deterministicReasonCounts,
+        semanticReasonCounts
       };
       payload[`semantic_review_cycle_${cycleIndex}_ms`] = reviewMs;
       if (regenerationMs != null) payload[`regeneration_cycle_${cycleIndex}_ms`] = regenerationMs;
@@ -14332,6 +14525,10 @@ async function qualityControlRawQuestions({
     maxTechnicalRetries: QCM_CRITIC_TECHNICAL_MAX_RETRIES,
     context,
     groundingSources,
+    earlyStopAtAccepted,
+    earlyStopCountFn,
+    filterRejectedForRegeneration,
+    onInitialBatchAccepted,
     onCycle,
     reviewSemantic: async ({ entries, context: reviewContext }) => {
       const content = await _callOpenAI(apiKey, [{ role: "user", content: buildSemanticReviewPrompt(entries, reviewContext) }], {
@@ -14339,7 +14536,7 @@ async function qualityControlRawQuestions({
         temperature: 0.1,
         responseFormat: { type: "json_object" },
         timeoutMs: timeoutMs || 90_000,
-        feature: "question_semantic_review",
+        feature: reviewFeature,
         generationId
       });
       return JSON.parse(content);
@@ -14404,6 +14601,20 @@ async function qualityControlRawQuestions({
       if (rejectionCodes.has("ARTIFICIAL_DISTRACTOR")) {
         targetedConstraints.push("- ARTIFICIAL_DISTRACTOR : remplace tout pseudo-concept, institution inventée, combinaison arbitraire ou causalité fantaisiste par une erreur réelle et pédagogiquement identifiable du même domaine.");
       }
+      // REORDERED_DUPLICATE_OPTION / ARTIFICIAL_YES_NO (audit réel "Les
+      // oiseaux migrateurs", 03/09/2026 — ces deux codes, déjà détectés
+      // correctement par le déterministe, n'avaient jusqu'ici aucune
+      // consigne ciblée : le modèle ne recevait que le message générique du
+      // rejet, contrairement aux autres codes de ce bloc, d'où des cycles de
+      // régénération qui reproduisaient parfois le même défaut. Ajout
+      // strictement additif : aucun critère de validation touché, seule
+      // l'instruction de correction devient plus précise.
+      if (rejectionCodes.has("REORDERED_DUPLICATE_OPTION")) {
+        targetedConstraints.push("- REORDERED_DUPLICATE_OPTION : les options doivent représenter des réponses factuellement distinctes. Ne réutilise pas les mêmes éléments simplement réordonnés ou reformulés. Si deux options reposent sur la même combinaison de faits, reconstruis entièrement les distracteurs autour d'hypothèses factuelles réellement différentes.");
+      }
+      if (rejectionCodes.has("ARTIFICIAL_YES_NO")) {
+        targetedConstraints.push("- ARTIFICIAL_YES_NO : ne transforme pas un fait binaire en pseudo-QCM (options qui reviennent essentiellement à oui/non, vrai/faux, possible/impossible, ou plusieurs variantes artificielles d'une même réponse binaire). Reformule la question pour tester une connaissance factuelle non binaire, avec des distracteurs crédibles et de même nature que la bonne réponse. Si le fait source est naturellement binaire, change l'angle de la question plutôt que de déguiser le binaire en QCM.");
+      }
       if (rejectionCodes.has("OVERGENERALIZED_QUESTION")) {
         targetedConstraints.push("- OVERGENERALIZED_QUESTION : restreins explicitement le stem et la réponse au contexte réellement supporté par knowledgeTarget et la source — période, territoire, groupe ou situation — sans transformer un cas partiel en règle générale.");
       }
@@ -14425,6 +14636,18 @@ async function qualityControlRawQuestions({
       }
       if (rejectionCodes.has("GROUNDING_ANSWER_NOT_IN_CLAIM")) {
         targetedConstraints.push("- GROUNDING_ANSWER_NOT_IN_CLAIM spécifiquement : l'échec signifie que la preuve fournie ne démontrait pas la réponse, même si elle pouvait parler du bon thème. Reviens aux passages SOURCE_N disponibles, identifie d'abord un fait explicitement attesté, puis reconstruis si nécessaire TOUTE la question, ses options ET la bonne réponse autour de ce fait ; produis ensuite un nouveau supporting_claim fidèle qui permet à un correcteur strict d'identifier la réponse avec ce claim seul. Ne te contente JAMAIS de réécrire supporting_claim pour le faire correspondre artificiellement à la question refusée.");
+      }
+      // GROUNDING_CLAIM_NOT_GROUNDED_IN_SOURCE (audit réel "Les Gueules
+      // cassées", 03/09/2026 — 92% des rejets de cette génération, jamais
+      // corrigé par 5 cycles de régénération + une passe V3.2 entière) :
+      // ce code signifie un recouvrement LEXICAL insuffisant entre
+      // supporting_claim et la source citée (lib/question-grounding-
+      // validation.js, seuils inchangés) — jamais un défaut du fait
+      // lui-même. Consigne dédiée, distincte de GROUNDING_ANSWER_NOT_IN_CLAIM
+      // ci-dessus (qui porte sur la preuve de la RÉPONSE, pas sur la
+      // proximité lexicale du texte).
+      if (rejectionCodes.has("GROUNDING_CLAIM_NOT_GROUNDED_IN_SOURCE")) {
+        targetedConstraints.push("- GROUNDING_CLAIM_NOT_GROUNDED_IN_SOURCE spécifiquement : reformule supporting_claim en restant au plus près du texte source réellement cité. Conserve les noms propres, dates, nombres, termes factuels et vocabulaire clé du passage source. Évite les paraphrases abstraites, synonymes éloignés ou reformulations qui changent trop le lexique — supporting_claim doit être une reformulation légère et fidèle du passage source, pas un résumé conceptuel. Si le passage cité ne permet pas cela, utilise une autre source_id réellement compatible avec la réponse.");
       }
       if (rejectionCodes.has("GROUNDING_NUMERIC_CLAIM_NOT_SUPPORTED")) {
         targetedConstraints.push("- GROUNDING_NUMERIC_CLAIM_NOT_SUPPORTED spécifiquement : pour toute date, tout nombre, quantité, pourcentage, durée ou mesure demandé, la valeur exacte doit apparaître explicitement dans un passage SOURCE_N cité ET dans supporting_claim. Sinon, reconstruis la question sans exiger cette précision ou choisis un autre fait explicitement documenté ; n'invente, ne calcule et n'extrapole jamais la valeur.");
@@ -14453,7 +14676,7 @@ async function qualityControlRawQuestions({
         temperature: 0.35,
         responseFormat: { type: "json_object" },
         timeoutMs: timeoutMs || 90_000,
-        feature: "question_targeted_regeneration",
+        feature: regenerationFeature,
         generationId
       });
       const parsed = JSON.parse(content);
@@ -14462,7 +14685,13 @@ async function qualityControlRawQuestions({
   });
   // Observabilité agrégée uniquement : aucun texte de question, fait privé,
   // contenu de document ou identifiant utilisateur n'est journalisé.
+  // generationId (observabilité, 03/09/2026, audit réel "Les oiseaux
+  // migrateurs") : absent jusqu'ici de cette ligne agrégée — son attribution
+  // ne pouvait se faire que par proximité avec les lignes [qcm-quality-cycle]
+  // (elles, déjà porteuses de generationId), fragile en cas de générations
+  // concurrentes dans les logs.
   console.info("[qcm-quality]", JSON.stringify({
+    generationId,
     route,
     model: DAILY_QUIZ_NARRATIVE_MODEL,
     criticModel: QCM_SEMANTIC_REVIEW_ENABLED ? DAILY_QUIZ_CRITIC_MODEL : null,
@@ -16036,7 +16265,7 @@ const DEBATE_TOPIC_NOTIONS_MAX = 5;
 function buildDebateTopicNotionsPrompt(question, content, optionA, optionB, category) {
   const trimmedContent = String(content || "").trim();
   return [
-    "Tu sélectionnes les notions à approfondir pour quelqu'un qui découvre le sujet ci-dessous : des concepts, mécanismes, institutions, théories, phénomènes ou événements historiques structurants — jamais de simples mots-clés extraits du texte, jamais un fait divers ou un détail circonstanciel isolé.",
+    "Tu sélectionnes les notions à approfondir et à mémoriser pour quelqu'un qui découvre le sujet ci-dessous : des concepts, mécanismes, institutions, théories, phénomènes ou événements historiques structurants — jamais de simples mots-clés extraits du texte, jamais un fait divers ou un détail circonstanciel isolé.",
     "",
     "Pour CHAQUE notion candidate, vérifie mentalement ces deux questions et rejette-la si l'une des deux réponses est non :",
     "1. Cette notion aide-t-elle réellement à comprendre ce contenu précis (son sujet, son contexte, ses mécanismes ou ses enjeux) ?",
@@ -16046,6 +16275,9 @@ function buildDebateTopicNotionsPrompt(question, content, optionA, optionB, cate
     "- Base-toi uniquement sur le texte fourni, n'invente aucun fait.",
     `- Entre ${DEBATE_TOPIC_NOTIONS_MIN} et ${DEBATE_TOPIC_NOTIONS_MAX} notions distinctes, jamais de doublon ni de synonymes proches. La pertinence prime toujours sur le nombre : n'ajoute JAMAIS une notion médiocre ou tirée par les cheveux pour atteindre un quota — une seule notion vraiment solide vaut mieux que plusieurs approximatives.`,
     "- Vise un niveau de granularité intermédiaire, entre ces deux excès à éviter absolument : (a) un mot-clé ou un détail anecdotique/circonstanciel du contenu (nom de lieu précis, nom propre secondaire, \"l'événement du [date]\") — trop étroit pour constituer un objet d'apprentissage ; (b) une catégorie généraliste qui engloberait n'importe quel contenu du même domaine (\"Histoire\", \"Politique\", \"Science\", \"International\", \"Économie\") — trop vague pour être précise ou pour qu'un apprentissage ciblé puisse être construit dessus. En cas d'hésitation entre deux formulations valides, préfère toujours la plus large des deux — les notions trop pointues valent pire que les notions un peu larges.",
+    "- Chaque nom doit correspondre à un sujet encyclopédique autonome qui pourrait naturellement être le titre d'un chapitre, d'un cours ou d'un article de référence. Préfère la notion-mère reconnue à une combinaison descriptive fabriquée spécialement pour ce contenu.",
+    "- Évite les intitulés qui assemblent plusieurs angles avec « et », ainsi que les formulations du type « X dans le contexte de Y », « enjeux de X pour Y » ou « conséquences de X sur Y ». Sélectionne plutôt le concept structurant commun, plus court et plus durable.",
+    "- Ne produis jamais plusieurs micro-variantes d'une même famille conceptuelle. Si trois candidats tournent autour de la même idée, conserve uniquement le plus structurant et utilise les autres places pour des notions réellement distinctes.",
     "- Chaque notion doit avoir un lien réel et explicite avec le sujet principal du contenu — jamais une notion seulement adjacente, évoquée en passant, ou reliée par une simple proximité thématique sans rapport direct avec l'enjeu central.",
     "- Écarte les notions triviales ou déjà évidentes pour un lecteur de la presse générale — ne retiens que celles qui apportent un vrai éclairage.",
     "- Vérifie que chaque notion et son explication sont exactes et vérifiables avant de les retenir — en cas de doute sur un fait, écarte-le plutôt que de risquer une explication fausse ou approximative.",
@@ -16059,6 +16291,10 @@ function buildDebateTopicNotionsPrompt(question, content, optionA, optionB, cate
     "",
     "Exemple — actualité \"épisode de canicule exceptionnel en Espagne\" :",
     "Bon (selon ce qui est effectivement abordé) : \"Vagues de chaleur\", \"Changement climatique\", \"Climat méditerranéen\", \"Îlot de chaleur urbain\".",
+    "",
+    "Exemple — contenu évoquant l'épicurisme et la recherche du bonheur :",
+    "Mauvais : \"Éthique du bonheur et pratique quotidienne\", \"Éthique des vertus et diversité des cadres moraux\", \"Éthique du bien commun et justice personnelle\" (intitulés synthétiques, trop étroits et redondants).",
+    "Bon (uniquement si réellement abordés) : \"Épicurisme\", \"Philosophie morale\", \"Vertu\", \"Justice sociale\".",
     "",
     `Sujet : ${String(question || "").trim().slice(0, 300)}`,
     (optionA || optionB) ? `Positions débattues : "${String(optionA || "").trim().slice(0, 120)}" contre "${String(optionB || "").trim().slice(0, 120)}"` : "",
@@ -18017,23 +18253,645 @@ const _notionQuizMasterGenerationPromises = new Map();
 // Résout une collision d'insertion sans laisser un ancien petit corpus
 // bloquer toutes les générations futures. Un master complet créé par un
 // autre worker gagne toujours ; seul un corpus devenu inéligible est remplacé.
-async function resolveMasterInsertConflict(masterSlot, questions, fallbackQuizDate) {
+// `extra` (génération progressive, Phase 1, 02/09/2026, optionnel) :
+// `{curriculum, progressiveStatus}` — transmis par
+// ensureProgressiveElementaryGenerated UNIQUEMENT ; absent pour tout appelant
+// legacy, comportement strictement inchangé dans ce cas. `progressiveStatus`
+// sert aussi à juger l'éligibilité de la ligne concurrente déjà en base
+// (cf. isMasterEligibleQuiz) : un bloc progressif légitimement partiel ne
+// doit jamais être remplacé à tort par une génération concurrente qui
+// l'ignore, ni inversement écraser un bloc progressif déjà valide.
+async function resolveMasterInsertConflict(masterSlot, questions, fallbackQuizDate, extra = {}) {
   const { data: raceRow, error: raceError } = await supabase
-    .from("daily_quiz").select("quiz_date, questions")
+    .from("daily_quiz").select("quiz_date, questions, curriculum, progressive_status")
     .eq("slot", masterSlot).order("quiz_date", { ascending: false }).limit(1).maybeSingle();
   if (raceError) throw new Error(raceError.message);
-  if (isMasterEligibleQuiz(raceRow?.questions)) {
-    return { questions: raceRow.questions, quizDate: raceRow.quiz_date || fallbackQuizDate, slot: masterSlot };
+  if (isMasterEligibleQuiz(raceRow?.questions, { progressiveStatus: raceRow?.progressive_status, curriculum: raceRow?.curriculum })) {
+    return { questions: raceRow.questions, quizDate: raceRow.quiz_date || fallbackQuizDate, slot: masterSlot, progressiveStatus: raceRow?.progressive_status || null };
   }
   // Cas réel : Expressionnisme demandé en Expert, mais seulement 4 questions
   // avaient été stockées. La génération conforme remplace ce corpus précis.
   const replacementDate = raceRow?.quiz_date || fallbackQuizDate;
+  // `extra` reste en camelCase côté JS (comme partout ailleurs dans ce
+  // fichier) — converti ici, et UNIQUEMENT ici, vers les noms de colonnes
+  // Supabase (snake_case) pour le payload réel de `.update()`. Jamais de
+  // colonne vide écrite pour un appelant legacy (extra={}).
+  const { curriculum, progressiveStatus } = extra;
+  const updatePayload = { questions, source_debate_ids: [] };
+  if (curriculum) updatePayload.curriculum = curriculum;
+  if (progressiveStatus) updatePayload.progressive_status = progressiveStatus;
   const { error: replaceError } = await supabase.from("daily_quiz")
-    .update({ questions, source_debate_ids: [] })
+    .update(updatePayload)
     .eq("slot", masterSlot)
     .eq("quiz_date", replacementDate);
   if (replaceError) throw new Error(replaceError.message);
-  return { questions, quizDate: replacementDate, slot: masterSlot };
+  return { questions, quizDate: replacementDate, slot: masterSlot, curriculum: curriculum || null, progressiveStatus: progressiveStatus || null };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Génération progressive — PHASE 1 (02/09/2026, cf. rapport d'architecture ;
+// taille FLEXIBLE du curriculum, 02/09/2026 suite — "le nombre de
+// connaissances utiles détermine la taille du parcours, les niveaux sont des
+// proportions du curriculum, jamais des quotas fixes")
+// ══════════════════════════════════════════════════════════════════════════
+// Objectif de cette phase, et UNIQUEMENT celui-ci : grounding → plan
+// pédagogique de 15 à 20 connaissances (jamais forcé à un total fixe) →
+// vérification/réparation → bloc ÉLÉMENTAIRE (toutes les connaissances de
+// niveau "elementary", dont le NOMBRE dépend de la taille réelle du
+// curriculum) → persistance → utilisateur servi. Les blocs "deepening"/
+// "expert" (B/C) ne sont PAS implémentés ici — cf. rapport, section "Phase
+// 2". Chemin entièrement NOUVEAU et additif : n'appelle ni ne modifie
+// generateNotionLevelQuiz/buildCustomTopicQuiz/ensureCustomTopicMaster
+// Generated, qui restent strictement inchangés pour tout appelant existant
+// (route POST /api/users/notion-quizzes/custom, legacy).
+
+// Au-delà de ce nombre de tentatives de réparation ciblée, échec propre —
+// jamais une boucle non bornée (même philosophie que QCM_SEMANTIC_REVIEW_
+// MAX_RETRIES/contentAttempts ailleurs dans ce fichier, qui utilisent aussi
+// une petite valeur fixe plutôt qu'un calcul dynamique).
+const CURRICULUM_REPAIR_MAX_ATTEMPTS = 2;
+
+// Construit le plan pédagogique de 15 à 20 connaissances PROPOSÉES, puis
+// vérifie (knowledge_verification, RÉUTILISÉE telle quelle — cf.
+// lib/knowledge-admission.js buildKnowledgeVerificationPrompt/
+// applyKnowledgeVerificationDecisions, aucune modification) et répare
+// UNIQUEMENT le sous-ensemble "elementary" (03/09/2026, latence — audit réel
+// "Les oiseaux migrateurs" : vérifier les 15-20 connaissances entières avant
+// de servir 4-5 questions était un chemin critique inutilement long).
+//
+// Étapes : 1 génération → split PROVISOIRE (computeCurriculumSplit sur la
+// taille brute du pool, AVANT toute vérification — c'est le seul moment où
+// l'on sait déjà combien de connaissances seront "elementary" par position,
+// sans dépendre du résultat de la vérification) → extraction du
+// sous-ensemble elementary → vérification + éviction de quasi-doublons +
+// réparation (jusqu'à CURRICULUM_REPAIR_MAX_ATTEMPTS) UNIQUEMENT sur ce
+// sous-ensemble, ciblant son propre effectif plutôt que MIN_PROGRESSIVE_
+// CURRICULUM (15, jamais changé, toujours utilisé pour le PROMPT initial et
+// le plafond `MAX_PROGRESSIVE_CURRICULUM`).
+//
+// Les connaissances deepening/expert ne sont ni vérifiées ni dédoublonnées
+// ici : elles restent dans le curriculum retourné, chacune marquée
+// explicitement `verified: false` (jamais considérées admises ni
+// silencieusement traitées comme telles) — leur vérification est différée à
+// une phase future (Phase 2, non implémentée). Le champ `verified` est la
+// seule source de vérité sur cet état ; rien dans ce chantier ne l'ignore ni
+// ne le contourne.
+async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, grounding) {
+  const curriculumStartedAt = Date.now();
+  let pool;
+  try {
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCurriculumPrompt(subject, contextHint, grounding?.groundingText || null) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" },
+      timeoutMs: 90_000,
+      feature: "curriculum_generation",
+      generationId: id
+    });
+    pool = parseCurriculumItems(JSON.parse(content)?.curriculum);
+  } catch (error) {
+    const code = classifyAiError(error);
+    console.error(`[notion-quiz-progressive:${id}] stage=curriculum_generation code=${code} :`, error.message);
+    return { error: "failed", code, stage: "curriculum_generation" };
+  }
+
+  // Split PROVISOIRE : réutilise normalizeCurriculumOrder (comble les trous
+  // laissés par des entrées malformées écartées au parsing, sans quoi
+  // assignCurriculumLevels/levelForOrder — qui suppose un `order` contigu
+  // 1..N — mal classerait des items dont l'`order` brut dépasse la taille
+  // réelle du pool) puis assignCurriculumLevels, TELS QUELS — jamais une
+  // seconde logique de split. `pool.length` (au lieu de la taille finale
+  // vérifiée) est le seul choix possible ici : le split doit être connu
+  // AVANT la vérification pour savoir QUOI vérifier en premier.
+  const leveledPool = assignCurriculumLevels(normalizeCurriculumOrder(pool));
+  let elementaryPool = selectCurriculumLevel(leveledPool, "elementary");
+  const deferredCandidates = leveledPool.filter((item) => item.level !== "elementary");
+  const elementaryTarget = elementaryPool.length;
+
+  // Vérifie un sous-ensemble de candidats (`{fact, order}`) et renvoie les
+  // `order` acceptés — jamais les `id`, pour ne jamais dépendre du format
+  // exact d'id renvoyé par l'IA (cf. lib/notion-quiz-curriculum.js). Réutilise
+  // buildKnowledgeVerificationPrompt/applyKnowledgeVerificationDecisions SANS
+  // AUCUNE modification : `candidates[i].fact` est le seul champ qu'elles
+  // lisent, `order` les traverse tel quel (spread préservé par le filtre).
+  const verifyOrders = async (candidates) => {
+    if (!candidates.length) return new Set();
+    const verificationCandidates = candidates.map((k) => ({ fact: k.knowledgeTarget, order: k.order }));
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(verificationCandidates, subject, grounding?.groundingText || null) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.2,
+      responseFormat: { type: "json_object" },
+      timeoutMs: 60_000,
+      feature: "knowledge_verification",
+      generationId: id
+    });
+    const decisions = JSON.parse(content);
+    const accepted = applyKnowledgeVerificationDecisions(verificationCandidates, decisions?.decisions);
+    return new Set(accepted.map((c) => c.order));
+  };
+
+  // Écarte toute quasi-équivalence entre connaissances ACCEPTÉES d'un
+  // sous-ensemble donné (cf. lib/notion-quiz-curriculum.js findNearDuplicates)
+  // : la plus tardive (order le plus grand, donc apparue en second) des deux
+  // est retirée — même mécanisme de réparation que pour un rejet de
+  // knowledge_verification, jamais une seconde logique.
+  const evictNearDuplicates = (items) => {
+    let current = [...items].sort((a, b) => a.order - b.order);
+    let evicted = true;
+    while (evicted) {
+      evicted = false;
+      const pair = findNearDuplicateCurriculumKnowledge(current)[0];
+      if (pair) {
+        const orderToEvict = Math.max(pair[0].order, pair[1].order);
+        current = current.filter((k) => k.order !== orderToEvict);
+        evicted = true;
+      }
+    }
+    return current;
+  };
+
+  let acceptedOrders;
+  try {
+    acceptedOrders = await verifyOrders(elementaryPool);
+  } catch (error) {
+    console.warn(`[notion-quiz-progressive:${id}] vérification curriculum (elementary) :`, error.message);
+    acceptedOrders = new Set();
+  }
+  let acceptedElementary = evictNearDuplicates(elementaryPool.filter((k) => acceptedOrders.has(k.order)));
+
+  for (let attempt = 1; attempt <= CURRICULUM_REPAIR_MAX_ATTEMPTS; attempt += 1) {
+    if (acceptedElementary.length >= elementaryTarget) break; // déjà au complet, jamais de réparation superflue
+    const neededCount = missingCurriculumCount(acceptedElementary.length, elementaryTarget);
+    console.warn(`[notion-quiz-progressive:${id}] curriculum elementary incomplet (réparation ${attempt}/${CURRICULUM_REPAIR_MAX_ATTEMPTS}) : ${acceptedElementary.length}/${elementaryTarget}, ${neededCount} connaissance(s) à ajouter.`);
+    let additions = [];
+    try {
+      const repairContent = await _callOpenAI(apiKey, [{ role: "user", content: buildCurriculumRepairPrompt(subject, contextHint, neededCount, acceptedElementary, grounding?.groundingText || null) }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" },
+        timeoutMs: 60_000,
+        feature: "curriculum_repair",
+        generationId: id
+      });
+      // Ordres temporaires au-delà du max courant du POOL ELEMENTARY (jamais
+      // du pool entier — les candidats deepening/expert ne sont jamais
+      // touchés par cette réparation) : garantit qu'un ajout ne collisionne
+      // jamais avec un `order` déjà utilisé dans ce sous-ensemble.
+      const startOrder = elementaryPool.reduce((max, k) => Math.max(max, k.order), 0);
+      additions = parseCurriculumRepairAdditions(JSON.parse(repairContent)?.additions, neededCount)
+        .map((a, index) => ({ id: `repair-${startOrder + index + 1}`, knowledgeTarget: a.knowledgeTarget, order: startOrder + index + 1 }));
+    } catch (error) {
+      console.warn(`[notion-quiz-progressive:${id}] réparation curriculum elementary (tentative ${attempt}) :`, error.message);
+      continue;
+    }
+    if (!additions.length) continue;
+    elementaryPool = mergeCurriculumAdditions(elementaryPool, additions);
+    try {
+      const newlyAcceptedOrders = await verifyOrders(additions);
+      const newlyAccepted = additions.filter((a) => newlyAcceptedOrders.has(a.order));
+      acceptedElementary = evictNearDuplicates(mergeCurriculumAdditions(acceptedElementary, newlyAccepted));
+    } catch (error) {
+      console.warn(`[notion-quiz-progressive:${id}] vérification réparation elementary (tentative ${attempt}) :`, error.message);
+    }
+  }
+
+  const curriculumMs = Date.now() - curriculumStartedAt;
+  // MIN_ELEMENTARY_READY_QUESTIONS (jamais MIN_PROGRESSIVE_CURRICULUM) : en
+  // dessous, le bloc A ne pourra de toute façon jamais atteindre son propre
+  // seuil de disponibilité (cf. lib/question-formats.js) — inutile de
+  // poursuivre vers la génération de fiche/questions.
+  if (acceptedElementary.length < MIN_ELEMENTARY_READY_QUESTIONS) {
+    console.warn(`[notion-quiz-progressive:${id}] curriculum elementary incomplet après ${CURRICULUM_REPAIR_MAX_ATTEMPTS} réparation(s) : ${acceptedElementary.length}/${MIN_ELEMENTARY_READY_QUESTIONS} minimum.`);
+    return generationFailure("CURRICULUM_INCOMPLETE", "curriculum_repair", {
+      reason: `Seulement ${acceptedElementary.length} connaissance(s) elementary fiable(s) et validée(s) sur ${MIN_ELEMENTARY_READY_QUESTIONS} minimum pour ce sujet.`
+    });
+  }
+
+  // Renormalisation DU SEUL sous-ensemble elementary (id/order 1..N
+  // séquentiels, ordre pédagogique préservé), niveau/statut attachés
+  // explicitement. Les candidats deepening/expert sont ensuite renumérotés
+  // à la suite (jamais re-triés selon un nouveau critère) pour éviter toute
+  // collision d'id/order avec les items elementary renormalisés — ils
+  // restent des PROPOSITIONS non vérifiées (`verified: false`), jamais
+  // dédupliquées, jamais garanties complètes : Phase 2 (non implémentée)
+  // reprendra leur vérification/réparation le moment venu, exactement comme
+  // le sous-ensemble elementary vient de l'être ici.
+  const elementaryFinal = normalizeCurriculumOrder(acceptedElementary).map((item) => ({ ...item, level: "elementary", verified: true }));
+  const deferredFinal = deferredCandidates.map((item, index) => ({
+    id: `k${elementaryFinal.length + index + 1}`,
+    knowledgeTarget: item.knowledgeTarget,
+    order: elementaryFinal.length + index + 1,
+    level: item.level,
+    verified: false
+  }));
+  const finalCurriculum = [...elementaryFinal, ...deferredFinal];
+  return {
+    curriculum: finalCurriculum,
+    curriculumMs,
+    elementaryVerificationCount: elementaryFinal.length,
+    deferredVerificationCount: deferredFinal.length
+  };
+}
+
+// Rédige la fiche élémentaire (toutes les connaissances de niveau
+// "elementary" du curriculum, dont le NOMBRE dépend de la taille réelle du
+// curriculum — 4 ou 5 selon les cas, cf. computeCurriculumSplit ; la fiche
+// couvre TOUJOURS l'intégralité de `elementaryKnowledge`, jamais réduite au
+// sous-ensemble qui finit par avoir une question — cf. buildElementaryFiche
+// Prompt, non modifié par ce correctif) puis génère et valide des questions
+// pour ces connaissances — MÊME chaîne qualité que le master legacy
+// (validation déterministe + critic Luna + régénération ciblée, via
+// qualityControlRawQuestions INCHANGÉE dans ses critères ; V3.2 réutilisé
+// tel quel, cf. rapport section 10). Qualité > quantité (03/09/2026, audit
+// réel "Bouddhisme tibétain") : le bloc devient prêt dès `elementaryReady
+// Threshold` (= min(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge.
+// length), donc toujours 4 en pratique puisque le curriculum ne descend
+// jamais sous 4 connaissances elementary) questions RÉELLEMENT validées,
+// jamais besoin d'une question par connaissance — la connaissance restée
+// sans question valide n'est ni supprimée ni comptée comme validée, elle
+// demeure disponible pour une réparation future (Phase 2, non implémentée
+// ici) sans qu'aucun code de cette phase n'en dépende. Aucun critère de
+// VALIDATION n'est modifié : une question rejetée reste rejetée dans tous
+// les cas.
+// Fiche et questions n'ont aucune dépendance mutuelle (audit read-only du
+// 03/09/2026) : toutes deux ne lisent que `elementaryKnowledge`/`grounding`,
+// jamais le résultat l'une de l'autre — lancées en parallèle (03/09/2026,
+// latence) plutôt que séquentiellement. Gain modeste et borné (la fiche est
+// déjà rapide, ~4 s) mais gratuit architecturalement, sans toucher au
+// contenu ni aux critères des deux appels.
+async function generateElementaryBlock(apiKey, subject, contextHint, id, elementaryKnowledge, grounding) {
+  const levelConfig = NOTION_QUIZ_LEVELS.elementaire;
+  const contentAttempts = 2;
+  const timeoutMs = Math.min(120_000, 45_000 + elementaryKnowledge.length * 3_000);
+  const elementaryReadyThreshold = Math.min(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge.length);
+  // Sur-génération initiale (03/09/2026, audit latence réel "Empire
+  // carolingien") : répartition déterministe de ELEMENTARY_INITIAL_CANDIDATE_
+  // POOL_SIZE candidats sur les connaissances elementary — cf. lib/
+  // question-formats.js computeElementaryCandidateDistribution pour le
+  // rationale complet et son comportement de repli (targetCount>=poolSize).
+  const initialCandidateCounts = computeElementaryCandidateDistribution(elementaryKnowledge.length, ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE);
+  const totalInitialCandidates = initialCandidateCounts.reduce((sum, n) => sum + n, 0) || elementaryKnowledge.length;
+
+  // Chaque tâche capture ses propres erreurs et renvoie un résultat
+  // discriminé (`{error}` ou son résultat utile) au lieu de rejeter/retourner
+  // directement — nécessaire pour orchestrer les deux en parallèle tout en
+  // conservant EXACTEMENT les mêmes codes d'échec et la même granularité
+  // qu'avant ce correctif (aucun changement de comportement en cas d'échec).
+  const ficheTask = (async () => {
+    const ficheStartedAt = Date.now();
+    let ficheResult;
+    for (let attempt = 1; attempt <= contentAttempts; attempt += 1) {
+      let content;
+      try {
+        content = await _callOpenAI(apiKey, [{ role: "user", content: buildElementaryFichePrompt(subject, contextHint, elementaryKnowledge, levelConfig, grounding?.groundingText || null) }], {
+          model: DAILY_QUIZ_NARRATIVE_MODEL,
+          temperature: 0.4,
+          responseFormat: { type: "json_object" },
+          timeoutMs,
+          feature: "elementary_fiche_generation",
+          generationId: id
+        });
+      } catch (error) {
+        const code = classifyAiError(error);
+        console.error(`[notion-quiz-progressive:${id}] stage=elementary_fiche_generation code=${code} :`, error.message);
+        return { error: generationFailure(code, "elementary_fiche_generation") };
+      }
+      try {
+        const candidate = JSON.parse(content);
+        const parsed = parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig);
+        if (parsed) { ficheResult = parsed; break; }
+        console.warn(`[notion-quiz-progressive:${id}] fiche élémentaire non conforme (tentative ${attempt}/${contentAttempts}).`);
+      } catch (error) {
+        console.warn(`[notion-quiz-progressive:${id}] JSON fiche élémentaire invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
+      }
+    }
+    const ficheMs = Date.now() - ficheStartedAt;
+    if (!ficheResult) return { error: generationFailure("CONTENT_UNUSABLE", "elementary_fiche_generation") };
+    return { ficheResult, ficheMs };
+  })();
+
+  // sequential/clearBoundary volontairement à `false` (Phase 1) : le
+  // curriculum ne les produit pas (structure minimale demandée, cf. rapport
+  // section 6) — conséquence assumée et documentée : les formats "ordre"/
+  // "intrus" ne sont jamais proposés pour un bloc progressif dans cette
+  // phase (buildQuestionsFromKnowledgePrompt reste, lui, strictement
+  // inchangé). Revisitable en Phase 2 si le curriculum les fournit un jour.
+  const admittedKnowledge = elementaryKnowledge.map((k) => ({ fact: k.knowledgeTarget, sequential: false, clearBoundary: false }));
+  const groundingSourcesMap = grounding?.identifiedSources?.length
+    ? new Map(grounding.identifiedSources.map((s) => [s.sourceId, s]))
+    : null;
+
+  const questionsTask = (async () => {
+    let validated = [];
+    let questionQualityMetrics = null;
+    let currentGrounding = grounding;
+    let initialBatchDistinctCount = null;
+    let elementaryReadyAfterInitialBatch = false;
+    try {
+      const formatBlock = buildQuestionFormatsPromptBlock("sourceId", totalInitialCandidates, true, undefined, currentGrounding?.identifiedSourcesBlock || null);
+      const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, levelConfig.instruction, formatBlock, initialCandidateCounts);
+      const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
+        model: DAILY_QUIZ_NARRATIVE_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" },
+        timeoutMs,
+        feature: "elementary_question_generation",
+        generationId: id
+      });
+      const questionsParsed = JSON.parse(content);
+      const qualityApproved = await qualityControlRawQuestions({
+        apiKey,
+        rawQuestions: questionsParsed?.questions,
+        basePrompt: questionPrompt,
+        route: "free_search_progressive_elementary",
+        timeoutMs,
+        context: {
+          hasIndependentSource: !!groundingSourcesMap,
+          sourceExcerptFor: (_sourceId, q) => String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200)
+        },
+        groundingSources: groundingSourcesMap,
+        metricsSink: (metrics) => { questionQualityMetrics = metrics; },
+        generationId: id,
+        reviewFeature: "elementary_semantic_review",
+        regenerationFeature: "elementary_targeted_regeneration",
+        // Qualité > quantité (03/09/2026) : inutile de régénérer une fois
+        // `elementaryReadyThreshold` connaissances DISTINCTES réellement
+        // validées obtenues — cf. lib/qcm-quality.js pour la garantie que
+        // ceci n'assouplit jamais un critère de validation.
+        earlyStopAtAccepted: elementaryReadyThreshold,
+        // Sur-génération initiale (03/09/2026) : plusieurs candidats
+        // acceptés peuvent désormais couvrir la même connaissance (cf.
+        // initialCandidateCounts) — earlyStopCountFn compte les
+        // connaissances DISTINCTES, jamais le nombre brut de questions
+        // acceptées, pour ne jamais retarder l'arrêt à cause d'un doublon
+        // ni, à l'inverse, s'arrêter trop tôt en confondant candidats et
+        // connaissances.
+        earlyStopCountFn: (acceptedList) => selectOneQuestionPerKnowledgeTarget(acceptedList).length,
+        // Ne dépense jamais un cycle de régénération pour une connaissance
+        // qui dispose déjà d'une question acceptée (via un autre candidat
+        // du pool initial ou d'un cycle précédent) — seules les
+        // connaissances encore réellement non couvertes déclenchent une
+        // régénération ciblée.
+        filterRejectedForRegeneration: (rejected, acceptedList) => {
+          const coveredTargets = new Set(selectOneQuestionPerKnowledgeTarget(acceptedList).map((q) => normalizeFactText(q?.knowledgeTarget)));
+          return rejected.filter((entry) => !coveredTargets.has(normalizeFactText(entry.question?.knowledgeTarget)));
+        },
+        onInitialBatchAccepted: (acceptedList) => { initialBatchDistinctCount = selectOneQuestionPerKnowledgeTarget(acceptedList).length; }
+      });
+      const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], totalInitialCandidates, totalInitialCandidates);
+      const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, admittedKnowledge);
+      const knowledgeConstrained = filterVariantsByKnowledgeConstraints(knowledgeMatched, admittedKnowledge);
+      // Consolidation (sur-génération initiale, 03/09/2026) : au plus une
+      // question par knowledgeTarget distinct, AVANT toute décision de
+      // couverture/V3.2 — le pool initial peut légitimement contenir
+      // plusieurs candidats validés pour la même connaissance, jamais
+      // compté plus d'une fois pour la disponibilité du bloc ni pour la
+      // décision V3.2 (shouldExpandGroundingSources), qui ne doit jamais
+      // transformer ce surplus en un ratio artificiellement gonflé (ex.
+      // 4/8 au lieu de 4/5, cf. rapport section 5).
+      validated = selectOneQuestionPerKnowledgeTarget(knowledgeConstrained);
+      elementaryReadyAfterInitialBatch = questionQualityMetrics?.regenerationCycles === 0 && validated.length >= elementaryReadyThreshold;
+
+      // V3.2 (fallback d'enrichissement des sources) : orchestration
+      // réutilisée TEL QUEL (audit confirmé, rapport section 10) — seule
+      // `finalAccepted` transmis à la décision (shouldExpandGroundingSources)
+      // est corrigé ici pour refléter `validated.length` déjà consolidé
+      // (connaissances DISTINCTES), jamais le nombre brut de candidats
+      // acceptés par le pipeline qualité (qui peut dépasser le nombre de
+      // connaissances elementary avec la sur-génération). missingKnowledge,
+      // côté expandGroundingAndRegenerateMissingQuestions, compare déjà
+      // `validated` (donc consolidé) aux connaissances admises — inchangé.
+      if (questionQualityMetrics && currentGrounding?.identifiedSources?.length) {
+        const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions({
+          apiKey, subject, id, instruction: levelConfig.instruction, timeoutMs,
+          grounding: currentGrounding, accepted: admittedKnowledge, validated,
+          questionQualityMetrics: { ...questionQualityMetrics, finalAccepted: validated.length }
+        });
+        // Re-consolidation défensive : expandGroundingAndRegenerateMissingQuestions
+        // ne cible que missingKnowledge (jamais de doublon attendu), mais le
+        // bloc servi ne doit jamais dépendre de cette garantie interne pour
+        // rester à au plus une question par connaissance distincte.
+        validated = selectOneQuestionPerKnowledgeTarget(expansionOutcome.validated);
+        currentGrounding = expansionOutcome.grounding;
+      }
+    } catch (error) {
+      if (error?.status) {
+        const code = classifyAiError(error);
+        console.error(`[notion-quiz-progressive:${id}] stage=elementary_question_generation code=${code} :`, error.message);
+        return { error: generationFailure(code, "elementary_question_generation") };
+      }
+      console.warn(`[notion-quiz-progressive:${id}] JSON questions élémentaires invalide :`, error.message);
+    }
+    return {
+      validated,
+      elementaryInitialCandidateCount: totalInitialCandidates,
+      elementaryInitialDistinctTargetsValidated: initialBatchDistinctCount,
+      elementaryRegenerationCalls: questionQualityMetrics?.regenerationCycles ?? null,
+      elementaryReadyAfterInitialBatch
+    };
+  })();
+
+  const ficheOutcome = await ficheTask;
+  if (ficheOutcome.error) return ficheOutcome.error;
+  const { sourceName, sourceDetail, imageSearchQuery } = ficheOutcome.ficheResult;
+  const ficheMs = ficheOutcome.ficheMs;
+
+  const imagePromise = imageSearchQuery
+    ? searchKnowledgeImage(imageSearchQuery, { logLabel: `${id}:${sourceName}:elementary` }).catch((error) => {
+        console.warn(`[notion-quiz-progressive:${id}] recherche image élémentaire :`, error.message);
+        return null;
+      })
+    : Promise.resolve(null);
+
+  const questionsOutcome = await questionsTask;
+  if (questionsOutcome.error) return questionsOutcome.error;
+  const {
+    validated,
+    elementaryInitialCandidateCount,
+    elementaryInitialDistinctTargetsValidated,
+    elementaryRegenerationCalls,
+    elementaryReadyAfterInitialBatch
+  } = questionsOutcome;
+
+  // Qualité > quantité (03/09/2026, audit réel "Bouddhisme tibétain") : le
+  // seuil de disponibilité est `elementaryReadyThreshold` (4 en pratique),
+  // jamais `elementaryKnowledge.length` (4 OU 5 selon le curriculum) — une
+  // connaissance elementary restée sans question valide n'empêche plus le
+  // bloc de devenir prêt. Aucune tolérance EN DESSOUS de ce seuil : une
+  // question rejetée par le déterministe ou le critique (`validated` ne
+  // contient jamais que des questions réellement acceptées, cf. lib/
+  // qcm-quality.js) n'est jamais comptée ni servie pour combler l'écart.
+  if (validated.length < elementaryReadyThreshold) {
+    console.warn(`[notion-quiz-progressive:${id}] bloc élémentaire incomplet : ${validated.length}/${elementaryKnowledge.length} question(s) valide(s) (minimum requis : ${elementaryReadyThreshold}).`);
+    return generationFailure("QCM_UNUSABLE", "elementary_question_validation", {
+      reason: `${validated.length}/${elementaryKnowledge.length} question(s) élémentaire(s) valide(s) et traçable(s) (minimum requis : ${elementaryReadyThreshold}).`
+    });
+  }
+
+  const resolvedImage = await imagePromise;
+  sourceDetail.image = resolvedImage;
+  return {
+    sourceName,
+    sourceDetail,
+    validated,
+    ficheMs,
+    elementaryInitialCandidateCount,
+    elementaryInitialDistinctTargetsValidated,
+    elementaryRegenerationCalls,
+    elementaryReadyAfterInitialBatch
+  };
+}
+
+// Orchestrateur complet Phase 1 : grounding → curriculum → bloc élémentaire →
+// persistance. Réutilise le MÊME verrou en mémoire que le chemin legacy
+// (_notionQuizMasterGenerationPromises, même clé `masterSlot`) : empêche
+// qu'une génération legacy et une génération progressive tournent en même
+// temps sur le même sujet et se marchent dessus à l'insertion.
+async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userId) {
+  const pending = _notionQuizMasterGenerationPromises.get(masterSlot);
+  if (pending) return pending;
+  const generation = (async () => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return generationFailure("AI_CONFIG_MISSING", "configuration");
+
+    const groundingStartedAt = Date.now();
+    const grounding = await resolveWebSearchGrounding(apiKey, topic, id);
+    const groundingMs = Date.now() - groundingStartedAt;
+
+    const curriculumResult = await resolveProgressiveCurriculum(apiKey, topic, null, id, grounding);
+    if (curriculumResult.error) return curriculumResult;
+    const { curriculum, curriculumMs, elementaryVerificationCount, deferredVerificationCount } = curriculumResult;
+
+    const elementaryKnowledge = selectCurriculumLevel(curriculum, "elementary");
+    const blockResult = await generateElementaryBlock(apiKey, topic, null, id, elementaryKnowledge, grounding);
+    if (blockResult.error) return blockResult;
+    const {
+      sourceName,
+      sourceDetail,
+      validated,
+      ficheMs,
+      elementaryInitialCandidateCount,
+      elementaryInitialDistinctTargetsValidated,
+      elementaryRegenerationCalls,
+      elementaryReadyAfterInitialBatch
+    } = blockResult;
+
+    // pedagogicalRank = order du curriculum (dans [1, taille du curriculum],
+    // plus nécessairement 1-5) — RÉUTILISE attachPedagogicalRanks tel quel
+    // (lib/question-formats.js), jamais une seconde logique de rattachement :
+    // lui fournir un "rankedKnowledge" dérivé du curriculum (plutôt que de
+    // rankAdmittedKnowledge, jamais appelée ici) suffit, l'appariement se
+    // fait par knowledgeTarget/fact normalisé, exactement comme pour le
+    // master legacy.
+    const rankedCurriculum = curriculum.map((k) => ({ fact: k.knowledgeTarget, pedagogicalRank: k.order }));
+    const rankedQuestions = attachPedagogicalRanks(validated, rankedCurriculum);
+
+    // curriculum_size/elementary_target_count/deepening_count/expert_count
+    // (taille FLEXIBLE, 02/09/2026) : permet de comparer time_to_elementary_
+    // ready selon la taille RÉELLE du curriculum obtenu pour ce sujet (15 à
+    // 20), jamais un nombre supposé fixe. elementary_validated_count/
+    // elementary_ready_threshold (qualité > quantité, 03/09/2026) : mesurent
+    // en production la fréquence à laquelle Mnoria sert le bloc avec moins
+    // de questions que de connaissances elementary (ex. 4/5) — jamais
+    // dupliqués : elementary_target_count restait déjà disponible
+    // (anciennement `elementary_count`, renommé ici pour la symétrie avec
+    // les deux nouveaux champs), les deux autres n'existaient pas.
+    const deepeningKnowledgeCount = curriculum.filter((k) => k.level === "deepening").length;
+    const expertKnowledgeCount = curriculum.filter((k) => k.level === "expert").length;
+    const elementaryReadyThreshold = Math.min(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge.length);
+    const timeToElementaryReadyMs = Date.now() - groundingStartedAt;
+    console.info("[qcm-progressive-timing]", JSON.stringify({
+      generationId: id,
+      route: "free_search_progressive",
+      grounding_ms: groundingMs,
+      curriculum_ms: curriculumMs,
+      elementary_fiche_ms: ficheMs,
+      time_to_elementary_ready_ms: timeToElementaryReadyMs,
+      curriculum_size: curriculum.length,
+      elementary_target_count: elementaryKnowledge.length,
+      elementary_validated_count: validated.length,
+      elementary_ready_threshold: elementaryReadyThreshold,
+      // elementary_verification_count/deferred_verification_count (latence,
+      // 03/09/2026, audit réel "Les oiseaux migrateurs") : combien de
+      // connaissances ont réellement été passées par knowledge_verification
+      // avant Block A (toujours = curriculum_size au total, jamais plus) —
+      // permet de vérifier en production que seules les elementary le sont.
+      elementary_verification_count: elementaryVerificationCount,
+      deferred_verification_count: deferredVerificationCount,
+      deepening_count: deepeningKnowledgeCount,
+      expert_count: expertKnowledgeCount,
+      // elementary_initial_candidate_count/elementary_initial_distinct_targets_
+      // validated/elementary_regeneration_calls/elementary_ready_after_initial_
+      // batch (sur-génération initiale, 03/09/2026, audit latence réel "Empire
+      // carolingien") : permettent de vérifier en production qu'un pool initial
+      // plus large réduit réellement le besoin de cycles de régénération
+      // séquentiels — cf. server.js generateElementaryBlock pour le détail de
+      // chaque champ.
+      elementary_initial_candidate_count: elementaryInitialCandidateCount,
+      elementary_initial_distinct_targets_validated: elementaryInitialDistinctTargetsValidated,
+      elementary_regeneration_calls: elementaryRegenerationCalls,
+      elementary_ready_after_initial_batch: elementaryReadyAfterInitialBatch
+    }));
+
+    const questions = rankedQuestions.map((q, index) => ({
+      id: `notion:custom:${id}-elementary-q${index + 1}`,
+      ...q,
+      sourceType: "custom",
+      sourceScope: null,
+      sourceName,
+      sourceDetail,
+      sourceThemes: [],
+      sourcePlacement: null,
+      level: "elementaire",
+      sourceDebateId: id,
+      searchTopic: topic
+    }));
+
+    const quizDate = parisDateKey();
+    // `curriculum` persisté ici est TOUJOURS le curriculum complet (15-20
+    // connaissances, 3 niveaux) renvoyé par resolveProgressiveCurriculum —
+    // jamais tronqué au sous-ensemble elementary, jamais réduit aux
+    // connaissances ayant effectivement une question validée. Une
+    // connaissance elementary restée sans question (cas 4/5) reste donc
+    // visible dans ce curriculum, disponible pour une réparation future.
+    // `progressive_status: "elementary_ready"` est un état INTERMÉDIAIRE,
+    // jamais un marqueur de fin de génération : rien dans ce chantier ne
+    // referme la possibilité de continuer en arrière-plan vers "deepening"/
+    // "expert" puis un master complet (`progressive_status='ready'`, déjà
+    // supporté par progressiveEligibilityMinimum, lib/question-formats.js) —
+    // cette continuation reste non implémentée ici (Phase 2), volontairement.
+    // grounding_sources (chantier "persister les sources factuelles",
+    // 03/09/2026, audit réel "Empire carolingien") : provenance PUBLIQUE
+    // minimale ({sourceId, domain, url}, cf. buildPublicGroundingSources)
+    // dérivée du grounding INITIAL uniquement (`grounding`, jamais
+    // `currentGrounding` interne à generateElementaryBlock post-V3.2) —
+    // même précédent que sourceDetail.sources côté master legacy
+    // (generateNotionLevelQuiz) : l'enrichissement V3.2 ne concerne que les
+    // questions manquantes, jamais la provenance affichée. Liste globale
+    // dédupliquée par URL, jamais répétée par question (cf. rapport).
+    const publicGroundingSources = buildPublicGroundingSources(grounding?.identifiedSources);
+    const progressiveExtra = { curriculum, progressive_status: "elementary_ready", grounding_sources: publicGroundingSources };
+    const { error: insertError } = await supabase.from("daily_quiz").insert({
+      quiz_date: quizDate,
+      slot: masterSlot,
+      questions,
+      source_debate_ids: [],
+      ...progressiveExtra
+    });
+    if (!insertError) return { questions, quizDate, slot: masterSlot, curriculum, progressiveStatus: "elementary_ready" };
+    if (insertError.code !== "23505") throw new Error(insertError.message);
+    // Course avec un autre worker (legacy OU progressif) ayant démarré une
+    // génération sur le même sujet entre-temps.
+    return resolveMasterInsertConflict(masterSlot, questions, quizDate, { curriculum, progressiveStatus: "elementary_ready" });
+  })();
+  _notionQuizMasterGenerationPromises.set(masterSlot, generation);
+  try {
+    return await generation;
+  } finally {
+    if (_notionQuizMasterGenerationPromises.get(masterSlot) === generation) {
+      _notionQuizMasterGenerationPromises.delete(masterSlot);
+    }
+  }
 }
 
 async function ensureCustomTopicMasterGenerated(masterSlot, topic, id, level, userId) {
@@ -18416,6 +19274,103 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
   }
 });
 
+// ── Génération progressive — PHASE 1 (02/09/2026) ──────────────────────────
+// Route ENTIÈREMENT NOUVELLE et distincte de POST .../custom ci-dessus, qui
+// reste intégralement inchangée : aucun trafic existant n'est routé ici tant
+// que le frontend n'appelle pas explicitement cette URL. Sert UNIQUEMENT le
+// bloc élémentaire (5 connaissances/5 questions) — jamais "deepening"/
+// "expert" (Phase 2, non implémentée). Volontairement plus simple que
+// POST .../custom : pas de mutualisation multi-niveaux ni de déduplication
+// de niveau 2 (le progressif ne connaît, pour l'instant, qu'un seul niveau),
+// pas de déclenchement Noès ni de notification push (le cas d'usage validé
+// ici est le premier bloc pendant que l'utilisateur reste sur place — cf.
+// rapport, section Phase 2 pour l'extension).
+app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30), async (req, res) => {
+  let masterSlotForFailureTracking = null;
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+
+    const topic = String(req.body?.topic || "").trim().replace(/\s+/g, " ");
+    if (topic.length < 3 || topic.length > 150) {
+      return res.status(400).json({ ok: false, error: "Sujet invalide (3 à 150 caractères)." });
+    }
+
+    const id = normalizeCustomTopicKey(topic);
+    const masterSlot = buildCustomTopicMasterSlot(id);
+    masterSlotForFailureTracking = masterSlot;
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    // Réutilisation : une ligne déjà éligible (progressive OU legacy
+    // complète) pour ce même sujet existe déjà — jamais une nouvelle
+    // génération pour la même chose. `isMasterEligibleQuiz` avec le contexte
+    // progressif accepte aussi bien un master legacy complet
+    // (progressive_status NULL, >= MIN_MASTER_QUESTIONS) qu'un bloc
+    // "elementary_ready" (>= 5) — cf. lib/question-formats.js.
+    const { data: existingRows, error: existingError } = await supabase
+      .from("daily_quiz")
+      .select("quiz_date, questions, curriculum, progressive_status")
+      .eq("slot", masterSlot)
+      .order("quiz_date", { ascending: false })
+      .limit(1);
+    if (existingError) throw new Error(existingError.message);
+    const existingRow = existingRows?.[0] || null;
+
+    let questions;
+    let quizDate;
+    let curriculum = null;
+    let progressiveStatus = null;
+    let reused = false;
+    if (existingRow && isMasterEligibleQuiz(existingRow.questions, { progressiveStatus: existingRow.progressive_status, curriculum: existingRow.curriculum })) {
+      questions = existingRow.questions || [];
+      quizDate = existingRow.quiz_date;
+      curriculum = existingRow.curriculum || null;
+      progressiveStatus = existingRow.progressive_status || null;
+      reused = true;
+    } else {
+      const result = await ensureProgressiveElementaryGenerated(masterSlot, topic, id, user.id);
+      if (result.error) {
+        const code = result.code || "INTERNAL_ERROR";
+        const publicError = publicGenerationError(code, result.reason);
+        console.warn(`[notion-quizzes:progressive:${id}] stage=${result.stage || "unknown"} code=${publicError.body.code} : ${result.reason || "échec contrôlé."}`);
+        recordNotionQuizGenerationFailure(supabase, { identity: masterSlot, code: publicError.body.code, reason: result.reason });
+        return res.status(publicError.status).json(publicError.body);
+      }
+      questions = result.questions;
+      quizDate = result.quizDate;
+      curriculum = result.curriculum || null;
+      progressiveStatus = result.progressiveStatus || null;
+    }
+
+    const { error: linkError } = await supabase
+      .from("user_notion_quizzes")
+      .upsert(
+        { user_id: user.id, quiz_date: quizDate, slot: masterSlot, requested_level: "elementaire" },
+        { onConflict: "user_id,quiz_date,slot" }
+      );
+    if (linkError) throw new Error(linkError.message);
+
+    res.json({
+      ok: true,
+      slot: masterSlot,
+      quizDate,
+      label: questions[0]?.sourceName || null,
+      questionCount: questions.length,
+      curriculumCount: Array.isArray(curriculum) ? curriculum.length : 0,
+      progressiveStatus,
+      reused
+    });
+  } catch (error) {
+    const publicError = publicGenerationError("STORAGE_TEMPORARY");
+    console.error("[notion-quizzes:progressive] création :", error.message);
+    if (masterSlotForFailureTracking) {
+      recordNotionQuizGenerationFailure(supabase, { identity: masterSlotForFailureTracking, code: "STORAGE_TEMPORARY", reason: error.message });
+    }
+    res.status(publicError.status).json(publicError.body);
+  }
+});
+
 // Bouton "Explorer les apprentissages disponibles" (demande du 13/08/2026) :
 // liste les sujets libres déjà générés par d'autres visiteurs (slot
 // "notion:custom:*" uniquement — les QCM Éclairages/Ce jour dans l'Histoire
@@ -18665,7 +19620,11 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
       );
       // Renvoyer le slot demandé, et non le slot physique trouvé : c'est la
       // clé exacte enregistrée dans le localStorage que le client doit retirer.
-      return row ? [{ slot: requestedSlot, quizDate: row.quiz_date }] : [];
+      return row ? [{
+        slot: requestedSlot,
+        quizDate: row.quiz_date,
+        learningSlot: row.slot
+      }] : [];
     });
 
     // failed (correctif UX du 01/09/2026, incident "Marxisme") : jusqu'ici,
@@ -18980,27 +19939,53 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     let questions;
     let resolvedSlot = slot;
     let resolvedQuizDate = quizDate;
+    // groundingSources (chantier "persister les sources factuelles",
+    // 03/09/2026) : provenance publique de la génération progressive
+    // ({sourceId, domain, url}[], cf. buildPublicGroundingSources) — absent
+    // ([]) pour tout quiz sans grounding (legacy Éclairages/Histoire/import,
+    // ou génération sans source web trouvée), comportement inchangé.
+    let groundingSources = [];
     if (linkType && linkSourceId) {
+      // Phase 1 (léger, audit egress du 03/09/2026) : le matching ne regarde
+      // jamais que questions[0] (sourceType/sourceDebateId partagés par tout
+      // le QCM) — on ne rapatrie donc que ce premier élément pour tout
+      // l'historique au lieu du tableau `questions` complet + grounding_sources,
+      // qui pouvaient peser jusqu'à 2000 lignes à ~300 Ko chacune.
       const { data: rows, error } = await supabase
-        .from("daily_quiz").select("quiz_date, slot, questions")
-        .ilike("slot", "notion:%").order("quiz_date", { ascending: false }).limit(2000);
+        .from("daily_quiz").select("quiz_date, slot, first:questions->0")
+        .ilike("slot", "notion:%")
+        // Une copie privée forkée (cf. isOwnedPrivateNotionSlot) garde le même
+        // sourceType/sourceDebateId que son original pour l'affichage — sans
+        // cette exclusion, elle pourrait matcher ici et fuiter le contenu édité
+        // d'un utilisateur vers un autre visiteur naviguant "Les liens" (demande
+        // du 02/09/2026).
+        .not("slot", "ilike", "notion:private:%")
+        .order("quiz_date", { ascending: false }).limit(2000);
       if (error) throw new Error(error.message);
       const match = (rows || []).find((row) => {
-        const q = row.questions?.[0];
+        const q = row.first;
         return q?.sourceType === linkType && String(q?.sourceDebateId) === linkSourceId;
       });
       if (!match) return res.status(404).json({ error: "QCM introuvable." });
-      questions = match.questions || [];
+      // Phase 2 : le tableau complet + grounding_sources ne sont relus que
+      // pour la SEULE ligne trouvée, jamais pour tout l'historique candidat.
+      const { data: fullRow, error: fullError } = await supabase
+        .from("daily_quiz").select("questions, grounding_sources")
+        .eq("slot", match.slot).eq("quiz_date", match.quiz_date).maybeSingle();
+      if (fullError) throw new Error(fullError.message);
+      questions = fullRow?.questions || [];
       resolvedSlot = match.slot;
       resolvedQuizDate = match.quiz_date;
+      groundingSources = fullRow?.grounding_sources || [];
     } else {
       if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
         return res.status(400).json({ error: "Requête invalide." });
       }
       const { data, error } = await supabase
-        .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+        .from("daily_quiz").select("questions, grounding_sources").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
       if (error) throw new Error(error.message);
       questions = data?.questions || [];
+      groundingSources = data?.grounding_sources || [];
     }
     if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
 
@@ -19073,6 +20058,12 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       questionCount: questions.length,
       themes: primaryTheme ? [primaryTheme] : [],
       sourceDetail: first.sourceDetail || null,
+      // groundingSources (chantier "persister les sources factuelles",
+      // 03/09/2026) : liste GLOBALE dédupliquée pour ce QCM entier — jamais
+      // répétée par question ci-dessous, jamais à confondre avec
+      // sourceDetail.image (crédit de l'image, mécanisme totalement
+      // indépendant, cf. rapport section 6 de l'audit).
+      groundingSources,
       links,
       questions: questions.map((q) => {
         const type = q.type || "qcm";
@@ -19086,6 +20077,134 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
   } catch (error) {
     console.error("[notion-quizzes] fiche :", error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Édition/suppression/ajout de questions par l'utilisateur (demande du
+// 02/09/2026, cf. bouton "Modifier ces questions" de la fiche, views/qcm-du-jour.html) :
+// UNE SEULE route recevant l'état final désiré de `questions`, jamais des
+// opérations granulaires — le fork (première édition d'un master partagé) est
+// ainsi une décision atomique par sauvegarde, jamais une par appel.
+//
+// Le contenu édité ne rejoint JAMAIS la ligne daily_quiz partagée : la
+// première édition d'un master bifurque vers une copie privée
+// (notion:private:${userId}:${uuid}, jamais mutualisée — cf.
+// isOwnedPrivateNotionSlot, GET /fiche l'exclut déjà de la navigation "Les
+// liens"), les éditions suivantes de CETTE copie restent en place (même
+// slot). L'ancien master et la progression FSRS déjà accumulée dessus par
+// CET utilisateur (ou par d'autres) ne sont jamais touchés : la copie
+// éditée démarre sa propre progression via son nouveau (slot, quiz_date).
+app.post("/api/users/notion-quizzes/edit-questions", rateLimit("users", 20), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+
+    const slot = String(req.body?.slot || "").trim();
+    const quizDate = String(req.body?.quizDate || "").trim();
+    if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
+      return res.status(400).json({ ok: false, error: "Requête invalide." });
+    }
+    const submittedQuestions = Array.isArray(req.body?.questions) ? req.body.questions : null;
+    if (!submittedQuestions) return res.status(400).json({ ok: false, error: "Requête invalide." });
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+
+    // Défense en profondeur : un slot notion:private: appartenant à un AUTRE
+    // utilisateur est rejeté ici même si l'étape de propriété ci-dessous
+    // (censée être la vraie barrière) devait un jour régresser.
+    if (slot.startsWith("notion:private:") && !isOwnedPrivateNotionSlot(slot, user.id)) {
+      return res.status(403).json({ ok: false, error: "Ce contenu ne vous appartient pas." });
+    }
+
+    const { data: currentQuiz, error: currentQuizError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot)
+      .maybeSingle();
+    if (currentQuizError) throw new Error(currentQuizError.message);
+    if (!currentQuiz || !Array.isArray(currentQuiz.questions) || !currentQuiz.questions.length) {
+      return res.status(404).json({ ok: false, error: "Ce QCM n'existe plus." });
+    }
+
+    // Vraie barrière de sécurité : sans un lien personnel vers CE (slot,
+    // quizDate), impossible d'éditer quoi que ce soit — empêche à la fois
+    // d'éditer un fork privé d'un autre utilisateur ET d'éditer un master
+    // partagé auquel on n'a jamais adopté soi-même.
+    const { data: ownLink, error: ownLinkError } = await supabase
+      .from("user_notion_quizzes")
+      .select("requested_level")
+      .eq("user_id", user.id)
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot)
+      .maybeSingle();
+    if (ownLinkError) throw new Error(ownLinkError.message);
+    if (!ownLink) return res.status(403).json({ ok: false, error: "Ce contenu n'est pas dans vos apprentissages." });
+
+    const isOwnedPrivate = isOwnedPrivateNotionSlot(slot, user.id);
+    const targetSlot = isOwnedPrivate ? slot : `notion:private:${user.id}:${crypto.randomUUID()}`;
+    const targetQuizDate = isOwnedPrivate ? quizDate : parisDateKey();
+
+    const finalQuestions = mergeEditedQuestionsPayload(currentQuiz.questions, submittedQuestions, { newIdPrefix: targetSlot, forceNewIds: !isOwnedPrivate });
+    if (!finalQuestions) return res.status(400).json({ ok: false, error: "Questions invalides — vérifie qu'il reste au moins une question complète et bien formée." });
+
+    if (isOwnedPrivate) {
+      const { error: updateError } = await supabase
+        .from("daily_quiz")
+        .update({ questions: finalQuestions })
+        .eq("slot", targetSlot)
+        .eq("quiz_date", targetQuizDate);
+      if (updateError) throw new Error(updateError.message);
+    } else {
+      const { error: insertError } = await supabase.from("daily_quiz").insert({
+        quiz_date: targetQuizDate,
+        slot: targetSlot,
+        questions: finalQuestions,
+        source_debate_ids: []
+      });
+      // Collision d'UUID aléatoire : à toutes fins pratiques impossible —
+      // traitée comme une erreur fatale plutôt que relue comme le ferait
+      // resolveMasterInsertConflict (pensé pour des slots déterministes
+      // partagés entre plusieurs générateurs concurrents, pas pour un fork
+      // privé à identifiant aléatoire).
+      if (insertError) throw new Error(insertError.message);
+
+      const { error: linkUpsertError } = await supabase
+        .from("user_notion_quizzes")
+        .upsert(
+          { user_id: user.id, quiz_date: targetQuizDate, slot: targetSlot, requested_level: ownLink.requested_level || null },
+          { onConflict: "user_id,quiz_date,slot" }
+        );
+      if (linkUpsertError) throw new Error(linkUpsertError.message);
+
+      const { error: oldLinkDeleteError } = await supabase
+        .from("user_notion_quizzes")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("quiz_date", quizDate)
+        .eq("slot", slot);
+      // Best-effort : le nouveau lien existe déjà (upsert ci-dessus réussi),
+      // un échec ici laisse seulement l'ancien lien en doublon inoffensif
+      // (toujours vers le master partagé original, inchangé).
+      if (oldLinkDeleteError) console.warn("[notion-quizzes] edit-questions, suppression ancien lien :", oldLinkDeleteError.message);
+    }
+
+    res.json({
+      ok: true,
+      slot: targetSlot,
+      quizDate: targetQuizDate,
+      questions: finalQuestions.map((q) => {
+        const type = q.type || "qcm";
+        const base = { id: q.id, type, question: q.question, explanation: q.explanation || "" };
+        if (type === "association") return { ...base, pairs: q.pairs || [] };
+        if (type === "qcm_multi") return { ...base, options: q.options || [], correctIndexes: q.correctIndexes || [] };
+        if (type === "ordre") return { ...base, items: q.items || [] };
+        return { ...base, options: q.options || [], correctIndex: q.correctIndex };
+      })
+    });
+  } catch (error) {
+    console.error("[notion-quizzes] edit-questions :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 

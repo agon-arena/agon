@@ -164,9 +164,9 @@
       ".mnoria-universal-menu-wrap{position:absolute;left:12px;top:50%;transform:translateY(-50%);z-index:10005}" +
       ".mnoria-universal-menu-toggle{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;margin:0;padding:0;border:1px solid #d1d5db;border-radius:12px;background:#e9ebec;color:#374151;font-size:18px;cursor:pointer}" +
       ".mnoria-universal-menu-toggle:hover,.mnoria-universal-menu-toggle:focus-visible{background:#fff;outline:none}" +
-      ".mnoria-universal-menu-panel{position:fixed;z-index:300010;display:none;gap:0;width:min(230px,calc(100vw - 20px));max-height:calc(100dvh - 24px);overflow-y:auto;padding:5px;border:1px solid rgba(17,24,39,.14);border-radius:14px;background:#fff;box-shadow:0 18px 38px rgba(15,23,42,.22);box-sizing:border-box}" +
+      ".mnoria-universal-menu-panel{position:fixed;z-index:300010;display:none;gap:3px;width:min(230px,calc(100vw - 20px));max-height:calc(100dvh - 24px);overflow-y:auto;padding:7px;border:1px solid rgba(17,24,39,.14);border-radius:14px;background:#fff;box-shadow:0 18px 38px rgba(15,23,42,.22);box-sizing:border-box}" +
       ".mnoria-universal-menu-panel.is-open{display:grid}" +
-      ".mnoria-universal-menu-item{display:flex;align-items:center;gap:7px;width:100%;padding:6px 9px;border:0;border-radius:9px;background:#fff;color:#1f2937;font:inherit;font-size:13px;font-weight:700;line-height:1.15;text-align:left;text-decoration:none;cursor:pointer;box-sizing:border-box}" +
+      ".mnoria-universal-menu-item{display:flex;align-items:center;gap:9px;width:100%;padding:10px 11px;border:0;border-radius:9px;background:#fff;color:#1f2937;font:inherit;font-size:13px;font-weight:700;line-height:1.2;text-align:left;text-decoration:none;cursor:pointer;box-sizing:border-box}" +
       ".mnoria-universal-menu-item:hover,.mnoria-universal-menu-item:focus-visible{background:#f3f4f6;outline:none}" +
       ".mnoria-universal-menu-item i{width:16px;flex:0 0 16px;text-align:center;font-size:14px}" +
       // Aligné en haut de la ligne du logo, pas centré sur toute la hauteur utile du bandeau
@@ -204,7 +204,7 @@
     wrap.innerHTML =
       '<button type="button" class="mnoria-universal-menu-toggle" aria-label="Ouvrir le menu" aria-expanded="false"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>' +
       '<nav class="mnoria-universal-menu-panel" aria-label="Menu du bandeau">' +
-        '<a class="mnoria-universal-menu-item" href="/"><i class="fa-regular fa-compass"></i><span>Explorer les arènes</span></a>' +
+        '<a class="mnoria-universal-menu-item" href="/"><i class="fa-regular fa-compass"></i><span>Accueil</span></a>' +
         '<a class="mnoria-universal-menu-item" href="/create"><i class="fa-solid fa-plus"></i><span>Ouvrir une arène</span></a>' +
         '<a class="mnoria-universal-menu-item" href="/notifications"><i class="fa-regular fa-bell"></i><span>Notifications</span></a>' +
         '<button type="button" class="mnoria-universal-menu-item" data-mnoria-alerts><i class="fa-regular fa-bell"></i><span>Activer les alertes</span></button>' +
@@ -229,7 +229,7 @@
     };
     var open = function () {
       var rect = toggle.getBoundingClientRect();
-      panel.style.top = Math.min(rect.bottom + 8, window.innerHeight - 20) + "px";
+      panel.style.top = Math.min(rect.bottom + 12, window.innerHeight - 20) + "px";
       panel.style.left = "8px";
       panel.style.right = "auto";
       panel.classList.add("is-open");

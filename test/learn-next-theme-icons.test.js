@@ -20,4 +20,12 @@ test('Histoire et les civilisations comme les Incas utilisent le temple', () => 
   const mapper = view.slice(start, end);
   assert.match(mapper, /histoire: 'fa-landmark'/);
   assert.match(mapper, /histoire\|civilisation\|archeolog.*'fa-landmark'/);
+  assert.match(mapper, /azteque\|inca\|maya\|civilisation[\s\S]*?return 'fa-landmark'/);
+});
+
+test('les sujets géographiques sans métadonnée utilisent le globe et non les couches', () => {
+  const start = view.indexOf('function learnNextThemeIconClass(item)');
+  const end = view.indexOf('function renderLearnNextInlineSkeleton()', start);
+  const mapper = view.slice(start, end);
+  assert.match(mapper, /capitale\|geograph\|montagne[\s\S]*?return 'fa-globe'/);
 });

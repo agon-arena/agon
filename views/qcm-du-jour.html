@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified">
+  <link rel="stylesheet" href="/style.min.css?v=20260902-community-youtube-badge">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -52,7 +52,11 @@
        qui disparaît un instant après"). Repris ici au plus près du ton final. */
     html,
     html:has(body.page-qcm-du-jour) {
-      background-color: #0c1218;
+      /* Le bundle global impose #243038 !important sur mobile. Cette page
+         utilise un fond beaucoup plus sombre : reprendre cette teinte dès la
+         première peinture rend invisible la safe-area provisoirement laissée
+         à nu par WebKit avant sa première recomposition. */
+      background-color: #0c1218 !important;
     }
     body.page-qcm-du-jour {
       min-height: 100vh;
@@ -69,10 +73,55 @@
         min-height: 100dvh;
       }
     }
+    /* Même traitement structurel que page-debate sur iOS : le document et
+       le bandeau débordent réellement dans la safe-area basse. Le fond
+       racine n'a donc jamais l'occasion de former une bande séparée. */
+    @media (max-width: 768px), (display-mode: standalone) {
+      body.page-qcm-du-jour {
+        min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+        background-clip: border-box !important;
+      }
+      @supports (min-height: 100dvh) {
+        body.page-qcm-du-jour {
+          min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+        }
+      }
+      body.page-qcm-du-jour::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+        height: env(safe-area-inset-bottom, 0px);
+        z-index: 10019;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 5px no-repeat,
+          #e9ebec;
+        transform: translateZ(0);
+      }
+      body.page-qcm-du-jour .qcm-home-bottom-nav {
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+      }
+    }
     /* État initial peint avant toute exécution du JS : la page Apprentissage affiche déjà la
        texture neuronale utilisée ensuite par Découvrir/Ancrer/Relier/Mes acquis. Cela supprime
        le flash bleu pétrole pendant que les premières données sont récupérées. */
     body.page-qcm-du-jour.qcm-learning-background {
+      /* Le fond réel est peint par ::before ci-dessous. Neutraliser ici
+         l'image liée à la hauteur du body évite que background-size:cover
+         recadre la texture quand les rubriques asynchrones agrandissent la
+         page, mouvement particulièrement visible sur mobile. */
+      background-image: none !important;
+      isolation: isolate;
+    }
+    body.page-qcm-du-jour.qcm-learning-background::before {
+      content: "";
+      position: fixed;
+      z-index: -1;
+      inset: 0;
+      pointer-events: none;
       background-image:
         linear-gradient(rgba(16, 24, 32, 0.72), rgba(16, 24, 32, 0.72)),
         url('/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy');
@@ -87,13 +136,7 @@
     @media (min-width: 769px) {
       html:has(body.page-qcm-du-jour.qcm-learning-background),
       body.page-qcm-du-jour.qcm-learning-background {
-        background-image:
-          linear-gradient(rgba(16, 24, 32, 0.72), rgba(16, 24, 32, 0.72)),
-          url('/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
+        background-image: none !important;
       }
     }
     /* Apprentissage reprend le véritable bandeau de navigation d'index. */
@@ -1810,15 +1853,19 @@
        rubrique à l'autre. */
     .qcm-mesqcm-table th:nth-child(1),
     .qcm-mesqcm-table td:nth-child(1) {
-      width: 52%;
+      width: 45%;
     }
     .qcm-mesqcm-table th:nth-child(2),
     .qcm-mesqcm-table td:nth-child(2) {
-      width: 24%;
+      width: 30%;
+      position: relative;
+      left: -4px;
     }
     .qcm-mesqcm-table th:nth-child(3),
     .qcm-mesqcm-table td:nth-child(3) {
-      width: 24%;
+      width: 25%;
+      position: relative;
+      left: -2px;
     }
     /* État et Niveau centrés (nom/valeur au-dessus du chiffre/sous-libellé,
        l'un au-dessus de l'autre, plutôt que collés au bord gauche de la
@@ -2330,21 +2377,17 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
-    /* État de chargement discret (demande du 30/08/2026) : 3 lignes grises qui
-       pulsent doucement — jamais le sablier central utilisé ailleurs sur
-       cette page, qui conviendrait à un remplacement plein-écran mais pas à
-       une section secondaire sous le bouton principal. */
-    .qcm-learn-next-inline-skeleton-row {
-      width: 110px;
-      height: 27px;
-      border-radius: 999px;
-      background: linear-gradient(90deg, #f1f3f5 25%, #e9ecef 37%, #f1f3f5 63%);
-      background-size: 400% 100%;
-      animation: qcmLearnNextInlineSkeletonPulse 1.4s ease infinite;
+    /* La rubrique reste visible pendant le calcul des préconisations. */
+    .qcm-learn-next-inline-hourglass {
+      width: 34px;
+      height: 34px;
+      margin: 0;
     }
-    @keyframes qcmLearnNextInlineSkeletonPulse {
-      0% { background-position: 100% 50%; }
-      100% { background-position: 0 50%; }
+    .qcm-learn-next-inline-empty {
+      margin: 0;
+      color: #66717a;
+      font-size: 13px;
+      text-align: center;
     }
     /* Corrigé des questions dans la fiche "Mes QCM" (cf.
        renderFicheQuestionCorrige) — lecture seule, jamais interactif : la
@@ -2405,6 +2448,215 @@
       font-size: 13px;
       color: #6b7280;
       line-height: 1.4;
+    }
+    /* Édition personnelle des questions (demande du 02/09/2026, cf.
+       enterFicheQuestionsEditMode) — visible uniquement depuis "Mes
+       apprentissages" (openMesQcmFiche), jamais depuis "Les liens"
+       (openMesQcmFicheByLink). Premier enregistrement = bifurcation vers une
+       copie privée côté serveur (POST /edit-questions), jamais visible par
+       les autres visiteurs. */
+    .qcm-fiche-edit-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      width: 100%;
+      margin: 0 0 4px;
+      padding: 10px 16px;
+      border: 1px solid #d7dde2;
+      border-radius: 10px;
+      background: #f8fafb;
+      color: #1f2933;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .qcm-fiche-edit-toggle-btn:hover {
+      background: #eef3f6;
+      border-color: #a8bcc7;
+    }
+    .qcm-fiche-edit-item {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid #eef1f3;
+    }
+    .qcm-fiche-edit-item-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 0 6px;
+    }
+    .qcm-fiche-edit-item-type {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #9ca3af;
+    }
+    .qcm-fiche-edit-field {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 0 8px;
+      padding: 9px 10px;
+      border: 1px solid #d8e0e5;
+      border-radius: 8px;
+      background: #fbfcfd;
+      color: #1c2733;
+      font: inherit;
+      font-size: 14px;
+      line-height: 1.4;
+      resize: vertical;
+    }
+    .qcm-fiche-edit-field:focus {
+      outline: none;
+      border-color: #647984;
+      background: #fff;
+    }
+    .qcm-fiche-edit-field-explanation {
+      min-height: 44px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    .qcm-fiche-edit-option-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .qcm-fiche-edit-option-row input[type="radio"],
+    .qcm-fiche-edit-option-row input[type="checkbox"] {
+      flex: 0 0 auto;
+      width: 17px;
+      height: 17px;
+      cursor: pointer;
+    }
+    .qcm-fiche-edit-option-row input[type="text"] {
+      flex: 1 1 auto;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 7px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #1c2733;
+      font: inherit;
+      font-size: 14px;
+    }
+    .qcm-fiche-edit-option-row input[type="text"]:focus {
+      outline: none;
+      border-color: #647984;
+      background: #fff;
+    }
+    .qcm-fiche-edit-pair-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .qcm-fiche-edit-pair-row input[type="text"] {
+      flex: 1 1 0;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 7px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #1c2733;
+      font: inherit;
+      font-size: 14px;
+    }
+    .qcm-fiche-edit-pair-arrow {
+      flex: 0 0 auto;
+      color: #9ca3af;
+    }
+    .qcm-fiche-edit-delete-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      margin: 4px 0 0;
+      padding: 6px;
+      border: none;
+      background: none;
+      font: inherit;
+      font-size: 12.5px;
+      color: #9ca3af;
+      cursor: pointer;
+    }
+    .qcm-fiche-edit-delete-btn:hover,
+    .qcm-fiche-edit-delete-btn:focus-visible {
+      color: #dc2626;
+      text-decoration: underline;
+    }
+    .qcm-fiche-edit-add-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      width: 100%;
+      margin-top: 18px;
+      padding: 10px 16px;
+      border: 1px dashed #b7c4cc;
+      border-radius: 10px;
+      background: none;
+      color: #516776;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .qcm-fiche-edit-add-btn:hover {
+      border-color: #647984;
+      background: #f8fafb;
+    }
+    .qcm-fiche-edit-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .qcm-fiche-edit-save-btn,
+    .qcm-fiche-edit-cancel-btn {
+      flex: 1 1 0;
+      padding: 11px 16px;
+      border-radius: 10px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .qcm-fiche-edit-save-btn {
+      border: 1px solid #243038;
+      background: #243038;
+      color: #fff;
+    }
+    .qcm-fiche-edit-save-btn:hover {
+      background: #1a232a;
+    }
+    .qcm-fiche-edit-save-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .qcm-fiche-edit-cancel-btn {
+      border: 1px solid #d7dde2;
+      background: #f3f6f4;
+      color: #1f2933;
+    }
+    .qcm-fiche-edit-cancel-btn:hover {
+      background: #e9efec;
+    }
+    .qcm-fiche-edit-error {
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #fdecea;
+      color: #b3261e;
+      font-size: 13px;
     }
     /* Fiche ouverte depuis "Mes apprentissages" : nom + détail pur du
        concept/mécanisme/citation/œuvre, même esprit que les cartes Éclairages
@@ -3339,9 +3591,9 @@
          uniquement sur "Mes apprentissages" (même visibilité que le bouton
          ci-dessus, cf. refreshLearnNextInlineVisibility) ET seulement une fois
          un contenu réel obtenu (jamais un état vide/erreur affiché ici). -->
-    <div class="qcm-learn-next-inline" id="qcm-learn-next-inline" hidden>
+    <div class="qcm-learn-next-inline" id="qcm-learn-next-inline">
       <p class="qcm-mesqcm-group-title">Sujets proposés</p>
-      <div class="qcm-learn-next-inline-list" id="qcm-learn-next-inline-list"></div>
+      <div class="qcm-learn-next-inline-list" id="qcm-learn-next-inline-list"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass qcm-learn-next-inline-hourglass" role="status" aria-label="Chargement des sujets proposés"></div>
     </div>
     <!-- Emplacement d'origine du formulaire IA (cf. openAiGenerateModal) : le
          <form> y revient (reparenté) à la fermeture de la modale, jamais recréé
@@ -3374,7 +3626,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
+<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -3421,7 +3673,7 @@
     // Le bouton de fermeture appartient au document parent : aucun z-index
     // interne à cette iframe ne peut placer le menu devant lui. On le remet
     // donc seulement une fois le panneau refermé.
-    setParentIframeCloseVisible(true);
+    if (!(options && options.keepParentCloseHidden)) setParentIframeCloseVisible(true);
     if (options && options.restoreFocus) knowledgeAddToggle.focus();
   }
   function openKnowledgeAddWindow() {
@@ -3647,11 +3899,24 @@
   // le popup "Explorer les apprentissages disponibles" pour ne pas proposer
   // d'adopter un sujet déjà présent dans la liste personnelle du visiteur.
   var currentMesQcmQuizzes = [];
+  // Ouverture demandée depuis l'alerte globale « Apprentissage prêt » : la
+  // liste est chargée normalement, puis la page globale de cette connaissance
+  // (Noès, parcours, QCM) s'ouvre sans lancer directement la première question.
+  var pendingOpenKnowledgeRowKey = null;
   // Slot|date de l'apprentissage à faire défiler jusqu'à "En attente de
   // réalisation" puis à faire clignoter, une fois la liste rechargée (cf.
   // adoptCatalogRecommendation, consommé et remis à null dans
   // renderMesQcmList — demande du 30/08/2026).
   var pendingHighlightRowKey = null;
+  // Arrivée depuis la notification "connaissance(s) ajoutée(s)" (photo/PDF/
+  // texte/URL/YouTube/manuel, cf. server.js addValidatedKnowledgeImport) —
+  // demande du 02/09/2026, "je veux le même scroll+clignotement qu'ailleurs".
+  // Ces imports n'ont pas de (slot, quizDate) unique à passer dans le lien de
+  // la notification (parfois plusieurs connaissances à la fois, sur des
+  // slots différents), donc on cible simplement le tout premier élément de
+  // la liste une fois rechargée : /api/users/notion-quizzes renvoie déjà "le
+  // plus récemment ajouté en premier" (cf. renderMesQcmList ci-dessous).
+  var highlightLatestQuizOnLoad = false;
   // Jeton incrémenté à chaque loadSlot/loadMesQcm : les callbacks async de
   // ces fonctions (fetch imbriqués, parfois lents) vérifient qu'ils sont
   // toujours le dernier appel en date avant de toucher au DOM. Sans ça, un
@@ -3663,6 +3928,10 @@
   var customSearchGenerationActive = false;
   var pendingNotionQuizPollId = null;
   var pendingNotionQuizStatusVisible = false;
+  // Secours propre à cette page : Safari standalone peut exceptionnellement
+  // refuser/perdre une écriture localStorage. Une génération lancée ici doit
+  // malgré tout rester visible jusqu'à un succès ou un échec confirmé.
+  var pagePendingNotionQuizGenerations = [];
   var customTopicGenerationLabel = '';
 
   // Signale au parent (bandeau bleu + sablier "Chargement en cours",
@@ -3671,8 +3940,10 @@
   // disparaît avant la fin des fetch (Mes QCM / QCM demandé) et laisse
   // apparaître un flash vide le temps que ce script inline prenne le relais.
   var iframeReadySignaled = false;
+  var iframeReadyDeferredForOverview = false;
   function signalIframeReady() {
     if (iframeReadySignaled) return;
+    if (iframeReadyDeferredForOverview) return;
     iframeReadySignaled = true;
     // Les quatre onglets attendent document.fonts.ready (cf.
     // revealCategoryGroupWhenStable). Attendre cette même promesse garantit
@@ -3681,7 +3952,23 @@
     Promise.resolve(categoryLayoutReadyPromise).then(function () {
       var panel = document.getElementById('qcm-panel');
       if (panel) panel.classList.remove('qcm-panel-awaiting-content');
-      requestAnimationFrame(function () {
+      var stableVisibleFrames = 0;
+      var waitForActuallyVisiblePanel = function () {
+        var panelRect = panel && panel.getBoundingClientRect();
+        var panelStyle = panel && window.getComputedStyle(panel);
+        var hasVisibleContent = !!(
+          panel && panelRect &&
+          panelRect.width > 0 && panelRect.height > 0 &&
+          panelStyle.visibility !== 'hidden' &&
+          panelStyle.display !== 'none' &&
+          panel.children.length > 0 &&
+          body.children.length > 0
+        );
+        stableVisibleFrames = hasVisibleContent ? stableVisibleFrames + 1 : 0;
+        if (stableVisibleFrames < 4) {
+          requestAnimationFrame(waitForActuallyVisiblePanel);
+          return;
+        }
         // En page autonome (lien direct, nouvel onglet, lancement PWA), il n'y a
         // pas de parent à qui poster ce message : on signale directement au voile
         // de la page elle-même (cf. markPageArrivalLoadingOverlayReady dans
@@ -3695,7 +3982,8 @@
         try {
           window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
         } catch (e) {}
-      });
+      };
+      requestAnimationFrame(waitForActuallyVisiblePanel);
     });
   }
 
@@ -3906,7 +4194,8 @@
   function setParentIframeCloseVisible(visible) {
     if (window.self === window.top) return;
     try {
-      var closeButton = window.parent.document.getElementById('debate-iframe-modal-close');
+      var closeButton = window.parent.document.getElementById('learning-iframe-modal-close') ||
+        window.parent.document.getElementById('debate-iframe-modal-close');
       if (!closeButton) return;
       closeButton.style.setProperty('display', visible ? 'flex' : 'none', 'important');
       closeButton.style.setProperty('opacity', visible ? '1' : '0', 'important');
@@ -4923,7 +5212,14 @@
   // `level`/`questionCount` (optionnels, demande du 30/08/2026) : juste sous
   // le titre, cf. renderFicheLevelInfo — absents (rien affiché) pour les
   // fiches qui n'en portent pas (ex. erreur de chargement).
-  function buildFicheModalHtml(iconClass, rubricLabel, name, detail, extraHtml, themes, links, level, questionCount) {
+  // `groundingSources` (optionnel, chantier "persister les sources
+  // factuelles", 03/09/2026) : provenance publique de la génération
+  // progressive ({sourceId, domain, url}[], cf. server.js GET .../fiche) —
+  // fusionnée avec detail.sources (mécanisme legacy title/url déjà en place,
+  // cf. juste plus bas) dans le MÊME bloc "Sources", jamais un second bloc
+  // redondant. Absent/vide : comportement inchangé pour tout quiz sans
+  // grounding.
+  function buildFicheModalHtml(iconClass, rubricLabel, name, detail, extraHtml, themes, links, level, questionCount, groundingSources) {
     var html =
       '<div class="qcm-fiche-modal">' +
       '<div class="qcm-fiche-head qcm-fiche-head-no-rubric">' +
@@ -4960,16 +5256,30 @@
     // affiché) pour toute fiche générée sans grounding trouvé, ou pour les
     // rubriques qui n'en produisent jamais (Éclairages/Histoire, import).
     // Tout en bas de la fiche, après le corrigé des questions, juste avant
-    // le bouton de fermeture.
-    var ficheSources = Array.isArray(detail.sources)
-      ? detail.sources.filter(function (s) { return s && /^https?:\/\//i.test(String(s.url || '')); })
-      : [];
+    // le bouton de fermeture. Deux origines possibles, FUSIONNÉES dans le
+    // même bloc plutôt que dupliquées (chantier "persister les sources
+    // factuelles", 03/09/2026) : detail.sources ({title,url}, master legacy)
+    // et groundingSources ({sourceId,domain,url}, génération progressive) —
+    // jamais les deux à la fois pour un même quiz en pratique (deux
+    // pipelines distincts), mais l'union reste correcte dans tous les cas.
+    // Dédupliquée par URL : une même source ne doit jamais apparaître deux
+    // fois sous une même fiche, quelle que soit son origine.
+    var ficheSourcesSeenUrls = {};
+    var ficheSources = [].concat(
+      Array.isArray(detail.sources) ? detail.sources : [],
+      Array.isArray(groundingSources) ? groundingSources : []
+    ).filter(function (s) {
+      var url = s && String(s.url || '');
+      if (!url || !/^https?:\/\//i.test(url) || ficheSourcesSeenUrls[url]) return false;
+      ficheSourcesSeenUrls[url] = true;
+      return true;
+    });
     if (ficheSources.length) {
       html += '<div class="qcm-fiche-sources">' +
         '<h3 class="qcm-fiche-section-label">Sources</h3>' +
         '<ul class="qcm-fiche-sources-list">' +
         ficheSources.map(function (s) {
-          return '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.title || s.url) + '</a></li>';
+          return '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.title || s.domain || s.url) + '</a></li>';
         }).join('') +
         '</ul>' +
         '</div>';
@@ -5095,6 +5405,11 @@
       });
     });
     document.addEventListener('keydown', onKeydown);
+    // Retournée pour l'édition de questions (cf. enterFicheQuestionsEditMode,
+    // demande du 02/09/2026) : besoin de requêter la fiche ouverte et de
+    // déclencher sa fermeture standard (close(), ci-dessus) depuis
+    // l'extérieur, sans dupliquer sa logique.
+    return overlay;
   }
 
   function setCustomSearchStatus(text, isError) {
@@ -5135,10 +5450,31 @@
   }
 
   function getPendingNotionQuizGenerations() {
+    var persisted = [];
     if (typeof window.mnoriaGetPendingNotionQuizGenerations === 'function') {
-      return window.mnoriaGetPendingNotionQuizGenerations();
+      persisted = window.mnoriaGetPendingNotionQuizGenerations();
     }
-    return [];
+    var bySlot = {};
+    persisted.concat(pagePendingNotionQuizGenerations).forEach(function (item) {
+      if (item && item.slot) bySlot[item.slot] = item;
+    });
+    return Object.keys(bySlot).map(function (slot) { return bySlot[slot]; });
+  }
+
+  function startTrackedPendingNotionQuizGeneration(item) {
+    if (!item || !item.slot || !item.label) return;
+    pagePendingNotionQuizGenerations = pagePendingNotionQuizGenerations.filter(function (row) { return row.slot !== item.slot; });
+    pagePendingNotionQuizGenerations.push({ slot: item.slot, label: item.label, startedAt: Date.now() });
+    if (typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
+      window.mnoriaStartPendingNotionQuizGeneration(item);
+    }
+  }
+
+  function finishTrackedPendingNotionQuizGeneration(slot) {
+    pagePendingNotionQuizGenerations = pagePendingNotionQuizGenerations.filter(function (row) { return row.slot !== slot; });
+    if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+      window.mnoriaFinishPendingNotionQuizGeneration(slot);
+    }
   }
 
   function getVisiblePendingNotionQuizGenerations() {
@@ -5157,11 +5493,17 @@
     return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating">' +
       '<h2 class="qcm-mesqcm-group-title">Parcours d’apprentissage en cours de création</h2>' +
       '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
-      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th></tr></thead><tbody>' +
+      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th><th>Niveau</th></tr></thead><tbody>' +
       pending.map(function (item) {
         return '<tr><td><span class="qcm-mesqcm-name-btn is-static">' +
           '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span></span></td>' +
-          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td></tr>';
+          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td>' +
+          // 3e colonne "Niveau" vide (demande du 02/09/2026) : sans elle, table-layout:fixed
+          // ne répartit les largeurs que sur 2 colonnes ici contre 3 dans "Mes apprentissages
+          // en cours" juste en dessous — même largeur théorique (52%/24%) mais rapportée à un
+          // total différent (76% vs 100%), donc la colonne État ne tombait pas au même endroit
+          // entre ces deux rubriques empilées.
+          '<td></td></tr>';
       }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></section>';
   }
 
@@ -5195,8 +5537,8 @@
       availableSlots[mesQcmTrackingSlotIdentity(quiz.slot)] = true;
     });
     pending.forEach(function (item) {
-      if (availableSlots[mesQcmTrackingSlotIdentity(item.slot)] && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-        window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
+      if (availableSlots[mesQcmTrackingSlotIdentity(item.slot)]) {
+        finishTrackedPendingNotionQuizGeneration(item.slot);
       }
     });
     pending = getPendingNotionQuizGenerations();
@@ -5272,9 +5614,7 @@
           return;
         }
         ready.forEach(function (item) {
-          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-            window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
-          }
+          finishTrackedPendingNotionQuizGeneration(item.slot);
         });
         // Vrai échec confirmé par le backend (correctif UX du 01/09/2026,
         // incident "Marxisme") : avant, generation-status ne renvoyait jamais
@@ -5283,9 +5623,7 @@
         // (public/script.js). Message mappé par code, identique à celui d'un
         // échec détecté en direct sur la requête initiale.
         failed.forEach(function (item) {
-          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-            window.mnoriaFinishPendingNotionQuizGeneration(item.slot);
-          }
+          finishTrackedPendingNotionQuizGeneration(item.slot);
           setCustomSearchStatus(customGenerationErrorMessage(item.code), true);
         });
         return fetchLatestMesQcmList();
@@ -5507,8 +5845,8 @@
           setCustomSearchStatus('Génération du QCM « ' + topic + ' » déjà en cours — cela peut prendre plusieurs minutes. Tu seras prévenu·e dès qu’il sera prêt.', false);
           return;
         }
-        if (pendingCustomSlot && typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
-          window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic });
+        if (pendingCustomSlot) {
+          startTrackedPendingNotionQuizGeneration({ slot: pendingCustomSlot, label: topic });
         }
         customSearchGenerationActive = true;
         customTopicGenerationLabel = topic;
@@ -5526,7 +5864,21 @@
         closeAiGenerateModal();
         if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
 
-        fetch('/api/users/notion-quizzes/custom', {
+        // Câblage Phase 1 (03/09/2026, "rendre la génération progressive
+        // accessible depuis l'UI") : la route .../custom/progressive ne sait
+        // encore produire QUE le bloc élémentaire (blocs deepening/expert non
+        // implémentés, cf. rapport Phase 1) — elle ignore d'ailleurs
+        // silencieusement `level` côté serveur. Un choix "Avancé"/"Expert" ne
+        // doit donc jamais y être routé (l'utilisateur recevrait 4-5
+        // questions élémentaires au lieu du niveau demandé) : seul le choix
+        // "Élémentaire" utilise la nouvelle route ; "Avancé"/"Expert"
+        // continuent d'utiliser .../custom (legacy, master complet),
+        // strictement inchangé.
+        var creationEndpoint = level === 'elementaire'
+          ? '/api/users/notion-quizzes/custom/progressive'
+          : '/api/users/notion-quizzes/custom';
+
+        fetch(creationEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ legacyKey: voterKey, topic: topic, level: level })
@@ -5570,9 +5922,7 @@
               return;
             }
             if (!result.data.ok) {
-              if (pendingCustomSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-                window.mnoriaFinishPendingNotionQuizGeneration(pendingCustomSlot);
-              }
+              if (pendingCustomSlot) finishTrackedPendingNotionQuizGeneration(pendingCustomSlot);
               customTopicGenerationLabel = '';
               if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
               if (result.data.diagnostics) {
@@ -5584,9 +5934,7 @@
               );
               return;
             }
-            if (pendingCustomSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-              window.mnoriaFinishPendingNotionQuizGeneration(pendingCustomSlot);
-            }
+            if (pendingCustomSlot) finishTrackedPendingNotionQuizGeneration(pendingCustomSlot);
             customTopicGenerationLabel = '';
             customSearchInput.value = '';
             setCustomSearchStatus('', false);
@@ -5802,7 +6150,10 @@
 
     fetchAndRenderExplore('');
   }
-  exploreBtn.addEventListener('click', openMesQcmExploreModal);
+  exploreBtn.addEventListener('click', function () {
+    closeKnowledgeAddMenu({ keepParentCloseHidden: true });
+    openMesQcmExploreModal();
+  });
 
   // "Générer avec l'IA" (demande du 27/08/2026, "toujours la même présentation") :
   // ouvre le vrai <form> qcm-custom-search dans une fenêtre .qcm-fiche-modal, comme
@@ -5875,7 +6226,7 @@
     if (customSearchInput) customSearchInput.focus();
   }
   if (aiGenerateToggle) aiGenerateToggle.addEventListener('click', function () {
-    closeKnowledgeAddMenu();
+    closeKnowledgeAddMenu({ keepParentCloseHidden: true });
     openAiGenerateModal();
   });
 
@@ -5893,6 +6244,11 @@
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     knowledgeRouteModalEls = null;
   }
+  // Exposée pour que Manuellement/Photo/PDF/Texte/Lien/YouTube (chargées en
+  // iframe ici, même origine) puissent fermer directement cette fenêtre sans
+  // attendre la fin de leur génération — demande du 02/09/2026, bouton "J'ai
+  // compris" sur le message "Nous te préviendrons" (cf. photo-knowledge.html).
+  window.closeKnowledgeRouteModal = closeKnowledgeRouteModal;
   function openKnowledgeRouteModal(title, iconClass, url) {
     closeMesQcmActionModal();
     closeMesQcmExploreModal();
@@ -5948,7 +6304,7 @@
   }
   knowledgeAddMenu.querySelectorAll('[data-url]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      closeKnowledgeAddMenu();
+      closeKnowledgeAddMenu({ keepParentCloseHidden: true });
       openKnowledgeRouteModal(btn.getAttribute('data-title'), btn.getAttribute('data-icon'), btn.getAttribute('data-url'));
     });
   });
@@ -6246,14 +6602,22 @@
     for (var i = 0; i < themeIcons.length; i++) {
       if (themeIcons[i][0].test(suggestedTheme)) return themeIcons[i][1];
     }
+    // Les recommandations catalogue historiques ne transportent pas encore
+    // toujours leur thématique. Dans ce cas seulement, quelques marqueurs
+    // non ambigus du titre évitent l'icône générique « couches » : peuples et
+    // civilisations historiques → Histoire ; géographie physique/politique
+    // → International. Exemple réel : Aztèques, Capitales du monde,
+    // Montagnes de La Réunion.
+    var subjectName = String(item && (item.name || item.title) || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    if (/azteque|inca|maya|civilisation|antiquite|empire ancien/.test(subjectName)) return 'fa-landmark';
+    if (/capitale|geograph|montagne|ocean|continent|archipel|\bile\b|pays du monde/.test(subjectName)) return 'fa-globe';
     return sourceTypeIcons[String(item && item.subjectType || '')] || 'fa-layer-group';
   }
   function renderLearnNextInlineSkeleton() {
     if (!learnNextInlineList) return;
-    learnNextInlineList.innerHTML =
-      '<span class="qcm-learn-next-inline-skeleton-row"></span>' +
-      '<span class="qcm-learn-next-inline-skeleton-row"></span>' +
-      '<span class="qcm-learn-next-inline-skeleton-row"></span>';
+    learnNextInlineList.innerHTML = '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass qcm-learn-next-inline-hourglass" role="status" aria-label="Chargement des sujets proposés">';
   }
   // Rendu de la seule liste EN VUE (learnNextVisible, <= LEARN_NEXT_DISPLAY_COUNT)
   // — learnNextQueue reste invisible, juste une réserve locale.
@@ -6261,7 +6625,7 @@
     if (!learnNextInlineList) return;
     if (!learnNextVisible.length) {
       learnNextInlinePhase = 'empty';
-      learnNextInlineList.innerHTML = '';
+      learnNextInlineList.innerHTML = '<p class="qcm-learn-next-inline-empty">Aucun nouveau sujet suffisamment pertinent pour le moment.</p>';
       refreshLearnNextInlineVisibility();
       return;
     }
@@ -6369,6 +6733,8 @@
     if (learnNextLoadPromise) return learnNextLoadPromise;
     if (learnNextInlinePhase !== 'idle') return Promise.resolve();
     learnNextInlinePhase = 'loading';
+    renderLearnNextInlineSkeleton();
+    refreshLearnNextInlineVisibility();
     learnNextLoadPromise = fetch('/api/users/recommendations/learn-next?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store' })
       .then(function (res) {
         if (!res.ok) throw new Error('http ' + res.status);
@@ -6382,28 +6748,32 @@
       })
       .catch(function () {
         // Best-effort strict (demande du 30/08/2026) : jamais de message
-        // d'erreur agressif, la section reste simplement masquée et le reste
-        // de la page continue de fonctionner normalement.
-        learnNextInlinePhase = 'empty';
-        refreshLearnNextInlineVisibility();
+        // d'erreur agressif ; la rubrique reste néanmoins présente afin de
+        // ne jamais laisser toute la zone sous le bouton visuellement vide.
+        learnNextVisible = [];
+        renderLearnNextInlineList();
       })
       .then(function () { learnNextLoadPromise = null; });
     return learnNextLoadPromise;
   }
   // Visibilité = même créneau que le bouton "Commencer un nouvel
-  // apprentissage" (cf. updateCustomSearchVisibility) ET un contenu réel déjà
-  // obtenu — jamais un état vide/erreur affiché ici (cf. loadLearnNextInline).
+  // apprentissage". Pendant le chargement, la rubrique est déjà présente et
+  // son sablier est remplacé par les sujets dès qu'ils sont tous prêts.
   function refreshLearnNextInlineVisibility() {
     if (!learnNextInline) return;
     var categoryVisible = currentCategory === 'mesqcm' && !currentSlot;
     if (categoryVisible) loadLearnNextInline();
-    learnNextInline.hidden = !(categoryVisible && discoverContentReady && learnNextInlinePhase === 'has-content');
+    learnNextInline.hidden = !(categoryVisible && (
+      learnNextInlinePhase === 'loading' ||
+      (discoverContentReady && (learnNextInlinePhase === 'has-content' || learnNextInlinePhase === 'empty'))
+    ));
   }
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
   // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
   function loadMesQcm() {
+    if (!iframeReadySignaled) iframeReadyDeferredForOverview = true;
     discoverContentReady = false;
     document.body.classList.add('qcm-discover-overview');
     clearQuestionBackgroundImage();
@@ -6428,6 +6798,8 @@
       discoverContentReady = true;
       refreshLearnNextInlineVisibility();
       revealDiscoverActions();
+      iframeReadyDeferredForOverview = false;
+      requestAnimationFrame(function () { requestAnimationFrame(signalIframeReady); });
       return;
     }
     renderMessage('Chargement de tes QCM…');
@@ -6435,21 +6807,21 @@
     var quizzesRequest = fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); });
     var gaugeRequest = fetchLoadGaugeData();
+    // Les préconisations se chargent indépendamment : leur sablier reste
+    // visible sans retenir la liste des apprentissages ni la jauge.
     var recommendationsRequest = loadLearnNextInline();
 
-    // Les trois flux partent simultanément, mais la page n'est peinte qu'une
-    // fois réunis : jauge, actions, sujets proposés et rubriques apparaissent
-    // dans la même peinture finale.
-    Promise.all([quizzesRequest, gaugeRequest, recommendationsRequest])
-      .then(function (results) {
+    // La liste principale n'attend pas la jauge : sur mobile, une lecture
+    // FSRS lente ne doit pas laisser vide toute la moitié basse de la page.
+    var quizzesRenderRequest = quizzesRequest
+      .then(function (data) {
         if (myToken !== loadToken) return;
-        var data = results[0];
-        var gauge = results[1];
-        if (myGaugeToken !== loadGaugeToken) return;
         var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
         syncPendingNotionQuizGenerations(quizzes);
-        if (gauge) renderLoadGauge(gauge);
-        else hideLoadGauge();
+        if (highlightLatestQuizOnLoad) {
+          highlightLatestQuizOnLoad = false;
+          if (quizzes.length) pendingHighlightRowKey = getMesQcmRowKey(quizzes[0]);
+        }
         renderMesQcmList(quizzes);
         updateMesAcquisAvailability(quizzes);
         discoverContentReady = true;
@@ -6458,13 +6830,26 @@
       })
       .catch(function () {
         if (myToken === loadToken) {
-          hideLoadGauge();
           renderMessage('Impossible de charger tes QCM pour le moment.');
           discoverContentReady = true;
           refreshLearnNextInlineVisibility();
           revealDiscoverActions();
         }
       });
+
+    var gaugeRenderRequest = gaugeRequest.then(function (gauge) {
+      if (myToken !== loadToken || myGaugeToken !== loadGaugeToken) return;
+      if (gauge) renderLoadGauge(gauge);
+      else hideLoadGauge();
+    });
+
+    Promise.allSettled([quizzesRenderRequest, gaugeRenderRequest, recommendationsRequest]).then(function () {
+      if (myToken !== loadToken) return;
+      iframeReadyDeferredForOverview = false;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(signalIframeReady);
+      });
+    });
   }
 
   function renderMesQcmEmpty() {
@@ -6708,7 +7093,6 @@
   // (renderMesQcmPaginatedTablesHtml), mêmes interactions (fiche, suppression, sélection
   // groupée), juste une composition différente de sections.
   function wireMesQcmListInteractions(quizzes) {
-    signalIframeReady();
     initMesQcmPagination();
     initMesQcmTableScrollHints();
     initMesQcmThemeMenus();
@@ -6775,6 +7159,21 @@
     html += '</div>';
     body.innerHTML = html;
     wireMesQcmListInteractions(quizzes);
+    if (pendingOpenKnowledgeRowKey) {
+      var openKnowledgeKey = pendingOpenKnowledgeRowKey;
+      pendingOpenKnowledgeRowKey = null;
+      var openKnowledgeIndex = quizzes.findIndex(function (q) {
+        return getMesQcmRowKey(q) === openKnowledgeKey;
+      });
+      if (openKnowledgeIndex !== -1) {
+        var openKnowledgeButton = body.querySelector('[data-mesqcm-index="' + openKnowledgeIndex + '"]');
+        if (openKnowledgeButton) {
+          requestAnimationFrame(function () {
+            openMesQcmActionMenu(openKnowledgeButton, quizzes[openKnowledgeIndex], quizzes);
+          });
+        }
+      }
+    }
     if (pendingHighlightRowKey) {
       var highlightKey = pendingHighlightRowKey;
       pendingHighlightRowKey = null;
@@ -7113,6 +7512,261 @@
     return html;
   }
 
+  var QUESTION_TYPE_EDIT_LABELS = {
+    qcm: 'QCM', texte_a_trous: 'Texte à trous', association: 'Association',
+    intrus: "Trouve l'intrus", qcm_multi: 'Plusieurs réponses', ordre: "Remets dans l'ordre",
+    vrai_faux: 'Vrai ou faux'
+  };
+
+  // Contenu (lecture seule OU édition) de la section "Questions et réponses"
+  // d'une fiche — factorisé pour être rejoué à l'identique par
+  // openMesQcmFicheFromUrl (premier rendu) et par "Annuler" en mode édition
+  // (retour à la lecture seule sans second appel réseau, cf.
+  // enterFicheQuestionsEditMode). `editable` n'ajoute que le bouton
+  // "Modifier ces questions" — jamais affiché depuis openMesQcmFicheByLink
+  // ("Les liens"), seul openMesQcmFiche (onglet "Mes apprentissages",
+  // garantit un lien user_notion_quizzes réel) le passe à true.
+  function buildFicheQuestionsSectionInnerHtml(data, editable) {
+    var html = editable
+      ? '<button type="button" class="qcm-fiche-edit-toggle-btn" data-action="edit-questions"><i class="fa-solid fa-pen" aria-hidden="true"></i> Modifier ces questions</button>'
+      : '';
+    html += '<h3 class="qcm-fiche-section-label">Questions et réponses</h3>';
+    (data.questions || []).forEach(function (q, i) { html += renderFicheQuestionCorrige(q, i); });
+    return html;
+  }
+
+  // Une ligne éditable — calquée sur renderFicheQuestionCorrige, mais avec des
+  // champs modifiables. `q` est null pour une nouvelle question (gabarit qcm
+  // vide, cf. §5 du plan — l'ajout ne propose jamais d'autre type).
+  // `rowKey` distingue le groupe de radios/checkboxes d'une ligne à l'autre
+  // (plusieurs questions à choix unique dans la même fiche ne doivent jamais
+  // partager le même name= de groupe radio).
+  function renderFicheQuestionEditorRow(q, rowKey) {
+    var type = (q && q.type) || 'qcm';
+    var isNew = !q;
+    var html = '<div class="qcm-fiche-edit-item" data-row-key="' + escapeHtml(rowKey) + '" data-question-id="' + escapeHtml(q && q.id ? q.id : '') + '" data-question-type="' + escapeHtml(type) + '">';
+    html += '<div class="qcm-fiche-edit-item-head"><span class="qcm-fiche-edit-item-type">' + escapeHtml(QUESTION_TYPE_EDIT_LABELS[type] || type) + '</span></div>';
+    html += '<textarea class="qcm-fiche-edit-field qcm-fiche-edit-field-question" data-field="question" rows="2" placeholder="Énoncé de la question">' + escapeHtml(q ? q.question : '') + '</textarea>';
+
+    if (type === 'association') {
+      var pairs = (q && q.pairs) || [{ left: '', right: '' }, { left: '', right: '' }, { left: '', right: '' }];
+      pairs.forEach(function (p) {
+        html += '<div class="qcm-fiche-edit-pair-row">' +
+          '<input type="text" data-field="pair-left" value="' + escapeHtml(p.left || '') + '" placeholder="Élément">' +
+          '<span class="qcm-fiche-edit-pair-arrow" aria-hidden="true">→</span>' +
+          '<input type="text" data-field="pair-right" value="' + escapeHtml(p.right || '') + '" placeholder="Correspond à">' +
+          '</div>';
+      });
+    } else if (type === 'ordre') {
+      var items = (q && q.items) || ['', '', ''];
+      items.forEach(function (it) {
+        html += '<div class="qcm-fiche-edit-option-row"><input type="text" data-field="order-item" value="' + escapeHtml(it || '') + '" placeholder="Étape, dans le bon ordre"></div>';
+      });
+    } else if (type === 'qcm_multi') {
+      var mOptions = (q && q.options) || ['', '', '', ''];
+      var correctIndexSet = {};
+      ((q && q.correctIndexes) || []).forEach(function (i) { correctIndexSet[i] = true; });
+      mOptions.forEach(function (opt, i) {
+        html += '<div class="qcm-fiche-edit-option-row">' +
+          '<input type="checkbox" data-field="option-correct" value="' + i + '"' + (correctIndexSet[i] ? ' checked' : '') + '>' +
+          '<input type="text" data-field="option-text" value="' + escapeHtml(opt || '') + '" placeholder="Option ' + (i + 1) + '">' +
+          '</div>';
+      });
+    } else {
+      // qcm / texte_a_trous / intrus / vrai_faux (legacy, edit-only)
+      var options = (q && q.options) || ['', '', '', ''];
+      var correctIndex = isNew ? 0 : (q && q.correctIndex);
+      options.forEach(function (opt, i) {
+        html += '<div class="qcm-fiche-edit-option-row">' +
+          '<input type="radio" name="correct-' + escapeHtml(rowKey) + '" data-field="option-correct" value="' + i + '"' + (i === correctIndex ? ' checked' : '') + '>' +
+          '<input type="text" data-field="option-text" value="' + escapeHtml(opt || '') + '" placeholder="Option ' + (i + 1) + '">' +
+          '</div>';
+      });
+      if (type === 'texte_a_trous') {
+        html += '<p class="qcm-fiche-edit-hint">La question doit contenir <code>___</code> à l\'endroit du trou.</p>';
+      }
+    }
+
+    html += '<textarea class="qcm-fiche-edit-field qcm-fiche-edit-field-explanation" data-field="explanation" rows="2" placeholder="Explication (facultatif)">' + escapeHtml((q && q.explanation) || '') + '</textarea>';
+    html += '<button type="button" class="qcm-fiche-edit-delete-btn" data-action="delete-question"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Supprimer cette question</button>';
+    html += '</div>';
+    return html;
+  }
+
+  // Lit une ligne éditable et la sérialise au format attendu par
+  // POST /api/users/notion-quizzes/edit-questions — retourne null si la ligne
+  // n'est pas exploitable (validation stricte finale toujours faite côté
+  // serveur, ceci n'est qu'un filet côté client pour éviter un aller-retour
+  // réseau inutile sur une saisie manifestement incomplète).
+  function serializeFicheEditRow(rowEl) {
+    var type = rowEl.getAttribute('data-question-type') || 'qcm';
+    var id = rowEl.getAttribute('data-question-id') || '';
+    var question = (rowEl.querySelector('[data-field="question"]').value || '').trim();
+    var explanation = (rowEl.querySelector('[data-field="explanation"]').value || '').trim();
+    if (!question) return null;
+    var result = { type: type, question: question, explanation: explanation };
+    if (id) result.id = id;
+
+    if (type === 'association') {
+      var pairs = [];
+      rowEl.querySelectorAll('.qcm-fiche-edit-pair-row').forEach(function (row) {
+        var left = (row.querySelector('[data-field="pair-left"]').value || '').trim();
+        var right = (row.querySelector('[data-field="pair-right"]').value || '').trim();
+        if (left && right) pairs.push({ left: left, right: right });
+      });
+      if (pairs.length < 3) return null;
+      result.pairs = pairs;
+    } else if (type === 'ordre') {
+      var items = [];
+      rowEl.querySelectorAll('[data-field="order-item"]').forEach(function (input) {
+        var value = (input.value || '').trim();
+        if (value) items.push(value);
+      });
+      if (items.length < 3) return null;
+      result.items = items;
+    } else if (type === 'qcm_multi') {
+      var options = [];
+      var correctIndexes = [];
+      rowEl.querySelectorAll('.qcm-fiche-edit-option-row').forEach(function (row, i) {
+        var text = (row.querySelector('[data-field="option-text"]').value || '').trim();
+        options.push(text);
+        if (row.querySelector('[data-field="option-correct"]').checked) correctIndexes.push(i);
+      });
+      if (options.some(function (o) { return !o; }) || correctIndexes.length < 2) return null;
+      result.options = options;
+      result.correctIndexes = correctIndexes;
+    } else {
+      var opts = [];
+      var correctIndex = -1;
+      rowEl.querySelectorAll('.qcm-fiche-edit-option-row').forEach(function (row, i) {
+        var text = (row.querySelector('[data-field="option-text"]').value || '').trim();
+        opts.push(text);
+        if (row.querySelector('[data-field="option-correct"]').checked) correctIndex = i;
+      });
+      if (opts.some(function (o) { return !o; }) || correctIndex === -1) return null;
+      if (type === 'texte_a_trous' && question.indexOf(FILL_BLANK_MARKER) === -1) return null;
+      result.options = opts;
+      result.correctIndex = correctIndex;
+    }
+    return result;
+  }
+
+  // Bascule lecture seule -> édition (cf. buildFicheQuestionsSectionInnerHtml,
+  // renderFicheQuestionEditorRow) : ajout/suppression de question restent des
+  // opérations purement locales (DOM), un seul aller-retour réseau au clic
+  // "Enregistrer" — la bifurcation vers une copie privée (ou la mise à jour de
+  // celle déjà existante) est décidée côté serveur en une fois, cf.
+  // POST /api/users/notion-quizzes/edit-questions.
+  function enterFicheQuestionsEditMode(overlay, data) {
+    var section = overlay.querySelector('#qcm-fiche-questions-section');
+    if (!section) return;
+    var rowCounter = 0;
+    section.innerHTML =
+      '<h3 class="qcm-fiche-section-label">Questions et réponses</h3>' +
+      '<div id="qcm-fiche-edit-rows"></div>' +
+      '<button type="button" class="qcm-fiche-edit-add-btn" id="qcm-fiche-edit-add-btn"><i class="fa-solid fa-plus" aria-hidden="true"></i> Ajouter une question</button>' +
+      '<p class="qcm-fiche-edit-error" id="qcm-fiche-edit-error" hidden></p>' +
+      '<div class="qcm-fiche-edit-actions">' +
+      '<button type="button" class="qcm-fiche-edit-cancel-btn" id="qcm-fiche-edit-cancel-btn">Annuler</button>' +
+      '<button type="button" class="qcm-fiche-edit-save-btn" id="qcm-fiche-edit-save-btn">Enregistrer les modifications</button>' +
+      '</div>';
+    var rowsContainer = section.querySelector('#qcm-fiche-edit-rows');
+
+    function wireDeleteButtons() {
+      rowsContainer.querySelectorAll('[data-action="delete-question"]').forEach(function (btn) {
+        if (btn.dataset.wired) return;
+        btn.dataset.wired = '1';
+        btn.addEventListener('click', function () {
+          btn.closest('.qcm-fiche-edit-item').remove();
+          positionFicheClose(overlay);
+        });
+      });
+    }
+
+    (data.questions || []).forEach(function (q) {
+      rowCounter += 1;
+      rowsContainer.insertAdjacentHTML('beforeend', renderFicheQuestionEditorRow(q, 'row-' + rowCounter));
+    });
+    wireDeleteButtons();
+    positionFicheClose(overlay);
+
+    section.querySelector('#qcm-fiche-edit-add-btn').addEventListener('click', function () {
+      rowCounter += 1;
+      rowsContainer.insertAdjacentHTML('beforeend', renderFicheQuestionEditorRow(null, 'row-' + rowCounter));
+      wireDeleteButtons();
+      positionFicheClose(overlay);
+      var lastRow = rowsContainer.lastElementChild;
+      if (lastRow && lastRow.scrollIntoView) lastRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    section.querySelector('#qcm-fiche-edit-cancel-btn').addEventListener('click', function () {
+      section.innerHTML = buildFicheQuestionsSectionInnerHtml(data, true);
+      wireFicheQuestionsEditToggle(overlay, data);
+      positionFicheClose(overlay);
+    });
+
+    function showEditError(message) {
+      var errorEl = section.querySelector('#qcm-fiche-edit-error');
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+      positionFicheClose(overlay);
+    }
+
+    section.querySelector('#qcm-fiche-edit-save-btn').addEventListener('click', function () {
+      var errorEl = section.querySelector('#qcm-fiche-edit-error');
+      errorEl.hidden = true;
+      var rows = Array.prototype.slice.call(rowsContainer.querySelectorAll('.qcm-fiche-edit-item'));
+      if (!rows.length) { showEditError('Il doit rester au moins une question.'); return; }
+      var questions = [];
+      for (var i = 0; i < rows.length; i += 1) {
+        var serialized = serializeFicheEditRow(rows[i]);
+        if (!serialized) { showEditError('Vérifie que chaque question a un énoncé, des options remplies et une bonne réponse choisie.'); return; }
+        questions.push(serialized);
+      }
+      var saveBtn = section.querySelector('#qcm-fiche-edit-save-btn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Enregistrement…';
+      fetch('/api/users/notion-quizzes/edit-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legacyKey: voterKey, slot: data.slot, quizDate: data.quizDate, questions: questions })
+      })
+        .then(function (res) {
+          return res.text().then(function (text) {
+            var body = null;
+            try { body = text ? JSON.parse(text) : null; } catch (e) {}
+            if (!res.ok || !body || !body.ok) throw new Error((body && body.error) || "Erreur d'enregistrement.");
+            return body;
+          });
+        })
+        .then(function (result) {
+          // Rechargement complet plutôt qu'une mutation locale de `quiz`
+          // (même pattern qu'adoptCatalogRecommendation) : source de vérité
+          // fraîche pour slot/quizDate/questionCount, jamais désynchronisée.
+          pendingHighlightRowKey = result.slot + '|' + result.quizDate;
+          var closeBtn = overlay.querySelector('.qcm-fiche-close');
+          if (closeBtn) closeBtn.click();
+          loadMesQcm();
+        })
+        .catch(function (error) {
+          showEditError(error.message || 'Erreur réseau. Réessaie dans quelques instants.');
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Enregistrer les modifications';
+        });
+    });
+  }
+
+  function wireFicheQuestionsEditToggle(overlay, data) {
+    var section = overlay.querySelector('#qcm-fiche-questions-section');
+    if (!section) return;
+    var toggleBtn = section.querySelector('[data-action="edit-questions"]');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        enterFicheQuestionsEditMode(overlay, data);
+      });
+    }
+  }
+
   // Clic sur le nom d'un apprentissage dans le tableau "Mes apprentissages" :
   // trois actions possibles (Fiche / QCM / Supprimer) plus le taux d'ancrage,
   // dans une vraie fenêtre modale centrée (même gabarit que la fiche,
@@ -7449,7 +8103,7 @@
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     mesQcmFicheLoadingOverlay = null;
   }
-  function openMesQcmFicheFromUrl(url, fallbackLabel, onClose) {
+  function openMesQcmFicheFromUrl(url, fallbackLabel, onClose, editable) {
     var myToken = ++mesQcmFicheToken;
     closeMesQcmFicheLoadingOverlay();
     // Sablier immédiat (demande du 30/08/2026) : sans lui, cliquer sur
@@ -7484,8 +8138,11 @@
         if (data.error) throw new Error(data.error);
         var meta = ACQUIS_SOURCE_TYPE_META[data.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
         var detail = data.sourceDetail || { meta: null, sections: [] };
-        var corrigeHtml = '<h3 class="qcm-fiche-section-label">Questions et réponses</h3>';
-        (data.questions || []).forEach(function (q, i) { corrigeHtml += renderFicheQuestionCorrige(q, i); });
+        // Enveloppée dans #qcm-fiche-questions-section (demande du 02/09/2026) :
+        // point d'ancrage stable pour basculer lecture/édition sans reconstruire
+        // toute la fiche (cf. enterFicheQuestionsEditMode/wireFicheQuestionsEditToggle).
+        var corrigeHtml = '<div class="qcm-fiche-questions-section" id="qcm-fiche-questions-section">' +
+          buildFicheQuestionsSectionInnerHtml(data, !!editable) + '</div>';
         var name = data.label || fallbackLabel || meta.label;
         // Plus de Noès ici (demande du 30/08/2026, "supprime vidéo noes du
         // coup, et remonte à sa place l'image") : Noès a désormais sa place
@@ -7493,7 +8150,8 @@
         // openMesQcmActionMenu), cette fiche complète revient à l'image
         // seule, déjà positionnée juste sous le titre par buildFicheModalHtml.
         var questionCount = (data.questions || []).length;
-        openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, name, detail, corrigeHtml, data.themes, data.links, data.level, questionCount), onClose);
+        var ficheOverlay = openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, name, detail, corrigeHtml, data.themes, data.links, data.level, questionCount, data.groundingSources), onClose);
+        if (editable) wireFicheQuestionsEditToggle(ficheOverlay, data);
       })
       .catch(function () {
         if (myToken !== mesQcmFicheToken) return;
@@ -7502,7 +8160,10 @@
       });
   }
   function openMesQcmFiche(quiz, onClose) {
-    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(quiz.slot) + '&date=' + encodeURIComponent(quiz.quizDate) + '&legacyKey=' + encodeURIComponent(voterKey || ''), quiz.label, onClose);
+    // editable=true : seul point d'entrée garantissant un lien
+    // user_notion_quizzes réel vers ce (slot, quizDate) — cf. openMesQcmFicheByLink
+    // ci-dessous, qui ne le passe jamais (demande du 02/09/2026).
+    openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(quiz.slot) + '&date=' + encodeURIComponent(quiz.quizDate) + '&legacyKey=' + encodeURIComponent(voterKey || ''), quiz.label, onClose, true);
   }
   // Ouvre la fiche d'une connaissance liée (cf. renderLinksSection) : retrouvée par son
   // identité (type, sourceId) plutôt que par (slot, date), qui peuvent différer de la
@@ -7636,19 +8297,34 @@
     voterKey = typeof getKey === 'function' ? getKey() : null;
 
     refreshSlotsStatus().then(function () {
-        // Lien direct depuis "Faire le QCM" (Éclairages/Ce jour dans
-        // l'Histoire) juste après un clic sur "Mémoriser" : ouvre ce QCM de
-        // notion précis plutôt que la liste "Mes QCM". Sans ce paramètre
-        // (accès normal via le bouton "Connaissances"), "Mes QCM" reste
-        // l'onglet ouvert par défaut — rien d'automatique au-delà.
-        var params = new URLSearchParams(window.location.search);
-        var requestedSlot = params.get('slot');
-        if (requestedSlot && requestedSlot.indexOf('notion:') === 0) {
-          loadSlot(requestedSlot, params.get('date'), params.get('label'));
-          return;
-        }
+      // Lien direct depuis "Faire le QCM" (Éclairages/Ce jour dans
+      // l'Histoire) juste après un clic sur "Mémoriser" : ouvre ce QCM de
+      // notion précis plutôt que la liste "Mes QCM".
+      var params = new URLSearchParams(window.location.search);
+      var requestedSlot = params.get('slot');
+      if (params.get('openKnowledge') === '1' && requestedSlot && requestedSlot.indexOf('notion:') === 0) {
+        pendingOpenKnowledgeRowKey = requestedSlot + '|' + (params.get('date') || '');
+        params.delete('openKnowledge');
+        params.delete('slot');
+        params.delete('date');
+        params.delete('label');
+        var cleanQuery = params.toString();
+        history.replaceState(null, '', window.location.pathname + (cleanQuery ? '?' + cleanQuery : ''));
         loadMesQcm();
-      });
+        return;
+      }
+      if (requestedSlot && requestedSlot.indexOf('notion:') === 0) {
+        loadSlot(requestedSlot, params.get('date'), params.get('label'));
+        return;
+      }
+      if (params.get('highlightLatest') === '1') {
+        highlightLatestQuizOnLoad = true;
+        params.delete('highlightLatest');
+        var remainingQuery = params.toString();
+        history.replaceState(null, '', window.location.pathname + (remainingQuery ? '?' + remainingQuery : ''));
+      }
+      loadMesQcm();
+    });
   }
 
   // getKey() est défini dans script.min.js : ce script inline n'est pas
@@ -7667,17 +8343,17 @@
 <nav class="home-bottom-nav qcm-home-bottom-nav" aria-label="Navigation principale">
   <!-- Lien natif volontaire : le premier appui lance immédiatement le retour,
        sans dépendre de l'ancienne logique de fermeture d'iframe. -->
-  <a href="/?skipStartup=1" class="home-bottom-nav-item" aria-label="Revenir à l'accueil">
+  <a href="/?skipStartup=1" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="event.preventDefault(); openHomePageWithArenaLoading('/?skipStartup=1')">
     <i class="fa-solid fa-house" aria-hidden="true"></i><span>Accueil</span>
   </a>
-  <button type="button" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="qcmBottomNavOpen('/create')">
-    <i class="fa-solid fa-plus" aria-hidden="true"></i><span>Ouvrir</span>
+  <button type="button" class="home-bottom-nav-item" aria-label="Mon fil" aria-disabled="true" tabindex="-1" style="pointer-events:none;cursor:default">
+    <i class="fa-solid fa-bars-staggered" aria-hidden="true"></i><span>Mon fil</span>
   </button>
   <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
     <i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>Actualiser</span>
   </button>
-  <button type="button" class="home-bottom-nav-item" aria-label="Explorer" onclick="qcmBottomNavHome()">
-    <i class="fa-regular fa-compass" aria-hidden="true"></i><span>Explorer</span>
+  <button type="button" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="qcmBottomNavOpen('/create')">
+    <i class="fa-solid fa-plus" aria-hidden="true"></i><span>Ouvrir</span>
   </button>
   <button type="button" class="home-bottom-nav-item home-bottom-nav-item-notifications" aria-label="Notifications" onclick="qcmBottomNavOpen('/notifications')">
     <i class="fa-regular fa-bell" aria-hidden="true"></i><span>Alertes</span>

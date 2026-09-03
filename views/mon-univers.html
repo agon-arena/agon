@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified" />
+<link rel="stylesheet" href="/style.min.css?v=20260903-bg-no-callout" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -75,8 +75,7 @@
        correctifs globaux standalone de cette page ajoutent un calque blanc
        dans la safe-area basse ; en mode mémoire seule il recouvrirait la
        scène plein écran. La texture étoilée remplit déjà toute la hauteur. */
-    body.page-memory-only::before,
-    body.page-memory-only::after {
+    body.page-memory-only::before {
       content: none !important;
       display: none !important;
     }
@@ -121,10 +120,29 @@
           var(--mnoria-mobile-bottom-fill, 0px),
           var(--mnoria-legacy-standalone-bottom-fill, 0px)
         );
+        height: calc(100dvh + var(--memory-standalone-bottom-bleed)) !important;
+        min-height: calc(100dvh + var(--memory-standalone-bottom-bleed)) !important;
       }
       body.page-memory-only #memory-page-main {
         height: calc(100dvh + var(--memory-standalone-bottom-bleed)) !important;
         min-height: calc(100dvh + var(--memory-standalone-bottom-bleed)) !important;
+      }
+      /* Remplissage matériel de la zone peinte sous le viewport par iOS.
+         Contrairement au calque global blanc des pages Notifications, celui-ci
+         reprend le fond nocturne de Ma mémoire et ne peut donc plus former de
+         bande grise pendant la stabilisation de la safe-area. */
+      body.page-memory-only.page-notifications-mobile:not(.admin-edit-open)::after {
+        content: "" !important;
+        display: block !important;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * var(--memory-standalone-bottom-bleed));
+        height: var(--memory-standalone-bottom-bleed);
+        z-index: 10019;
+        pointer-events: none;
+        background: #020610 !important;
+        transform: translateZ(0);
       }
     }
     body.page-memory-only #memory-page-main > h1,
@@ -328,6 +346,41 @@
     }
     body.page-contributions .topbar-message {
       display: none !important;
+    }
+    /* Route /contributions (page Score) : même plein écran structurel que
+       Apprentissage, Notifications et Ouvrir. Le document et le bandeau blanc
+       couvrent la safe-area basse sans scroll synthétique. */
+    html:has(body.page-contributions-only) {
+      background-color: #243038 !important;
+    }
+    @media (max-width: 768px), (display-mode: standalone) {
+      body.page-contributions-only {
+        min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+        background-clip: border-box !important;
+      }
+      @supports (min-height: 100dvh) {
+        body.page-contributions-only {
+          min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+        }
+      }
+      body.page-contributions-only::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+        height: env(safe-area-inset-bottom, 0px);
+        z-index: 10019;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) bottom / 100% 5px no-repeat,
+          #ffffff;
+        transform: translateZ(0);
+      }
+      body.page-contributions-only .home-bottom-nav {
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+      }
     }
     /* Flèche de fermeture/retour : .page-mon-univers (style.css) masque tout
        ce qui n'est pas le logo dans le bandeau — on réintroduit .topbar-actions
@@ -1578,14 +1631,15 @@ function contributionsBottomNavHome() {
       return;
     }
   } catch (error) {}
-  window.location.href = '/?skipStartup=1';
+  if (typeof openHomePageWithArenaLoading === 'function') openHomePageWithArenaLoading('/?skipStartup=1');
+  else window.location.href = '/?skipStartup=1';
 }
 </script>
 
-<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
+<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260901-solar-group-envelopes");
+    import("/mon-univers.js?v=20260903-longpress-no-select");
   }
 </script>
 </body>

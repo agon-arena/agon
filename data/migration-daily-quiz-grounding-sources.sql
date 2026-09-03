@@ -1,0 +1,18 @@
+-- À exécuter une fois dans le SQL editor de Supabase. PRÉPARÉE, PAS EXÉCUTÉE.
+-- Persister les sources factuelles (03/09/2026, audit read-only réel
+-- "Empire carolingien" — les questions persistées portaient déjà
+-- source_ids/supporting_claim, mais rien ne résolvait "SOURCE_1" vers un
+-- domaine ou une URL réelle : grounding.identifiedSources ne vivait qu'en
+-- mémoire pendant la génération, jamais persisté). Additive et
+-- rétrocompatible : NULL par défaut, donc invisible pour tout quiz existant
+-- ou toute génération sans grounding trouvé — aucune ligne existante n'est
+-- modifiée, aucun comportement legacy ne change.
+--
+-- grounding_sources : provenance PUBLIQUE minimale, un tableau
+-- [{sourceId, domain, url}] par ligne — jamais le texte extrait, jamais le
+-- titre de page, jamais sourceScore (aucune nécessité démontrée à ce jour).
+-- Liste globale dédupliquée par URL pour ce QCM, jamais répétée par
+-- question (cf. lib/web-search-grounding.js buildPublicGroundingSources).
+-- NULL pour tout quiz sans grounding (comportement historique inchangé,
+-- jamais interprété comme "sources absentes par erreur").
+ALTER TABLE daily_quiz ADD COLUMN IF NOT EXISTS grounding_sources JSONB;

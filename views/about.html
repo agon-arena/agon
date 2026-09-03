@@ -12,11 +12,68 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
-<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified">
+<link rel="stylesheet" href="/style.min.css?v=20260902-about-panel-up-4">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <style>
+    html:has(body.page-about) {
+      background-color: #243038 !important;
+    }
+    /* Bandeau propre à À propos : le menu reste ancré à gauche, tandis
+       que le bloc logo (et donc le compteur qu'il porte) est centré sur la
+       largeur réelle de l'écran, indépendamment des autres contrôles. */
+    body.page-about .topbar-inner.topbar-home {
+      position: relative !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    body.page-about .home-brand-block {
+      position: absolute !important;
+      left: 50% !important;
+      margin: 0 !important;
+      width: auto !important;
+      transform: translateX(-50%) !important;
+    }
+    body.page-about .home-brand-main {
+      position: relative !important;
+      margin: 0 !important;
+      transform: none !important;
+    }
+    body.page-about .mnoria-time-widget-logo-overlay {
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+    }
+    /* Plein écran structurel en standalone mobile. La page n'a pas de
+       bandeau inférieur : son fond bleu pétrole couvre directement la
+       safe-area basse, sans bande grise ni scroll synthétique. */
+    @media (max-width: 768px), (display-mode: standalone) {
+      body.page-about {
+        min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+        background-color: #243038 !important;
+        background-clip: border-box !important;
+      }
+      @supports (min-height: 100dvh) {
+        body.page-about {
+          min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+        }
+      }
+      body.page-about::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+        height: env(safe-area-inset-bottom, 0px);
+        z-index: 10019;
+        pointer-events: none;
+        background: #243038;
+        transform: translateZ(0);
+      }
+    }
+  </style>
   <script>
     if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
     document.addEventListener('DOMContentLoaded', function(){
@@ -144,7 +201,7 @@
 
   </section>
 </main>
-<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
+<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
 <script>
 (function() {
   var list = document.getElementById('about-media-list');

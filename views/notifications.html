@@ -85,7 +85,7 @@
   goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified" />
+<link rel="stylesheet" href="/style.min.css?v=20260902-community-youtube-badge" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -93,6 +93,41 @@
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <style>
     body { background-color: #243038; }
+    html:has(body.page-notifications-mobile) {
+      background-color: #243038 !important;
+    }
+    /* Plein écran structurel en standalone mobile : comme sur Apprentissage,
+       le document et le bandeau blanc couvrent réellement la safe-area basse.
+       Cela évite la bande grise transitoire sans provoquer de faux scroll. */
+    @media (max-width: 768px), (display-mode: standalone) {
+      body.page-notifications-mobile {
+        min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+        background-clip: border-box !important;
+      }
+      @supports (min-height: 100dvh) {
+        body.page-notifications-mobile {
+          min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+        }
+      }
+      body.page-notifications-mobile::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+        height: env(safe-area-inset-bottom, 0px);
+        z-index: 10019;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) bottom / 100% 5px no-repeat,
+          #ffffff;
+        transform: translateZ(0);
+      }
+      body.page-notifications-mobile .home-bottom-nav {
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+      }
+    }
     html.in-iframe .mobile-back-button,
     html.in-iframe .back-link { display: none !important; }
     html.in-iframe .app-floating-refresh-btn { display: none !important; }
@@ -332,6 +367,21 @@
 </main>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
+  <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="notificationsBottomNavHome()">
+    <i class="fa-solid fa-house"></i>
+    <span>Accueil</span>
+  </button>
+
+  <button type="button" class="home-bottom-nav-item" aria-label="Mon fil" aria-disabled="true" tabindex="-1" style="pointer-events:none;cursor:default">
+    <i class="fa-solid fa-bars-staggered"></i>
+    <span>Mon fil</span>
+  </button>
+
+  <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
+    <i class="fa-solid fa-rotate-right"></i>
+    <span>Actualiser</span>
+  </button>
+
   <a href="/apprentissage" class="home-bottom-nav-item" aria-label="Apprentissages">
     <i class="fa-solid fa-list-check"></i>
     <span>Apprentissages</span>
@@ -341,21 +391,6 @@
     <i class="fa-solid fa-plus"></i>
     <span>Ouvrir</span>
   </a>
-
-  <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
-    <i class="fa-solid fa-rotate-right"></i>
-    <span>Actualiser</span>
-  </button>
-
-  <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="notificationsBottomNavHome()">
-    <i class="fa-solid fa-house"></i>
-    <span>Accueil</span>
-  </button>
-
-  <button type="button" class="home-bottom-nav-item" aria-label="Explorer" onclick="notificationsBottomNavHome()">
-    <i class="fa-regular fa-compass"></i>
-    <span>Explorer</span>
-  </button>
 </nav>
 <script>
 function notificationsBottomNavHome() {
@@ -365,7 +400,8 @@ function notificationsBottomNavHome() {
       return;
     }
   } catch (error) {}
-  window.location.href = '/?skipStartup=1';
+  if (typeof openHomePageWithArenaLoading === 'function') openHomePageWithArenaLoading('/?skipStartup=1');
+  else window.location.href = '/?skipStartup=1';
 }
 </script>
 
@@ -440,7 +476,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-	<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
+	<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
   <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom" defer></script>
 <script>
 (function() {

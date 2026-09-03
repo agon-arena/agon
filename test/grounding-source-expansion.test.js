@@ -45,6 +45,20 @@ test("cas A : 20 demandées, 19 acceptées, 1 rejet numérique -> pas d'expansio
   assert.equal(result.reason, "coverage_sufficient");
 });
 
+// Bloc élémentaire progressif (qualité > quantité, MIN_ELEMENTARY_READY_
+// QUESTIONS=4, cf. server.js generateElementaryBlock) : 4/5 = 80 % de
+// couverture, au-dessus du seuil — confirme numériquement (au lieu de
+// simplement l'affirmer en commentaire) que V3.2 ne se déclenche jamais dès
+// que le seuil de disponibilité elementary est déjà atteint.
+test("bloc élémentaire à 4/5 (MIN_ELEMENTARY_READY_QUESTIONS) : 80% de couverture -> pas d'expansion, même avec un motif documentaire non résolu", () => {
+  const result = shouldExpandGroundingSources(
+    metrics({ finalAccepted: 4, unresolvedReasonCounts: { GROUNDING_ANSWER_NOT_IN_CLAIM: 1 } }),
+    { questionsRequested: 5 }
+  );
+  assert.equal(result.expand, false);
+  assert.equal(result.reason, "coverage_sufficient");
+});
+
 test("cas B : 20 demandées, 8 acceptées, 12 rejets NUMERIC_NOT_SUPPORTED -> expansion", () => {
   const result = shouldExpandGroundingSources(
     metrics({ finalAccepted: 8, unresolvedReasonCounts: { GROUNDING_NUMERIC_CLAIM_NOT_SUPPORTED: 12 } }),

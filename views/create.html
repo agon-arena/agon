@@ -86,7 +86,7 @@
   goHomeIfStale();
 })();
 </script>
-  <link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified">
+  <link rel="stylesheet" href="/style.min.css?v=20260902-community-youtube-badge">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -128,6 +128,40 @@
   </style>
   <style>
     body { background-color: #243038; }
+    html:has(body.page-create-mobile) {
+      background-color: #243038 !important;
+    }
+    /* Plein écran structurel en standalone mobile : le document et le
+       bandeau blanc couvrent réellement la safe-area basse, sans faux scroll. */
+    @media (max-width: 768px), (display-mode: standalone) {
+      body.page-create-mobile {
+        min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+        background-clip: border-box !important;
+      }
+      @supports (min-height: 100dvh) {
+        body.page-create-mobile {
+          min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+        }
+      }
+      body.page-create-mobile::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+        height: env(safe-area-inset-bottom, 0px);
+        z-index: 10019;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) bottom / 100% 5px no-repeat,
+          #ffffff;
+        transform: translateZ(0);
+      }
+      body.page-create-mobile .home-bottom-nav {
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+      }
+    }
     body.in-iframe .create-back-link,
     body.in-iframe .topbar-back-arrow { display: none !important; }
     body.in-iframe .app-floating-refresh-btn { display: none !important; }
@@ -282,7 +316,7 @@
         >
           <a href="/" class="home-topbar-menu-item" id="home-topbar-explore-link">
             <i class="fa-regular fa-compass"></i>
-            <span>Explorer les arènes</span>
+            <span>Accueil</span>
           </a>
 
           <a href="/notifications" class="home-topbar-menu-item" id="home-topbar-notifications-link" onclick="event.preventDefault(); openDebateIframeModal('/notifications')">
@@ -779,7 +813,8 @@ function createBottomNavHome() {
       return;
     }
   } catch (error) {}
-  window.location.href = '/?skipStartup=1';
+  if (typeof openHomePageWithArenaLoading === 'function') openHomePageWithArenaLoading('/?skipStartup=1');
+  else window.location.href = '/?skipStartup=1';
 }
 </script>
 
@@ -830,7 +865,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
+<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
 
 <!-- Modale liens externes -->
 <div id="ext-link-overlay" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.6); backdrop-filter:blur(3px);">

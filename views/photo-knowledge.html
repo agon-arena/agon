@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Importer une photo | mnoria</title>
 <link rel="icon" type="image/png" href="/mnoria-icon-64.png?v=20260825-mnoria-icon-v2">
-<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified">
+<link rel="stylesheet" href="/style.min.css?v=20260902-community-youtube-badge">
 <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
 <style>
   /* Page volontairement autonome (pas de dépendance à public/script.js) :
@@ -257,10 +257,13 @@
     <ul id="pk-knowledge-list" class="pk-knowledge-list"></ul>
     <div class="pk-actions">
       <button class="pk-btn secondary" id="pk-add-row-btn" type="button">+ Ajouter une connaissance</button>
-      <button class="pk-btn" id="pk-add-btn">Ajouter à ma mémoire</button>
+      <button class="pk-btn" id="pk-add-btn">Ajouter aux apprentissages</button>
       <button class="pk-btn discreet" id="pk-results-choose-other-btn">Analyser une autre photo</button>
     </div>
     <p id="pk-add-status" class="pk-info" role="status" style="display:none; margin-top:12px;"></p>
+    <div class="pk-actions" id="pk-add-status-actions" style="display:none; margin-top:0;">
+      <button class="pk-btn secondary" id="pk-add-status-understood-btn" type="button">J'ai compris</button>
+    </div>
   </div>
 
   <div class="pk-confirm-overlay" id="pk-reset-confirm" role="dialog" aria-modal="true" aria-labelledby="pk-reset-confirm-title" hidden>
@@ -716,7 +719,20 @@
 
     addBtn.disabled = true;
     addBtn.textContent = "Ajout en cours…";
-    addStatus.textContent = "Création des questions et ajout à ta mémoire…";
+    // Même message que la génération IA (demande du 02/09/2026) : la création
+    // des questions peut prendre plusieurs minutes pour plusieurs connaissances
+    // à la fois, et une notification push arrive bien à la fin (cf. server.js
+    // addValidatedKnowledgeImport, même mécanisme que /notion-quizzes/custom)
+    // même si l'utilisateur a quitté la page entre-temps.
+    addStatus.textContent = "La génération peut prendre plusieurs minutes. Nous te préviendrons lorsque ce sera prêt.";
+    // "J'ai compris" (demande du 02/09/2026) : ferme la fenêtre sans attendre —
+    // fermer l'iframe n'interrompt pas la génération côté serveur (elle
+    // continue même après un client déconnecté, cf. commentaire ci-dessus).
+    var addStatusActions = document.getElementById("pk-add-status-actions");
+    addStatusActions.style.display = "flex";
+    // Le message peut apparaître sous une longue liste de connaissances,
+    // hors de l'écran visible sans ce scroll (demande du 02/09/2026).
+    addStatusActions.scrollIntoView({ behavior: "smooth", block: "end" });
 
     fetch(isManualMode ? "/api/manual-knowledge/add" : (isPdfMode ? "/api/pdf-knowledge/add" : (isTextMode ? "/api/text-knowledge/add" : (isUrlMode ? "/api/url-knowledge/add" : (isYoutubeMode ? "/api/youtube-knowledge/add" : "/api/photo-knowledge/add")))), {
       method: "POST",
@@ -739,6 +755,7 @@
         });
       })
       .then(function (result) {
+        addStatusActions.style.display = "none";
         var added = Number(result.addedCount || 0);
         var existing = Number(result.existingCount || 0);
         var failed = Number(result.errorCount || 0);
@@ -757,12 +774,30 @@
         }
       })
       .catch(function (error) {
+        addStatusActions.style.display = "none";
         addStatus.textContent = error.message || "Erreur réseau. Réessaie dans quelques instants.";
         addBtn.disabled = false;
       })
       .finally(function () {
-        addBtn.textContent = "Ajouter à ma mémoire";
+        addBtn.textContent = "Ajouter aux apprentissages";
       });
+  });
+
+  // "J'ai compris" (demande du 02/09/2026) : ferme la fenêtre plutôt que de
+  // laisser l'utilisateur devant un message qui ne bouge plus. Cette page est
+  // chargée en iframe dans .qcm-knowledge-route-modal (cf. openKnowledgeRouteModal,
+  // views/qcm-du-jour.html) — même origine, donc appel direct de la fonction du
+  // parent plutôt qu'un postMessage (même convention que goHome() dans
+  // bottom-nav.js pour .qcm-fiche-modal/closeDebateIframeModal). Repli sur une
+  // vraie navigation si la page est ouverte hors de cette fenêtre.
+  document.getElementById("pk-add-status-understood-btn").addEventListener("click", function () {
+    try {
+      if (window.parent && window.parent !== window && typeof window.parent.closeKnowledgeRouteModal === "function") {
+        window.parent.closeKnowledgeRouteModal();
+        return;
+      }
+    } catch (error) {}
+    window.location.href = "/qcm-du-jour";
   });
 
   if (isManualMode) {

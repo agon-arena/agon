@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
-<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified" />
+<link rel="stylesheet" href="/style.min.css?v=20260902-community-youtube-badge" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -21,6 +21,35 @@
   <script>if (window.self !== window.top) document.documentElement.classList.add('in-iframe'); document.addEventListener('DOMContentLoaded', function(){ if (window.self !== window.top) document.body.classList.add('in-iframe'); });</script>
   <style>
     body { background-color: #243038; }
+    html:has(body.page-best-ideas-fullscreen) {
+      background-color: #243038 !important;
+    }
+    /* Plein écran structurel en standalone mobile. Cette page masque son
+       bandeau inférieur : c'est donc le fond bleu pétrole qui couvre la
+       safe-area, sans bande grise et sans scroll synthétique. */
+    @media (max-width: 768px), (display-mode: standalone) {
+      body.page-best-ideas-fullscreen {
+        min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+        background-clip: border-box !important;
+      }
+      @supports (min-height: 100dvh) {
+        body.page-best-ideas-fullscreen {
+          min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+        }
+      }
+      body.page-best-ideas-fullscreen::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+        height: env(safe-area-inset-bottom, 0px);
+        z-index: 10019;
+        pointer-events: none;
+        background: #243038;
+        transform: translateZ(0);
+      }
+    }
     html.in-iframe .mobile-back-button,
     html.in-iframe .back-link { display: none !important; }
     .page-notifications .topbar-inner,
@@ -303,7 +332,7 @@
   </style>
   <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
 </head>
-<body class="page-notifications page-notifications-mobile page-contributions">
+<body class="page-notifications page-notifications-mobile page-contributions page-best-ideas-fullscreen">
 <header class="topbar topbar--mnoria-uniform">
   <div class="container topbar-inner topbar-home">
 
@@ -552,6 +581,6 @@
 })();
 </script>
 
-<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
+<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
 <script src="/bottom-nav.js?v=20260830-no-nav-param"></script>
 </body></html>

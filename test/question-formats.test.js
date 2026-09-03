@@ -21,7 +21,11 @@ const {
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
   selectQuestionsForRequestedLevel,
-  isMasterEligibleQuiz
+  isMasterEligibleQuiz,
+  MIN_ELEMENTARY_READY_QUESTIONS,
+  ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE,
+  computeElementaryCandidateDistribution,
+  selectOneQuestionPerKnowledgeTarget
 } = require("../lib/question-formats");
 const { resolveActiveQuestionVariant } = require("../lib/spaced-repetition/question-variant");
 
@@ -1110,4 +1114,144 @@ test("isMasterEligibleQuiz : pedagogicalRank non entier (corruption défensive) 
   assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: "1" }]), false);
   assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: 1.5 }]), false);
   assert.equal(isMasterEligibleQuiz([{ pedagogicalRank: null }]), false);
+});
+
+// ── Génération progressive (Phase 1, 02/09/2026 ; taille FLEXIBLE du
+// curriculum, 02/09/2026 suite ; qualité > quantité, 03/09/2026 suite —
+// audit réel "Bouddhisme tibétain") : `context.progressiveStatus`/`context.
+// curriculum` — additif, jamais un changement du comportement ci-dessus
+// (aucun argument `context` dans tous les tests précédents, qui continuent
+// tous de passer). Le seuil "elementary_ready" est désormais
+// MIN_ELEMENTARY_READY_QUESTIONS (4), jamais le nombre d'items "elementary"
+// du curriculum (4 OU 5 selon sa taille) : un bloc à 4 questions RÉELLEMENT
+// validées est éligible même si le curriculum en portait 5 — servir vite et
+// bien prime sur attendre une question de plus. "deepening_ready"/"ready"
+// restent inchangés (hors périmètre de ce correctif).
+
+function curriculumWithLevelCounts({ elementary = 0, deepening = 0, expert = 0 }) {
+  const items = [];
+  for (let i = 0; i < elementary; i += 1) items.push({ level: "elementary" });
+  for (let i = 0; i < deepening; i += 1) items.push({ level: "deepening" });
+  for (let i = 0; i < expert; i += 1) items.push({ level: "expert" });
+  return items;
+}
+
+test("isMasterEligibleQuiz : elementary_ready exige MIN_ELEMENTARY_READY_QUESTIONS (4), pas le nombre d'items \"elementary\" du curriculum (5 pour un curriculum à 20)", () => {
+  const curriculum = curriculumWithLevelCounts({ elementary: 5, deepening: 5, expert: 10 });
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 5 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready", curriculum }), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 5 }, (_, i) => ({ pedagogicalRank: i + 1 }))), false, "sans le contexte progressif, le seuil legacy (15) doit rester inchangé");
+});
+
+test("isMasterEligibleQuiz : elementary_ready exige MIN_ELEMENTARY_READY_QUESTIONS (4) pour un curriculum plus petit (15 au total, 4 elementary) — inchangé quand le curriculum n'offre déjà que 4", () => {
+  const curriculum = curriculumWithLevelCounts({ elementary: 4, deepening: 4, expert: 7 });
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 4 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready", curriculum }), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 3 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready", curriculum }), false);
+});
+
+test("isMasterEligibleQuiz : 4 questions sur 5 connaissances elementary deviennent éligibles (qualité > quantité) — jamais en dessous de 4", () => {
+  const curriculum = curriculumWithLevelCounts({ elementary: 5, deepening: 5, expert: 10 });
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 4 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready", curriculum }), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 3 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready", curriculum }), false, "en dessous de MIN_ELEMENTARY_READY_QUESTIONS (4), toujours inéligible — cas réel \"Bouddhisme tibétain\" (3/5) ne devient jamais un succès");
+});
+
+test(`MIN_ELEMENTARY_READY_QUESTIONS vaut exactement 4`, () => {
+  assert.equal(MIN_ELEMENTARY_READY_QUESTIONS, 4);
+});
+
+// ── Sur-génération initiale du bloc élémentaire (03/09/2026, audit latence
+// réel "Empire carolingien") : computeElementaryCandidateDistribution /
+// selectOneQuestionPerKnowledgeTarget. Le comportement du pipeline qualité
+// lui-même (earlyStopCountFn/filterRejectedForRegeneration/
+// onInitialBatchAccepted) est testé sur de vraies données dans
+// test/qcm-quality.test.js — ce bloc ne reteste que ces deux fonctions pures.
+
+test("ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE vaut exactement 8", () => {
+  assert.equal(ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE, 8);
+});
+
+test("computeElementaryCandidateDistribution(5, 8) = [2,2,2,1,1] (cas réel : curriculum elementary à 5 connaissances)", () => {
+  assert.deepEqual(computeElementaryCandidateDistribution(5, 8), [2, 2, 2, 1, 1]);
+});
+
+test("computeElementaryCandidateDistribution(4, 8) = [2,2,2,2] (curriculum elementary à 4 connaissances, plancher MIN_LEVEL_SIZE)", () => {
+  assert.deepEqual(computeElementaryCandidateDistribution(4, 8), [2, 2, 2, 2]);
+});
+
+test("computeElementaryCandidateDistribution : la somme vaut toujours poolSize (au moins un candidat par connaissance, jamais zéro)", () => {
+  for (const targetCount of [4, 5]) {
+    const distribution = computeElementaryCandidateDistribution(targetCount, 8);
+    assert.equal(distribution.length, targetCount);
+    assert.ok(distribution.every((n) => n >= 1), "au moins une tentative par connaissance");
+    assert.equal(distribution.reduce((sum, n) => sum + n, 0), 8);
+  }
+});
+
+test("computeElementaryCandidateDistribution : repli défensif si targetCount>=poolSize (ne devrait jamais arriver en pratique) — un candidat par connaissance, jamais de surplus négatif", () => {
+  assert.deepEqual(computeElementaryCandidateDistribution(9, 8), [1, 1, 1, 1, 1, 1, 1, 1, 1]);
+  assert.deepEqual(computeElementaryCandidateDistribution(8, 8), [1, 1, 1, 1, 1, 1, 1, 1]);
+});
+
+test("computeElementaryCandidateDistribution(0) = [] (tableau vide, jamais une erreur)", () => {
+  assert.deepEqual(computeElementaryCandidateDistribution(0, 8), []);
+});
+
+test("selectOneQuestionPerKnowledgeTarget : au plus une question par knowledgeTarget distinct, la PREMIÈRE conservée (jamais la dernière ni un choix arbitraire)", () => {
+  const questions = [
+    { id: "a", knowledgeTarget: "Ottawa est la capitale du Canada." },
+    { id: "b", knowledgeTarget: "Le français est la langue officielle du Québec." },
+    { id: "c", knowledgeTarget: "Ottawa est la capitale du Canada." }
+  ];
+  const result = selectOneQuestionPerKnowledgeTarget(questions);
+  assert.deepEqual(result.map((q) => q.id), ["a", "b"], "deux questions valides du même target ne comptent qu'une fois, la première conservée");
+});
+
+test("selectOneQuestionPerKnowledgeTarget : comparaison texte normalisée (casse/espaces), jamais stricte caractère par caractère", () => {
+  const questions = [
+    { id: "a", knowledgeTarget: "Ottawa est la capitale du Canada." },
+    { id: "b", knowledgeTarget: "  OTTAWA EST LA CAPITALE DU CANADA.  " }
+  ];
+  assert.deepEqual(selectOneQuestionPerKnowledgeTarget(questions).map((q) => q.id), ["a"]);
+});
+
+test("selectOneQuestionPerKnowledgeTarget : knowledgeTarget vide/absent toujours écarté, jamais conservé", () => {
+  const questions = [{ id: "a", knowledgeTarget: "" }, { id: "b", knowledgeTarget: null }, { id: "c" }];
+  assert.deepEqual(selectOneQuestionPerKnowledgeTarget(questions), []);
+});
+
+test("selectOneQuestionPerKnowledgeTarget : tableau vide/non-tableau ne jette jamais", () => {
+  assert.deepEqual(selectOneQuestionPerKnowledgeTarget([]), []);
+  assert.deepEqual(selectOneQuestionPerKnowledgeTarget(null), []);
+  assert.deepEqual(selectOneQuestionPerKnowledgeTarget(undefined), []);
+});
+
+test("isMasterEligibleQuiz : progressiveStatus='deepening_ready' exige (elementary + deepening) questions du curriculum, jamais un nombre fixe", () => {
+  const curriculum = curriculumWithLevelCounts({ elementary: 4, deepening: 4, expert: 9 }); // N=17
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 8 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "deepening_ready", curriculum }), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 7 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "deepening_ready", curriculum }), false);
+});
+
+test("isMasterEligibleQuiz : progressiveStatus='ready' retombe sur le même seuil que le master legacy (MIN_MASTER_QUESTIONS=15), indépendamment du curriculum", () => {
+  const curriculum = curriculumWithLevelCounts({ elementary: 4, deepening: 4, expert: 7 }); // ne doit jamais être utilisé pour "ready"
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 15 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "ready", curriculum }), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 14 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "ready", curriculum }), false);
+});
+
+test("isMasterEligibleQuiz : curriculum absent/vide avec progressiveStatus='elementary_ready' retombe sur le repli défensif MIN_ELEMENTARY_READY_QUESTIONS (4) — cas censé ne jamais se produire en pratique", () => {
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 4 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready" }), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 4 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready", curriculum: [] }), true);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 3 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "elementary_ready", curriculum: null }), false);
+});
+
+test("isMasterEligibleQuiz : un bloc progressif reste soumis à l'exigence de pedagogicalRank sur CHAQUE question", () => {
+  const curriculum = curriculumWithLevelCounts({ elementary: 5, deepening: 5, expert: 10 });
+  const questions = Array.from({ length: 5 }, (_, i) => ({ pedagogicalRank: i + 1 }));
+  delete questions[2].pedagogicalRank;
+  assert.equal(isMasterEligibleQuiz(questions, { progressiveStatus: "elementary_ready", curriculum }), false);
+});
+
+test("isMasterEligibleQuiz : progressiveStatus inconnu/vide retombe sur le comportement legacy inchangé", () => {
+  const questions = Array.from({ length: 5 }, (_, i) => ({ pedagogicalRank: i + 1 }));
+  assert.equal(isMasterEligibleQuiz(questions, { progressiveStatus: "" }), false);
+  assert.equal(isMasterEligibleQuiz(questions, { progressiveStatus: "unknown_status" }), false);
+  assert.equal(isMasterEligibleQuiz(questions, {}), false);
 });

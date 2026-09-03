@@ -2316,7 +2316,14 @@
     if (progressSlot) progressSlot.innerHTML = '';
 
     try {
-      const { r, json } = await fetchStoredAnalysis(debateId);
+      // Le résumé léger est lancé dès le <head> de debate.html. Il suffit pour
+      // afficher immédiatement le badge supérieur ; le rapport complet et le
+      // calcul du compteur sous le barème continuent à charger séparément.
+      const early = window.__mnoriaEarlyAnalysisFetch;
+      const earlyMatches = early && String(early.debateId || '') === String(debateId) && early.promise;
+      const { r, json } = earlyMatches
+        ? await early.promise
+        : await fetchStoredAnalysis(debateId);
       if (!r.ok) return;
 
       const hasPending = (json.status === 'scheduled' || json.status === 'generating') && !!json.scheduledAt;
@@ -2324,7 +2331,7 @@
       // déjà (cf. _scheduleAnalysisIfNeeded côté serveur) : dans ce cas, seul le
       // compte à rebours est affiché ici — le rapport existant reste consultable
       // via le bouton "Voir le rapport" du bloc d'analyse, pas via ce badge.
-      const hasReady = !hasPending && !!(json.raw || json.status === 'ready');
+      const hasReady = !hasPending && !!(json.hasReport || json.raw || json.status === 'ready');
 
       if (hasReady) {
         const readyBadge = document.createElement('span');
@@ -2673,7 +2680,12 @@
     if (wantsReport && hasReport) openReport(debateId, undefined, { fromNotification: true });
   }
 
-  if (document.readyState === 'loading') {
+  // À cet emplacement du template, les deux slots IA sont déjà dans le DOM.
+  // Démarrer tout de suite évite d'attendre les nombreux scripts inline placés
+  // après ce module et donc retarde moins le badge sous le bloc titre.
+  if (document.getElementById('debate-ai-countdown-slot') && getDebateId()) {
+    init();
+  } else if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();

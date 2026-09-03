@@ -49,9 +49,22 @@ test("_callOpenAI lit opts.generationId et le transmet aux 3 recordAiUsage (éch
 
 test("D — qualityControlRawQuestions accepte generationId et le transmet au critique sémantique (question_semantic_review) ET à la régénération ciblée (question_targeted_regeneration)", () => {
   const fn = sliceBetween(/async function qualityControlRawQuestions\(\{/, "\n// QCM d'une seule notion");
-  assert.match(fn, /generationId\s*\n\}\) \{/, "generationId doit être un paramètre déstructuré de qualityControlRawQuestions");
-  assert.match(fn, /feature: "question_semantic_review",\s*\n\s*generationId\s*\n\s*\}\);/);
-  assert.match(fn, /feature: "question_targeted_regeneration",\s*\n\s*generationId\s*\n\s*\}\);/);
+  assert.match(fn, /generationId,/, "generationId doit être un paramètre déstructuré de qualityControlRawQuestions");
+  // reviewFeature/regenerationFeature (Phase 1 génération progressive,
+  // 02/09/2026) : paramètres optionnels ajoutés APRÈS generationId, avec pour
+  // valeur par défaut EXACTEMENT les chaînes vérifiées ci-dessous — donc
+  // aucun changement de feature journalisée pour un appelant qui ne les
+  // fournit pas (tous les appelants d'avant ce correctif).
+  // earlyStopAtAccepted (qualité > quantité, 03/09/2026) : paramètre
+  // optionnel supplémentaire ajouté APRÈS regenerationFeature, absent
+  // (undefined) pour tout appelant qui ne le fournit pas.
+  // earlyStopCountFn/filterRejectedForRegeneration/onInitialBatchAccepted
+  // (sur-génération initiale, 03/09/2026) : trois paramètres optionnels
+  // supplémentaires ajoutés APRÈS earlyStopAtAccepted, tous absents
+  // (undefined) pour tout appelant qui ne les fournit pas.
+  assert.match(fn, /reviewFeature = "question_semantic_review",\s*\n\s*regenerationFeature = "question_targeted_regeneration",\s*\n[\s\S]{0,700}?earlyStopAtAccepted,\s*\n[\s\S]{0,700}?onInitialBatchAccepted\s*\n\}\) \{/);
+  assert.match(fn, /feature: reviewFeature,\s*\n\s*generationId\s*\n\s*\}\);/);
+  assert.match(fn, /feature: regenerationFeature,\s*\n\s*generationId\s*\n\s*\}\);/);
 });
 
 // ── generateNotionLevelQuiz : fiche, vérification, génération, critique ───

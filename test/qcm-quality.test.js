@@ -11,6 +11,7 @@ const {
   validateFinalShuffledQuestion,
   buildSemanticReviewPrompt
 } = require("../lib/qcm-quality");
+const { selectOneQuestionPerKnowledgeTarget } = require("../lib/question-formats");
 
 function q(question = "Quelle est la capitale du Canada ?", overrides = {}) {
   return {
@@ -302,6 +303,337 @@ test("un véritable reject sémantique régénère uniquement la question refus�
   assert.equal(result.metrics.criticTechnicalRetries, 0);
   assert.ok(Object.keys(result.metrics.reasonCounts).length >= 1);
   assert.deepEqual(result.metrics.unresolvedReasonCounts, {});
+});
+
+// ── earlyStopAtAccepted (qualité > quantité, 03/09/2026 — bloc élémentaire
+// progressif uniquement, cf. server.js generateElementaryBlock/
+// qualityControlRawQuestions) : optionnel, jamais un assouplissement des
+// critères de validation eux-mêmes — seulement une décision d'arrêter la
+// boucle de régénération plus tôt une fois le seuil de questions RÉELLEMENT
+// validées atteint. Absent (undefined) dans tous les autres tests de ce
+// fichier, qui continuent de régénérer jusqu'à épuisement des rejets ou du
+// budget de cycles — comportement legacy strictement inchangé.
+
+// 5 questions structurellement DISTINCTES (texte et options) — jamais un
+// gabarit répété, qui déclencherait à tort DUPLICATE_QUESTION (contrôle
+// déterministe inter-questions du lot, cf. validateQuestionBatchQuality).
+function fiveDistinctQuestions() {
+  return [
+    q("Quelle est la capitale du Canada ?", { sourceId: "s1", options: ["Ottawa", "Toronto", "Montréal", "Vancouver"], correctIndex: 0, knowledgeTarget: "Ottawa est la capitale du Canada." }),
+    q("Quelle langue est officielle au Québec ?", { sourceId: "s2", options: ["Français", "Anglais", "Espagnol", "Portugais"], correctIndex: 0, knowledgeTarget: "Le français est la langue officielle du Québec." }),
+    q("Quel océan borde la côte est du Canada ?", { sourceId: "s3", options: ["Atlantique", "Pacifique", "Arctique", "Indien"], correctIndex: 0, knowledgeTarget: "L'océan Atlantique borde la côte est du Canada." }),
+    q("Quelle monnaie utilise le Canada ?", { sourceId: "s4", options: ["Dollar canadien", "Euro", "Livre sterling", "Dollar américain"], correctIndex: 0, knowledgeTarget: "Le Canada utilise le dollar canadien." }),
+    q("Quelle province canadienne est la plus peuplée ?", { sourceId: "s5", options: ["Ontario", "Québec", "Alberta", "Colombie-Britannique"], correctIndex: 0, knowledgeTarget: "L'Ontario est la province la plus peuplée du Canada." })
+  ];
+}
+
+test("earlyStopAtAccepted : arrête la boucle dès que le seuil de questions VALIDÉES est atteint, sans jamais régénérer pour la dernière question rejetée", async () => {
+  const five = fiveDistinctQuestions();
+  let regenerationCalls = 0;
+  const result = await runQuestionQualityPipeline(five, {
+    earlyStopAtAccepted: 4,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry, index) => ({
+        id: entry.id,
+        // La 5e question (dernier index) est refusée — un rejet réel, jamais simulé comme accepté.
+        verdict: index === 4 ? "reject" : "accept",
+        reasonCodes: index === 4 ? ["AMBIGUOUS_WORDING"] : [],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async () => { regenerationCalls += 1; return []; }
+  });
+  assert.equal(result.accepted.length, 4, "exactement les 4 questions réellement validées, jamais 5 (aucune question rejetée comblée artificiellement)");
+  assert.equal(regenerationCalls, 0, "aucune régénération déclenchée pour la 5e question une fois le seuil de 4 atteint");
+  assert.equal(result.metrics.finalAccepted, 4);
+  assert.equal(result.metrics.regenerationCycles, 0);
+  // La question rejetée reste bien tracée comme rejetée, jamais silencieusement absorbée.
+  assert.equal(result.rejected.length, 1);
+  assert.ok(Object.keys(result.metrics.unresolvedReasonCounts).includes("AMBIGUOUS_WORDING"));
+});
+
+test("earlyStopAtAccepted : sans lui (undefined), le comportement legacy (régénérer jusqu'au budget) reste strictement inchangé", async () => {
+  const five = fiveDistinctQuestions();
+  let regenerationCalls = 0;
+  await runQuestionQualityPipeline(five, {
+    maxRetries: 1,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry, index) => ({
+        id: entry.id,
+        verdict: index === 4 ? "reject" : "accept",
+        reasonCodes: index === 4 ? ["AMBIGUOUS_WORDING"] : [],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async () => { regenerationCalls += 1; return []; }
+  });
+  assert.equal(regenerationCalls, 1, "sans earlyStopAtAccepted, une régénération est toujours tentée pour la question rejetée — comportement inchangé");
+});
+
+test("earlyStopAtAccepted : n'arrête jamais la boucle avant d'avoir validé le cycle courant (le seuil est vérifié APRÈS acceptation, jamais en cours de cycle)", async () => {
+  const three = fiveDistinctQuestions().slice(0, 3);
+  let regenerationCalls = 0;
+  const result = await runQuestionQualityPipeline(three, {
+    earlyStopAtAccepted: 4,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id, verdict: "accept", reasonCodes: [],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async () => { regenerationCalls += 1; return []; }
+  });
+  // Seuil jamais atteint (3 < 4) : la boucle se termine normalement (plus rien à régénérer), pas par earlyStop.
+  assert.equal(result.accepted.length, 3);
+  assert.equal(regenerationCalls, 0);
+});
+
+// ── Sur-génération initiale du bloc élémentaire (03/09/2026, audit latence
+// réel "Empire carolingien") : earlyStopCountFn/filterRejectedForRegeneration/
+// onInitialBatchAccepted — mêmes garanties qu'earlyStopAtAccepted ci-dessus
+// (jamais un assouplissement de validation), appliquées à un pool de
+// candidats où PLUSIEURS peuvent partager le même knowledgeTarget. Absents
+// (undefined) dans tous les autres tests de ce fichier : comportement
+// legacy strictement inchangé, cf. tests dédiés plus bas.
+
+// 8 candidats structurellement DISTINCTS répartis sur 5 knowledgeTarget
+// (2,2,2,1,1 — même répartition que computeElementaryCandidateDistribution(5,8),
+// cf. test/question-formats.test.js) : t1/t2/t3 ont chacun 2 candidats, t4/t5
+// un seul. Jamais un gabarit répété (déclencherait DUPLICATE_QUESTION).
+function eightCandidatesForFiveTargets() {
+  const t1 = "Ottawa est la capitale du Canada.";
+  const t2 = "Le français est la langue officielle du Québec.";
+  const t3 = "L'océan Atlantique borde la côte est du Canada.";
+  const t4 = "Le Canada utilise le dollar canadien.";
+  const t5 = "L'Ontario est la province la plus peuplée du Canada.";
+  return [
+    q("Quelle est la capitale du Canada ?", { sourceId: "t1a", knowledgeTarget: t1, options: ["Ottawa", "Toronto", "Montréal", "Vancouver"], correctIndex: 0 }),
+    q("Quelle ville canadienne est le siège du gouvernement fédéral ?", { sourceId: "t1b", knowledgeTarget: t1, options: ["Ottawa", "Calgary", "Winnipeg", "Halifax"], correctIndex: 0 }),
+    q("Quelle langue est officielle au Québec ?", { sourceId: "t2a", knowledgeTarget: t2, options: ["Français", "Anglais", "Espagnol", "Portugais"], correctIndex: 0 }),
+    q("Dans quelle langue les lois québécoises sont-elles rédigées en premier lieu ?", { sourceId: "t2b", knowledgeTarget: t2, options: ["Français", "Anglais", "Latin", "Inuktitut"], correctIndex: 0 }),
+    q("Quel océan borde la côte est du Canada ?", { sourceId: "t3a", knowledgeTarget: t3, options: ["Atlantique", "Pacifique", "Arctique", "Indien"], correctIndex: 0 }),
+    q("Sur quel océan la ville de Halifax est-elle ouverte ?", { sourceId: "t3b", knowledgeTarget: t3, options: ["Atlantique", "Pacifique", "Arctique", "Indien"], correctIndex: 0 }),
+    q("Quelle monnaie utilise le Canada ?", { sourceId: "t4a", knowledgeTarget: t4, options: ["Dollar canadien", "Euro", "Livre sterling", "Dollar américain"], correctIndex: 0 }),
+    q("Quelle province canadienne est la plus peuplée ?", { sourceId: "t5a", knowledgeTarget: t5, options: ["Ontario", "Québec", "Alberta", "Colombie-Britannique"], correctIndex: 0 })
+  ];
+}
+
+function distinctCountFn(accepted) { return selectOneQuestionPerKnowledgeTarget(accepted).length; }
+function coveredTargetsFilter(rejected, accepted) {
+  const covered = new Set(selectOneQuestionPerKnowledgeTarget(accepted).map((qq) => qq.knowledgeTarget));
+  return rejected.filter((entry) => !covered.has(entry.question?.knowledgeTarget));
+}
+
+test("1/2. 8 candidats, un par knowledgeTarget au minimum, répartis 2/2/2/1/1 sur 5 targets distincts", () => {
+  const eight = eightCandidatesForFiveTargets();
+  assert.equal(eight.length, 8);
+  const distinctTargets = new Set(eight.map((question) => question.knowledgeTarget));
+  assert.equal(distinctTargets.size, 5, "les 8 candidats couvrent 5 knowledgeTarget distincts, jamais moins");
+});
+
+test("3/9. 8 candidats dont 5 valides mais seulement 3 knowledgeTarget distincts -> earlyStopCountFn (4) jamais atteint, la régénération existante continue pour les targets manquants", async () => {
+  const eight = eightCandidatesForFiveTargets();
+  const acceptedIds = new Set(["t1a", "t1b", "t2a", "t2b", "t4a"]); // 5 accepted, mais seulement t1/t2/t4 (3 targets)
+  let regenerateCallArgs = null;
+  const result = await runQuestionQualityPipeline(eight, {
+    earlyStopAtAccepted: 4,
+    earlyStopCountFn: distinctCountFn,
+    filterRejectedForRegeneration: coveredTargetsFilter,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id,
+        verdict: acceptedIds.has(entry.sourceId) ? "accept" : "reject",
+        reasonCodes: acceptedIds.has(entry.sourceId) ? [] : ["AMBIGUOUS_WORDING"],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async ({ rejected }) => { regenerateCallArgs = rejected; return []; }
+  });
+  assert.equal(result.accepted.length, 5, "les 5 candidats réellement validés, jamais comblés artificiellement");
+  assert.equal(selectOneQuestionPerKnowledgeTarget(result.accepted).length, 3, "3 knowledgeTarget distincts seulement — NOT READY (seuil 4 jamais atteint)");
+  assert.ok(regenerateCallArgs, "la régénération existante doit continuer : le seuil de 4 targets distincts n'est jamais atteint");
+  assert.equal(regenerateCallArgs.length, 3, "régénère pour t3 (x2) et t5 (x1) — les seuls targets encore non couverts, jamais les 3 rejets bruts s'il y en avait plus");
+});
+
+test("4/7. 8 candidats dont 4 valides sur 4 knowledgeTarget distincts -> READY dès le premier lot, zéro targeted_regeneration", async () => {
+  const eight = eightCandidatesForFiveTargets();
+  const acceptedIds = new Set(["t1a", "t2a", "t3a", "t4a"]); // 4 accepted, 4 targets distincts
+  let regenerationCalls = 0;
+  const result = await runQuestionQualityPipeline(eight, {
+    earlyStopAtAccepted: 4,
+    earlyStopCountFn: distinctCountFn,
+    filterRejectedForRegeneration: coveredTargetsFilter,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id,
+        verdict: acceptedIds.has(entry.sourceId) ? "accept" : "reject",
+        reasonCodes: acceptedIds.has(entry.sourceId) ? [] : ["AMBIGUOUS_WORDING"],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async () => { regenerationCalls += 1; return []; }
+  });
+  assert.equal(selectOneQuestionPerKnowledgeTarget(result.accepted).length, 4, "4 knowledgeTarget distincts -> READY");
+  assert.equal(regenerationCalls, 0, "aucun targeted_regeneration : le seuil est atteint dès le premier lot");
+  assert.equal(result.metrics.regenerationCycles, 0);
+});
+
+test("5. deux questions valides du MÊME target ne comptent qu'une fois pour earlyStopCountFn — n'accélère jamais artificiellement l'arrêt", async () => {
+  const eight = eightCandidatesForFiveTargets();
+  // t1a+t1b (même target t1) + t2a : 3 candidats acceptés mais seulement 2 targets distincts.
+  const acceptedIds = new Set(["t1a", "t1b", "t2a"]);
+  let regenerationCalls = 0;
+  await runQuestionQualityPipeline(eight, {
+    earlyStopAtAccepted: 3,
+    earlyStopCountFn: distinctCountFn,
+    filterRejectedForRegeneration: coveredTargetsFilter,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id,
+        verdict: acceptedIds.has(entry.sourceId) ? "accept" : "reject",
+        reasonCodes: acceptedIds.has(entry.sourceId) ? [] : ["AMBIGUOUS_WORDING"],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async () => { regenerationCalls += 1; return []; }
+  });
+  assert.ok(regenerationCalls > 0, "3 questions acceptées mais 2 targets distincts seulement (<3) : earlyStopAtAccepted ne doit jamais se déclencher sur le compte brut");
+});
+
+test("filterRejectedForRegeneration : exclut de la régénération un knowledgeTarget déjà couvert par une question acceptée (même quand un AUTRE candidat sur ce même target a été rejeté)", async () => {
+  const eight = eightCandidatesForFiveTargets();
+  // t1a accepté (target t1 couvert) ; t1b rejeté MAIS même target -> ne doit
+  // jamais être envoyé à regenerate(). t3a/t3b/t5a rejetés sur des targets
+  // encore non couverts -> doivent, eux, être envoyés.
+  const acceptedIds = new Set(["t1a", "t2a", "t4a"]);
+  let regenerateCallArgs = null;
+  await runQuestionQualityPipeline(eight, {
+    earlyStopAtAccepted: 5, // jamais atteint ici (3 targets distincts) : on force le passage par regenerate()
+    earlyStopCountFn: distinctCountFn,
+    filterRejectedForRegeneration: coveredTargetsFilter,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id,
+        verdict: acceptedIds.has(entry.sourceId) ? "accept" : "reject",
+        reasonCodes: acceptedIds.has(entry.sourceId) ? [] : ["AMBIGUOUS_WORDING"],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async ({ rejected }) => { regenerateCallArgs = rejected; return []; }
+  });
+  assert.ok(regenerateCallArgs, "regenerate() doit être appelé (seuil jamais atteint)");
+  const regeneratedSourceIds = regenerateCallArgs.map((entry) => entry.question.sourceId);
+  assert.ok(!regeneratedSourceIds.includes("t1b"), "t1b ne doit jamais être régénéré : son target (t1) est déjà couvert par t1a");
+  assert.deepEqual(new Set(regeneratedSourceIds), new Set(["t3a", "t3b", "t5a"]), "seuls les targets encore non couverts (t3, t5) sont régénérés");
+});
+
+test("filterRejectedForRegeneration : ne filtre QUE ce qui est envoyé à regenerate() — rejectionHistory/unresolvedReasonCounts restent complets, jamais amputés", async () => {
+  const eight = eightCandidatesForFiveTargets();
+  const acceptedIds = new Set(["t1a", "t1b", "t2a", "t2b", "t4a"]); // même scénario que le test 3/9
+  const result = await runQuestionQualityPipeline(eight, {
+    maxRetries: 0, // pas de second cycle nécessaire pour ce test : on inspecte le premier cycle seul
+    earlyStopCountFn: distinctCountFn,
+    filterRejectedForRegeneration: coveredTargetsFilter,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id,
+        verdict: acceptedIds.has(entry.sourceId) ? "accept" : "reject",
+        reasonCodes: acceptedIds.has(entry.sourceId) ? [] : ["AMBIGUOUS_WORDING"],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async () => []
+  });
+  // Les 3 rejets bruts (t3a, t3b, t5a) restent tous tracés, même si
+  // filterRejectedForRegeneration en aurait exclu certains dans un scénario
+  // où d'autres targets étaient déjà couverts — ici aucun ne l'est, donc les
+  // 3 apparaissent malgré tout dans l'historique complet.
+  assert.equal(result.rejected.length, 3);
+  assert.equal(Object.values(result.metrics.unresolvedReasonCounts).reduce((a, b) => a + b, 0), 3);
+});
+
+test("onInitialBatchAccepted : appelé une seule fois, avec l'accepted du tout premier lot (avant toute régénération), jamais recalculé après", async () => {
+  const eight = eightCandidatesForFiveTargets();
+  const acceptedIds = new Set(["t1a", "t1b", "t2a", "t2b", "t4a"]);
+  const snapshots = [];
+  await runQuestionQualityPipeline(eight, {
+    maxRetries: 1,
+    earlyStopCountFn: distinctCountFn,
+    filterRejectedForRegeneration: coveredTargetsFilter,
+    onInitialBatchAccepted: (acceptedList) => snapshots.push(acceptedList),
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id,
+        verdict: acceptedIds.has(entry.sourceId) ? "accept" : "reject",
+        reasonCodes: acceptedIds.has(entry.sourceId) ? [] : ["AMBIGUOUS_WORDING"],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    // Le second cycle (régénération) accepte tout, pour prouver que le
+    // snapshot du premier lot n'est jamais recalculé/écrasé après coup.
+    regenerate: async ({ rejected }) => rejected.map((entry, index) => q(`Question régénérée ${index}`, { sourceId: `regen${index}`, knowledgeTarget: entry.question.knowledgeTarget }))
+  });
+  assert.equal(snapshots.length, 1, "un seul appel, jamais un par cycle");
+  assert.equal(snapshots[0].length, 5, "exactement l'accepted du premier lot (5 questions), avant toute régénération");
+  assert.equal(selectOneQuestionPerKnowledgeTarget(snapshots[0]).length, 3, "3 targets distincts dans ce premier lot");
+});
+
+test("earlyStopCountFn/filterRejectedForRegeneration/onInitialBatchAccepted absents (undefined) : comportement legacy strictement inchangé", async () => {
+  const five = fiveDistinctQuestions();
+  let regenerationCalls = 0;
+  const result = await runQuestionQualityPipeline(five, {
+    earlyStopAtAccepted: 4,
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry, index) => ({
+        id: entry.id,
+        verdict: index === 4 ? "reject" : "accept",
+        reasonCodes: index === 4 ? ["AMBIGUOUS_WORDING"] : [],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    }),
+    regenerate: async () => { regenerationCalls += 1; return []; }
+  });
+  assert.equal(result.accepted.length, 4);
+  assert.equal(regenerationCalls, 0, "identique au comportement déjà vérifié plus haut sans ces trois options");
+});
+
+// ── onCycle : deterministicReasonCounts/semanticReasonCounts (observabilité,
+// 03/09/2026, audit réel "Les oiseaux migrateurs") : codes de rejet agrégés
+// PAR CYCLE, séparés par origine — jamais de texte de question. ───────────
+
+test("onCycle reçoit deterministicReasonCounts et semanticReasonCounts séparés pour le même cycle, sans jamais mélanger les deux origines", async () => {
+  const deterministicInvalid = q(undefined, { sourceId: "det", options: ["Ottawa", "", "Ottawa", "Toronto"], correctIndex: 9 });
+  const semanticInvalid = q("Quelle est la langue officielle du Québec ?", { sourceId: "sem", options: ["Français", "Anglais", "Espagnol", "Portugais"], correctIndex: 0 });
+  const cyclePayloads = [];
+  await runQuestionQualityPipeline([deterministicInvalid, semanticInvalid], {
+    maxRetries: 0,
+    onCycle: (payload) => cyclePayloads.push(payload),
+    reviewSemantic: async ({ entries }) => ({
+      reviews: entries.map((entry) => ({
+        id: entry.id, verdict: "reject", reasonCodes: ["GUESSABLE_WITHOUT_KNOWLEDGE"],
+        expectedCorrectIndexes: [0], targetsKnowledge: true, groundedInSource: true
+      }))
+    })
+  });
+  assert.equal(cyclePayloads.length, 1);
+  const [cycle0] = cyclePayloads;
+  // Le rejet déterministe (options vides/dupliquées, correctIndex invalide) n'apparaît jamais côté sémantique.
+  assert.ok(cycle0.deterministicReasonCounts.EMPTY_OPTION >= 1);
+  assert.ok(cycle0.deterministicReasonCounts.INVALID_CORRECT_INDEX >= 1);
+  assert.equal(cycle0.deterministicReasonCounts.GUESSABLE_WITHOUT_KNOWLEDGE, undefined, "un code sémantique ne doit jamais apparaître côté deterministicReasonCounts");
+  // Le rejet sémantique (critique mockée) n'apparaît jamais côté déterministe.
+  assert.equal(cycle0.semanticReasonCounts.GUESSABLE_WITHOUT_KNOWLEDGE, 1);
+  assert.equal(cycle0.semanticReasonCounts.EMPTY_OPTION, undefined, "un code déterministe ne doit jamais apparaître côté semanticReasonCounts");
+});
+
+test("le log [qcm-quality] agrégé porte désormais generationId — jamais de texte de question", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const serverSource = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
+  const start = serverSource.indexOf('console.info("[qcm-quality]"');
+  const snippet = serverSource.slice(start, start + 700);
+  assert.match(snippet, /generationId,\s*\n\s*route,/);
+  assert.doesNotMatch(snippet, /knowledgeTarget|rejectedQuestion|sourceExcerpt|question:/);
 });
 
 test("post-shuffle compare le texte des réponses, même lorsque deux options sont proches", () => {

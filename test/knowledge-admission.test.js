@@ -119,6 +119,54 @@ test("buildQuestionsFromKnowledgePrompt : au maximum une question par connaissan
   assert.match(prompt, /produire moins de questions que de connaissances admises est un comportement normal et attendu/);
 });
 
+// ── perKnowledgeCandidateCounts (sur-génération initiale du bloc élémentaire,
+// 03/09/2026, audit latence réel "Empire carolingien") : optionnel, absent
+// dans tous les tests ci-dessus (comportement inchangé, vérifié juste au-
+// dessus). Ces tests couvrent le comportement quand il EST fourni. ────────
+
+test("perKnowledgeCandidateCounts : remplace la règle « au maximum une question » par une consigne de candidats multiples, annote chaque connaissance de son compte", () => {
+  const items = [knowledge({ fact: "Fait A." }), knowledge({ fact: "Fait B." })];
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, [], [2, 1]);
+  assert.doesNotMatch(prompt, /Au maximum une question par connaissance de la liste/);
+  assert.match(prompt, /Pour chaque connaissance, génère EXACTEMENT le nombre de candidats indiqué entre crochets/);
+  assert.match(prompt, /1\. Fait A\. .*\[génère exactement 2 candidat\(s\) INDÉPENDANT\(S\) pour cette connaissance\]/);
+  assert.match(prompt, /2\. Fait B\. .*\[génère exactement 1 candidat\(s\) INDÉPENDANT\(S\) pour cette connaissance\]/);
+});
+
+test("perKnowledgeCandidateCounts : aucune phrase du prompt n'autorise à produire moins que le nombre demandé (aucune échappatoire)", () => {
+  const items = [knowledge({ fact: "Fait A." }), knowledge({ fact: "Fait B." })];
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, [], [2, 1]);
+  assert.doesNotMatch(prompt, /comportement normal et attendu/);
+  assert.doesNotMatch(prompt, /tu peux l'omettre/);
+  assert.doesNotMatch(prompt, /produire moins de questions/);
+  assert.match(prompt, /jamais moins, jamais plus/);
+});
+
+test("perKnowledgeCandidateCounts : les candidats multiples restent rattachés à la même connaissance, jamais une connaissance nouvelle", () => {
+  const items = [knowledge({ fact: "Fait A." })];
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, [], [2]);
+  assert.match(prompt, /chaque candidat reste une question sur EXACTEMENT le fait numéroté ci-dessous, jamais une connaissance nouvelle, élargie ou périphérique/);
+  assert.match(prompt, /Ces candidats restent des PROPOSITIONS à valider, pas des connaissances déjà admises/);
+});
+
+test("perKnowledgeCandidateCounts : la consigne exige des candidats réellement différents, jamais une simple reformulation", () => {
+  const items = [knowledge({ fact: "Fait A." })];
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, [], [2]);
+  assert.match(prompt, /Chaque candidat doit être une question INDÉPENDANTE et RÉELLEMENT DIFFÉRENTE testant la MÊME connaissance/);
+  assert.match(prompt, /jamais deux fois la même question, jamais une simple reformulation superficielle/);
+});
+
+test("perKnowledgeCandidateCounts : tableau absent, de mauvaise longueur, ou sans aucune valeur > 1 -> comportement inchangé (repli sur « au maximum une question »)", () => {
+  const items = [knowledge({ fact: "Fait A." }), knowledge({ fact: "Fait B." })];
+  const withoutCounts = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, []);
+  const wrongLength = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, [], [2]);
+  const allOnes = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, [], [1, 1]);
+  for (const prompt of [withoutCounts, wrongLength, allOnes]) {
+    assert.match(prompt, /Au maximum une question par connaissance de la liste/);
+    assert.doesNotMatch(prompt, /génère exactement \d+ candidat/);
+  }
+});
+
 test("buildQuestionsFromKnowledgePrompt : toutes les connaissances admises apparaissent, numérotées", () => {
   const items = [knowledge({ fact: "Fait A." }), knowledge({ fact: "Fait B." }), knowledge({ fact: "Fait C." })];
   const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, []);

@@ -256,7 +256,7 @@ let moonLinkEl = null;
 // des 2 étoiles + rappel "clique n'importe où pour tout faire réapparaître") : tous les points
 // d'entrée (double-clic sur le lien, clic sur zone vide) passent par ici plutôt que de manipuler
 // isolatedStarPair et ce panneau séparément à chaque endroit.
-function setIsolatedStarPair(pair, fromNode, toNode) {
+function setIsolatedStarPair(pair, fromNode, toNode, fromArticle, fromStarRef, toArticle, toStarRef) {
   isolatedStarPair = pair;
   if (isolationInfoEl) {
     if (pair && fromNode && toNode) {
@@ -267,6 +267,35 @@ function setIsolatedStarPair(pair, fromNode, toNode) {
       const hint = document.createElement("p");
       hint.className = "universe-isolation-info-hint";
       hint.textContent = "Ferme cette fenêtre, puis double-clique n’importe où pour tout faire réapparaître.";
+      isolationInfoEl.append(names, hint);
+
+      // Accès direct aux deux fiches connaissance à l'origine de ce lien (demande du 03/09/2026,
+      // "je voudrais que les deux fiches issues des deux connaissances apparaissent aussi sur
+      // cette fenêtre") : ouvre le panneau fiche existant (même showKnowledgeSheet/starPanelEl que
+      // le clic normal sur une étoile) plutôt que de dupliquer le rendu d'une fiche complète (image,
+      // sections, questions) dans cette petite fenêtre de 280px — trop à l'étroit pour deux fiches.
+      // Le panneau fiche (z-index 2000) recouvre cette fenêtre d'isolement sans la fermer : à sa
+      // fermeture, on revient donc naturellement ici (toujours isolé sur ces 2 étoiles).
+      const fichesRow = document.createElement("div");
+      fichesRow.className = "universe-isolation-info-fiches";
+      [[fromArticle, fromStarRef], [toArticle, toStarRef]].forEach(([article, starRef]) => {
+        if (!article || !starRef) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "universe-isolation-info-fiche-btn";
+        btn.innerHTML = '<i class="fa-solid fa-file-lines" aria-hidden="true"></i><span></span>';
+        btn.querySelector("span").textContent = article.title || "Voir la fiche";
+        btn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          document.body.classList.add("universe-star-panel-open");
+          starPanelEl.hidden = false;
+          showKnowledgeSheet(article, starRef, true);
+        });
+        fichesRow.appendChild(btn);
+      });
+      if (fichesRow.children.length) isolationInfoEl.append(fichesRow);
+
       const dismissBtn = document.createElement("button");
       dismissBtn.type = "button";
       dismissBtn.className = "universe-isolation-info-dismiss";
@@ -279,7 +308,7 @@ function setIsolatedStarPair(pair, fromNode, toNode) {
         event.stopPropagation();
         isolationInfoEl.hidden = true;
       });
-      isolationInfoEl.append(names, hint, dismissBtn);
+      isolationInfoEl.append(dismissBtn);
       isolationInfoEl.hidden = false;
     } else {
       isolationInfoEl.hidden = true;
@@ -996,7 +1025,7 @@ function knowledgeNodeKey(sourceType, sourceId) {
 // libellés, signalé à nouveau le 17/08/2026 pour ces traits — "pas nettes... surtout zoomé").
 // Repositionnés à chaque frame de caméra dans onCameraChange, jamais ici (la caméra n'a pas
 // encore de position tant que le montage n'est pas terminé).
-function createKnowledgeLinkEl(level, fromNode, toNode) {
+function createKnowledgeLinkEl(level, fromNode, toNode, articleLink) {
   const el = document.createElement("div");
   el.className = "universe-knowledge-link";
   // Double-clic pour isoler la paire (restauré le 17/08/2026 : confirmé fonctionnel — seule la
@@ -1006,10 +1035,26 @@ function createKnowledgeLinkEl(level, fromNode, toNode) {
   if (level === "star") {
     el.style.pointerEvents = "auto";
     el.style.cursor = "pointer";
+    // Retrouve les 2 connaissances précises (pas juste les étoiles qui les contiennent, qui
+    // peuvent en regrouper plusieurs) à l'origine de CE lien, pour permettre d'ouvrir directement
+    // leurs fiches depuis la fenêtre d'isolement (cf. setIsolatedStarPair, demande du 03/09/2026).
+    const fromStarRef = fromNode.ref;
+    const toStarRef = toNode.ref;
+    const fromArticle = (fromStarRef?.articles || []).find(
+      (a) => a.sourceType === articleLink?.typeA && String(a.sourceDebateId) === String(articleLink?.sourceIdA)
+    );
+    const toArticle = (toStarRef?.articles || []).find(
+      (a) => a.sourceType === articleLink?.typeB && String(a.sourceDebateId) === String(articleLink?.sourceIdB)
+    );
     const toggleIsolation = () => {
       const alreadyIsolated = isolatedStarPair
         && isolatedStarPair.has(fromNode.id) && isolatedStarPair.has(toNode.id);
-      setIsolatedStarPair(alreadyIsolated ? null : new Set([fromNode.id, toNode.id]), fromNode, toNode);
+      setIsolatedStarPair(
+        alreadyIsolated ? null : new Set([fromNode.id, toNode.id]),
+        fromNode, toNode,
+        fromArticle, fromStarRef,
+        toArticle, toStarRef
+      );
     };
     el.addEventListener("dblclick", (event) => {
       event.preventDefault();
@@ -1018,6 +1063,7 @@ function createKnowledgeLinkEl(level, fromNode, toNode) {
     });
     let lastTapAt = 0;
     el.addEventListener("pointerup", (event) => {
+      if (longPressFired) { longPressFired = false; return; } // déjà déclenché par le pointerdown ci-dessous
       if (event.pointerType !== "touch") return;
       const now = Date.now();
       if (now - lastTapAt < 400) {
@@ -1029,6 +1075,47 @@ function createKnowledgeLinkEl(level, fromNode, toNode) {
         lastTapAt = now;
       }
     });
+    // Clic prolongé (souris ou tactile), en plus du double-clic/double-tap ci-dessus (demande du
+    // 03/09/2026) : maintenir le pointeur sur le trait pendant LONG_PRESS_MS bascule l'isolement
+    // sans attendre un second clic. Un déplacement (pointermove au-delà d'une petite tolérance),
+    // un relâchement prématuré ou une sortie du trait annule le minuteur — appui bref normal,
+    // laissé au double-clic/double-tap existant.
+    const LONG_PRESS_MS = 500;
+    const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
+    let longPressTimer = null;
+    let longPressFired = false;
+    let longPressStartX = 0;
+    let longPressStartY = 0;
+    const clearLongPressTimer = () => {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+    };
+    el.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      // Sans ce preventDefault, Safari iOS lance en parallèle sa propre sélection de
+      // texte/callout ("Copier", loupe) sur l'appui maintenu — cf. -webkit-touch-callout/
+      // user-select:none déjà posés en CSS (style.css), qui seuls ne suffisaient pas à eux seuls
+      // sur certaines versions (demande du 03/09/2026, "ça sélectionne le cadre").
+      event.preventDefault();
+      clearLongPressTimer();
+      longPressFired = false;
+      longPressStartX = event.clientX;
+      longPressStartY = event.clientY;
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        longPressFired = true;
+        toggleIsolation();
+      }, LONG_PRESS_MS);
+    });
+    el.addEventListener("pointermove", (event) => {
+      if (!longPressTimer) return;
+      const dx = event.clientX - longPressStartX;
+      const dy = event.clientY - longPressStartY;
+      if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE_PX) clearLongPressTimer();
+    });
+    el.addEventListener("pointerleave", clearLongPressTimer);
+    el.addEventListener("pointercancel", clearLongPressTimer);
+    el.addEventListener("contextmenu", (event) => event.preventDefault());
   }
   linksOverlayEl.appendChild(el);
   const linkState = { el, level, fromNodeId: fromNode.id, toNodeId: toNode.id, count: 1 };
@@ -1150,7 +1237,7 @@ function mountUniverse() {
         existingLink.count += 1;
         return;
       }
-      renderedKnowledgePairs.set(pairKey, createKnowledgeLinkEl(level, fromNode, toNode));
+      renderedKnowledgePairs.set(pairKey, createKnowledgeLinkEl(level, fromNode, toNode, level === "star" ? link : null));
     });
   });
 
@@ -1282,7 +1369,15 @@ function waitForUniverseRootPaint(modeToken) {
         return rect.width > 0 && rect.height > 0 && opacity >= 0.98;
       });
 
-      if (rootIsPainted && textureSettled) {
+      const section = document.getElementById("mnoria-tag-trends-section");
+      const frameIsVisible = Boolean(
+        cloudEl && !cloudEl.hidden &&
+        (!section || (!section.hidden && getComputedStyle(section).visibility !== "hidden")) &&
+        cloudEl.getBoundingClientRect().width > 0 &&
+        cloudEl.getBoundingClientRect().height > 0
+      );
+
+      if (rootIsPainted && textureSettled && frameIsVisible) {
         finishAfterPaint();
         return;
       }
@@ -1363,6 +1458,7 @@ async function mountUniverseAndHideSpinnerWhenReady(modeToken) {
   const ready = await waitForUniverseRootPaint(modeToken);
   if (!ready || modeToken !== window._mnoriaCloudModeToken || !isMemoireEmbedActive()) return;
   window.__mnoriaHideBubbleCloudLoadingSpinner();
+  window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
 }
 
 function getGalaxyNameFromId(galaxyId) {
@@ -1990,7 +2086,7 @@ function appendKnowledgeLinks(parent, links, star) {
   parent.appendChild(list);
 }
 
-function renderKnowledgeSheet(article, star, fullFiche, loading = false) {
+function renderKnowledgeSheet(article, star, fullFiche, loading = false, hideBackButton = false) {
   const detail = fullFiche?.sourceDetail || article.sourceDetail || {};
   starPanelTitleEl.textContent = fullFiche?.label || article.title || "Fiche connaissance";
   starPanelListEl.innerHTML = "";
@@ -1998,12 +2094,19 @@ function renderKnowledgeSheet(article, star, fullFiche, loading = false) {
   const sheet = document.createElement("li");
   sheet.className = "universe-star-panel__knowledge-sheet";
 
-  const back = document.createElement("button");
-  back.type = "button";
-  back.className = "universe-star-panel__knowledge-back";
-  back.innerHTML = '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Retour aux connaissances</span>';
-  back.addEventListener("click", () => showStarPanel(star));
-  sheet.appendChild(back);
+  // Masqué quand la fiche est ouverte directement depuis la fenêtre d'isolement d'un lien entre 2
+  // étoiles (cf. setIsolatedStarPair) : "Retour aux connaissances" y ramènerait vers la liste des
+  // connaissances d'UNE SEULE des 2 étoiles isolées, sans rapport avec ce qui a ouvert cette fiche
+  // — demande du 03/09/2026, "je ne veux pas que la fiche ait le bouton retour ... lorsque j'ouvre
+  // la fiche depuis cette fenêtre avec les liens".
+  if (!hideBackButton) {
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "universe-star-panel__knowledge-back";
+    back.innerHTML = '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Retour aux connaissances</span>';
+    back.addEventListener("click", () => showStarPanel(star));
+    sheet.appendChild(back);
+  }
 
   const sourceMeta = STAR_KNOWLEDGE_SOURCE_META[fullFiche?.sourceType || article.sourceType] || {
     icon: "fa-book-open",
@@ -2109,10 +2212,10 @@ function renderKnowledgeSheet(article, star, fullFiche, loading = false) {
   refreshStarPanelScrollHint();
 }
 
-async function showKnowledgeSheet(article, star) {
+async function showKnowledgeSheet(article, star, hideBackButton = false) {
   const requestToken = ++starKnowledgeRequestToken;
   const hasFullFiche = article.quizSlot && article.quizDate;
-  renderKnowledgeSheet(article, star, null, hasFullFiche);
+  renderKnowledgeSheet(article, star, null, hasFullFiche, hideBackButton);
   if (!hasFullFiche) return;
 
   try {
@@ -2121,11 +2224,11 @@ async function showKnowledgeSheet(article, star) {
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || "Fiche indisponible");
     if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
-    renderKnowledgeSheet(article, star, data, false);
+    renderKnowledgeSheet(article, star, data, false, hideBackButton);
   } catch (error) {
     if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
     console.warn("[mon-univers] fiche QCM complète indisponible :", error.message);
-    renderKnowledgeSheet(article, star, null, false);
+    renderKnowledgeSheet(article, star, null, false, hideBackButton);
   }
 }
 
@@ -2445,6 +2548,7 @@ async function loadUniverse() {
     // remplacer par une erreur ni faire réapparaître un chargement long. La prochaine entrée
     // relancera de toute façon une vérification fraîche.
     if (!showedCachedEmpty) showStatus("error");
+    window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
     return;
   }
 
@@ -2454,6 +2558,7 @@ async function loadUniverse() {
   cacheUniverseEmptyState(emptyUniverse);
   if (emptyUniverse) {
     showStatus("empty");
+    window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
     return;
   }
 

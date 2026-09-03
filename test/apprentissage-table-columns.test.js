@@ -27,6 +27,9 @@ test('le tableau horizontal affiche Apprentissage, État et Niveau sans ancrage 
   assert.match(source, /avance: 'Approfondi'/);
   assert.match(source, /expert: 'Expert'/);
   assert.match(source, /qcm-mesqcm-level-count/);
+  assert.match(page, /th:nth-child\(1\),[\s\S]*?td:nth-child\(1\)\s*\{\s*width: 45%;/);
+  assert.match(page, /th:nth-child\(2\),[\s\S]*?td:nth-child\(2\)\s*\{\s*width: 30%;/);
+  assert.match(page, /th:nth-child\(3\),[\s\S]*?td:nth-child\(3\)\s*\{\s*width: 25%;\s*position: relative;\s*left: -2px;/);
 });
 
 test('la connaissance ouverte conserve son ancrage et sa suppression', () => {

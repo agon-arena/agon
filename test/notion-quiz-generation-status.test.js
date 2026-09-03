@@ -209,7 +209,7 @@ test("le frontend traite toujours une réponse ok:true en fermant le statut et e
 // ─── Scénario 2 (toujours pending après expiration de la requête initiale) ───
 
 test("une coupure réseau sur le fetch initial n'affiche plus un message d'échec et conserve le marqueur persistant", () => {
-  const catchStart = view.indexOf(".catch(function () {", view.indexOf("fetch('/api/users/notion-quizzes/custom'"));
+  const catchStart = view.indexOf(".catch(function () {", view.indexOf("fetch(creationEndpoint,"));
   const catchEnd = view.indexOf("          });", catchStart);
   const catchBody = view.slice(catchStart, catchEnd);
   // Le marqueur persistant (localStorage) n'est jamais retiré ici : seul le
@@ -232,7 +232,7 @@ test("une coupure réseau sur le fetch initial n'affiche plus un message d'éche
 
 test("une génération déjà suivie pour le même sujet+niveau ne peut plus être relancée en double", () => {
   const confirmStart = view.indexOf("showGenerateConfirmModal(topic, level, async function () {");
-  const fetchStart = view.indexOf("fetch('/api/users/notion-quizzes/custom'", confirmStart);
+  const fetchStart = view.indexOf("fetch(creationEndpoint,", confirmStart);
   const guardBlock = view.slice(confirmStart, fetchStart);
   assert.match(guardBlock, /getPendingNotionQuizGenerations\(\)\.some\(function \(item\) \{\s*return item\.slot === pendingCustomSlot;/);
   assert.match(guardBlock, /déjà en cours/);

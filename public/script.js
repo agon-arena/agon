@@ -990,7 +990,7 @@ window.mnoriaFinishPendingNotionQuizGeneration = finishPendingNotionQuizGenerati
 // visite d'/apprentissage (demande du 30/08/2026). Même famille visuelle que
 // showDebateNotionMemorizeExplainer (cf. plus bas), en autonome : pas
 // d'instance d'appelant à mettre à jour ici, juste une nouvelle fenêtre.
-function showNotionQuizReadyAnnouncement(label) {
+function showNotionQuizReadyAnnouncement(label, target = {}) {
   const overlay = document.createElement("div");
   overlay.className = "ecl-memorize-explainer-overlay";
   const modal = document.createElement("div");
@@ -1022,8 +1022,15 @@ function showNotionQuizReadyAnnouncement(label) {
   closeBtn.addEventListener("click", close);
   qcmBtn.addEventListener("click", () => {
     close();
-    if (typeof openDebateIframeModal === "function") openDebateIframeModal("/apprentissage");
-    else window.location.href = "/apprentissage";
+    const learningSlot = String(target.learningSlot || target.slot || "").trim();
+    const quizDate = String(target.quizDate || "").trim();
+    const params = new URLSearchParams({ openKnowledge: "1" });
+    if (learningSlot) params.set("slot", learningSlot);
+    if (quizDate) params.set("date", quizDate);
+    if (label) params.set("label", label);
+    const learningUrl = `/apprentissage?${params.toString()}`;
+    if (typeof openDebateIframeModal === "function") openDebateIframeModal(learningUrl);
+    else window.location.href = learningUrl;
   });
 }
 
@@ -1075,6 +1082,7 @@ function checkPendingNotionQuizzesReadiness() {
   fetchJSON(`${API}/users/notion-quizzes/generation-status?legacyKey=${encodeURIComponent(voterKeyForReadinessCheck)}&slots=${encodeURIComponent(slotsParam)}&startedAt=${encodeURIComponent(startedAtParam)}`, { cache: "no-store" })
     .then((data) => {
       const readySlots = new Set((data.ready || []).map((row) => row.slot));
+      const readyBySlot = new Map((data.ready || []).map((row) => [row.slot, row]));
       const failedSlots = new Set((data.failed || []).map((row) => row.slot));
       // Relu juste avant d'agir : le flux direct (recherche libre restée
       // ouverte sur /apprentissage pendant toute la génération) peut avoir
@@ -1085,7 +1093,7 @@ function checkPendingNotionQuizzesReadiness() {
         if (!stillPending.some((row) => row.slot === item.slot)) return;
         if (readySlots.has(item.slot)) {
           finishPendingNotionQuizGeneration(item.slot);
-          showNotionQuizReadyAnnouncement(item.label);
+          showNotionQuizReadyAnnouncement(item.label, readyBySlot.get(item.slot) || {});
         } else if (failedSlots.has(item.slot)) {
           finishPendingNotionQuizGeneration(item.slot);
           showNotionQuizFailedAnnouncement(item.label);
@@ -2777,6 +2785,31 @@ function ensurePageArrivalLoadingOverlayStyles() {
       -webkit-backdrop-filter: blur(8px);
     }
 
+    /* Même écran intermédiaire que le conteneur .loading d'une arène :
+       bleu pétrole uni, sans laisser transparaître la page en dessous. */
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-learning {
+      inset: 0 !important;
+      z-index: 10030;
+      background: #243038;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-learning .page-arrival-loading-box {
+      width: auto;
+      max-width: min(90vw, 220px);
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-learning .page-arrival-loading-title {
+      margin-top: 8px;
+      color: #ffffff;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+    }
+
     .page-arrival-loading-overlay.page-arrival-loading-overlay-opaque {
       background: rgba(255, 255, 255, 0.98);
       backdrop-filter: none;
@@ -2974,7 +3007,7 @@ function isIframeDebateLoadingOverlayContext() {
 // blanc) n'a rien changé, ce cadre disparaît donc complètement au lieu
 // d'être restylé : mon-univers.js affiche déjà son propre indicateur
 // ("Chargement de ton univers…", cf. #universe-status).
-const MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/apprentissage", "/mon-univers"];
+const MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY = ["/mon-univers"];
 function isIframePageWithoutLoadingOverlay(pathname) {
   return MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY.includes(String(pathname || ""));
 }
@@ -2986,7 +3019,7 @@ function isIframePageWithoutLoadingOverlay(pathname) {
 // (.page-arrival-loading-box) — redondant avec le bandeau du parent déjà
 // suffisant. Distinct de MNORIA_IFRAME_PAGES_WITHOUT_LOADING_OVERLAY (qui
 // supprime les deux) : ici seul le voile de la page elle-même est coupé.
-const MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/eclairages"];
+const MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY = ["/eclairages", "/apprentissage"];
 function isIframePageUsingParentLoadingOnly(pathname) {
   return MNORIA_IFRAME_PAGES_USING_PARENT_LOADING_ONLY.includes(String(pathname || ""));
 }
@@ -3098,6 +3131,11 @@ function applyPageArrivalLoadingVisuals() {
   const isCreateReturnTransition = isCreateToDebateLoadingTransition();
   const isCreateToDebate = isCreateToDebateOverlayContext();
   const isNotificationToDebate = isAiScorePopupOverlayContext();
+  let isHomeMemoryReturnLoading = false;
+  try { isHomeMemoryReturnLoading = sessionStorage.getItem("mnoria_home_memory_return_loading") === "1"; } catch (error) {}
+  const isLearningArrival = window.self === window.top && (
+    location.pathname === "/apprentissage" || (location.pathname === "/" && isHomeMemoryReturnLoading)
+  );
   const loadingImage = overlay.querySelector('.page-arrival-loading-hourglass img');
 
   // /apprentissage et /eclairages retirent leur propre voile au profit du
@@ -3115,6 +3153,7 @@ function applyPageArrivalLoadingVisuals() {
   overlay.classList.toggle("page-arrival-loading-overlay-return-to-debate", isCreateReturnTransition);
   overlay.classList.toggle("page-arrival-loading-overlay-create-to-debate", isCreateToDebate || isNotificationToDebate);
   overlay.classList.toggle("page-arrival-loading-overlay-notification-to-debate", isNotificationToDebate);
+  overlay.classList.toggle("page-arrival-loading-overlay-learning", isLearningArrival);
 
   if (loadingImage) {
     const desiredSrc = getPageArrivalLoadingImageSrc();
@@ -3283,11 +3322,13 @@ function initPageArrivalLoadingOverlay() {
   pageArrivalLoadingOverlayReady = location.pathname !== "/debate" && location.pathname !== "/" && location.pathname !== "/apprentissage";
 
   const isNotificationsInIframe = window.self !== window.top && location.pathname === "/notifications";
+  let waitForHomeMemoryReturn = false;
+  try { waitForHomeMemoryReturn = location.pathname === "/" && sessionStorage.getItem("mnoria_home_memory_return_loading") === "1"; } catch (error) {}
   // Retour depuis Autres actus (ou reload interne à l'index) : window.__mnoriaSkipStartupOnce
   // est déjà posé pour sauter l'intro logo (cf. index.html) — même logique ici, sans quoi
   // le voile sombre/flou plein écran s'affiche par-dessus le cadre nuages ET les boutons
   // Bulles Actu/Mnoria en dessous le temps que les débats se rechargent.
-  const skipForIndexReturn = location.pathname === "/" && window.__mnoriaSkipStartupOnce === true;
+  const skipForIndexReturn = location.pathname === "/" && window.__mnoriaSkipStartupOnce === true && !waitForHomeMemoryReturn;
   // Éclairages a son propre rendu léger et quasi immédiat : ce voile
   // "Chargement en cours" (posé par la page embarquée elle-même, distinct du
   // bandeau du parent déjà supprimé pour cette page) n'apporte qu'un flash
@@ -3313,7 +3354,51 @@ function initPageArrivalLoadingOverlay() {
   const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && !skipForFullscreenMemoryPage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
-    showPageArrivalLoadingOverlay("Chargement en cours");
+    const arrivalMessage = waitForHomeMemoryReturn
+      ? "Chargement de l'accueil en cours"
+      : location.pathname === "/apprentissage"
+        ? "Chargement de mes apprentissages en cours"
+        : "Chargement en cours";
+    showPageArrivalLoadingOverlay(arrivalMessage);
+  }
+
+  if (waitForHomeMemoryReturn) {
+    window.addEventListener("mnoria:memoire-content-ready", () => {
+      const section = document.getElementById("mnoria-tag-trends-section");
+      const cloud = document.getElementById("mnoria-tag-trends-cloud");
+
+      // Le moteur peut avoir peint ses bulles pendant que la section parente
+      // porte encore le visibility:hidden du HTML initial. Ne jamais retirer
+      // l'écran de transition avant que le cadre lui-même soit affichable.
+      document.body?.classList.add("mnoria-memoire-cloud-mode");
+      if (section) {
+        section.hidden = false;
+        section.style.visibility = "visible";
+      }
+      if (cloud) {
+        cloud.hidden = false;
+        cloud.classList.add("mnoria-memoire-frame");
+      }
+      syncCloudSectionHeight();
+
+      const finishWhenFrameIsVisible = () => {
+          const frameIsVisible = Boolean(
+            section && cloud &&
+            !section.hidden && !cloud.hidden &&
+            getComputedStyle(section).visibility !== "hidden" &&
+            cloud.getBoundingClientRect().width > 0 &&
+            cloud.getBoundingClientRect().height > 0
+          );
+          if (!frameIsVisible) {
+            requestAnimationFrame(finishWhenFrameIsVisible);
+            return;
+          }
+          try { sessionStorage.removeItem("mnoria_home_memory_return_loading"); } catch (error) {}
+          markPageArrivalLoadingOverlayReady();
+          document.documentElement.classList.remove("mnoria-home-memory-return-loading");
+      };
+      requestAnimationFrame(() => requestAnimationFrame(finishWhenFrameIsVisible));
+    }, { once: true });
   }
 
   const refreshBounds = () => {
@@ -3350,9 +3435,11 @@ function initPageArrivalLoadingOverlay() {
     }, { once: true });
   }
 
-  pageArrivalLoadingOverlayFallbackTimer = setTimeout(() => {
-    finish(true);
-  }, location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/apprentissage" ? 5000 : 2200);
+  if (!waitForHomeMemoryReturn) {
+    pageArrivalLoadingOverlayFallbackTimer = setTimeout(() => {
+      finish(true);
+    }, location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/apprentissage" ? 5000 : 2200);
+  }
 }
 
 function getDebateViewMode() {
@@ -4827,6 +4914,8 @@ let _debateModalScrollLockMode = "";
 let _debateModalTouchBlockHandler = null;
 let _debateModalWheelBlockHandler = null;
 let debateIframeParentLoadingFallbackTimer = null;
+let learningIframeMinimumLoadingTimer = null;
+let learningIframeLoadingStartedAt = 0;
 
 function shouldUseMobileDebateModalScrollLock() {
   return window.innerWidth <= 768;
@@ -5194,6 +5283,15 @@ function ensureDebateIframeParentLoadingStyles() {
       outline: 2px solid rgba(255, 255, 255, 0.5);
       outline-offset: 2px;
     }
+
+    #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-learning-page {
+      inset: 0 !important;
+      height: auto !important;
+      z-index: 10030;
+      background: #243038;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
   `;
 
   document.head.appendChild(style);
@@ -5251,6 +5349,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
   // un éventuel état "bloqué" (sablier arrêté + actions de récupération) laissé
   // par un chargement précédent.
 	  overlay.classList.remove("debate-iframe-parent-loading-stuck");
+	  overlay.classList.remove("debate-iframe-parent-loading-learning-page");
 	  overlay.classList.toggle(
 	    "debate-iframe-parent-loading-enter-debate",
 	    String(message || "").includes("Entrée dans l'arène")
@@ -5479,6 +5578,7 @@ function syncDebateIframeModalPageClass(pathname = "") {
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal) return;
   const safePathname = String(pathname || "");
+  if (safePathname !== "/apprentissage") modal.classList.remove("learning-frame-ready");
   modal.classList.toggle("contact-frame-open", safePathname === "/contact");
   modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
   modal.classList.toggle("debate-frame-open", safePathname === "/debate");
@@ -5863,6 +5963,22 @@ function setDebateIframeModalLoadingState(isLoading, message = "Chargement en co
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal) return;
 
+  if (!isLoading && modal.classList.contains("qcm-frame-open")) {
+    // Verrou central : aucun événement générique (load, fallback, message
+    // secondaire) ne peut dévoiler Apprentissages avant son signal métier.
+    if (modal.dataset.learningContentReady !== "true") return;
+    const elapsed = performance.now() - learningIframeLoadingStartedAt;
+    const remaining = Math.max(0, 4000 - elapsed);
+    if (remaining > 0) {
+      clearTimeout(learningIframeMinimumLoadingTimer);
+      learningIframeMinimumLoadingTimer = setTimeout(() => {
+        learningIframeMinimumLoadingTimer = null;
+        setDebateIframeModalLoadingState(false, message, showOverlay);
+      }, remaining);
+      return;
+    }
+  }
+
   modal.classList.toggle("loading", !!isLoading);
   modal.style.setProperty("--debate-iframe-modal-top", `${getStableTopbarBottomOffset()}px`);
 
@@ -6240,6 +6356,59 @@ function ensureDebateIframeModal() {
       visibility: hidden;
       pointer-events: none;
     }
+    #learning-iframe-modal-close {
+      display: none;
+      position: fixed;
+      left: 16px;
+      bottom: 80px;
+      z-index: 10002;
+      width: 42px;
+      height: 42px;
+      min-width: 42px;
+      min-height: 42px;
+      padding: 0;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid transparent;
+      border-radius: 999px;
+      background:
+        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
+      color: #e5edf3;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    #debate-iframe-modal.open.qcm-frame-open.learning-frame-ready #learning-iframe-modal-close {
+      display: inline-flex;
+    }
+    #debate-iframe-modal.qcm-fiche-open-in-child #learning-iframe-modal-close {
+      display: none !important;
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+    #learning-iframe-modal-close:hover,
+    #learning-iframe-modal-close:focus-visible {
+      background:
+        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
+      color: #ffffff;
+    }
+    @media (max-width: 768px) {
+      #learning-iframe-modal-close {
+        left: calc(20% - 13px);
+        bottom: 59px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+        font-size: 16px;
+      }
+    }
   `;
   document.head.appendChild(style);
 
@@ -6253,6 +6422,7 @@ function ensureDebateIframeModal() {
       <button id="debate-iframe-modal-refresh" type="button" aria-label="Actualiser" title="Actualiser"><i class="fa-solid fa-rotate-right" style="font-size:18px;line-height:1;"></i></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
+    <button id="learning-iframe-modal-close" type="button" aria-label="Quitter les apprentissages et retourner à l'accueil" title="Retour à l'accueil"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
   `;
   document.body.appendChild(modal);
 
@@ -6268,6 +6438,9 @@ function ensureDebateIframeModal() {
   if (debateIframeModalRefreshButton) {
     debateIframeModalRefreshButton.addEventListener("click", reloadDebateIframeModalFrame);
   }
+  document.getElementById("learning-iframe-modal-close")?.addEventListener("click", () => {
+    closeDebateIframeModal({ skipReturnLoader: true });
+  });
 
   // Écoute le postMessage envoyé par les flèches retour de la page débat
   window.addEventListener("message", (e) => {
@@ -6360,9 +6533,28 @@ function ensureDebateIframeModal() {
       }
 
       if (!shouldKeepLoadingUntilNotificationTarget) {
-        requestAnimationFrame(() => {
+        const revealReadyFrame = () => {
+          if (!isCurrentDebateIframeModalNavigation(readyFrame, readyHref, readyPathname)) return;
+          if (readyPathname === "/apprentissage") {
+            const learningModal = document.getElementById("debate-iframe-modal");
+            learningModal?.classList.add("learning-frame-ready");
+            if (learningModal) learningModal.dataset.learningContentReady = "true";
+          }
           setDebateIframeModalLoadingState(false);
-        });
+        };
+        if (readyPathname === "/apprentissage") {
+          // Le signal de la page confirme que ses données principales et ses
+          // polices sont prêtes. On lui laisse encore deux peintures puis un
+          // court temps de stabilisation pour que jauge, rubriques et sujets
+          // proposés soient déjà en place derrière le loader au dévoilement.
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setTimeout(revealReadyFrame, 2500);
+            });
+          });
+        } else {
+          requestAnimationFrame(revealReadyFrame);
+        }
       }
       return;
     }
@@ -6466,6 +6658,25 @@ function ensureDebateIframeModal() {
     if (e.data.type === "mnoria:qcm-fiche-visibility") {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) debateModal.classList.toggle("qcm-fiche-open-in-child", !!e.data.open);
+      if (!e.data.open) {
+        // La page Apprentissage masque aussi cette flèche directement avec
+        // des styles inline `!important`. La classe du parent ne suffit donc
+        // pas à la faire revenir : nettoyer explicitement ces styles lorsque
+        // la dernière fenêtre enfant se ferme.
+        const learningCloseButton = document.getElementById("learning-iframe-modal-close");
+        if (learningCloseButton) {
+          ["display", "opacity", "visibility", "pointer-events"].forEach((property) => {
+            learningCloseButton.style.removeProperty(property);
+          });
+          learningCloseButton.setAttribute("aria-hidden", "false");
+          learningCloseButton.tabIndex = 0;
+        }
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
+          });
+        });
+      }
       return;
     }
 
@@ -6519,7 +6730,10 @@ function ensureDebateIframeModal() {
         loadedPathname = frame.contentWindow?.location?.pathname || "";
       } catch (error) {}
       if (!isCurrentDebateIframeModalNavigation(frame, loadedHref, loadedPathname)) return;
-      if (expectedPathname && expectedPathname !== "/debate") {
+      // /apprentissage, comme /debate, possède son propre signal de contenu
+      // réellement prêt. L'événement HTML load ne signifie ici que « document
+      // téléchargé » : les QCM, la jauge et les recommandations chargent encore.
+      if (expectedPathname && expectedPathname !== "/debate" && expectedPathname !== "/apprentissage") {
         requestAnimationFrame(() => {
           setDebateIframeModalLoadingState(false);
         });
@@ -6918,6 +7132,56 @@ function _showEpisodeNavNotFound() {
   notice._hideTimer = setTimeout(() => notice.classList.remove("show"), 3500);
 }
 
+function openLearningPageWithArenaLoading(url = "/apprentissage") {
+  openDebateIframeModal(url);
+}
+
+function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
+  if (window.self !== window.top) {
+    try {
+      if (typeof window.parent.openHomePageWithArenaLoading === "function") {
+        window.parent.openHomePageWithArenaLoading(url);
+        return;
+      }
+    } catch (error) {}
+    window.top.location.href = url;
+    return;
+  }
+
+  closeHomeTopbarMenu();
+  if (window.__mnoriaDebateModalOpen === true && document.getElementById("debate-iframe-modal")?.classList.contains("open")) {
+    closeDebateIframeModal({ skipReturnLoader: true });
+    showDebateIframeParentLoadingOverlay("Chargement de l'accueil en cours");
+    document.getElementById("debate-iframe-parent-loading-overlay")
+      ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
+    setTimeout(() => hideDebateIframeParentLoadingOverlay(), 240);
+    return;
+  }
+  try { sessionStorage.setItem("mnoria_home_memory_return_loading", "1"); } catch (error) {}
+  showDebateIframeParentLoadingOverlay("Chargement de l'accueil en cours");
+  document.getElementById("debate-iframe-parent-loading-overlay")
+    ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => { window.location.href = url; }, 80);
+    });
+  });
+}
+
+document.addEventListener("click", (event) => {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const link = event.target?.closest?.('a[href]');
+  if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+
+  let targetUrl;
+  try { targetUrl = new URL(link.href, window.location.origin); } catch (error) { return; }
+  if (targetUrl.origin !== window.location.origin || targetUrl.pathname !== "/" || location.pathname === "/") return;
+
+  event.preventDefault();
+  openHomePageWithArenaLoading("/?skipStartup=1");
+}, true);
+
 function openDebateIframeModal(url, options = {}) {
   // Les liens du bandeau bas (Apprentissages, Alertes…) font event.preventDefault() puis
   // appellent cette fonction au lieu de naviguer réellement — sans vraie navigation, le lien
@@ -6932,8 +7196,10 @@ function openDebateIframeModal(url, options = {}) {
        navigations top-level. Leur scroll, leur bandeau et leur zone sûre
        appartiennent directement au viewport. Seules les arènes conservent
        l'iframe modale et son dock spécialisé. */
-    const isArenaPath = parsedModalUrl.pathname === "/debate" || parsedModalUrl.pathname.indexOf("/debates/") === 0;
-    if (parsedModalUrl.origin === window.location.origin && !isArenaPath) {
+    const isIframeModalPath = parsedModalUrl.pathname === "/debate" ||
+      parsedModalUrl.pathname.indexOf("/debates/") === 0 ||
+      parsedModalUrl.pathname === "/apprentissage";
+    if (parsedModalUrl.origin === window.location.origin && !isIframeModalPath) {
       const pageTarget = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
       if (window.top && window.top !== window) window.top.location.href = pageTarget;
       else window.location.href = pageTarget;
@@ -6969,6 +7235,8 @@ function openDebateIframeModal(url, options = {}) {
   const existingModal = document.getElementById("debate-iframe-modal");
   if (existingModal) {
     existingModal.classList.remove("argument-form-open-in-child");
+    existingModal.classList.remove("learning-frame-ready");
+    delete existingModal.dataset.learningContentReady;
     setDebateIframeAiLoadingAnimationState(false);
   }
 
@@ -6992,6 +7260,11 @@ function openDebateIframeModal(url, options = {}) {
 
   let iframeUrlPathname = url;
   try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
+  if (iframeUrlPathname === "/apprentissage") {
+    learningIframeLoadingStartedAt = performance.now();
+    clearTimeout(learningIframeMinimumLoadingTimer);
+    learningIframeMinimumLoadingTimer = null;
+  }
   const isDebateUrl = iframeUrlPathname === "/debate";
   const useNativeParentScroll = shouldUseNativeParentScrollForDebateIframe(iframeUrlPathname);
   syncIndexUrlWithOpenIframeModal(url);
@@ -7015,9 +7288,17 @@ function openDebateIframeModal(url, options = {}) {
   // le comportement de rendu du navigateur entre deux lignes.
   setDebateIframeModalLoadingState(
     true,
-    isDebateUrl ? "Entrée dans l'arène en cours" : "Chargement en cours",
+    isDebateUrl
+      ? "Entrée dans l'arène en cours"
+      : iframeUrlPathname === "/apprentissage"
+        ? "Chargement de mes apprentissages en cours"
+        : "Chargement en cours",
     !isIframePageWithoutLoadingOverlay(iframeUrlPathname)
   );
+  if (iframeUrlPathname === "/apprentissage") {
+    document.getElementById("debate-iframe-parent-loading-overlay")
+      ?.classList.add("debate-iframe-parent-loading-learning-page");
+  }
   modal.classList.add("open");
   if (useNativeParentScroll) {
     setDebateIframeNativeParentScrollMode(true);
@@ -7248,6 +7529,10 @@ function closeDebateIframeModal(options = {}) {
   const frame = document.getElementById("debate-iframe-modal-frame");
   const closeButton = document.getElementById("debate-iframe-modal-close");
   if (!modal) return;
+  clearTimeout(learningIframeMinimumLoadingTimer);
+  learningIframeMinimumLoadingTimer = null;
+  learningIframeLoadingStartedAt = 0;
+  if (modal) modal.dataset.learningContentReady = "true";
   const notificationsReturnContext = getNotificationsReturnContext();
   const currentIframePathname = String(window.__mnoriaIframeCurrentPathname || "");
   const shouldReturnToTribunesFromChildPage =
@@ -13514,6 +13799,11 @@ function openExternalSourceDirect(url) {
 }
 
 document.addEventListener("click", (event) => {
+  // Les commandes du carrousel vivent dans la carte Open Graph, qui porte
+  // elle-même data-source-panel-url. En phase de capture, ce gestionnaire
+  // passe avant leur onclick : les exclure ici permet aux flèches/points de
+  // faire défiler la source sans ouvrir son lien.
+  if (event.target?.closest?.(".debate-media-swipe-hotspot, .debate-source-carousel-dot")) return;
   const sourceTrigger = event.target?.closest?.(".page-debate [data-source-panel-url]");
   if (!sourceTrigger) return;
   const url = sourceTrigger.dataset?.sourcePanelUrl || sourceTrigger.getAttribute?.("href") || "";
@@ -19762,9 +20052,20 @@ function syncMnoriaCloudModeSwitch() {
   if (secondaryActions) secondaryActions.style.display = (_memoireCloudMode || _mnoriaCloudMode) ? 'none' : '';
 }
 
+// Allume immédiatement le segment cliqué, avant même le fetch réseau du mode ciblé (demande du
+// 03/09/2026, "le bouton doit immédiatement changer de couleur, là il y a un temps de latence") :
+// syncMnoriaCloudModeSwitch() ci-dessus ne reflète l'état réel qu'une fois le fetch résolu (jusqu'à
+// plusieurs secondes), donc corrige seul ce highlight en cas d'échec/retour arrière.
+function highlightMnoriaCloudModeSwitchButton(activeId) {
+  ['mnoria-cloud-mode-actu', 'mnoria-cloud-mode-mnoria-btn', 'mnoria-cloud-mode-memoire-btn'].forEach((id) => {
+    document.getElementById(id)?.classList.toggle('mnoria-cloud-mode-segment-active', id === activeId);
+  });
+}
+
 // Cible explicitement un mode (utilisé par les segments du sélecteur)
 function setMnoriaCloudMode(enableMnoria) {
   const targetMnoriaMode = Boolean(enableMnoria);
+  highlightMnoriaCloudModeSwitchButton(targetMnoriaMode ? 'mnoria-cloud-mode-mnoria-btn' : 'mnoria-cloud-mode-actu');
   _mnoriaCloudRequestedMode = targetMnoriaMode;
   const wasMemoireMode = _memoireCloudMode;
   if (_memoireCloudMode) {
@@ -19799,6 +20100,7 @@ let _memoireModuleLoadPromise = null;
 
 function setMemoireCloudMode(enable, skipSync = false) {
   const enableMemoire = Boolean(enable);
+  if (enableMemoire) highlightMnoriaCloudModeSwitchButton('mnoria-cloud-mode-memoire-btn');
   if (enableMemoire === _memoireCloudMode) {
     document.body.classList.toggle('mnoria-memoire-cloud-mode', enableMemoire);
     // Reclique sur l'onglet "Ma mémoire" alors qu'on y est déjà, potentiellement à un niveau
@@ -19840,6 +20142,12 @@ function setMemoireCloudMode(enable, skipSync = false) {
   // une fois son texte final posé (cf. plus bas, mêmes branches success/échec).
   if (caption && _memoireCloudMode) caption.hidden = true;
   if (_memoireCloudMode) {
+    // La section est partagée avec Bulles Actu. Au démarrage, initIndex() peut recevoir
+    // momentanément une liste Actu vide et poser section.hidden=true juste avant cette
+    // bascule. "Ma mémoire" dispose de son propre chargement et ne doit jamais hériter de
+    // cet état vide du flux Actu : la rendre explicitement visible à chaque entrée.
+    const trendsSection = document.getElementById('mnoria-tag-trends-section');
+    if (trendsSection) trendsSection.hidden = false;
     if (beforeEl) beforeEl.hidden = false;
     if (afterEl) afterEl.hidden = false;
     if (politicalSwitch) politicalSwitch.hidden = true;
@@ -19907,9 +20215,10 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260902-retry-429').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260903-longpress-no-select').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
+        window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
         _memoireModuleLoadPromise = null;
         return null;
       });
@@ -34210,6 +34519,8 @@ function _buildNotifPageItemHtml(notification) {
     link = `/debate?id=${notification.debate_id}&highlight=${notification.type === "analysis_ready" ? "ai-report" : "debate"}`;
   } else if (notification.type === "learning_digest") {
     link = "/qcm-du-jour";
+  } else if (notification.type === "notion_quiz_ready") {
+    link = "/qcm-du-jour?highlightLatest=1";
   }
 
   if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") { icon = "🗳️"; title = "Votre idée a reçu une voix"; subtitle = "Ouvrir l'idée"; }
@@ -34226,6 +34537,7 @@ function _buildNotifPageItemHtml(notification) {
   if (notification.type === "analysis_scheduled") { icon = '<img src="/sablier2-64.png" style="width:1.4em;height:1.4em;object-fit:contain;vertical-align:middle;">'; title = "L'arbitrage IA démarre dans 24h"; subtitle = "Ouvrir le débat"; }
   if (notification.type === "analysis_ready") { icon = "⚖️"; title = "L'arbitrage IA est disponible"; subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse"; }
   if (notification.type === "learning_digest") { icon = "🧠"; subtitle = "Ouvrir la page apprentissage"; }
+  if (notification.type === "notion_quiz_ready") { icon = "🧠"; subtitle = "Ouvrir la page apprentissage"; }
 
   title = getNotificationDisplayTitle(notification, title);
   return `
@@ -35864,40 +36176,6 @@ function markMnoriaHomeTrendsSectionTopReady() {
   if (window.__mnoriaHomeTrendsSectionTopReady === true) return;
   window.__mnoriaHomeTrendsSectionTopReady = true;
   window.dispatchEvent(new Event('mnoria:memoire-frame-ready'));
-}
-// iOS/WebKit standalone : env(safe-area-inset-bottom) peut valoir 0 sur les toutes
-// premières frames après un lancement à froid, avant de se corriger — un bandeau
-// position:fixed calé dessus (.home-bottom-nav, cf. son débordement volontaire pour
-// /create, /notifications, /apprentissage dans style.css) laisse alors voir une bande
-// non couverte sous lui jusqu'à ce que WebKit recompose la couche, ce qui ne se
-// produisait jusqu'ici qu'au premier scroll réel de l'utilisateur (constaté le
-// 01/09/2026, "ca fait pareil en create et notification : bande [qui] disparaît
-// quand on scroll vers le bas"). Hypothèse testée à la demande de l'utilisateur
-// ("rajoute comme un faux élément en bas, afin de mimer scroll ?") : un tout petit
-// scroll synthétique (1px aller-retour, sans geste réel) juste après le chargement,
-// pour déclencher cette recomposition sans attendre l'utilisateur.
-function forceStandaloneFixedNavRepaintOnce() {
-  const body = document.body;
-  if (!body || window.innerWidth > 768 || !body.classList.contains('is-standalone')) return;
-  const affectedPageClasses = [
-    'page-create', 'page-create-mobile',
-    'page-notifications', 'page-notifications-mobile',
-    'page-qcm-du-jour',
-  ];
-  if (!affectedPageClasses.some((c) => body.classList.contains(c))) return;
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      try {
-        window.scrollTo(0, 1);
-        window.scrollTo(0, 0);
-      } catch (error) {}
-    });
-  });
-}
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', forceStandaloneFixedNavRepaintOnce, { once: true });
-} else {
-  forceStandaloneFixedNavRepaintOnce();
 }
 function syncMnoriaHomeTrendsSectionMinHeight() {
   const body = document.body;

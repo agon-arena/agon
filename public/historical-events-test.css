@@ -80,53 +80,6 @@ html {
   }
 }
 
-/* Même bandeau Mnoria que l'index : cette page isolée ne charge pas style.css. */
-.topbar.topbar--mnoria-uniform {
-  height: 152px;
-  min-height: 152px;
-  max-height: 152px;
-}
-.topbar.topbar--mnoria-uniform .topbar-inner {
-  height: 146px;
-  min-height: 146px;
-  max-height: 146px;
-  padding: 0;
-  box-sizing: border-box;
-}
-.topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
-  width: 220px;
-  max-width: 220px;
-  height: 92px;
-  max-height: 92px;
-  object-fit: contain;
-}
-@media (max-width: 768px) {
-  .topbar.topbar--mnoria-uniform {
-    height: 102px;
-    min-height: 102px;
-    max-height: 102px;
-  }
-  .topbar.topbar--mnoria-uniform .topbar-inner {
-    height: 96px;
-    min-height: 96px;
-    max-height: 96px;
-  }
-  .topbar.topbar--mnoria-uniform .home-logo.home-logo--mnoria {
-    width: 128px;
-    max-width: 128px;
-    height: 96px;
-    max-height: 96px;
-  }
-}
-@media (display-mode: standalone) and (max-width: 768px) {
-  .topbar.topbar--mnoria-uniform {
-    height: calc(98px + env(safe-area-inset-top, 0px));
-    min-height: calc(98px + env(safe-area-inset-top, 0px));
-    max-height: calc(98px + env(safe-area-inset-top, 0px));
-    padding-top: calc(1px + env(safe-area-inset-top, 0px));
-  }
-}
-
 .het-body::after {
   content: "";
   display: block;
@@ -142,22 +95,25 @@ html {
 
 .het-page {
   box-sizing: border-box;
-  width: min(100% - 32px, 1100px);
+  width: min(100% - 32px, 900px);
   margin: 0 auto;
   /* Padding bas généreux : laisse scroller au-delà du bas du contenu plutôt
      que de s'arrêter pile dessus. */
-  padding: 40px 0 180px;
+  /* 8px ici + les 24px de marge du panneau = 32px, comme À propos. */
+  padding: 8px 0 180px;
+}
+@media (min-width: 769px) {
+  .het-page {
+    width: min(100% - 64px, 1200px);
+  }
 }
 /* En iframe (modale ouverte depuis l'accueil, cas d'usage réel de cette
    page) : même principe que .page-eclairages.in-iframe .ecl-page-shell —
    le padding-top "page autonome" (40px) laissait un grand vide au-dessus du
    cadre, la modale ayant déjà son propre espace en haut. */
 .het-body.in-iframe .het-page {
-  /* 20px (même marge que .qcm-page-shell/.ecl-page-shell en iframe) + 16px :
-     ces pages sont des <main>, qui héritent en mobile d'un padding-top
-     générique de style.css (main { padding: 16px 0 28px 0 }) que cette page
-     isolée ne charge pas — reproduit ici en dur pour un total identique. */
-  padding-top: 36px;
+  /* Le panneau perd sa marge propre en iframe : 28px directement, comme À propos. */
+  padding-top: 28px;
 }
 .het-body.in-iframe .het-panel {
   margin-top: 0;
@@ -191,7 +147,7 @@ html {
   box-sizing: border-box;
 }
 .het-panel {
-  width: min(100% - 32px, 900px);
+  width: 100%;
   margin: 24px auto 0;
   padding: 24px;
   border-radius: 8px;

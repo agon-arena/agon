@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
-<link rel="stylesheet" href="/style.min.css?v=20260901-card-fonts-unified">
+<link rel="stylesheet" href="/style.min.css?v=20260902-eclairages-panel-no-top-gap">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -66,10 +66,12 @@
     }
     .ecl-page-shell {
       width: min(100% - 32px, 900px);
-      margin: 112px auto 180px;
+      margin: 32px auto 180px;
+      padding-top: 0 !important;
     }
     html.in-iframe .page-eclairages .ecl-page-shell {
-      margin: 20px auto 0;
+      margin: 28px auto 0;
+      padding-top: 0 !important;
     }
     /* Doit rester APRÈS la règle ci-dessus (même sélecteur, donc même
        spécificité) : un margin-bottom placé avant un margin raccourci
@@ -1069,7 +1071,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260902-notion-level-desc2" defer></script>
+<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1379,11 +1381,9 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       init();
-      if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.ecl-panel' });
     });
   } else {
     init();
-    if (typeof attachPageScrollFadeHint === 'function') attachPageScrollFadeHint('#ffffff', { contentEndSelector: '.ecl-panel' });
   }
 })();
 </script>

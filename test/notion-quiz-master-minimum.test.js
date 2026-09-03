@@ -12,8 +12,18 @@ test('Expert generation uses the shared minimum for a reusable master', () => {
 
 test('an incomplete stored master is replaced after a successful regeneration', () => {
   assert.match(server, /async function resolveMasterInsertConflict\(/);
-  assert.match(server, /if \(isMasterEligibleQuiz\(raceRow\?\.questions\)\)/);
+  // Génération progressive (Phase 1, 02/09/2026 ; taille FLEXIBLE, 02/09/2026
+  // suite) : isMasterEligibleQuiz reçoit aussi progressive_status ET
+  // curriculum pour juger équitablement un bloc progressif légitimement
+  // partiel — cf. lib/question-formats.js, comportement legacy strictement
+  // inchangé quand progressive_status est absent (NULL).
+  assert.match(server, /if \(isMasterEligibleQuiz\(raceRow\?\.questions, \{ progressiveStatus: raceRow\?\.progressive_status, curriculum: raceRow\?\.curriculum \}\)\)/);
   const callers = server.match(/return resolveMasterInsertConflict\(masterSlot, questions, quizDate\);/g) || [];
   assert.equal(callers.length, 2);
-  assert.match(server, /\.update\(\{ questions, source_debate_ids: \[\] \}\)/);
+  // Le payload d'update est désormais construit dynamiquement
+  // (updatePayload) pour pouvoir y ajouter curriculum/progressive_status
+  // UNIQUEMENT quand un appelant progressif les fournit — le cas legacy
+  // (extra={}) écrit toujours exactement { questions, source_debate_ids: [] }.
+  assert.match(server, /const updatePayload = \{ questions, source_debate_ids: \[\] \};/);
+  assert.match(server, /\.update\(updatePayload\)/);
 });
