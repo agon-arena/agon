@@ -76,6 +76,16 @@ const {
   buildSemanticReviewPrompt,
   runQuestionQualityPipeline
 } = require("./lib/qcm-quality");
+// Evidence grounding en amont (V1, 03/09/2026, cf. audit read-only du même
+// jour) : validateKnowledgeEvidence/applyEvidenceGroundingOverride,
+// utilisées UNIQUEMENT par le bloc Elementary progressif grounded (cf.
+// resolveProgressiveCurriculum/generateElementaryBlock/qualityControlRawQuestions
+// plus bas) — jamais par le pipeline legacy/master, qui ne les importe nulle
+// part ailleurs dans ce fichier.
+const {
+  validateKnowledgeEvidence,
+  applyEvidenceGroundingOverride
+} = require("./lib/question-grounding-validation");
 const {
   buildKnowledgeAdmissionPrompt,
   buildQuestionsFromKnowledgePrompt,
@@ -13289,11 +13299,21 @@ app.post("/api/youtube-knowledge/analyze", rateLimit("youtube-knowledge", 4), ex
 async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnowledge = 20, sourceUrl = null, sourceMeta = null }) {
   if (!process.env.OPENAI_API_KEY) return { status: 503, body: { ok: false, error: "OPENAI_API_KEY manquant." } };
 
+  // Capturés dès que possible pour pouvoir notifier un échec même si une
+  // exception survient plus loin dans le pipeline (cf. catch générique
+  // ci-dessous) — sans ça, une erreur en cours de génération ne produit
+  // aucune notification et l'utilisateur, invité à quitter la page pendant
+  // que "la génération continue côté serveur", ne voit jamais rien venir.
+  let legacyKeyForFailureNotif = null;
+  let sourceTitleForFailureNotif = "";
+
   try {
     const validation = validateLegacyKey(body?.legacyKey);
     if (validation.error) return { status: 400, body: { ok: false, error: validation.error } };
+    legacyKeyForFailureNotif = validation.legacyKey;
 
     const sourceTitle = String(body?.sourceTitle || "").trim().replace(/\s+/g, " ").slice(0, 160);
+    sourceTitleForFailureNotif = sourceTitle;
     const submitted = Array.isArray(body?.knowledge) ? body.knowledge : [];
     if (!submitted.length || submitted.length > maxKnowledge) {
       return { status: 400, body: { ok: false, error: `Sélection invalide (1 à ${maxKnowledge} connaissances).` } };
@@ -13504,11 +13524,29 @@ async function addValidatedKnowledgeImport({ body, sourceType, logLabel, maxKnow
         type: "notion_quiz_ready",
         message: readyMessage
       }).catch((error) => console.error(`[${logLabel}:${documentImportId}] notification push :`, error.message));
+    } else if (errorCount > 0) {
+      // Génération allée jusqu'au bout mais sans aucun succès (aucune
+      // exception levée) : sans ce bloc, l'utilisateur qui a quitté la page
+      // ne reçoit jamais rien, alors que la génération est bien "terminée".
+      const failMessage = `La génération a échoué${sourceTitle ? ` (« ${sourceTitle} »)` : ""}. Réessaie depuis la photo.`;
+      createNotification({
+        user_key: validation.legacyKey,
+        type: "notion_quiz_failed",
+        message: failMessage
+      }).catch((error) => console.error(`[${logLabel}:${documentImportId}] notification d'échec :`, error.message));
     }
 
     return { status: 200, body: { ok: errorCount === 0, documentImportId, addedCount, existingCount, errorCount, results } };
   } catch (error) {
     console.error(`Erreur ajout ${logLabel}:`, error.message);
+    if (legacyKeyForFailureNotif) {
+      const failMessage = `La génération a échoué${sourceTitleForFailureNotif ? ` (« ${sourceTitleForFailureNotif} »)` : ""}. Réessaie depuis la photo.`;
+      createNotification({
+        user_key: legacyKeyForFailureNotif,
+        type: "notion_quiz_failed",
+        message: failMessage
+      }).catch((notifError) => console.error(`[${logLabel}] notification d'échec :`, notifError.message));
+    }
     return { status: 500, body: { ok: false, error: "Erreur lors de l'ajout à la mémoire." } };
   }
 }
@@ -14483,7 +14521,15 @@ async function qualityControlRawQuestions({
   // détail de chacun).
   earlyStopCountFn,
   filterRejectedForRegeneration,
-  onInitialBatchAccepted
+  onInitialBatchAccepted,
+  // evidenceByKnowledgeTarget (V1 evidence grounding, 03/09/2026) : Map
+  // texte-normalisé(knowledgeTarget) -> {source_id, evidence_text}, fournie
+  // UNIQUEMENT par generateElementaryBlock/expandGroundingAndRegenerateMissing
+  // Questions pour le bloc Elementary progressif grounded — absente
+  // (undefined) pour tout autre appelant, comportement STRICTEMENT inchangé
+  // (applyEvidenceGroundingOverride est un no-op explicite sans elle, cf.
+  // lib/question-grounding-validation.js).
+  evidenceByKnowledgeTarget
 }) {
   const startedAt = Date.now();
   // onCycle (V1 latence, 02/09/2026, cf. audit read-only) : un log par cycle
@@ -14519,7 +14565,14 @@ async function qualityControlRawQuestions({
       // jamais bloquant ni remonté — cf. commentaire ci-dessus
     }
   };
-  const outcome = await runQuestionQualityPipeline(rawQuestions, {
+  // applyEvidence (V1 evidence grounding, 03/09/2026) : appliqué au lot
+  // initial ET à chaque lot retourné par regenerate() ci-dessous — le SEUL
+  // point qui force déterministiquement supporting_claim/source_ids depuis
+  // evidence_text, jamais laissé au modèle de les recopier. Ne modifie
+  // jamais aucun autre champ de la question (question/options/correctIndex/
+  // knowledgeTarget restent exactement ce que le modèle a écrit).
+  const applyEvidence = (questions) => applyEvidenceGroundingOverride(questions, evidenceByKnowledgeTarget);
+  const outcome = await runQuestionQualityPipeline(applyEvidence(rawQuestions), {
     semanticReviewEnabled: QCM_SEMANTIC_REVIEW_ENABLED,
     maxRetries: QCM_SEMANTIC_REVIEW_MAX_RETRIES,
     maxTechnicalRetries: QCM_CRITIC_TECHNICAL_MAX_RETRIES,
@@ -14680,7 +14733,8 @@ async function qualityControlRawQuestions({
         generationId
       });
       const parsed = JSON.parse(content);
-      return Array.isArray(parsed?.questions) ? parsed.questions.slice(0, rejectionPayload.length) : [];
+      const regenerated = Array.isArray(parsed?.questions) ? parsed.questions.slice(0, rejectionPayload.length) : [];
+      return applyEvidence(regenerated);
     }
   });
   // Observabilité agrégée uniquement : aucun texte de question, fait privé,
@@ -15086,7 +15140,16 @@ async function expandWebSearchGroundingSources(apiKey, subject, id, topicContext
 // Toujours appelée au plus une fois par génération par son unique appelant
 // (generateNotionLevelQuiz) — c'est ce qui borne le fallback à une seule
 // tentative (section 15), jamais une boucle au sein de cette fonction.
-async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, id, instruction, timeoutMs, grounding, accepted, validated, questionQualityMetrics }) {
+// evidenceByKnowledgeTarget (V1 evidence grounding, 03/09/2026) : optionnel,
+// simple relais vers qualityControlRawQuestions ci-dessous (section 9 de
+// l'audit — "pas de bypass" : les connaissances régénérées par V3.2 doivent
+// bénéficier du même forçage supporting_claim=evidence_text que le lot
+// initial). Absent pour tout appelant existant (master legacy) — comportement
+// strictement inchangé. `missingKnowledge`, dérivé de `accepted` plus bas,
+// porte déjà source_id/evidence_text quand `accepted` les porte (cf.
+// generateElementaryBlock, seul appelant à les fournir) — aucune nouvelle
+// preuve n'est jamais extraite ici, seulement propagée.
+async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, id, instruction, timeoutMs, grounding, accepted, validated, questionQualityMetrics, evidenceByKnowledgeTarget }) {
   const sourceCountInitial = grounding?.identifiedSources?.length || 0;
   const baseSummary = {
     triggered: false,
@@ -15172,7 +15235,8 @@ async function expandGroundingAndRegenerateMissingQuestions({ apiKey, subject, i
       },
       groundingSources: mergedGroundingSourcesMap,
       metricsSink: (metrics) => { expansionMetrics = metrics; },
-      generationId: id
+      generationId: id,
+      evidenceByKnowledgeTarget
     });
     const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], missingKnowledge.length, missingKnowledge.length);
     const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, missingKnowledge);
@@ -18336,11 +18400,57 @@ const CURRICULUM_REPAIR_MAX_ATTEMPTS = 2;
 // une phase future (Phase 2, non implémentée). Le champ `verified` est la
 // seule source de vérité sur cet état ; rien dans ce chantier ne l'ignore ni
 // ne le contourne.
+// evidenceModeActive (V1 evidence grounding, 03/09/2026, cf. audit
+// read-only du même jour — "déplacer la preuve en amont") : actif
+// UNIQUEMENT quand grounding.identifiedSources existe réellement (sources
+// web citables par SOURCE_N, cf. lib/web-search-grounding.js) — sinon
+// (sujet sans grounding réel, comportement de tout appelant qui atteignait
+// déjà cette fonction avant ce chantier) reste strictement le comportement
+// existant au caractère près : buildCurriculumPrompt/buildCurriculumRepairPrompt
+// reçoivent `identifiedSourcesBlock: null`, retombent sur leur branche
+// `groundingText` inchangée. Périmètre strict de cette V1 : jamais le
+// pipeline legacy/master (generateNotionLevelQuiz), qui n'appelle jamais
+// cette fonction.
 async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, grounding) {
   const curriculumStartedAt = Date.now();
+  const evidenceModeActive = !!grounding?.identifiedSources?.length;
+  // Instrumentation minimale (section 11 de la demande) : comptés sur
+  // TOUTE la résolution du curriculum (pool initial + chaque tentative de
+  // réparation), jamais réinitialisés en cours de route — permet de
+  // comparer, après un test réel, la fréquence de GROUNDING_CLAIM_NOT_
+  // GROUNDED_IN_SOURCE côté question AVANT/APRÈS ce chantier. Neutres
+  // (0/vide) quand evidenceModeActive est faux, jamais confondus avec "0
+  // rejet" au sens qualitatif — cf. qcm-progressive-timing plus bas.
+  let evidenceCandidates = 0;
+  let evidenceValid = 0;
+  const evidenceRejectionReasons = {};
+  const trackEvidenceRejection = (reason) => {
+    evidenceRejectionReasons[reason] = (evidenceRejectionReasons[reason] || 0) + 1;
+  };
+  // Filtre déterministe (jamais un jugement IA, jamais un assouplissement
+  // d'un seuil de validateQuestionGrounding) : un item dont l'evidence_text
+  // n'est pas réellement retrouvé dans la source citée n'est jamais admis
+  // artificiellement — il est simplement retiré ici, comme n'importe quel
+  // rejet de knowledge_verification (même mécanisme de réparation existant
+  // plus bas, jamais une nouvelle boucle dédiée, cf. section 8 de la
+  // demande).
+  const applyEvidenceGate = (items) => {
+    if (!evidenceModeActive) return items;
+    return items.filter((item) => {
+      evidenceCandidates += 1;
+      const result = validateKnowledgeEvidence(item, grounding.identifiedSources);
+      if (result.ok) { evidenceValid += 1; return true; }
+      trackEvidenceRejection(result.reason);
+      return false;
+    });
+  };
+
   let pool;
   try {
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildCurriculumPrompt(subject, contextHint, grounding?.groundingText || null) }], {
+    const content = await _callOpenAI(apiKey, [{
+      role: "user",
+      content: buildCurriculumPrompt(subject, contextHint, grounding?.groundingText || null, evidenceModeActive ? grounding.identifiedSourcesBlock : null)
+    }], {
       model: DAILY_QUIZ_NARRATIVE_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" },
@@ -18367,6 +18477,14 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
   let elementaryPool = selectCurriculumLevel(leveledPool, "elementary");
   const deferredCandidates = leveledPool.filter((item) => item.level !== "elementary");
   const elementaryTarget = elementaryPool.length;
+  // Gate evidence AVANT toute vérification IA (section 3 de la demande) :
+  // un item sans preuve textuelle réelle ne mérite pas qu'on dépense un
+  // appel de knowledge_verification dessus, son sort est déjà scellé.
+  // elementaryTarget (ci-dessus) reste calculé sur le pool AVANT ce gate —
+  // la réparation plus bas cible donc toujours la taille réelle attendue du
+  // bloc elementary, quelle que soit la raison (evidence OU vérification)
+  // pour laquelle un item en a été retiré.
+  elementaryPool = applyEvidenceGate(elementaryPool);
 
   // Vérifie un sous-ensemble de candidats (`{fact, order}`) et renvoie les
   // `order` acceptés — jamais les `id`, pour ne jamais dépendre du format
@@ -18425,7 +18543,10 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
     console.warn(`[notion-quiz-progressive:${id}] curriculum elementary incomplet (réparation ${attempt}/${CURRICULUM_REPAIR_MAX_ATTEMPTS}) : ${acceptedElementary.length}/${elementaryTarget}, ${neededCount} connaissance(s) à ajouter.`);
     let additions = [];
     try {
-      const repairContent = await _callOpenAI(apiKey, [{ role: "user", content: buildCurriculumRepairPrompt(subject, contextHint, neededCount, acceptedElementary, grounding?.groundingText || null) }], {
+      const repairContent = await _callOpenAI(apiKey, [{
+        role: "user",
+        content: buildCurriculumRepairPrompt(subject, contextHint, neededCount, acceptedElementary, grounding?.groundingText || null, evidenceModeActive ? grounding.identifiedSourcesBlock : null)
+      }], {
         model: DAILY_QUIZ_NARRATIVE_MODEL,
         temperature: 0.4,
         responseFormat: { type: "json_object" },
@@ -18438,8 +18559,19 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
       // touchés par cette réparation) : garantit qu'un ajout ne collisionne
       // jamais avec un `order` déjà utilisé dans ce sous-ensemble.
       const startOrder = elementaryPool.reduce((max, k) => Math.max(max, k.order), 0);
+      // Spread de `a` (jamais une reconstruction champ par champ) : préserve
+      // source_id/evidence_text quand présents SANS jamais poser une clé
+      // explicite à `undefined` pour les ajouts sans preuve (comportement
+      // legacy) — même précédent que normalizeCurriculumOrder ci-dessus.
       additions = parseCurriculumRepairAdditions(JSON.parse(repairContent)?.additions, neededCount)
-        .map((a, index) => ({ id: `repair-${startOrder + index + 1}`, knowledgeTarget: a.knowledgeTarget, order: startOrder + index + 1 }));
+        .map((a, index) => ({ ...a, id: `repair-${startOrder + index + 1}`, order: startOrder + index + 1 }));
+      // Même gate déterministe que le pool initial (jamais un nouveau
+      // mécanisme) : un ajout de réparation sans preuve réelle n'est jamais
+      // accepté artificiellement — aucun retry supplémentaire n'est
+      // introduit ici, la boucle de réparation existante (CURRICULUM_REPAIR_
+      // MAX_ATTEMPTS) absorbe déjà ce cas exactement comme un rejet de
+      // knowledge_verification.
+      additions = applyEvidenceGate(additions);
     } catch (error) {
       console.warn(`[notion-quiz-progressive:${id}] réparation curriculum elementary (tentative ${attempt}) :`, error.message);
       continue;
@@ -18489,7 +18621,14 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
     curriculum: finalCurriculum,
     curriculumMs,
     elementaryVerificationCount: elementaryFinal.length,
-    deferredVerificationCount: deferredFinal.length
+    deferredVerificationCount: deferredFinal.length,
+    // Instrumentation evidence grounding (V1, section 11 de la demande) :
+    // evidenceCandidates=0 quand evidenceModeActive est faux (sujet sans
+    // grounding réel) — jamais confondu avec "0 rejet", cf. qcm-progressive-timing.
+    elementaryEvidenceCandidates: evidenceCandidates,
+    elementaryEvidenceValid: evidenceValid,
+    elementaryEvidenceRejected: evidenceCandidates - evidenceValid,
+    elementaryEvidenceRejectionReasons: evidenceRejectionReasons
   };
 }
 
@@ -18576,10 +18715,34 @@ async function generateElementaryBlock(apiKey, subject, contextHint, id, element
   // "intrus" ne sont jamais proposés pour un bloc progressif dans cette
   // phase (buildQuestionsFromKnowledgePrompt reste, lui, strictement
   // inchangé). Revisitable en Phase 2 si le curriculum les fournit un jour.
-  const admittedKnowledge = elementaryKnowledge.map((k) => ({ fact: k.knowledgeTarget, sequential: false, clearBoundary: false }));
+  // source_id/evidence_text (V1 evidence grounding, 03/09/2026) : propagés
+  // depuis le curriculum UNIQUEMENT quand présents et déjà validés (cf.
+  // resolveProgressiveCurriculum applyEvidenceGate) — jamais posés à
+  // undefined pour une connaissance sans preuve (mêmes précédents que
+  // parseCurriculumItems/normalizeCurriculumOrder plus haut dans le
+  // fichier).
+  const admittedKnowledge = elementaryKnowledge.map((k) => ({
+    fact: k.knowledgeTarget,
+    sequential: false,
+    clearBoundary: false,
+    ...(k.source_id && k.evidence_text ? { source_id: k.source_id, evidence_text: k.evidence_text } : {})
+  }));
   const groundingSourcesMap = grounding?.identifiedSources?.length
     ? new Map(grounding.identifiedSources.map((s) => [s.sourceId, s]))
     : null;
+  // evidenceByKnowledgeTarget (V1 evidence grounding, 03/09/2026) : construite
+  // UNE SEULE FOIS ici, réutilisée par le lot initial ET par V3.2 (cf. plus
+  // bas) — jamais reconstruite séparément, jamais une seconde source de
+  // vérité. Vide (Map de taille 0) quand aucune connaissance elementary ne
+  // porte de preuve validée (sujet sans grounding réel, ou toutes les
+  // preuves rejetées par le gate déterministe) : applyEvidenceGroundingOverride
+  // est alors un no-op strict, comportement identique à avant ce chantier.
+  const evidenceByKnowledgeTarget = new Map();
+  for (const k of admittedKnowledge) {
+    if (k.source_id && k.evidence_text) {
+      evidenceByKnowledgeTarget.set(normalizeFactText(k.fact), { source_id: k.source_id, evidence_text: k.evidence_text });
+    }
+  }
 
   const questionsTask = (async () => {
     let validated = [];
@@ -18636,7 +18799,8 @@ async function generateElementaryBlock(apiKey, subject, contextHint, id, element
           const coveredTargets = new Set(selectOneQuestionPerKnowledgeTarget(acceptedList).map((q) => normalizeFactText(q?.knowledgeTarget)));
           return rejected.filter((entry) => !coveredTargets.has(normalizeFactText(entry.question?.knowledgeTarget)));
         },
-        onInitialBatchAccepted: (acceptedList) => { initialBatchDistinctCount = selectOneQuestionPerKnowledgeTarget(acceptedList).length; }
+        onInitialBatchAccepted: (acceptedList) => { initialBatchDistinctCount = selectOneQuestionPerKnowledgeTarget(acceptedList).length; },
+        evidenceByKnowledgeTarget
       });
       const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], totalInitialCandidates, totalInitialCandidates);
       const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, admittedKnowledge);
@@ -18665,7 +18829,8 @@ async function generateElementaryBlock(apiKey, subject, contextHint, id, element
         const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions({
           apiKey, subject, id, instruction: levelConfig.instruction, timeoutMs,
           grounding: currentGrounding, accepted: admittedKnowledge, validated,
-          questionQualityMetrics: { ...questionQualityMetrics, finalAccepted: validated.length }
+          questionQualityMetrics: { ...questionQualityMetrics, finalAccepted: validated.length },
+          evidenceByKnowledgeTarget
         });
         // Re-consolidation défensive : expandGroundingAndRegenerateMissingQuestions
         // ne cible que missingKnowledge (jamais de doublon attendu), mais le
@@ -18760,7 +18925,10 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
 
     const curriculumResult = await resolveProgressiveCurriculum(apiKey, topic, null, id, grounding);
     if (curriculumResult.error) return curriculumResult;
-    const { curriculum, curriculumMs, elementaryVerificationCount, deferredVerificationCount } = curriculumResult;
+    const {
+      curriculum, curriculumMs, elementaryVerificationCount, deferredVerificationCount,
+      elementaryEvidenceCandidates, elementaryEvidenceValid, elementaryEvidenceRejected, elementaryEvidenceRejectionReasons
+    } = curriculumResult;
 
     const elementaryKnowledge = selectCurriculumLevel(curriculum, "elementary");
     const blockResult = await generateElementaryBlock(apiKey, topic, null, id, elementaryKnowledge, grounding);
@@ -18830,7 +18998,19 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       elementary_initial_candidate_count: elementaryInitialCandidateCount,
       elementary_initial_distinct_targets_validated: elementaryInitialDistinctTargetsValidated,
       elementary_regeneration_calls: elementaryRegenerationCalls,
-      elementary_ready_after_initial_batch: elementaryReadyAfterInitialBatch
+      elementary_ready_after_initial_batch: elementaryReadyAfterInitialBatch,
+      // elementary_evidence_candidates/valid/rejected/rejection_reasons (V1
+      // evidence grounding, 03/09/2026, section 11 de la demande) : mesurent,
+      // pour un run comparable, la fréquence à laquelle un item de curriculum
+      // proposé porte réellement une preuve textuelle vérifiable — jamais de
+      // texte de source ni d'extrait ici, uniquement des compteurs et des
+      // codes de rejet (cf. resolveProgressiveCurriculum). 0/vide quand le
+      // sujet n'a aucun grounding réel (evidenceModeActive=false), jamais
+      // confondu avec "0 rejet" au sens qualitatif.
+      elementary_evidence_candidates: elementaryEvidenceCandidates,
+      elementary_evidence_valid: elementaryEvidenceValid,
+      elementary_evidence_rejected: elementaryEvidenceRejected,
+      elementary_evidence_rejection_reasons: elementaryEvidenceRejectionReasons
     }));
 
     const questions = rankedQuestions.map((q, index) => ({
@@ -19694,6 +19874,17 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     const validation = validateLegacyKey(req.query?.legacyKey);
     if (validation.error) return res.status(400).json({ error: validation.error });
 
+    // Lancées immédiatement (demande du 03/09/2026, ouverture de /apprentissage
+    // trop lente) : ces deux lectures ne dépendent que de legacyKey, jamais de
+    // userRow.id — inutile d'attendre le reste de la route pour les démarrer.
+    // Le .catch() ici sert uniquement à éviter un "unhandled rejection" si la
+    // route retourne plus bas avant de les avoir attendues (cas !userRow /
+    // !links) ; il n'avale rien pour l'usage réel, qui reste le `await` de la
+    // même promesse plus bas dans le Promise.all.
+    const durableAcquisPromise = fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
+    durableAcquisPromise.catch(() => {});
+    const excludedQuestionIdsPromise = fetchExcludedQuestionIds(validation.legacyKey);
+
     const { data: userRow, error: userError } = await supabase
       .from("users").select("id").eq("legacy_key", validation.legacyKey).maybeSingle();
     if (userError) throw new Error(userError.message);
@@ -19720,23 +19911,16 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     const pairFilter = links
       .map((l) => `and(quiz_date.eq.${l.quiz_date},slot.eq.${l.slot})`)
       .join(",");
-    const { data: quizRows, error: quizRowsError } = await supabase
+
+    // Les trois lectures ci-dessous (daily_quiz, mémoire/galaxie, FSRS) ne
+    // dépendent chacune que de `pairFilter`/`userRow.id`, jamais l'une de
+    // l'autre : lancées en parallèle (Promise.all plus bas) plutôt qu'en
+    // série (demande du 03/09/2026) — mêmes requêtes, même volume lu, seule
+    // la mise en vol change.
+    const quizRowsPromise = supabase
       .from("daily_quiz")
       .select("quiz_date, slot, questions")
       .or(pairFilter);
-    if (quizRowsError) throw new Error(quizRowsError.message);
-    const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
-
-    // Le pourcentage FSRS ci-dessous mesure la rétrivabilité actuelle ; il
-    // peut naturellement frôler 100 % juste après une première exposition.
-    // Le statut durable « Acquis » doit rester plus exigeant : il réutilise
-    // la source de vérité historique de fetchUserAcquis, validée uniquement
-    // après DAILY_QUIZ_ACQUIS_VALIDATION_STREAK journées consécutives
-    // réussies (4 actuellement, une journée incorrecte remet la série à 0).
-    const durableAcquis = await fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
-    const durableAcquisBySourceId = new Map(
-      durableAcquis.map((item) => [String(item.sourceDebateId), item])
-    );
 
     // Même rubrique que « Ma mémoire » : celle-ci ne se contente pas de la
     // catégorie copiée dans daily_quiz lors de la génération, elle construit
@@ -19746,40 +19930,43 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // libellé dans « Mes acquis » et « Ma mémoire ». Les QCM pas encore acquis
     // gardent leur sourcePlacement comme repli, puisqu'ils n'ont logiquement
     // encore aucune position personnelle dans la mémoire.
-    const memoryGalaxyByKnowledgeKey = new Map();
-    try {
-      const { data: memoryAcquisitions, error: memoryAcquisitionsError } = await supabase
-        .from("user_article_acquisitions")
-        .select("eclairage_type, eclairage_source_id, solar_system_id")
-        .eq("user_id", userRow.id)
-        .not("eclairage_type", "is", null)
-        .not("solar_system_id", "is", null);
-      if (memoryAcquisitionsError) throw memoryAcquisitionsError;
+    const memoryGalaxyPromise = (async () => {
+      const memoryGalaxyByKnowledgeKey = new Map();
+      try {
+        const { data: memoryAcquisitions, error: memoryAcquisitionsError } = await supabase
+          .from("user_article_acquisitions")
+          .select("eclairage_type, eclairage_source_id, solar_system_id")
+          .eq("user_id", userRow.id)
+          .not("eclairage_type", "is", null)
+          .not("solar_system_id", "is", null);
+        if (memoryAcquisitionsError) throw memoryAcquisitionsError;
 
-      const memorySolarIds = [...new Set((memoryAcquisitions || []).map((item) => item.solar_system_id).filter(Boolean))];
-      let memorySolarById = new Map();
-      if (memorySolarIds.length) {
-        const { data: memorySolars, error: memorySolarsError } = await supabase
-          .from("solar_systems")
-          .select("id, galaxy")
-          .in("id", memorySolarIds);
-        if (memorySolarsError) throw memorySolarsError;
-        memorySolarById = new Map((memorySolars || []).map((solar) => [solar.id, solar]));
-      }
+        const memorySolarIds = [...new Set((memoryAcquisitions || []).map((item) => item.solar_system_id).filter(Boolean))];
+        let memorySolarById = new Map();
+        if (memorySolarIds.length) {
+          const { data: memorySolars, error: memorySolarsError } = await supabase
+            .from("solar_systems")
+            .select("id, galaxy")
+            .in("id", memorySolarIds);
+          if (memorySolarsError) throw memorySolarsError;
+          memorySolarById = new Map((memorySolars || []).map((solar) => [solar.id, solar]));
+        }
 
-      for (const acquisition of memoryAcquisitions || []) {
-        const galaxy = String(memorySolarById.get(acquisition.solar_system_id)?.galaxy || "").trim();
-        if (!galaxy) continue;
-        memoryGalaxyByKnowledgeKey.set(
-          `${acquisition.eclairage_type}:${acquisition.eclairage_source_id}`,
-          galaxy
-        );
+        for (const acquisition of memoryAcquisitions || []) {
+          const galaxy = String(memorySolarById.get(acquisition.solar_system_id)?.galaxy || "").trim();
+          if (!galaxy) continue;
+          memoryGalaxyByKnowledgeKey.set(
+            `${acquisition.eclairage_type}:${acquisition.eclairage_source_id}`,
+            galaxy
+          );
+        }
+      } catch (error) {
+        // Le classement d'affichage ne doit jamais rendre toute la liste
+        // indisponible : sourcePlacement reste un repli cohérent et déjà stocké.
+        console.warn("[notion-quizzes] rubriques Ma mémoire indisponibles :", error.message);
       }
-    } catch (error) {
-      // Le classement d'affichage ne doit jamais rendre toute la liste
-      // indisponible : sourcePlacement reste un repli cohérent et déjà stocké.
-      console.warn("[notion-quizzes] rubriques Ma mémoire indisponibles :", error.message);
-    }
+      return memoryGalaxyByKnowledgeKey;
+    })();
 
     // Progression par sujet : AGRÉGATION DÉRIVÉE de l'état FSRS de chacune de
     // ses questions (memory_item_fsrs_states, cf. lib/spaced-repetition/),
@@ -19795,11 +19982,31 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // (computeQuestionStreaks), qui ne reflétait plus le rythme réel des
     // repasses une fois celui-ci piloté par due_at plutôt que par des
     // paliers fixes.
-    const { data: fsrsStates, error: fsrsStatesError } = await supabase
+    const fsrsStatesPromise = supabase
       .from("memory_item_fsrs_states")
       .select("state, stability, last_review_at, memory_items(slot, quiz_date, question_id)")
       .eq("user_id", userRow.id);
+
+    const [
+      { data: quizRows, error: quizRowsError },
+      memoryGalaxyByKnowledgeKey,
+      { data: fsrsStates, error: fsrsStatesError },
+      durableAcquis,
+      excludedQuestionIds
+    ] = await Promise.all([
+      quizRowsPromise,
+      memoryGalaxyPromise,
+      fsrsStatesPromise,
+      durableAcquisPromise,
+      excludedQuestionIdsPromise
+    ]);
+    if (quizRowsError) throw new Error(quizRowsError.message);
     if (fsrsStatesError) throw new Error(fsrsStatesError.message);
+
+    const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
+    const durableAcquisBySourceId = new Map(
+      durableAcquis.map((item) => [String(item.sourceDebateId), item])
+    );
     const stateByQuestionKey = new Map();
     for (const row of fsrsStates || []) {
       const mi = row.memory_items;
@@ -19815,7 +20022,6 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // "en cours" indéfiniment. N'affecte jamais progressPct (une question
     // passée ne rapporte toujours aucun crédit de rétrivabilité, cohérent
     // avec "pas mémorisée") ni le scheduler FSRS (invariant D inchangé).
-    const excludedQuestionIds = await fetchExcludedQuestionIds(validation.legacyKey);
 
     const quizzes = [];
     for (const link of links) {

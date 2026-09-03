@@ -8536,15 +8536,6 @@ body.page-home-mobile #debates-list {
 }
 
 @media (max-width: 768px) {
-  /* Débat embarqué dans l'iframe du modal : on montre CE bouton (natif de la
-     page débat, déjà câblé sur goBackToIndex qui gère le postMessage vers le
-     parent) plutôt que celui de la modale, pour n'avoir plus qu'un seul
-     document à positionner par rapport au bandeau bas — cf. positionnement
-     dans initMnoriaDebateDockLineSync, plus de synchro entre 2 documents. */
-  body.page-debate.debate-embedded-frame .mobile-back-button {
-    display: inline-flex !important;
-  }
-
   .page-notifications-mobile .mobile-back-button,
   .page-debate .mobile-back-button {
     position: fixed;
@@ -8897,6 +8888,11 @@ body.page-home-mobile #debates-list {
     border-radius: 999px !important;
     padding-left: 8px !important;
     padding-right: 8px !important;
+    gap: 1px !important;
+  }
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-row
+  .comment-stance-option input[type="radio"][value="amelioration"] {
+    margin-right: 0 !important;
   }
 
   .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-option:has(input[type="radio"]:checked) {
@@ -19034,11 +19030,22 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   margin-left: 0 !important;
   margin-right: 0 !important;
   border-radius: 0 !important;
+  /* Sans ce fond, le blanc par défaut de .debate-source-card (#ffffff, cf. plus haut) restait
+     visible dans le média swipeable tant que l'image n'était pas encore chargée/affichée (état
+     intermédiaire entre 2 images du carrousel, image qui clignote au chargement sur mobile) —
+     un trait blanc apparaissait sous le bandeau titre #243038 au lieu du même bleu pétrole
+     partout (demande du 03/09/2026, capture montrant ce trait). */
+  background: #243038 !important;
 }
 
 .index-card-media-with-title .index-media-swipe-shell,
 .index-card-media-with-title .debate-card-media {
   width: 100%;
+  background: #243038;
+}
+
+.index-card-media-with-title .debate-source-card-image-wrap {
+  background: #243038 !important;
 }
 
 /* Suppression marges et coins droits en haut sur tous types de media */
@@ -25244,6 +25251,18 @@ body.page-home-mobile .debate-card.debate-card--community .index-card-title-bann
     rgba(255, 255, 255, 0.85) 85%,
     #ffffff 100%
   ) !important;
+}
+
+/* Cartes communauté AVEC bandeau titre (has-title-banner) : pas de ce fondu sur le
+   média lui-même — le bandeau blanc opaque juste en dessous (margin-top:0, cf. plus
+   haut) fait déjà toute la transition à lui seul. Ce fondu en plus, dessiné par-dessus
+   une zone parfois sombre du média (ex. bandeau de sous-titres d'une vidéo TV en
+   direct), créait un "trait blanc" visible juste avant le titre (signalé le
+   03/09/2026, capture à l'appui). */
+.debate-card.debate-card--community.has-title-banner .index-card-media-with-title::after,
+body.page-home .debate-card.debate-card--community.has-title-banner .index-card-media-with-title::after,
+body.page-home-mobile .debate-card.debate-card--community.has-title-banner .index-card-media-with-title::after {
+  content: none !important;
 }
 
 /* La pastille source doit rester entièrement dans la partie nette de l'image.

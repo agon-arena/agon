@@ -14,19 +14,22 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260903-bg-no-callout" />
+<link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <script>
-    if (window.self !== window.top) {
-      try {
-        window.top.location.replace(window.location.href);
-      } catch (error) {
-        window.top.location.href = window.location.href;
-      }
-    }
+    // Rejoint le système d'iframe modale du parent (comme /apprentissage, cf.
+    // qcm-du-jour.html) — demande du 03/09/2026, "quand je quitte le mode plein écran, il y a
+    // un temps de chargement trop long" : rester dans la page parent déjà chargée au lieu
+    // d'une navigation top-level complète pour revenir en arrière. Un accès direct (lien
+    // partagé, nouvel onglet, PWA) reste une vraie page top-level (window.self === window.top),
+    // c'est uniquement ce marqueur qui distingue les deux cas côté CSS/JS ci-dessous.
+    if (window.self !== window.top) document.documentElement.classList.add('in-iframe');
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.self !== window.top) document.body.classList.add('in-iframe');
+    });
   </script>
   <style>
     /* La page autonome est elle-même la surface d'exploration : un glissement tactile déplace
@@ -1015,7 +1018,7 @@
 
   <div id="mnoria-universe-cloud" class="mnoria-tag-trends-cloud"></div>
 
-  <a href="/?skipStartup=1" class="universe-exit-fullscreen" aria-label="Quitter le mode plein écran et revenir à Ma mémoire">
+  <a href="/?skipStartup=1" class="universe-exit-fullscreen" aria-label="Quitter le mode plein écran et revenir à Ma mémoire" onclick="event.preventDefault(); contributionsBottomNavHome();">
     <i class="fa-solid fa-compress" aria-hidden="true"></i>
     <span>Quitter le plein écran</span>
   </a>
@@ -1636,10 +1639,10 @@ function contributionsBottomNavHome() {
 }
 </script>
 
-<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
+<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260903-longpress-no-select");
+    import("/mon-univers.js?v=20260903-fullscreen-iframe-modal");
   }
 </script>
 </body>

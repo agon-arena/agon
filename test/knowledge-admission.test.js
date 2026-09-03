@@ -167,6 +167,46 @@ test("perKnowledgeCandidateCounts : tableau absent, de mauvaise longueur, ou san
   }
 });
 
+// ── Evidence grounding en amont (V1, 03/09/2026, cf. audit read-only du
+// même jour) : annotation [preuve disponible : SOURCE_N — "..."] posée
+// UNIQUEMENT sur une connaissance qui porte à la fois source_id ET
+// evidence_text (cf. server.js generateElementaryBlock, seul appelant à les
+// fournir) — absente pour tout appelant existant (master legacy, sujets
+// sans grounding réel), qui ne posent jamais ces deux champs. Le
+// "supporting_claim"/"source_ids" que le modèle écrit pour CETTE
+// connaissance n'est de toute façon jamais conservé (cf. server.js
+// applyEvidenceGroundingOverride, appliqué APRÈS coup) — cette annotation
+// ne fait qu'aider le modèle à formuler une bonne question, jamais une
+// garantie de traçabilité à elle seule. ──────────────────────────────────
+
+test("buildQuestionsFromKnowledgePrompt : une connaissance avec source_id+evidence_text est annotée [preuve disponible : ...] dans sa ligne", () => {
+  const withEvidence = knowledge({ fact: "Charlemagne est couronné empereur en 800.", source_id: "SOURCE_1", evidence_text: "Charlemagne est couronné empereur d'Occident le 25 décembre 800." });
+  const withoutEvidence = knowledge({ fact: "Fait sans preuve." });
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", [withEvidence, withoutEvidence], null, []);
+  assert.match(prompt, /1\. Charlemagne est couronné empereur en 800\. .*\[preuve disponible : SOURCE_1 — "Charlemagne est couronné empereur d'Occident le 25 décembre 800\."\]/);
+  assert.doesNotMatch(prompt, /2\. Fait sans preuve\. .*\[preuve disponible/);
+});
+
+test("buildQuestionsFromKnowledgePrompt : sans aucune connaissance evidence, aucune mention de [preuve disponible] ni de règle dédiée (comportement legacy inchangé)", () => {
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", [knowledge()], null, []);
+  assert.doesNotMatch(prompt, /preuve disponible/);
+  assert.doesNotMatch(prompt, /ne seront de toute façon jamais utilisés/);
+});
+
+test("buildQuestionsFromKnowledgePrompt : dès qu'AU MOINS une connaissance porte une preuve, la règle dédiée apparaît — explique que supporting_claim/source_ids seront de toute façon écrasés pour CETTE connaissance", () => {
+  const withEvidence = knowledge({ fact: "Fait avec preuve.", source_id: "SOURCE_2", evidence_text: "Un extrait réel suffisamment long depuis SOURCE_2." });
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", [withEvidence], null, []);
+  assert.match(prompt, /démontrables depuis CET extrait précis/);
+  assert.match(prompt, /ne seront de toute façon jamais utilisés tels quels/);
+});
+
+test("buildQuestionsFromKnowledgePrompt : une connaissance avec seulement source_id OU seulement evidence_text (jamais les deux) n'est jamais annotée — les deux sont exigés ensemble", () => {
+  const onlySourceId = knowledge({ fact: "Fait A.", source_id: "SOURCE_1" });
+  const onlyEvidence = knowledge({ fact: "Fait B.", evidence_text: "Un extrait." });
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", [onlySourceId, onlyEvidence], null, []);
+  assert.doesNotMatch(prompt, /preuve disponible/);
+});
+
 test("buildQuestionsFromKnowledgePrompt : toutes les connaissances admises apparaissent, numérotées", () => {
   const items = [knowledge({ fact: "Fait A." }), knowledge({ fact: "Fait B." }), knowledge({ fact: "Fait C." })];
   const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", items, null, []);

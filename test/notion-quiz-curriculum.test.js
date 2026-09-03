@@ -445,3 +445,89 @@ test("selectCurriculumLevel : retourne exactement les connaissances \"expert\" a
   assert.equal(expert.length, 7);
   assert.deepEqual(expert.map((k) => k.order), [9, 10, 11, 12, 13, 14, 15]);
 });
+
+// ── Evidence grounding en amont (V1, 03/09/2026, cf. audit read-only du
+// même jour — "déplacer la preuve en amont") : buildCurriculumPrompt/
+// buildCurriculumRepairPrompt en mode source-aware (identifiedSourcesBlock
+// fourni), parseCurriculumItems/parseCurriculumRepairAdditions qui capturent
+// source_id/evidence_text, normalizeCurriculumOrder qui les préserve. Le
+// comportement SANS identifiedSourcesBlock (branche déjà couverte par tous
+// les tests ci-dessus, tous encore verts) reste la preuve que le legacy est
+// strictement inchangé — ces nouveaux tests couvrent UNIQUEMENT le nouveau
+// mode. ────────────────────────────────────────────────────────────────────
+
+const SOURCES_BLOCK = 'SOURCE_1\ntitle: Charlemagne\nurl: https://fr.wikipedia.org/wiki/Charlemagne\ncontent: Charlemagne est couronné empereur d\'Occident par le pape Léon III le 25 décembre 800.';
+
+test("buildCurriculumPrompt : sans identifiedSourcesBlock, le prompt reste IDENTIQUE au caractère près à avant ce paramètre (legacy inchangé)", () => {
+  const prompt = buildCurriculumPrompt("Charlemagne", null, "Un texte de grounding brut, sans identifiant de source.");
+  assert.match(prompt, /Un texte de grounding brut, sans identifiant de source\./);
+  assert.doesNotMatch(prompt, /source_id/);
+  assert.doesNotMatch(prompt, /evidence_text/);
+  assert.match(prompt, /\{"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1\}, \.\.\.\]\}/);
+});
+
+test("buildCurriculumPrompt : avec identifiedSourcesBlock, exige source_id + evidence_text par connaissance et injecte le bloc SOURCE_N (jamais groundingText en plus, même contenu sous une autre forme)", () => {
+  const prompt = buildCurriculumPrompt("Charlemagne", null, "texte de grounding ignoré dans ce mode", SOURCES_BLOCK);
+  assert.match(prompt, /SOURCE_1/);
+  assert.match(prompt, /Charlemagne est couronné empereur d'Occident/);
+  assert.doesNotMatch(prompt, /texte de grounding ignoré dans ce mode/);
+  assert.match(prompt, /"source_id"/);
+  assert.match(prompt, /"evidence_text"/);
+  assert.match(prompt, /COPIÉ TEXTUELLEMENT/);
+  assert.match(prompt, /N'invente jamais une citation/);
+  assert.match(prompt, /\{"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1,"source_id":"SOURCE_1","evidence_text":"extrait exact copié depuis SOURCE_1"\}, \.\.\.\]\}/);
+});
+
+test("buildCurriculumRepairPrompt : sans identifiedSourcesBlock, reste identique au caractère près (legacy inchangé)", () => {
+  const prompt = buildCurriculumRepairPrompt("Charlemagne", null, 2, [{ knowledgeTarget: "Déjà validée 1" }], null);
+  assert.doesNotMatch(prompt, /source_id/);
+  assert.match(prompt, /\{"additions":\[\{"knowledgeTarget":"\.\.\."\}\]\}/);
+});
+
+test("buildCurriculumRepairPrompt : avec identifiedSourcesBlock, exige source_id + evidence_text pour chaque ajout de réparation", () => {
+  const prompt = buildCurriculumRepairPrompt("Charlemagne", null, 2, [{ knowledgeTarget: "Déjà validée 1" }], null, SOURCES_BLOCK);
+  assert.match(prompt, /SOURCE_1/);
+  assert.match(prompt, /"source_id"/);
+  assert.match(prompt, /"evidence_text"/);
+  assert.match(prompt, /\{"additions":\[\{"knowledgeTarget":"\.\.\.","source_id":"SOURCE_1","evidence_text":"\.\.\."\}\]\}/);
+});
+
+test("parseCurriculumItems : capture source_id/evidence_text UNIQUEMENT quand les deux sont fournis ensemble — jamais l'un sans l'autre, jamais posé à null/undefined pour un item sans preuve", () => {
+  const raw = [
+    { id: "k1", knowledgeTarget: "Avec preuve complète.", order: 1, source_id: "SOURCE_1", evidence_text: "Un extrait suffisamment long et réel." },
+    { id: "k2", knowledgeTarget: "Sans aucune preuve.", order: 2 },
+    { id: "k3", knowledgeTarget: "Source seule, sans evidence_text.", order: 3, source_id: "SOURCE_1" },
+    { id: "k4", knowledgeTarget: "evidence_text seul, sans source_id.", order: 4, evidence_text: "Un extrait." }
+  ];
+  const items = parseCurriculumItems(raw);
+  assert.deepEqual(Object.keys(items[0]).sort(), ["evidence_text", "id", "knowledgeTarget", "order", "source_id"]);
+  assert.equal(items[0].source_id, "SOURCE_1");
+  assert.equal(items[0].evidence_text, "Un extrait suffisamment long et réel.");
+  assert.deepEqual(Object.keys(items[1]).sort(), ["id", "knowledgeTarget", "order"]);
+  assert.deepEqual(Object.keys(items[2]).sort(), ["id", "knowledgeTarget", "order"]);
+  assert.deepEqual(Object.keys(items[3]).sort(), ["id", "knowledgeTarget", "order"]);
+});
+
+test("normalizeCurriculumOrder : préserve source_id/evidence_text quand présents, sans jamais les ajouter à un item qui n'en avait pas", () => {
+  const items = [
+    { id: "k1", knowledgeTarget: "A", order: 1, source_id: "SOURCE_1", evidence_text: "Preuve A." },
+    { id: "k4", knowledgeTarget: "B", order: 4 }
+  ];
+  const normalized = normalizeCurriculumOrder(items);
+  assert.equal(normalized[0].source_id, "SOURCE_1");
+  assert.equal(normalized[0].evidence_text, "Preuve A.");
+  assert.equal(normalized[0].id, "k1");
+  assert.equal(normalized[0].order, 1);
+  assert.deepEqual(Object.keys(normalized[1]).sort(), ["id", "knowledgeTarget", "order"]);
+});
+
+test("parseCurriculumRepairAdditions : capture source_id/evidence_text UNIQUEMENT quand les deux sont fournis ensemble", () => {
+  const raw = [
+    { knowledgeTarget: "Ajout avec preuve.", source_id: "SOURCE_2", evidence_text: "Un extrait réel suffisamment long." },
+    { knowledgeTarget: "Ajout sans preuve." }
+  ];
+  const additions = parseCurriculumRepairAdditions(raw, 2);
+  assert.equal(additions[0].source_id, "SOURCE_2");
+  assert.equal(additions[0].evidence_text, "Un extrait réel suffisamment long.");
+  assert.deepEqual(Object.keys(additions[1]).sort(), ["knowledgeTarget"]);
+});

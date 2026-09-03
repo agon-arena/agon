@@ -276,6 +276,14 @@ function setIsolatedStarPair(pair, fromNode, toNode, fromArticle, fromStarRef, t
       // sections, questions) dans cette petite fenêtre de 280px — trop à l'étroit pour deux fiches.
       // Le panneau fiche (z-index 2000) recouvre cette fenêtre d'isolement sans la fermer : à sa
       // fermeture, on revient donc naturellement ici (toujours isolé sur ces 2 étoiles).
+      // Horodatage d'ouverture : un tap/clic fantôme peut être livré par Safari iOS juste après
+      // le double-tap/clic prolongé qui vient d'ouvrir cette fenêtre (le bouton apparaît alors
+      // pile sous le doigt, puisque la fenêtre est centrée à l'écran) — sans ce garde-fou, ce clic
+      // fantôme ouvrait directement une fiche sans que l'utilisateur n'ait rien touché (demande du
+      // 03/09/2026, "parfois ça ouvre aussi directement une fiche ... rien qu'en cliquant sur le
+      // lien"). Même fenêtre de 400ms que la détection de double-tap ci-dessus : un vrai tap
+      // délibéré sur ce bouton arrive forcément après.
+      const shownAt = Date.now();
       const fichesRow = document.createElement("div");
       fichesRow.className = "universe-isolation-info-fiches";
       [[fromArticle, fromStarRef], [toArticle, toStarRef]].forEach(([article, starRef]) => {
@@ -288,6 +296,7 @@ function setIsolatedStarPair(pair, fromNode, toNode, fromArticle, fromStarRef, t
         btn.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (Date.now() - shownAt < 400) return;
           document.body.classList.add("universe-star-panel-open");
           starPanelEl.hidden = false;
           showKnowledgeSheet(article, starRef, true);
@@ -1063,6 +1072,11 @@ function createKnowledgeLinkEl(level, fromNode, toNode, articleLink) {
     });
     let lastTapAt = 0;
     el.addEventListener("pointerup", (event) => {
+      // Sans ce clear, le minuteur de clic prolongé démarré par CE MÊME appui (pointerdown
+      // ci-dessous) restait actif après un relâchement normal — il finissait par se déclencher
+      // ~500ms plus tard, alors qu'un double-tap l'avait déjà basculé entre-temps, refermant la
+      // fenêtre juste après son ouverture (demande du 03/09/2026, corrigé avec le bug ci-dessous).
+      clearLongPressTimer();
       if (longPressFired) { longPressFired = false; return; } // déjà déclenché par le pointerdown ci-dessous
       if (event.pointerType !== "touch") return;
       const now = Date.now();
@@ -1165,6 +1179,13 @@ function mountUniverse() {
     fullPageButton.href = "/mon-univers";
     fullPageButton.setAttribute("aria-label", "Ouvrir Ma mémoire sur toute la page");
     fullPageButton.innerHTML = '<i class="fa-solid fa-expand" aria-hidden="true"></i><span>Plein écran</span>';
+    // /mon-univers rejoint le système d'iframe modale (demande du 03/09/2026) : ouvre la
+    // scène déjà chargée dans le modal parent plutôt que de renaviguer entièrement.
+    fullPageButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (typeof window.openDebateIframeModal === "function") window.openDebateIframeModal("/mon-univers");
+      else window.location.href = "/mon-univers";
+    });
     cloudEl.appendChild(fullPageButton);
   }
   let backgroundTileMetrics = syncMnoriaTileMetrics();
@@ -2451,6 +2472,35 @@ const UNIVERSE_FETCH_TIMEOUT_MS = 12000;
 // première acquisition, afin de ne pas faire clignoter un ancien état vide devant les bulles.
 const UNIVERSE_EMPTY_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 
+// Le clic "Plein écran" (bouton .mnoria-memory-fullpage-btn, accueil → /mon-univers) déclenche
+// une vraie navigation top-level : ce module est réévalué de zéro et refaisait jusqu'ici le même
+// appel réseau que celui qui venait tout juste de remplir la scène embarquée, avec un sablier au
+// passage (demande du 03/09/2026, "je veux que le plein écran s'ouvre immédiatement"). Mémorise
+// donc aussi les données complètes (pas seulement la confirmation "vide" ci-dessus) pendant
+// quelques minutes dans sessionStorage, qui survit à cette navigation dans le même onglet : la
+// scène peut ainsi être montée dès l'évaluation du module, sans attendre le réseau.
+const UNIVERSE_DATA_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+
+function getUniverseDataCacheKey() {
+  return `mnoriaUniverseData:${getKey()}`;
+}
+
+function readCachedUniverseData() {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(getUniverseDataCacheKey()) || "null");
+    if (!cached || !Number.isFinite(cached.at) || Date.now() - cached.at > UNIVERSE_DATA_CACHE_MAX_AGE_MS) return null;
+    return cached.data || null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheUniverseData(data) {
+  try {
+    sessionStorage.setItem(getUniverseDataCacheKey(), JSON.stringify({ data, at: Date.now() }));
+  } catch {}
+}
+
 function getUniverseEmptyCacheKey() {
   return `mnoriaUniverseEmpty:${getKey()}`;
 }
@@ -2527,8 +2577,6 @@ async function loadUniverse() {
   destroyUniverseScene();
   breadcrumbEl.innerHTML = "";
   backBtn.classList.remove("is-visible");
-  const showedCachedEmpty = hasFreshEmptyUniverseCache();
-  showStatus(showedCachedEmpty ? "empty" : "loading");
 
   const isDemo = new URLSearchParams(location.search).get("demo") === "1";
   if (isDemo) {
@@ -2539,8 +2587,31 @@ async function loadUniverse() {
     return;
   }
 
+  // Ouverture instantanée depuis un cache tout frais (typiquement le "Plein écran" juste après
+  // la scène embarquée de l'accueil) : monte directement, puis rafraîchit le cache en tâche de
+  // fond pour la prochaine fois, sans jamais retoucher la scène déjà montée à partir de lui.
+  const cachedUniverseData = readCachedUniverseData();
+  if (cachedUniverseData) {
+    universeData = cachedUniverseData;
+    if (modeToken !== window._mnoriaCloudModeToken) return;
+    const emptyUniverse = isUniverseEmpty(universeData);
+    if (emptyUniverse) {
+      showStatus("empty");
+      window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+    } else {
+      showStatus("none");
+      await mountUniverseAndHideSpinnerWhenReady(modeToken);
+    }
+    fetchIntellectualUniverseWithRetry(modeToken, 1).then(cacheUniverseData).catch(() => {});
+    return;
+  }
+
+  const showedCachedEmpty = hasFreshEmptyUniverseCache();
+  showStatus(showedCachedEmpty ? "empty" : "loading");
+
   try {
     universeData = await fetchIntellectualUniverseWithRetry(modeToken, 1);
+    cacheUniverseData(universeData);
   } catch (error) {
     console.warn("[mon-univers] chargement échoué :", error.message);
     if (modeToken !== window._mnoriaCloudModeToken) return;

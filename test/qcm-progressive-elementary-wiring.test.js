@@ -25,7 +25,7 @@ const SERVER_SOURCE = fs.readFileSync(path.join(__dirname, "../server.js"), "utf
 test("resolveProgressiveCurriculum construit le prompt curriculum puis parse via parseCurriculumItems (jamais un parsing maison)", () => {
   assert.match(
     SERVER_SOURCE,
-    /async function resolveProgressiveCurriculum\(apiKey, subject, contextHint, id, grounding\) \{[\s\S]{0,900}?buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null\)[\s\S]{0,300}?pool = parseCurriculumItems\(JSON\.parse\(content\)\?\.curriculum\);/
+    /async function resolveProgressiveCurriculum\(apiKey, subject, contextHint, id, grounding\) \{[\s\S]{0,2500}?buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)[\s\S]{0,300}?pool = parseCurriculumItems\(JSON\.parse\(content\)\?\.curriculum\);/
   );
 });
 
@@ -241,7 +241,7 @@ test("le log qcm-progressive-timing porte curriculum_size/elementary_target_coun
 });
 
 test("elementaryVerificationCount/deferredVerificationCount proviennent de resolveProgressiveCurriculum, jamais recalculés localement", () => {
-  assert.match(SERVER_SOURCE, /const \{ curriculum, curriculumMs, elementaryVerificationCount, deferredVerificationCount \} = curriculumResult;/);
+  assert.match(SERVER_SOURCE, /const \{\s*\n\s*curriculum, curriculumMs, elementaryVerificationCount, deferredVerificationCount,[\s\S]{0,200}?\} = curriculumResult;/);
   assert.match(SERVER_SOURCE, /elementaryVerificationCount: elementaryFinal\.length,\s*\n\s*deferredVerificationCount: deferredFinal\.length/);
 });
 
@@ -399,4 +399,67 @@ test("la migration curriculum/progressive_status reste celle déjà appliquée �
   assert.match(migrationSource, /ALTER TABLE daily_quiz ADD COLUMN IF NOT EXISTS curriculum JSONB;/);
   assert.match(migrationSource, /ALTER TABLE daily_quiz ADD COLUMN IF NOT EXISTS progressive_status TEXT;/);
   assert.doesNotMatch(migrationSource, /CREATE TABLE/i);
+});
+
+// ── Evidence grounding en amont (V1, 03/09/2026) : câblage server.js ──────
+
+test("evidenceModeActive est dérivé UNIQUEMENT de grounding.identifiedSources.length — jamais un flag séparé ni une option de l'appelant", () => {
+  assert.match(SERVER_SOURCE, /const evidenceModeActive = !!grounding\?\.identifiedSources\?\.length;/);
+});
+
+test("le gate evidence (applyEvidenceGate) est appliqué au pool elementary AVANT verifyOrders, et à chaque lot d'ajouts de réparation — jamais un nouveau retry, jamais une nouvelle boucle", () => {
+  const fnStart = SERVER_SOURCE.indexOf("async function resolveProgressiveCurriculum");
+  const fnEnd = SERVER_SOURCE.indexOf("// Rédige la fiche élémentaire");
+  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
+  assert.match(fnBody, /elementaryPool = applyEvidenceGate\(elementaryPool\);/);
+  assert.match(fnBody, /additions = applyEvidenceGate\(additions\);/);
+  // Un seul mécanisme de réparation (CURRICULUM_REPAIR_MAX_ATTEMPTS déjà
+  // existant) traite un rejet evidence exactement comme un rejet de
+  // knowledge_verification — jamais une seconde boucle "evidence-specific".
+  assert.equal((fnBody.match(/for \(let attempt = 1; attempt <= CURRICULUM_REPAIR_MAX_ATTEMPTS/g) || []).length, 1);
+});
+
+test("knowledge_verification (verifyOrders/buildKnowledgeVerificationPrompt) ne voit et ne renvoie jamais que {fact, order} — structurellement incapable de lire, réécrire ou fabriquer source_id/evidence_text", () => {
+  assert.match(SERVER_SOURCE, /const verificationCandidates = candidates\.map\(\(k\) => \(\{ fact: k\.knowledgeTarget, order: k\.order \}\)\);/);
+  assert.match(SERVER_SOURCE, /return new Set\(accepted\.map\(\(c\) => c\.order\)\);/);
+});
+
+test("acceptedElementary est reconstruit en filtrant les items ORIGINAUX de elementaryPool par order — jamais une reconstruction {fact, order} qui aurait perdu source_id/evidence_text en route", () => {
+  assert.match(SERVER_SOURCE, /acceptedElementary = evictNearDuplicates\(elementaryPool\.filter\(\(k\) => acceptedOrders\.has\(k\.order\)\)\);/);
+});
+
+test("buildCurriculumPrompt/buildCurriculumRepairPrompt reçoivent identifiedSourcesBlock UNIQUEMENT quand evidenceModeActive, jamais groundingText en plus dans ce cas", () => {
+  assert.match(SERVER_SOURCE, /buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
+  assert.match(SERVER_SOURCE, /buildCurriculumRepairPrompt\(subject, contextHint, neededCount, acceptedElementary, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
+});
+
+test("generateElementaryBlock construit evidenceByKnowledgeTarget UNE SEULE FOIS depuis admittedKnowledge, et le relaie au lot initial ET à l'expansion V3.2 — jamais deux Map distinctes", () => {
+  const fnStart = SERVER_SOURCE.indexOf("async function generateElementaryBlock");
+  const fnEnd = SERVER_SOURCE.indexOf("async function ensureProgressiveElementaryGenerated");
+  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
+  assert.equal((fnBody.match(/const evidenceByKnowledgeTarget = new Map\(\);/g) || []).length, 1);
+  assert.match(fnBody, /evidenceByKnowledgeTarget\s*\n\s*\}\);/); // lot initial : qualityControlRawQuestions({..., evidenceByKnowledgeTarget})
+  assert.match(fnBody, /questionQualityMetrics: \{ \.\.\.questionQualityMetrics, finalAccepted: validated\.length \},\s*\n\s*evidenceByKnowledgeTarget/); // V3.2
+});
+
+test("qualityControlRawQuestions applique applyEvidenceGroundingOverride au lot initial ET à chaque lot retourné par regenerate() — jamais laissé au modèle de recopier source_ids/supporting_claim", () => {
+  const fnStart = SERVER_SOURCE.indexOf("async function qualityControlRawQuestions");
+  const fnEnd = SERVER_SOURCE.indexOf("// QCM d'une seule notion");
+  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
+  assert.match(fnBody, /const applyEvidence = \(questions\) => applyEvidenceGroundingOverride\(questions, evidenceByKnowledgeTarget\);/);
+  assert.match(fnBody, /runQuestionQualityPipeline\(applyEvidence\(rawQuestions\), \{/);
+  assert.match(fnBody, /return applyEvidence\(regenerated\);/);
+});
+
+test("qcm-progressive-timing journalise elementary_evidence_candidates/valid/rejected/rejection_reasons — jamais le texte des sources ni des extraits", () => {
+  assert.match(SERVER_SOURCE, /elementary_evidence_candidates: elementaryEvidenceCandidates,\s*\n\s*elementary_evidence_valid: elementaryEvidenceValid,\s*\n\s*elementary_evidence_rejected: elementaryEvidenceRejected,\s*\n\s*elementary_evidence_rejection_reasons: elementaryEvidenceRejectionReasons/);
+});
+
+test("aucun changement de modèle/température/seuil/retry : DAILY_QUIZ_NARRATIVE_MODEL et les températures 0.4/0.2 restent utilisées pour curriculum_generation/knowledge_verification, MIN_ELEMENTARY_READY_QUESTIONS n'est jamais réassigné dans ce chantier", () => {
+  const fnStart = SERVER_SOURCE.indexOf("async function resolveProgressiveCurriculum");
+  const fnEnd = SERVER_SOURCE.indexOf("// Rédige la fiche élémentaire");
+  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
+  assert.match(fnBody, /model: DAILY_QUIZ_NARRATIVE_MODEL,\s*\n\s*temperature: 0\.4,[\s\S]{0,200}?feature: "curriculum_generation"/);
+  assert.match(fnBody, /model: DAILY_QUIZ_NARRATIVE_MODEL,\s*\n\s*temperature: 0\.2,[\s\S]{0,200}?feature: "knowledge_verification"/);
+  assert.doesNotMatch(fnBody, /MIN_ELEMENTARY_READY_QUESTIONS\s*=[^=]/);
 });

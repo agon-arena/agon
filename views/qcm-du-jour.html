@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260902-community-youtube-badge">
+  <link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -3626,7 +3626,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
+<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -3872,7 +3872,13 @@
       });
     } catch (e) {}
   }
-  var slotsStatus = null;
+  // Objet vide (jamais null) : renderCategorySwitcher()/isCategoryAvailable
+  // peuvent s'exécuter avant la résolution de refreshSlotsStatus (cf. init,
+  // parallélisée avec le chargement du contenu depuis le 03/09/2026 pour ne
+  // plus retarder l'ouverture de la page) — tous les onglets à créneau
+  // (Ancrer/Relier/Comprendre) démarrent alors "indisponibles" puis
+  // renderCategorySwitcher() est rappelée une fois le vrai statut connu.
+  var slotsStatus = { slots: {} };
   var categoryLayoutReadyPromise = null;
 
   /* Le chargement différé de Barlow Condensed modifie brièvement la largeur
@@ -6808,8 +6814,15 @@
       .then(function (res) { return res.json(); });
     var gaugeRequest = fetchLoadGaugeData();
     // Les préconisations se chargent indépendamment : leur sablier reste
-    // visible sans retenir la liste des apprentissages ni la jauge.
-    var recommendationsRequest = loadLearnNextInline();
+    // visible sans retenir la liste des apprentissages ni la jauge, et
+    // depuis le 03/09/2026 sans retenir non plus le signal "page prête" ci-
+    // dessous — cet appel peut déclencher une génération IA côté serveur
+    // (learn-next/ai-fallback, potentiellement plusieurs secondes) que le
+    // bandeau de chargement du parent n'a aucune raison d'attendre : la
+    // rubrique affiche déjà son propre sablier (renderLearnNextInlineSkeleton)
+    // puis son propre contenu (refreshLearnNextInlineVisibility) sans lien
+    // avec signalIframeReady.
+    loadLearnNextInline();
 
     // La liste principale n'attend pas la jauge : sur mobile, une lecture
     // FSRS lente ne doit pas laisser vide toute la moitié basse de la page.
@@ -6843,7 +6856,7 @@
       else hideLoadGauge();
     });
 
-    Promise.allSettled([quizzesRenderRequest, gaugeRenderRequest, recommendationsRequest]).then(function () {
+    Promise.allSettled([quizzesRenderRequest, gaugeRenderRequest]).then(function () {
       if (myToken !== loadToken) return;
       iframeReadyDeferredForOverview = false;
       requestAnimationFrame(function () {
@@ -8296,35 +8309,45 @@
   function init() {
     voterKey = typeof getKey === 'function' ? getKey() : null;
 
+    // Ne bloque plus le chargement du contenu (demande du 03/09/2026, page
+    // /apprentissage trop longue à s'ouvrir) : /api/daily-quiz/status ne
+    // sert qu'à activer/désactiver les onglets Ancrer/Relier/Comprendre
+    // (cf. isCategoryAvailable) — jamais à décider QUOI charger ci-dessous,
+    // qui ne dépend que de l'URL. slotsStatus démarre à { slots: {} } (tous
+    // les onglets à créneau indisponibles), renderCategorySwitcher() est
+    // rappelée une fois le vrai statut connu pour les remettre à jour sans
+    // rien retarder d'autre.
     refreshSlotsStatus().then(function () {
-      // Lien direct depuis "Faire le QCM" (Éclairages/Ce jour dans
-      // l'Histoire) juste après un clic sur "Mémoriser" : ouvre ce QCM de
-      // notion précis plutôt que la liste "Mes QCM".
-      var params = new URLSearchParams(window.location.search);
-      var requestedSlot = params.get('slot');
-      if (params.get('openKnowledge') === '1' && requestedSlot && requestedSlot.indexOf('notion:') === 0) {
-        pendingOpenKnowledgeRowKey = requestedSlot + '|' + (params.get('date') || '');
-        params.delete('openKnowledge');
-        params.delete('slot');
-        params.delete('date');
-        params.delete('label');
-        var cleanQuery = params.toString();
-        history.replaceState(null, '', window.location.pathname + (cleanQuery ? '?' + cleanQuery : ''));
-        loadMesQcm();
-        return;
-      }
-      if (requestedSlot && requestedSlot.indexOf('notion:') === 0) {
-        loadSlot(requestedSlot, params.get('date'), params.get('label'));
-        return;
-      }
-      if (params.get('highlightLatest') === '1') {
-        highlightLatestQuizOnLoad = true;
-        params.delete('highlightLatest');
-        var remainingQuery = params.toString();
-        history.replaceState(null, '', window.location.pathname + (remainingQuery ? '?' + remainingQuery : ''));
-      }
-      loadMesQcm();
+      if (!currentSlot) renderCategorySwitcher();
     });
+
+    // Lien direct depuis "Faire le QCM" (Éclairages/Ce jour dans
+    // l'Histoire) juste après un clic sur "Mémoriser" : ouvre ce QCM de
+    // notion précis plutôt que la liste "Mes QCM".
+    var params = new URLSearchParams(window.location.search);
+    var requestedSlot = params.get('slot');
+    if (params.get('openKnowledge') === '1' && requestedSlot && requestedSlot.indexOf('notion:') === 0) {
+      pendingOpenKnowledgeRowKey = requestedSlot + '|' + (params.get('date') || '');
+      params.delete('openKnowledge');
+      params.delete('slot');
+      params.delete('date');
+      params.delete('label');
+      var cleanQuery = params.toString();
+      history.replaceState(null, '', window.location.pathname + (cleanQuery ? '?' + cleanQuery : ''));
+      loadMesQcm();
+      return;
+    }
+    if (requestedSlot && requestedSlot.indexOf('notion:') === 0) {
+      loadSlot(requestedSlot, params.get('date'), params.get('label'));
+      return;
+    }
+    if (params.get('highlightLatest') === '1') {
+      highlightLatestQuizOnLoad = true;
+      params.delete('highlightLatest');
+      var remainingQuery = params.toString();
+      history.replaceState(null, '', window.location.pathname + (remainingQuery ? '?' + remainingQuery : ''));
+    }
+    loadMesQcm();
   }
 
   // getKey() est défini dans script.min.js : ce script inline n'est pas

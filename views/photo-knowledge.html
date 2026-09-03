@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Importer une photo | mnoria</title>
 <link rel="icon" type="image/png" href="/mnoria-icon-64.png?v=20260825-mnoria-icon-v2">
-<link rel="stylesheet" href="/style.min.css?v=20260902-community-youtube-badge">
+<link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix">
 <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
 <style>
   /* Page volontairement autonome (pas de dépendance à public/script.js) :
@@ -321,6 +321,7 @@
   var currentText = "";
   var currentType = null;
   var currentSourceTitle = null;
+  var currentSourceUrl = null;
   var currentAnalysisToken = null;
   var currentMaxKnowledge = 20;
   var nextKnowledgeRowId = 0;
@@ -330,6 +331,7 @@
     currentText = "";
     currentType = null;
     currentSourceTitle = null;
+    currentSourceUrl = null;
     currentAnalysisToken = null;
     currentMaxKnowledge = 20;
     nextKnowledgeRowId = 0;
@@ -470,6 +472,7 @@
 
   function renderResults(result) {
     currentSourceTitle = result.sourceTitle || null;
+    currentSourceUrl = (isUrlMode || isYoutubeMode) ? (result.sourceUrl || null) : null;
     currentAnalysisToken = result.analysisToken || null;
     currentMaxKnowledge = Number(result.maxKnowledge || 20);
     var titleEl = document.getElementById("pk-source-title");
@@ -656,6 +659,96 @@
     if (event.key === "Escape" && !resetConfirm.hidden) closeResetConfirmation();
   });
 
+  // Slot déterministe identique à buildPhotoDocumentImportId côté serveur
+  // (lib/photo-knowledge-sheet.js, cf. server.js addValidatedKnowledgeImport)
+  // — calculé avant l'envoi pour alimenter la même liste locale persistante
+  // "en cours de création" que la génération IA (getCustomTopicPendingSlot,
+  // views/qcm-du-jour.html), qui jusqu'ici ne couvrait aucun de ces imports
+  // (photo/manuel/PDF/texte/URL/YouTube — demande du 03/09/2026). Un slot
+  // exact (et non un identifiant local arbitraire) permet aussi au sondage
+  // periodique de /apprentissage de retrouver l'import même si cette fenêtre
+  // a été fermée avant la fin de la génération ("J'ai compris" plus bas).
+  function normalizeKnowledgeListForHash(list) {
+    return (Array.isArray(list) ? list : [])
+      .map(function (fact) { return String(fact || "").trim().replace(/\s+/g, " "); })
+      .filter(Boolean);
+  }
+
+  function computePendingImportSlot(sourceType, sourceTitle, knowledge, sourceIdentity) {
+    var normalizedTitle = String(sourceTitle || "").trim().toLowerCase().replace(/\s+/g, " ");
+    var normalizedFacts = normalizeKnowledgeListForHash(knowledge).map(function (fact) { return fact.toLowerCase(); });
+    var identityPayload = { title: normalizedTitle, knowledge: normalizedFacts };
+    var normalizedSourceIdentity = String(sourceIdentity || "").trim();
+    if (normalizedSourceIdentity) identityPayload.sourceIdentity = normalizedSourceIdentity;
+    if (!window.crypto || !window.crypto.subtle || typeof TextEncoder !== "function") return Promise.resolve("");
+    return window.crypto.subtle.digest("SHA-1", new TextEncoder().encode(JSON.stringify(identityPayload)))
+      .then(function (digest) {
+        var id = Array.from(new Uint8Array(digest)).map(function (byte) {
+          return byte.toString(16).padStart(2, "0");
+        }).join("").slice(0, 20);
+        return "notion:" + sourceType + ":" + id;
+      })
+      .catch(function () { return ""; });
+  }
+
+  var pendingImportSourceType = isManualMode ? "manual_import" : (isPdfMode ? "pdf_import" : (isTextMode ? "text_import" : (isUrlMode ? "url_import" : (isYoutubeMode ? "youtube_import" : "photo_import"))));
+
+  // Même clé/format que MNORIA_PENDING_NOTION_QUIZZES_KEY (public/script.js) —
+  // cette page reste volontairement autonome (pas de <script src="/script.js">,
+  // ouverte en iframe OU en page pleine), donc lu/écrit directement ici plutôt
+  // que via window.mnoriaStart.../window.mnoriaFinish... qui n'existent pas
+  // forcément dans ce document (et pas non plus, de façon fiable, sur
+  // window.parent — cf. fallback navigation directe de "J'ai compris" plus bas).
+  var PENDING_NOTION_QUIZZES_KEY = "mnoria_pending_notion_quizzes_v1";
+  var PENDING_NOTION_QUIZ_MAX_AGE_MS = 30 * 60 * 1000;
+
+  function readPendingNotionQuizGenerationsLocal() {
+    var rows = [];
+    try {
+      var parsed = JSON.parse(localStorage.getItem(PENDING_NOTION_QUIZZES_KEY) || "[]");
+      if (Array.isArray(parsed)) rows = parsed;
+    } catch (error) {}
+    var now = Date.now();
+    var fresh = rows.filter(function (row) {
+      return row && row.slot && row.label
+        && Number.isFinite(Number(row.startedAt))
+        && now - Number(row.startedAt) <= PENDING_NOTION_QUIZ_MAX_AGE_MS;
+    });
+    if (fresh.length !== rows.length) {
+      try { localStorage.setItem(PENDING_NOTION_QUIZZES_KEY, JSON.stringify(fresh)); } catch (error) {}
+    }
+    return fresh;
+  }
+
+  function startPendingImportTracking(slot, label) {
+    var normalizedSlot = String(slot || "").trim();
+    var normalizedLabel = String(label || "").trim().slice(0, 160);
+    if (!normalizedSlot || !normalizedLabel) return;
+    var rows = readPendingNotionQuizGenerationsLocal().filter(function (row) { return row.slot !== normalizedSlot; });
+    rows.push({ slot: normalizedSlot, label: normalizedLabel, quizDate: null, startedAt: Date.now() });
+    try { localStorage.setItem(PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows)); } catch (error) {}
+  }
+
+  function finishPendingImportTracking(slot) {
+    var normalizedSlot = String(slot || "").trim();
+    if (!normalizedSlot) return;
+    var rows = readPendingNotionQuizGenerationsLocal().filter(function (row) { return row.slot !== normalizedSlot; });
+    try {
+      if (rows.length) localStorage.setItem(PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
+      else localStorage.removeItem(PENDING_NOTION_QUIZZES_KEY);
+    } catch (error) {}
+  }
+
+  function pendingImportLabel() {
+    if (currentSourceTitle) return currentSourceTitle;
+    if (isManualMode) return "Ajout manuel";
+    if (isPdfMode) return "Import PDF";
+    if (isTextMode) return "Texte collé";
+    if (isUrlMode) return "Page web";
+    if (isYoutubeMode) return "Vidéo YouTube";
+    return "Photo";
+  }
+
   function getLegacyKey() {
     var key = null;
     try { key = localStorage.getItem("key"); } catch (error) {}
@@ -734,16 +827,22 @@
     // hors de l'écran visible sans ce scroll (demande du 02/09/2026).
     addStatusActions.scrollIntoView({ behavior: "smooth", block: "end" });
 
-    fetch(isManualMode ? "/api/manual-knowledge/add" : (isPdfMode ? "/api/pdf-knowledge/add" : (isTextMode ? "/api/text-knowledge/add" : (isUrlMode ? "/api/url-knowledge/add" : (isYoutubeMode ? "/api/youtube-knowledge/add" : "/api/photo-knowledge/add")))), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        legacyKey: getLegacyKey(),
-        sourceTitle: currentSourceTitle,
-        knowledge: selected,
-        analysisToken: (isPdfMode || isUrlMode || isYoutubeMode) ? currentAnalysisToken : undefined
+    var pendingImportSlot = "";
+    computePendingImportSlot(pendingImportSourceType, currentSourceTitle, selected, currentSourceUrl)
+      .then(function (slot) {
+        pendingImportSlot = slot;
+        if (pendingImportSlot) startPendingImportTracking(pendingImportSlot, pendingImportLabel());
+        return fetch(isManualMode ? "/api/manual-knowledge/add" : (isPdfMode ? "/api/pdf-knowledge/add" : (isTextMode ? "/api/text-knowledge/add" : (isUrlMode ? "/api/url-knowledge/add" : (isYoutubeMode ? "/api/youtube-knowledge/add" : "/api/photo-knowledge/add")))), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            legacyKey: getLegacyKey(),
+            sourceTitle: currentSourceTitle,
+            knowledge: selected,
+            analysisToken: (isPdfMode || isUrlMode || isYoutubeMode) ? currentAnalysisToken : undefined
+          })
+        });
       })
-    })
       .then(function (response) {
         // Même précaution que pour l'analyse plus haut (demande du 27/08/2026) :
         // évite qu'une réponse non-JSON affiche une SyntaxError native brute.
@@ -755,6 +854,7 @@
         });
       })
       .then(function (result) {
+        if (pendingImportSlot) finishPendingImportTracking(pendingImportSlot);
         addStatusActions.style.display = "none";
         var added = Number(result.addedCount || 0);
         var existing = Number(result.existingCount || 0);
@@ -774,6 +874,7 @@
         }
       })
       .catch(function (error) {
+        if (pendingImportSlot) finishPendingImportTracking(pendingImportSlot);
         addStatusActions.style.display = "none";
         addStatus.textContent = error.message || "Erreur réseau. Réessaie dans quelques instants.";
         addBtn.disabled = false;

@@ -7195,10 +7195,16 @@ function openDebateIframeModal(url, options = {}) {
     /* Toutes les pages publiques ordinaires sont désormais de vraies
        navigations top-level. Leur scroll, leur bandeau et leur zone sûre
        appartiennent directement au viewport. Seules les arènes conservent
-       l'iframe modale et son dock spécialisé. */
+       l'iframe modale et son dock spécialisé — "Ma mémoire" plein écran
+       (/mon-univers) les rejoint (demande du 03/09/2026, "quand je quitte le
+       mode plein écran, il y a un temps de chargement trop long") : rester
+       dans la même page parent déjà chargée évite de refaire une navigation
+       top-level complète (reparse de script.min.js/style.min.css, remontage
+       de tout l'accueil) juste pour revenir en arrière. */
     const isIframeModalPath = parsedModalUrl.pathname === "/debate" ||
       parsedModalUrl.pathname.indexOf("/debates/") === 0 ||
-      parsedModalUrl.pathname === "/apprentissage";
+      parsedModalUrl.pathname === "/apprentissage" ||
+      parsedModalUrl.pathname === "/mon-univers";
     if (parsedModalUrl.origin === window.location.origin && !isIframeModalPath) {
       const pageTarget = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
       if (window.top && window.top !== window) window.top.location.href = pageTarget;
@@ -9396,7 +9402,8 @@ function ensureIndexSocialLoadingPlaceholderStyles() {
       border: 1px solid rgba(148, 163, 184, 0.18);
       background:
         linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82)),
-        radial-gradient(circle at top left, rgba(125, 211, 252, 0.08), rgba(15, 23, 42, 0) 52%);
+        radial-gradient(circle at top left, rgba(125, 211, 252, 0.08), rgba(15, 23, 42, 0) 52%),
+        #243038;
       box-shadow: 0 14px 34px rgba(2, 6, 23, 0.22);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
@@ -10076,7 +10083,7 @@ function buildIndexXEmbedHtml(sourceUrl, preview = null, debateId = "") {
         data-tweet-id="${escapeAttribute(tweetId)}"
         style="position:relative; width:100%; max-width:100%; min-height:${reservedHeight}px; overflow:hidden; border-radius:0;"
       >
-        <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(26,39,47,0.72), rgba(15,23,42,0.82));">
+        <div data-index-x-loading style="position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:#243038;">
           <img src="/sablier-96.png" alt="" style="width:48px; height:48px; object-fit:contain; opacity:0.85; will-change:transform; animation:indexCarouselSablierBounce 0.7s ease-in-out infinite alternate;">
         </div>
         <div data-index-x-embed onclick="event.stopPropagation()" style="display:none; width:100%; max-width:100%; margin:0;"></div>
@@ -13621,7 +13628,7 @@ function buildSourcePreviewCardHtml(preview, sourceUrl = "", options = {}) {
       <div
         class="debate-source-card-image-wrap"
         ${image ? `data-index-og-image-shell data-image-src="${escapeAttribute(image)}" data-source-url="${escapeAttribute(safeUrl)}"${imageAlreadyLoaded ? ' data-rendered="true"' : ''}` : ''}
-        style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:${isLogoFallbackImage ? '#ffffff' : 'linear-gradient(180deg, rgba(26, 39, 47, 0.72), rgba(15, 23, 42, 0.82))'}; overflow:hidden;"
+        style="position:relative; display:block; width:100%; aspect-ratio:16/9; background:${isLogoFallbackImage ? '#ffffff' : '#243038'}; overflow:hidden;"
       >
         ${image ? `
         <div data-index-og-image-loading style="position:absolute; inset:0; z-index:2; display:${imageAlreadyLoaded ? 'none' : 'flex'}; width:100%; height:100%;">
@@ -20215,7 +20222,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260903-longpress-no-select').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260903-fullscreen-iframe-modal').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
@@ -34521,6 +34528,8 @@ function _buildNotifPageItemHtml(notification) {
     link = "/qcm-du-jour";
   } else if (notification.type === "notion_quiz_ready") {
     link = "/qcm-du-jour?highlightLatest=1";
+  } else if (notification.type === "notion_quiz_failed") {
+    link = "/qcm-du-jour";
   }
 
   if (notification.type === "vote_on_argument" || notification.type === "vote_on_argument_batch") { icon = "🗳️"; title = "Votre idée a reçu une voix"; subtitle = "Ouvrir l'idée"; }
@@ -34538,6 +34547,7 @@ function _buildNotifPageItemHtml(notification) {
   if (notification.type === "analysis_ready") { icon = "⚖️"; title = "L'arbitrage IA est disponible"; subtitle = notification.argument_id ? "Voir ta note IA" : "Voir l'analyse"; }
   if (notification.type === "learning_digest") { icon = "🧠"; subtitle = "Ouvrir la page apprentissage"; }
   if (notification.type === "notion_quiz_ready") { icon = "🧠"; subtitle = "Ouvrir la page apprentissage"; }
+  if (notification.type === "notion_quiz_failed") { icon = "⚠️"; subtitle = "Voir la page apprentissage"; }
 
   title = getNotificationDisplayTitle(notification, title);
   return `

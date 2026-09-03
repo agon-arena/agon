@@ -124,7 +124,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260903-bg-no-callout">
+  <link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -1272,7 +1272,7 @@
     <!-- Présent dès le HTML initial, avant même le chargement des données de Ma mémoire : le
          moteur de scène le remonte ensuite au-dessus de ses calques, mais un état vide ou lent
          ne peut plus faire disparaître l'accès plein écran. -->
-    <a href="/mon-univers" id="mnoria-memory-fullpage-btn" class="mnoria-memory-fullpage-btn" aria-label="Ouvrir Ma mémoire sur toute la page">
+    <a href="/mon-univers" id="mnoria-memory-fullpage-btn" class="mnoria-memory-fullpage-btn" aria-label="Ouvrir Ma mémoire sur toute la page" onclick="event.preventDefault(); openDebateIframeModal('/mon-univers');">
       <i class="fa-solid fa-expand" aria-hidden="true"></i>
       <span>Plein écran</span>
     </a>
@@ -2101,7 +2101,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260903-longpress-no-select" defer></script>
+<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
