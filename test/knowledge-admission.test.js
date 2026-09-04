@@ -108,6 +108,26 @@ test("buildQuestionsFromKnowledgePrompt : knowledgeTarget doit reprendre EXACTEM
   assert.match(prompt, /doit reprendre EXACTEMENT le texte du fait numéroté qu'elle teste, sans le reformuler/);
 });
 
+// ---- Autonomie de la question (Phase 2.3, 04/09/2026) : interdiction de
+// référence au support, présente sur TOUT appel (legacy, progressif, avec
+// ou sans paragraphe/grounding) puisqu'aucun paramètre ne la conditionne. --
+
+test("buildQuestionsFromKnowledgePrompt : interdit toute référence au support (texte/source/document/passage/informations fournies), avec les formulations et exemples explicites", () => {
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", [knowledge()], null, []);
+  assert.match(prompt, /INTERDICTION ABSOLUE de faire référence, explicitement ou implicitement, au support/);
+  assert.match(prompt, /"D'après le texte\.\.\."/);
+  assert.match(prompt, /"Selon la source\.\.\."/);
+  assert.match(prompt, /"D'après les informations fournies\.\.\."/);
+  assert.match(prompt, /Quel rôle le texte attribue-t-il à Théodora dans la conduite de l'Empire \?/);
+  assert.match(prompt, /Quel rôle Théodora joue-t-elle dans la conduite de l'Empire sous Justinien \?/);
+  assert.match(prompt, /le support reste une preuve interne, jamais un élément de l'énoncé/);
+});
+
+test("buildQuestionsFromKnowledgePrompt : la règle d'autonomie est présente même avec un paragraphe progressif fourni (pipeline V2)", () => {
+  const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", [knowledge()], null, [], undefined, "Un paragraphe pédagogique réel.");
+  assert.match(prompt, /INTERDICTION ABSOLUE de faire référence, explicitement ou implicitement, au support/);
+});
+
 test("buildQuestionsFromKnowledgePrompt : interdit d'introduire une nouvelle connaissance ou un détail périphérique", () => {
   const prompt = buildQuestionsFromKnowledgePrompt("sourceId", "id1", [knowledge()], null, []);
   assert.match(prompt, /jamais une dérive vers un autre fait, jamais un détail périphérique absent de cette liste/);

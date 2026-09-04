@@ -28,7 +28,7 @@ test("parseFicheAndKnowledgeCandidates plafonne section.text via truncateAtSente
   assert.ok(fnIndex > 0);
   const nextFnIndex = SERVER_SOURCE.indexOf("\nfunction ", fnIndex + 10);
   const fnBody = SERVER_SOURCE.slice(fnIndex, nextFnIndex > 0 ? nextFnIndex : fnIndex + 2000);
-  assert.match(fnBody, /text: truncateAtSentenceBoundary\(s\?\.text, sectionTextLimit\)/);
+  assert.match(fnBody, /const text = truncateAtSentenceBoundary\(s\?\.text, sectionTextLimit\);/);
   assert.doesNotMatch(fnBody, /text: String\(s\?\.text \|\| ""\)\.trim\(\)\.slice\(0, sectionTextLimit\)/, "l'ancien slice brut ne doit plus exister");
 });
 
@@ -80,8 +80,15 @@ test("9. GET /api/users/notion-quizzes/fiche ne re-tronque jamais section.text (
 
 // ── 10. Frontend : rendu direct, aucune troncature JS du texte affiché. ───
 
-test("10. le frontend (qcm-du-jour.html) affiche section.text intégralement (escapeHtml seul), sans slice/substring/ellipsis appliqué au texte pédagogique", () => {
-  const renderIndex = QCM_FRONTEND_SOURCE.indexOf('html += \'<p class="qcm-fiche-explanation">\' + escapeHtml(section.text) + \'</p>\';');
+test("10. le frontend (qcm-du-jour.html) affiche section.text intégralement (via renderFicheSectionText, échappement complet, cf. Phase 2.4), sans slice/substring/ellipsis appliqué au texte pédagogique", () => {
+  const renderIndex = QCM_FRONTEND_SOURCE.indexOf('html += \'<p class="qcm-fiche-explanation">\' + renderFicheSectionText(section.text, section.highlights) + \'</p>\';');
   assert.ok(renderIndex > 0, "le rendu direct doit exister tel quel");
   assert.doesNotMatch(QCM_FRONTEND_SOURCE, /section\.text\.(slice|substring|substr)\(/, "le frontend ne doit jamais tronquer le texte pédagogique côté client");
+  // renderFicheSectionText elle-même : le texte complet (str) est toujours
+  // entièrement échappé et concaténé, jamais tronqué — cf.
+  // test/qcm-fiche-highlights-render.test.js pour le comportement complet.
+  const rendererIndex = QCM_FRONTEND_SOURCE.indexOf("function renderFicheSectionText(text, highlights) {");
+  assert.ok(rendererIndex > 0);
+  const rendererBody = QCM_FRONTEND_SOURCE.slice(rendererIndex, QCM_FRONTEND_SOURCE.indexOf("\n  }\n", rendererIndex));
+  assert.doesNotMatch(rendererBody, /\.slice\(0, \d/, "aucune troncature par longueur fixe dans le renderer");
 });

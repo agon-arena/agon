@@ -22783,7 +22783,13 @@ body.page-contact.in-iframe .contact-page-shell {
   color: #e8e8e8;
 }
 
-.page-tribunes .about-panel p {
+/* :not(.tribunes-summary) : ce gris clair est pensé pour le sous-titre sur
+   fond bleu pétrole en haut de page (cf. commentaire au-dessus) — sans
+   l'exception, il gagnait aussi sur .tribunes-summary (résumé sous le titre
+   de chaque carte, fond blanc) via sa spécificité plus forte que la couleur
+   noire de .tribunes-summary, rendant ce texte gris au lieu de noir (demande
+   du 04/09/2026, "le sous texte sous le titre doit être écrit en noir"). */
+.page-tribunes .about-panel p:not(.tribunes-summary) {
   color: #c7ced4;
 }
 
@@ -23455,6 +23461,15 @@ body.page-create-mobile .create-card .create-submit-helper {
   scroll-snap-type: x proximity;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+  /* Scrollbar native masquée (même traitement que .theme-horizontal-row) : la navigation
+     et les points sous les cartes (.tribunes-carousel-dots) suffisent déjà, et sur desktop
+     la scrollbar visible se superposait aux points remontés par-dessus (margin négatif). */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tribunes-carousel::-webkit-scrollbar {
+  display: none;
 }
 
 .tribunes-carousel .tribunes-item {
@@ -23619,7 +23634,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   flex-direction: column;
   background: #fff;
   border: 3px solid #000000;
-  border-radius: 8px 8px 0 0;
+  border-radius: 8px;
   overflow: hidden;
   font-size: 0.9rem;
   color: #374151;
@@ -23649,14 +23664,38 @@ body.page-create-mobile .create-card .create-submit-helper {
 /* Ratio 1.91:1 : format standard des images og:image, évite tout rognage
    agressif sur la plupart des aperçus récupérés. Une seule bordure sur
    .tribunes-item (le cadre entoure image + texte ensemble, comme un seul
-   bloc) ; border-bottom ici sépare juste visuellement l'image du texte. */
+   bloc) ; le fondu ::after ci-dessous fait la transition vers le texte
+   (remplace l'ancienne ligne dure border-bottom, demande du 04/09/2026 :
+   "un dégradé entre image et titre en dessous, comme sur cartes
+   communautés"). */
 .tribunes-thumb {
   position: relative;
   width: 100%;
   aspect-ratio: 1.91 / 1;
-  border-bottom: 1px solid #e5e7eb;
   background: #e5e7eb;
   overflow: hidden;
+}
+
+/* Même fondu que .debate-card--community (blanc, le fond de .tribunes-item-body
+   en dessous) : fait disparaître le bas de l'image dans le texte au lieu d'une
+   coupure nette. */
+.tribunes-thumb::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 24px;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.15) 30%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0.85) 85%,
+    #ffffff 100%
+  );
 }
 
 .tribunes-thumb img {
@@ -23810,7 +23849,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #111827;
   min-width: 0;
   max-width: 100%;
-  font-size: 0.98rem;
+  font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: 0.01em;
   overflow-wrap: anywhere;
@@ -23838,8 +23877,8 @@ body.page-create-mobile .create-card .create-submit-helper {
   color: #111827;
   font-family: "Barlow Condensed", Impact, sans-serif;
   font-weight: 800;
-  font-size: 1.2rem;
-  line-height: 1.12;
+  font-size: 1.05rem;
+  line-height: 1.18;
   letter-spacing: 0;
   text-decoration: none;
 }
@@ -23945,7 +23984,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   }
 
   .tribunes-title {
-    font-size: 1.26rem;
+    font-size: 1.1rem;
   }
 }
 

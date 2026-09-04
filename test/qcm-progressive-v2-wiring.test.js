@@ -228,7 +228,10 @@ test("validateParagraphGrounding est déterministe (containment lexical), jamais
 
 test("generateProgressiveLevelBlock tague chaque section de sourceDetail avec son propre niveau (levelKey) — jamais laissé sans marqueur", () => {
   const body = extractFunctionBody(SERVER_SOURCE, /async function generateProgressiveLevelBlock\(\{/);
-  assert.match(body, /sourceDetail\.sections = \(sourceDetail\.sections \|\| \[\]\)\.map\(\(s\) => \(\{ \.\.\.s, level: levelKey \}\)\);/);
+  // Phase 2.4 (04/09/2026) : le .map() pose aussi `highlights` (filtrés aux
+  // ids de levelKnowledge, cf. test/qcm-fiche-highlights-wiring.test.js) —
+  // `level: levelKey` reste posé sur CHAQUE section, comportement inchangé.
+  assert.match(body, /sourceDetail\.sections = \(sourceDetail\.sections \|\| \[\]\)\.map\(\(s\) => \(\{\s*\n\s*\.\.\.s,\s*\n\s*level: levelKey,/);
 });
 
 test("GET .../fiche filtre sourceDetail.sections au niveau demandé (cumulatif jusqu'à effectiveLevel) — sections sans `level` (legacy) jamais filtrées, effectiveLevel non reconnu = aucun filtrage (repli sûr)", () => {

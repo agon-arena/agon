@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260904-summary-bolder-black">
+  <link rel="stylesheet" href="/style.min.css?v=20260904-tribunes-scrollbar">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -348,7 +348,7 @@
       padding: 0 34px;
       color: #17212a;
       font-size: clamp(28px, 4.5vw, 34px);
-      line-height: 1.15;
+      line-height: 1;
       text-align: center;
       text-wrap: balance;
     }
@@ -361,6 +361,26 @@
       height: 3px;
       margin: 12px auto 0;
       background: #111827;
+    }
+    /* Nom du QCM d'origine de la question courante, sous le titre de séance
+       générique ("Renforcement des connaissances"/"Comprendre les liens") —
+       n'a de sens que sur Ancrer/Relier, qui mélangent des questions issues
+       de plusieurs connaissances différentes (cf. updateQuestionSourceNameHeader).
+       Un saut de ligne supplémentaire (margin-top) le sépare nettement du
+       liseret du titre ci-dessus. */
+    .qcm-question-source-name {
+      max-width: 680px;
+      margin: 20px auto 0;
+      padding: 0 34px;
+      color: #6b7280;
+      font-family: "Barlow Condensed", Arial, sans-serif;
+      /* Même taille que .qcm-question (cf. section "Session QCM immersive"
+         plus bas, qui prime sur la base ci-dessous) — juste mise en gras
+         (700) pour se distinguer visuellement de la question elle-même. */
+      font-size: clamp(21px, 2.7vw, 26px);
+      font-weight: 700;
+      line-height: 1.24;
+      text-align: center;
     }
     /* Charge de mémorisation (demande du 17/08/2026, remplacée le 27/08/2026
        par une barre de progression horizontale — l'ancien cadran à aiguille
@@ -2926,6 +2946,10 @@
     .qcm-fiche-explanation:first-of-type {
       margin-top: 0;
     }
+    .qcm-fiche-explanation strong {
+      color: #1f2937;
+      font-weight: 700;
+    }
     .qcm-fiche-sources {
       margin: 14px 0 0;
       padding-top: 10px;
@@ -3462,6 +3486,10 @@
         font-size: clamp(20px, 5.8vw, 24px);
         line-height: 1.25;
       }
+      .qcm-question-source-name {
+        font-size: clamp(20px, 5.8vw, 24px);
+        line-height: 1.25;
+      }
       .qcm-option-btn {
         min-height: 56px;
         padding: 14px;
@@ -3603,6 +3631,7 @@
     </button>
     <h1 class="qcm-page-heading-hidden" aria-hidden="true"><span id="qcm-title-text">Découvrir</span></h1>
     <p class="qcm-subtitle qcm-page-heading-hidden" id="qcm-subtitle-text" aria-hidden="true"></p>
+    <p class="qcm-question-source-name" id="qcm-question-source-name" hidden></p>
     <div class="qcm-category-group">
       <div class="qcm-slot-switcher" id="qcm-category-switcher"></div>
       <div class="qcm-mes-acquis-row">
@@ -3716,12 +3745,13 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260904-fast-veil-retry" defer></script>
+<script src="/script.min.js?v=20260904-desktop-dpr-floor" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
   var titleText = document.getElementById('qcm-title-text');
   var subtitleText = document.getElementById('qcm-subtitle-text');
+  var questionSourceNameEl = document.getElementById('qcm-question-source-name');
   var categorySwitcher = document.getElementById('qcm-category-switcher');
   var categoryGroup = categorySwitcher && categorySwitcher.closest('.qcm-category-group');
   var customSearchForm = document.getElementById('qcm-custom-search');
@@ -4278,13 +4308,66 @@
     return div.innerHTML;
   }
 
+  // Mise en évidence des knowledgeTargets dans une section de fiche (Phase
+  // 2.4, 04/09/2026) — `highlights` : [{start, end, knowledgeTargetId}]
+  // déjà résolus et validés côté serveur (cf. lib/fiche-highlights.js). Ne
+  // fait AUCUNE confiance aveugle à ces offsets malgré tout (défense en
+  // profondeur) : un span hors bornes/invalide ou encore chevauchant après
+  // filtrage est simplement ignoré, jamais une erreur de rendu ni une
+  // coupure du texte. Chaque fragment de `text` — highlighté ou non — passe
+  // par escapeHtml() avant d'être concaténé : le texte de Luna ne devient
+  // JAMAIS du HTML, seules les balises <strong> ajoutées ICI par notre
+  // propre code entourent un contenu déjà échappé. Absent/vide `highlights`
+  // (toute fiche antérieure à ce chantier) : repli strictement identique à
+  // l'ancien rendu, escapeHtml(text) seul, aucun gras.
+  function renderFicheSectionText(text, highlights) {
+    var str = String(text == null ? '' : text);
+    if (!Array.isArray(highlights) || !highlights.length) return escapeHtml(str);
+    var ranges = highlights
+      .filter(function (item) {
+        return item && Number.isInteger(item.start) && Number.isInteger(item.end)
+          && item.start >= 0 && item.end > item.start && item.end <= str.length;
+      })
+      .sort(function (a, b) { return a.start - b.start; });
+    var accepted = [];
+    ranges.forEach(function (range) {
+      var last = accepted[accepted.length - 1];
+      if (last && range.start < last.end) return;
+      accepted.push(range);
+    });
+    if (!accepted.length) return escapeHtml(str);
+    var html = '';
+    var cursor = 0;
+    accepted.forEach(function (range) {
+      html += escapeHtml(str.slice(cursor, range.start));
+      html += '<strong>' + escapeHtml(str.slice(range.start, range.end)) + '</strong>';
+      cursor = range.end;
+    });
+    html += escapeHtml(str.slice(cursor));
+    return html;
+  }
+
   function renderMessage(text) {
     var isLoading = /^Chargement\b/i.test(String(text || ''));
     var loadingHtml = isLoading
       ? '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">'
       : '';
     body.innerHTML = '<p class="qcm-state-message">' + loadingHtml + escapeHtml(text) + '</p>';
+    if (questionSourceNameEl) questionSourceNameEl.hidden = true;
     if (!isLoading) signalIframeReady();
+  }
+
+  // Nom de la connaissance (notion) dont provient la question courante,
+  // affiché sous le titre de séance générique — seulement sur Ancrer/Relier
+  // (pseudo-slots qui mélangent des questions de plusieurs connaissances
+  // différentes ; sur Découvrir, le titre est déjà le nom exact de la
+  // connaissance, cf. loadSlot(label)). q.sourceName vient de
+  // stripQuestionForClient côté serveur, absent si inconnu.
+  function updateQuestionSourceNameHeader(question) {
+    if (!questionSourceNameEl) return;
+    var show = (currentCategory === 'renforcement' || currentCategory === 'comprendre') && question && question.sourceName;
+    questionSourceNameEl.textContent = show ? question.sourceName : '';
+    questionSourceNameEl.hidden = !show;
   }
 
   function setParentIframeCloseVisible(visible) {
@@ -4678,6 +4761,7 @@
     signalIframeReady();
     var question = questions[currentIndex];
     applyQuestionBackgroundImage(question);
+    updateQuestionSourceNameHeader(question);
     var answer = (practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId)[question.id];
     var type = question.type || 'qcm';
     if (type === 'association') {
@@ -5203,6 +5287,7 @@
     // applyQuestionBackgroundImage sur renderQuestion).
     clearQuestionBackgroundImage();
     applyLearningPageBackgroundImage();
+    if (questionSourceNameEl) questionSourceNameEl.hidden = true;
     // Série Ancrer/Relier terminée (jamais en "Refaire" : practiceMode ne persiste aucune
     // réponse, cf. POST /api/daily-quiz/practice-answer) : l'onglet doit perdre son doré +
     // reflet et redevenir grisé/non cliquable tout de suite (cf. .qcm-slot-btn-new,
@@ -5343,7 +5428,7 @@
     }
     (detail.sections || []).forEach(function (section) {
       if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
-      html += '<p class="qcm-fiche-explanation">' + escapeHtml(section.text) + '</p>';
+      html += '<p class="qcm-fiche-explanation">' + renderFicheSectionText(section.text, section.highlights) + '</p>';
     });
     html += renderLinksSection(links);
     if (extraHtml) html += extraHtml;

@@ -399,7 +399,13 @@ function ensureMnoriaTextureReady() {
 }
 
 function syncMnoriaTileMetrics() {
-  const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
+  // Plancher à 2 (pas 1) : sur un moniteur de bureau standard (dpr 1), diviser par 1 seul
+  // donnait une tuile 2× plus grande que sur un écran portable Retina (dpr 2, cf. formule
+  // ci-dessous) — le fond paraissait donc bien plus zoomé sur bureau (demande du 04/09/2026,
+  // "je veux que cela soit moins zoomé [en bureau]"). En traitant tout dpr < 2 comme 2, les
+  // écrans standards reprennent la même tuile (donc le même zoom apparent) que les écrans
+  // HiDPI, sans rien changer pour ces derniers.
+  const dpr = Math.max(2, Number(window.devicePixelRatio) || 1);
   const width = (MNORIA_TEXTURE_NATURAL_W * MNORIA_TEXTURE_DISPLAY_SCALE) / dpr;
   const height = (MNORIA_TEXTURE_NATURAL_H * MNORIA_TEXTURE_DISPLAY_SCALE) / dpr;
   cloudEl?.style.setProperty("--mnoria-tile-width", `${width}px`);

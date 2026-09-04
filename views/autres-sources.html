@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
-  <link rel="stylesheet" href="/style.min.css?v=20260904-summary-bolder-black">
+  <link rel="stylesheet" href="/style.min.css?v=20260904-tribunes-scrollbar">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -192,7 +192,6 @@
       box-sizing: border-box;
       width: 100%;
       max-width: 100%;
-      overflow: hidden;
       border: 0;
       border-radius: 0;
       box-shadow: none;
@@ -204,6 +203,16 @@
          relais (demande du 04/09/2026, "c'est comme un grand cadre blanc en
          fait"). */
       background: transparent;
+    }
+    /* overflow:hidden réservé à l'iframe (clip du contenu dans son cadre) :
+       hors iframe, .tribunes-page-header remonte de -32px en desktop
+       (position:sticky, cf. plus haut) au-dessus du padding-top (16px) du
+       panneau — un overflow:hidden ici rognait donc le haut du titre "Autres
+       actus" (bug du 04/09/2026 signalé le jour même, régression de l'ajout
+       de cette règle à .about-panel hors iframe). */
+    html.in-iframe body.page-tribunes .about-panel,
+    body.page-tribunes.in-iframe .about-panel {
+      overflow: hidden;
     }
     html.in-iframe body.page-tribunes .topbar,
     body.page-tribunes.in-iframe .topbar {
@@ -243,35 +252,56 @@
     body.page-tribunes .topbar :where(button, input, textarea, select, p, span, div, a, h1, h2, h3, h4, h5, h6, label, small, strong, em):not(.fa):not(.fa-solid):not(.fa-regular):not(.fa-brands):not([class^="fa-"]):not([class*=" fa-"]) {
       font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
     }
-    body.page-tribunes .home-logo {
-      width: 128px !important;
-      max-height: 96px !important;
-      object-fit: contain !important;
-    }
+    /* Taille du logo/de la barre : plus besoin de valeurs locales ici, la
+       règle globale .topbar--mnoria-uniform (style.css) impose déjà exactement
+       les mêmes dimensions que sur l'index à toutes les pages qui portent
+       cette classe (dont celle-ci, cf. le <header> plus bas) — les anciennes
+       valeurs codées en dur ici (128px mobile, 402px desktop...) étaient
+       neutralisées par cette règle plus spécifique mais un translateX(83px) et
+       une grille à colonnes fixes (44px/1fr/210px) pensés pour ce 402px
+       restaient actifs, ce qui décalait le logo hors du centre en desktop
+       (demande du 04/09/2026, "le bandeau du haut doit être comme sur page
+       accueil / index"). */
     body.page-tribunes .topbar-social {
       display: none !important;
     }
+    /* Même mise en page desktop que .page-home (style.css) : grille à 2
+       colonnes avec le bloc marque centré et les actions calées à droite,
+       bouton admin repositionné en absolu — copié à l'identique pour que le
+       bandeau soit vraiment identique à celui de l'index. */
     @media (min-width: 769px) {
-      body.page-tribunes .topbar {
-        height: 152px !important;
-        min-height: 152px !important;
-        max-height: 152px !important;
-      }
-      body.page-tribunes .home-brand-main {
-        transform: translateX(83px) !important;
-      }
-      body.page-tribunes .home-logo {
-        width: 402px !important;
-        max-height: 144px !important;
-        transform: translateY(2px) !important;
+      body.page-tribunes .topbar-inner.topbar-home {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas: "brand actions";
+        align-items: center;
+        column-gap: 12px;
       }
       body.page-tribunes .home-brand-block {
-        height: 146px !important;
-        max-height: 146px !important;
-        overflow: visible !important;
+        grid-area: brand;
+        position: relative;
+        width: 100%;
+        justify-content: center;
+        margin-left: 0;
       }
-      body.page-tribunes .topbar-inner.topbar-home {
-        grid-template-columns: 44px minmax(0, 1fr) 210px !important;
+      body.page-tribunes .home-brand-main {
+        width: 100%;
+        justify-content: center;
+      }
+      body.page-tribunes .topbar-actions {
+        grid-area: actions;
+        position: relative;
+        right: auto;
+        top: auto;
+        transform: none;
+        margin-top: 0;
+        justify-self: end;
+      }
+      body.page-tribunes #admin-login-btn {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
       }
     }
     @media (max-width: 768px) {
@@ -864,7 +894,7 @@
     .tribunes-title {
       position: relative;
       z-index: 2;
-      font-size: 1.28rem;
+      font-size: 1.05rem;
       line-height: 1.18;
       display: block;
       -webkit-line-clamp: unset;
@@ -1676,8 +1706,8 @@ window.addEventListener("pageshow", function() {
 <main class="about-page-shell">
   <section class="about-panel">
     <div class="tribunes-page-header">
-      <h1>Autres actus</h1>
-      <p>Actualités qui n'ont pas (encore) donné lieu à l'ouverture d'une arène sur Mnoria.</p>
+      <h1>Autres publications du jour</h1>
+      <p>Publications qui n'ont pas (encore) donné lieu à l'ouverture d'une arène sur Mnoria.</p>
 
       <div id="tribunes-sort-search-wrap" class="tribunes-sort-search-block">
         <div class="index-explorer-topbar">
@@ -1891,7 +1921,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260904-fast-veil-retry" defer></script>
+<script src="/script.min.js?v=20260904-desktop-dpr-floor" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');

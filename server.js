@@ -157,6 +157,7 @@ const {
 } = require("./lib/grounding-source-expansion");
 const { extractGroundingReasonCounts } = require("./lib/qcm-grounding-metrics");
 const { truncateAtTextBoundary, truncateAtSentenceBoundary } = require("./lib/text-boundaries");
+const { resolveSectionHighlights, filterHighlightsToKnownTargetIds } = require("./lib/fiche-highlights");
 const {
   classifyAiError,
   generationFailure,
@@ -9555,7 +9556,7 @@ if (AUTO_VOTE_SCHEDULERS_ENABLED) {
 // Config + logique extraites dans lib/data-retention.js (testable avec un
 // client Supabase injecté, cf. test/data-retention.test.js pour la
 // régression du bug F1 : purge des repasses "cgreview-*").
-const { runDataRetentionCleanup } = require("./lib/data-retention");
+const { runDataRetentionCleanup, getReferencedOpinionArticleIds } = require("./lib/data-retention");
 
 runDataRetentionCleanup(supabase).catch((err) => console.error("[retention] purge initiale :", err.message));
 setInterval(() => {
@@ -10681,6 +10682,13 @@ const OPINION_UNSEEN_SESSION_GAP_MS = 90 * 60 * 1000;
 const OPINION_UNSEEN_MIN_SHARED_TOKENS = 2;
 let _opinionDebateTopicsCache = null;
 let _opinionDebateTopicsComputedAt = 0;
+// Horodatage (created_at ISO de l'arène la plus fraîche) de la session en cours, mis à
+// jour par getRecentDebateTopicTokenSets — sert de déclencheur à la purge complète
+// d'opinion_articles ci-dessous (purgeOpinionArticlesForNewSession) : dès qu'une session
+// plus récente que la dernière purgée est détectée, tous les anciens articles disparaissent
+// (demande du 04/09/2026, "supprime automatiquement tous les articles lorsqu'une nouvelle
+// session est publiée : les anciens disparaissent en même temps que la nouvelle arrive").
+let _opinionCurrentSessionStartIso = null;
 
 // Mots grammaticaux/génériques (≥ 4 lettres, sans accents) qui ne doivent pas
 // compter comme recoupement de sujet entre un titre d'article et une arène.
@@ -10740,11 +10748,55 @@ async function getRecentDebateTopicTokenSets() {
       .filter(Boolean);
     _opinionDebateTopicsCache = sets;
     _opinionDebateTopicsComputedAt = Date.now();
+    _opinionCurrentSessionStartIso = data?.length ? data[0].created_at : null;
     return sets;
   } catch (error) {
     console.warn("[opinion-articles inédits] arènes de référence indisponibles :", error.message);
     // Cache périmé plutôt que rien ; sinon aucun filtrage sur cette passe.
     return _opinionDebateTopicsCache || [];
+  }
+}
+
+// Purge complète d'"Autres actus" à chaque nouvelle session de publication (rafale
+// d'arènes) : les anciens articles ne doivent pas s'accumuler d'une session à l'autre, ils
+// disparaissent tous d'un coup dès que la session suivante arrive. Marqueur persisté dans
+// app_config (comme last_push_broadcast_daily) : survit à un redémarrage serveur et aux deux
+// instances (Render + veille locale, cf. project_render_deux_instances) pour ne purger
+// qu'une fois par session, pas à chaque recalcul du cache (TTL 15 min).
+async function purgeOpinionArticlesForNewSession(sessionStartIso) {
+  if (!sessionStartIso) return;
+  try {
+    const { data: markerRow, error: markerError } = await supabase
+      .from("app_config").select("value").eq("key", "opinion_articles_last_purged_session").maybeSingle();
+    if (markerError) throw new Error(markerError.message);
+    if (!markerRow) {
+      // Tout premier passage depuis l'activation de cette purge : on initialise le marqueur sur
+      // la session actuelle sans rien supprimer — sinon la mise en prod de cette fonctionnalité
+      // viderait d'un coup tout le stock d'articles déjà accumulé. Seules les transitions de
+      // session suivantes (une arène plus récente que ce marqueur) déclenchent une purge.
+      await supabase.from("app_config")
+        .upsert({ key: "opinion_articles_last_purged_session", value: { sessionStart: sessionStartIso }, updated_at: nowIso() });
+      return;
+    }
+    const lastPurgedIso = markerRow?.value?.sessionStart || null;
+    if (lastPurgedIso && new Date(lastPurgedIso).getTime() >= new Date(sessionStartIso).getTime()) return;
+
+    // Même exclusion que la purge par ancienneté (runDataRetentionCleanup, lib/data-retention.js) :
+    // article_secondary_classifications et user_article_acquisitions référencent
+    // opinion_articles.id sans ON DELETE CASCADE.
+    const exemptIds = await getReferencedOpinionArticleIds(supabase);
+    let deleteQuery = supabase.from("opinion_articles").delete().gte("id", 0);
+    if (exemptIds.length) deleteQuery = deleteQuery.not("id", "in", `(${exemptIds.join(",")})`);
+    const { error: deleteError } = await deleteQuery;
+    if (deleteError) throw new Error(deleteError.message);
+
+    await supabase.from("app_config")
+      .upsert({ key: "opinion_articles_last_purged_session", value: { sessionStart: sessionStartIso }, updated_at: nowIso() });
+    _opinionArticlesCache = null;
+    _opinionArticlesCacheComputedAt = 0;
+    console.log(`[opinion-articles] nouvelle session détectée (${sessionStartIso}) : anciens articles purgés (${exemptIds.length} conservés, référencés ailleurs).`);
+  } catch (error) {
+    console.warn("[opinion-articles] purge de session impossible :", error.message);
   }
 }
 
@@ -10919,6 +10971,13 @@ async function getOpinionArticlesSelection() {
 }
 
 async function buildFreshOpinionArticlesSelection() {
+  // Filtre "inédits" : ne garde que les sujets non couverts par une arène de la session de
+  // publication en cours (cf. getRecentDebateTopicTokenSets, plus bas dans ce fichier). Appelé
+  // en premier ici (avant même le scan des articles) pour que _opinionCurrentSessionStartIso
+  // soit à jour et déclenche, le cas échéant, la purge complète de la session précédente.
+  const debateTopicTokenSets = await getRecentDebateTopicTokenSets();
+  await purgeOpinionArticlesForNewSession(_opinionCurrentSessionStartIso);
+
   // La classification gauche/droite (avec ses synonymes) se fait en JS, pas en SQL :
   // ilike n'est pas insensible aux accents, ce qui rendrait le filtre SQL aussi long
   // et fragile que la liste de synonymes elle-même. Passe 1 : colonnes légères
@@ -10946,9 +11005,6 @@ async function buildFreshOpinionArticlesSelection() {
   );
   if (fullError) throw new Error(fullError.message);
 
-  // Filtre "inédits" : ne garde que les sujets non couverts par une arène de
-  // la session de publication en cours (cf. getRecentDebateTopicTokenSets).
-  const debateTopicTokenSets = await getRecentDebateTopicTokenSets();
   const articles = attachOpinionArticlePreviews(
     dedupeOpinionArticlesByTitle(
       (fullRows || [])
@@ -14688,6 +14744,14 @@ async function qualityControlRawQuestions({
       if (rejectionCodes.has("UNNECESSARY_NEGATION")) {
         targetedConstraints.push("- UNNECESSARY_NEGATION : reformule entièrement la question de manière affirmative et directe si la connaissance peut être testée sans négation. Ne te contente pas de supprimer le mot \"pas\" ou de retirer les capitales : reconstruis la question si nécessaire. Ne renonce à l'affirmatif QUE si la négation est réellement indispensable à la connaissance testée (ex. une absence, une exception ou une interdiction sans équivalent affirmatif aussi direct).");
       }
+      // SOURCE_REFERENCE_WORDING (Phase 2.3, 04/09/2026, "chaque question
+      // doit être autonome, sans référence au support") : contrôle
+      // déterministe uniquement (hasSourceReferenceWording, lib/qcm-quality.js)
+      // — jamais un critère du critique sémantique, jamais un nouveau code
+      // qu'il pourrait produire lui-même.
+      if (rejectionCodes.has("SOURCE_REFERENCE_WORDING")) {
+        targetedConstraints.push("- SOURCE_REFERENCE_WORDING : réécris la question sans AUCUNE référence, explicite ou implicite, au support (\"D'après le texte...\", \"Selon la source...\", \"Le document indique que...\", \"Le passage explique...\", etc.). Interroge directement la connaissance elle-même, comme si aucun texte/source/document/fiche n'existait — le support reste une preuve interne, jamais un élément de l'énoncé. Ex. \"Quel rôle le texte attribue-t-il à Théodora ?\" devient \"Quel rôle Théodora joue-t-elle dans la conduite de l'Empire ?\".");
+      }
       if (rejectionCodes.has("AWKWARD_WORDING")) {
         targetedConstraints.push("- AWKWARD_WORDING : réécris la question et/ou les options dans un français naturel, simple et idiomatique, sans modifier la connaissance testée ni la bonne réponse factuelle. Ne raccourcis ni n'allonge artificiellement une option correcte pour la \"corriger\" : reformule-la simplement de façon idiomatique.");
       }
@@ -14844,14 +14908,34 @@ function parseFicheAndKnowledgeCandidates(parsed, fallbackName, levelConfig) {
   const sourceName = capitalizeFirstLetter(String(parsed?.sourceName || fallbackName).trim()).slice(0, 120);
   const sections = Array.isArray(parsed?.sections)
     ? parsed.sections
-        // Plafond de texte à la frontière de PHRASE COMPLÈTE (Phase 2.2,
-        // 04/09/2026, correctif "paragraphe pédagogique jamais servi
-        // tronqué en milieu de phrase", cf. lib/text-boundaries.js) — les
-        // prompts (buildElementaryFichePrompt/buildProgressiveContinuationFichePrompt)
-        // ne transmettent à Luna qu'un lengthHint indicatif, jamais ce
-        // chiffre exact : un léger dépassement de sectionTextLimit est donc
-        // le cas normal, jamais une anomalie à corriger côté prompt.
-        .map((s) => ({ label: s?.label ? String(s.label).trim().slice(0, 80) : null, text: truncateAtSentenceBoundary(s?.text, sectionTextLimit) }))
+        .map((s) => {
+          // Plafond de texte à la frontière de PHRASE COMPLÈTE (Phase 2.2,
+          // 04/09/2026, correctif "paragraphe pédagogique jamais servi
+          // tronqué en milieu de phrase", cf. lib/text-boundaries.js) — les
+          // prompts (buildElementaryFichePrompt/buildProgressiveContinuationFichePrompt)
+          // ne transmettent à Luna qu'un lengthHint indicatif, jamais ce
+          // chiffre exact : un léger dépassement de sectionTextLimit est
+          // donc le cas normal, jamais une anomalie à corriger côté prompt.
+          const text = truncateAtSentenceBoundary(s?.text, sectionTextLimit);
+          return {
+            label: s?.label ? String(s.label).trim().slice(0, 80) : null,
+            text,
+            // Mise en évidence des knowledgeTargets (Phase 2.4, 04/09/2026) :
+            // résolue ICI, sur le texte FINAL déjà tronqué ci-dessus — jamais
+            // avant (des offsets calculés sur le brut Luna seraient
+            // silencieusement faux dès qu'une troncature intervient). Ne
+            // valide PAS encore knowledgeTargetId contre le curriculum réel :
+            // ce fichier ne le connaît pas — cf. generateProgressiveLevelBlock,
+            // qui applique filterHighlightsToKnownTargetIds juste après cet
+            // appel, avec la liste exacte des ids fournis à Luna pour CE bloc
+            // de niveau. Pour tout appelant qui ne transmet pas ce champ
+            // (legacy generateNotionLevelQuiz, qui n'a jamais demandé de
+            // highlights à Luna) : rawHighlights est undefined,
+            // resolveSectionHighlights renvoie [] sans erreur — comportement
+            // strictement inchangé pour ce chemin.
+            highlights: resolveSectionHighlights(text, s?.highlights)
+          };
+        })
         .filter((s) => s.text)
         .slice(0, maxSections)
     : [];
@@ -18238,7 +18322,12 @@ function stripQuestionForClient(q) {
   // peuvent venir de sujets différents, donc avoir des images différentes
   // (ou aucune) : c'est voulu, jamais lissé/uniformisé côté serveur.
   const image = q.sourceDetail && q.sourceDetail.image && q.sourceDetail.image.url ? q.sourceDetail.image : null;
-  const originFields = { origin, ...(q.sourceType ? { sourceType: q.sourceType } : {}), ...(image ? { image } : {}) };
+  // sourceName (demande du 04/09/2026) : nom de la connaissance d'origine de
+  // CETTE question, affiché sous le titre de séance sur Ancrer/Relier (cf.
+  // updateQuestionSourceNameHeader côté client) — sessions qui mélangent des
+  // questions de plusieurs connaissances différentes, contrairement à
+  // Découvrir où le titre est déjà ce nom (cf. loadSlot(label)).
+  const originFields = { origin, ...(q.sourceType ? { sourceType: q.sourceType } : {}), ...(q.sourceName ? { sourceName: q.sourceName } : {}), ...(image ? { image } : {}) };
   if (type === "association") {
     const pairs = Array.isArray(q.pairs) ? q.pairs : [];
     return {
@@ -18920,7 +19009,19 @@ async function generateProgressiveLevelBlock({
   // servie mélangeait tout). `level` absent = comportement legacy inchangé
   // (aucun fiche pré-Phase-2 ne porte ce champ, jamais filtrée à tort, cf.
   // GET .../fiche).
-  sourceDetail.sections = (sourceDetail.sections || []).map((s) => ({ ...s, level: levelKey }));
+  // Filtre final des highlights (Phase 2.4, 04/09/2026) : `validHighlightTargetIds`
+  // = exactement les ids du curriculum FOURNIS À LUNA pour CE bloc de niveau
+  // (`levelKnowledge`, jamais le curriculum entier) — garantit structurellement
+  // qu'un knowledgeTargetId halluciné, ou appartenant à un AUTRE bloc/niveau
+  // (Approfondi/Expert dans un bloc Élémentaire notamment), ne peut jamais
+  // survivre ici, même si resolveSectionHighlights (qui ne connaît pas le
+  // curriculum) l'avait résolu par ailleurs.
+  const validHighlightTargetIds = new Set(levelKnowledge.map((k) => k.id));
+  sourceDetail.sections = (sourceDetail.sections || []).map((s) => ({
+    ...s,
+    level: levelKey,
+    highlights: filterHighlightsToKnownTargetIds(s.highlights, validHighlightTargetIds)
+  }));
   return {
     sourceName,
     sourceDetail,

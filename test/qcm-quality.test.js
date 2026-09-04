@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   normalizeComparisonText,
+  hasSourceReferenceWording,
   validateQuestionQuality,
   validateQuestionBatchQuality,
   parseSemanticReviews,
@@ -99,6 +100,68 @@ test("UNNECESSARY_NEGATION : ne rejette PAS une négation réellement nécessair
 test("UNNECESSARY_NEGATION : ne rejette PAS une question affirmative portant intrinsèquement sur une interdiction (pas de négation syntaxique)", () => {
   const result = validateQuestionQuality(q("Quel additif alimentaire est interdit dans l'Union européenne depuis 2011 ?", { type: "qcm" }));
   assert.ok(!codes(result).includes("UNNECESSARY_NEGATION"));
+});
+
+// SOURCE_REFERENCE_WORDING (Phase 2.3, 04/09/2026, "chaque question doit
+// être autonome, sans référence au support qui a servi à la générer") —
+// contrôle purement déterministe, aucun appel IA. Les 5 cas requis par
+// l'audit sont testés directement via validateQuestionQuality (comme les
+// autres contrôles de ce fichier) ; hasSourceReferenceWording est en plus
+// testée isolément pour couvrir les 17 motifs minimums et les faux positifs.
+
+test("1. « D'après le texte, qui est Justinien ? » → rejet SOURCE_REFERENCE_WORDING", () => {
+  assert.ok(codes(validateQuestionQuality(q("D'après le texte, qui est Justinien ?"))).includes("SOURCE_REFERENCE_WORDING"));
+});
+
+test("2. « Quel rôle le texte attribue-t-il à Théodora ? » → rejet SOURCE_REFERENCE_WORDING", () => {
+  assert.ok(codes(validateQuestionQuality(q("Quel rôle le texte attribue-t-il à Théodora ?"))).includes("SOURCE_REFERENCE_WORDING"));
+});
+
+test("3. « Selon la source, quand a lieu la révolte de Nika ? » → rejet SOURCE_REFERENCE_WORDING", () => {
+  assert.ok(codes(validateQuestionQuality(q("Selon la source, quand a lieu la révolte de Nika ?"))).includes("SOURCE_REFERENCE_WORDING"));
+});
+
+test("4. « Quelle ville est la capitale de l'Empire romain d'Orient sous Justinien ? » → accepté (aucun rejet SOURCE_REFERENCE_WORDING)", () => {
+  assert.ok(!codes(validateQuestionQuality(q("Quelle ville est la capitale de l'Empire romain d'Orient sous Justinien ?"))).includes("SOURCE_REFERENCE_WORDING"));
+});
+
+test("5. « Quel rôle Théodora joue-t-elle dans la conduite de l'Empire ? » → accepté (aucun rejet SOURCE_REFERENCE_WORDING)", () => {
+  assert.ok(!codes(validateQuestionQuality(q("Quel rôle Théodora joue-t-elle dans la conduite de l'Empire ?"))).includes("SOURCE_REFERENCE_WORDING"));
+});
+
+test("hasSourceReferenceWording : couvre les 17 motifs minimums requis, insensible à la casse et aux apostrophes typographiques", () => {
+  const cases = [
+    "d'après le texte", "D’APRÈS LE TEXTE", "selon le texte", "dans le texte",
+    "le texte indique que...", "le texte explique que...", "le texte attribue à...",
+    "d'après la source", "selon la source", "dans la source",
+    "d'après le document", "selon le document", "dans le document",
+    "le document indique que...", "le passage indique que...", "le passage explique que...",
+    "d'après les informations fournies", "selon les informations fournies"
+  ];
+  for (const fragment of cases) {
+    assert.ok(hasSourceReferenceWording(`Question quelconque, ${fragment} ceci est vrai ?`), `motif non détecté : "${fragment}"`);
+  }
+});
+
+test("hasSourceReferenceWording : jamais de faux positif sur un sujet légitime contenant texte/source/document/passage isolément", () => {
+  const legit = [
+    "Quel document Justinien fait-il rédiger pour unifier le droit romain ?",
+    "Dans quelle ville se trouve la basilique Sainte-Sophie ?",
+    "Quelle est la source du Nil ?",
+    "Quel texte fondateur inspire la Déclaration de 1789 ?",
+    "Quel est le titre du passage le plus célèbre de ce discours ?",
+    "Quel rôle Théodora joue-t-elle dans la conduite de l'Empire sous Justinien ?"
+  ];
+  for (const text of legit) {
+    assert.ok(!hasSourceReferenceWording(text), `faux positif sur : "${text}"`);
+  }
+});
+
+test("SOURCE_REFERENCE_WORDING : le rejet vise uniquement le champ question, jamais un nouveau code de grounding/critique", () => {
+  const result = validateQuestionQuality(q("Selon la source, quand a lieu la révolte de Nika ?"));
+  const entry = result.reasons.find((r) => r.code === "SOURCE_REFERENCE_WORDING");
+  assert.ok(entry);
+  assert.deepEqual(entry.fields, ["question"]);
 });
 
 test("rejette une incompatibilité grammaticale sûre dans un texte à trous", () => {

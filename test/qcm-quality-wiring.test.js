@@ -170,3 +170,45 @@ test("V5 sélection de format : pertinence avant variété et intrus jamais impo
   assert.match(serverSource, /intrus[^.]{0,300}point commun substantiel/i);
   assert.match(serverSource, /aucun quota par format|jamais.*quota.*format/i);
 });
+
+// ── SOURCE_REFERENCE_WORDING (Phase 2.3, 04/09/2026, "chaque question doit
+// être autonome, sans référence au support") — le contrôle lui-même est pur
+// et testé isolément dans test/qcm-quality.test.js ; ce fichier verrouille
+// uniquement le CÂBLAGE : présent dans le cycle de régénération ciblée
+// (même mécanisme que les autres codes déterministes), jamais un nouvel
+// appel IA dédié. ────────────────────────────────────────────────────────
+
+test("SOURCE_REFERENCE_WORDING a bien une consigne de régénération ciblée, dans le même bloc targetedConstraints que les autres codes déterministes", () => {
+  const codePosition = serverSource.indexOf('rejectionCodes.has("SOURCE_REFERENCE_WORDING")');
+  assert.ok(codePosition > 0, "le code doit être testé dans le bloc targetedConstraints");
+  assert.match(
+    serverSource.slice(codePosition, codePosition + 900),
+    /targetedConstraints\.push\("- SOURCE_REFERENCE_WORDING : réécris la question sans AUCUNE référence, explicite ou implicite, au support/
+  );
+  // Situé dans la même fonction que les autres blocs déjà verrouillés
+  // ci-dessus (DOUBLE_NEGATION, UNNECESSARY_NEGATION, GROUNDING_*) — jamais
+  // une fonction séparée ni un second appel regenerate().
+  const doubleNegationIndex = serverSource.indexOf('rejectionCodes.has("DOUBLE_NEGATION")');
+  const groundingIndex = serverSource.indexOf('rejectionCodes.has("GROUNDING_CLAIM_NOT_GROUNDED_IN_SOURCE")');
+  assert.ok(doubleNegationIndex > 0 && codePosition > doubleNegationIndex && codePosition < groundingIndex);
+});
+
+test("aucun nouvel appel IA introduit pour ce correctif : le contrôle vit uniquement dans validateQuestionQuality (lib/qcm-quality.js), jamais dans buildSemanticReviewPrompt ni un nouveau helper _callOpenAI", () => {
+  const qualitySource = fs.readFileSync(require.resolve("../lib/qcm-quality.js"), "utf8");
+  assert.match(qualitySource, /function hasSourceReferenceWording\(value\)/);
+  const fnIndex = qualitySource.indexOf("if (hasSourceReferenceWording(question))");
+  const validatorIndex = qualitySource.indexOf("function validateQuestionQuality(item, options = {}) {");
+  const nextFnIndex = qualitySource.indexOf("\nfunction ", validatorIndex + 10);
+  assert.ok(fnIndex > validatorIndex && fnIndex < (nextFnIndex > 0 ? nextFnIndex : qualitySource.length), "le contrôle doit vivre dans validateQuestionQuality, purement déterministe");
+  const semanticPromptIndex = qualitySource.indexOf("function buildSemanticReviewPrompt(");
+  const semanticPromptEnd = qualitySource.indexOf("\nfunction ", semanticPromptIndex + 10);
+  assert.doesNotMatch(qualitySource.slice(semanticPromptIndex, semanticPromptEnd), /SOURCE_REFERENCE_WORDING|hasSourceReferenceWording/, "le critique sémantique (appel IA) ne doit jamais porter ce contrôle");
+});
+
+test("buildQuestionsFromKnowledgePrompt (lib/knowledge-admission.js) porte la règle d'autonomie de la question, sur le seul générateur de questions partagé par tous les pipelines (legacy et progressif)", () => {
+  const admissionSource = fs.readFileSync(require.resolve("../lib/knowledge-admission.js"), "utf8");
+  assert.match(admissionSource, /INTERDICTION ABSOLUE de faire référence, explicitement ou implicitement, au support/);
+  // Une seule fonction de génération de questions dans tout le fichier :
+  // la règle ne peut donc pas avoir été oubliée sur un second chemin.
+  assert.equal((admissionSource.match(/^function buildQuestionsFromKnowledgePrompt\(/gm) || []).length, 1);
+});
