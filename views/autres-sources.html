@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
-  <link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix">
+  <link rel="stylesheet" href="/style.min.css?v=20260904-summary-bolder-black">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -20,7 +20,7 @@
       z-index: 40;
       margin: -16px -16px 0;
       padding: 2px 16px 10px;
-      background: rgba(219, 229, 225, 0.86);
+      background: rgba(36, 48, 56, 0.86);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-radius: 8px 8px 0 0;
@@ -32,7 +32,7 @@
       .tribunes-page-header {
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
-        background: rgba(219, 229, 225, 0.97);
+        background: rgba(36, 48, 56, 0.97);
       }
     }
     /* Desktop : le header passe sous la topbar (z-index 20) pour coulisser
@@ -44,9 +44,11 @@
         margin-top: -32px;
       }
     }
-    /* Desktop : le bloc Trier/Rechercher reste dans le header sticky, juste
-       au-dessus de Nouvelles positives — même position et même largeur qu'en
-       mobile (il est donc épinglé au scroll avec les autres boutons). */
+    /* Desktop : le bloc Trier/Rechercher reste dans le header sticky, sous le
+       titre/sous-titre mais au-dessus du switch Gauche/Recommandé/Droite et
+       du bouton Personnalisé (demande du 04/09/2026) — même position et
+       même largeur qu'en mobile (il est donc épinglé au scroll avec les
+       autres boutons). */
     @media (min-width: 769px) {
       body.page-tribunes .tribunes-sort-search-block {
         margin: 24px auto 0;
@@ -86,6 +88,42 @@
         ) bottom / 100% 5px no-repeat,
         #ffffff !important;
     }
+    /* Liseré visible sous le bandeau bas (fond de la page qui perce dans la
+       safe-area basse, iPhone à encoche — barre d'adresse Safari repliée
+       comprise, pas seulement en PWA standalone) : même traitement que
+       notifications.html/qcm-du-jour.html — le bandeau déborde sous le
+       viewport visible et un ::after de même dégradé/blanc comble l'écart
+       (demande du 04/09/2026, "enlève le liseret blanc qui est visible sous
+       le bandeau blanc du bas"). */
+    @media (max-width: 768px), (display-mode: standalone) {
+      body.page-tribunes {
+        min-height: calc(100vh + env(safe-area-inset-bottom, 0px)) !important;
+        background-clip: border-box !important;
+      }
+      @supports (min-height: 100dvh) {
+        body.page-tribunes {
+          min-height: calc(100dvh + env(safe-area-inset-bottom, 0px)) !important;
+        }
+      }
+      body.page-tribunes::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+        height: env(safe-area-inset-bottom, 0px);
+        z-index: 10019;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) bottom / 100% 5px no-repeat,
+          #ffffff;
+        transform: translateZ(0);
+      }
+      body.page-tribunes .home-bottom-nav {
+        bottom: calc(-1 * env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
+      }
+    }
     body.page-tribunes .home-bottom-nav-item {
       color: #111827;
     }
@@ -115,7 +153,6 @@
       text-align: center !important;
     }
     .tribunes-page-header #tribunes-filter-switch,
-    .tribunes-page-header #tribunes-positive-filter-btn,
     .tribunes-page-header .tribunes-filters-row {
       display: flex !important;
       opacity: 1 !important;
@@ -138,7 +175,7 @@
     html.in-iframe body.page-tribunes,
     body.page-tribunes.in-iframe {
       overflow-x: hidden;
-      background: #dbe5e1 !important;
+      background: #243038 !important;
     }
     html.in-iframe body.page-tribunes .about-page-shell,
     body.page-tribunes .about-page-shell,
@@ -150,6 +187,7 @@
       margin: 0 0 24px !important;
     }
     html.in-iframe body.page-tribunes .about-panel,
+    body.page-tribunes .about-panel,
     body.page-tribunes.in-iframe .about-panel {
       box-sizing: border-box;
       width: 100%;
@@ -158,6 +196,14 @@
       border: 0;
       border-radius: 0;
       box-shadow: none;
+      /* .about-panel (composant partagé avec /about, /contact...) a par
+         défaut background:#ffffff — un "grand cadre blanc" autour de tout le
+         contenu, jamais neutralisé hors iframe (seules les variantes
+         .in-iframe l'étaient jusqu'ici). Transparent : le fond sombre de
+         body.page-tribunes (#243038, cf. .page-tribunes plus haut) prend le
+         relais (demande du 04/09/2026, "c'est comme un grand cadre blanc en
+         fait"). */
+      background: transparent;
     }
     html.in-iframe body.page-tribunes .topbar,
     body.page-tribunes.in-iframe .topbar {
@@ -227,33 +273,8 @@
       body.page-tribunes .topbar-inner.topbar-home {
         grid-template-columns: 44px minmax(0, 1fr) 210px !important;
       }
-      body.page-tribunes .topbar-app-icon--desktop {
-        width: 144px !important;
-        height: 144px !important;
-        border-radius: 18px !important;
-        margin: 0 !important;
-        transform: none !important;
-        align-self: center !important;
-        justify-self: center !important;
-        /* Même ancrage que sur l'index : l'icône appartient au bandeau et
-           défile avec lui, au lieu de rester flottante dans la fenêtre. */
-        position: absolute !important;
-        top: 6px !important;
-        right: -27px !important;
-        z-index: 2 !important;
-      }
     }
     @media (max-width: 768px) {
-      body.page-tribunes .topbar-app-icon--mobile {
-        width: 104px !important;
-        height: 104px !important;
-        border-radius: 16px !important;
-        margin: 0 !important;
-        position: absolute !important;
-        top: -1px !important;
-        right: -16px !important;
-        z-index: 2 !important;
-      }
       body.is-standalone.page-tribunes .topbar {
         padding-top: calc(1px + env(safe-area-inset-top, 0px)) !important;
       }
@@ -328,9 +349,6 @@
         margin-top: 6px;
       }
     }
-    body.page-tribunes #tribunes-positive-filter-btn {
-      margin-top: 24px;
-    }
     /* Bouton Trier/Rechercher agrandi — mobile et desktop. */
     body.page-tribunes .index-sort-toggle {
       padding: 8px 16px;
@@ -340,6 +358,72 @@
     }
     body.page-tribunes .index-explorer-controls {
       border: 2px solid #000000;
+    }
+    /* Fusion Gauche/Recommandé/Droite + Personnalisé (demande du 04/09/2026,
+       "Recommandé en haut, Personnalisé en bas, Gauche à gauche et Droite à
+       droite" — puis "pas centrés, décalés vers la droite, plus compacts") :
+       flexbox plutôt qu'une grille (centrage margin:auto/justify-content
+       plus fiable ici) — Gauche/Droite s'étirent (align-items:stretch, la
+       valeur par défaut) sur toute la hauteur de la colonne du milieu, qui
+       empile Recommandé/Personnalisé. Le conteneur partagé
+       .tribunes-filter-switch (pilule pleine largeur, style.css) est
+       neutralisé : chaque bouton redevient sa propre pilule autonome, plus
+       petite (min-width et padding réduits) que l'ancien switch 3 segments. */
+    body.page-tribunes .tribunes-filter-switch-merged {
+      display: flex;
+      /* center (pas stretch, demande du 04/09/2026, "pas ronds, plutôt
+         allongés comme Recommandé/Personnalisé") : Gauche/Droite gardent
+         leur hauteur naturelle de pilule courte au lieu de s'étirer sur
+         toute la hauteur de la colonne empilée, juste centrés dessus. */
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: max-content;
+      max-width: 100%;
+      margin: 14px auto 0;
+      background: none;
+      border: none;
+      box-shadow: none;
+      border-radius: 0;
+      overflow: visible;
+    }
+    body.page-tribunes .tribunes-filter-switch-merged .tribunes-filter-segment-side {
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      background: #f3f4f6;
+      min-width: 64px;
+      padding: 6px 12px;
+      font-size: 11px;
+    }
+    body.page-tribunes .tribunes-filter-switch-merged .tribunes-filter-segment-side.tribunes-filter-segment-active {
+      background: #1a1f24;
+      border-color: #1a1f24;
+    }
+    body.page-tribunes .tribunes-filter-switch-center {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    body.page-tribunes .tribunes-filter-switch-center .tribunes-filter-segment {
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      background: #f3f4f6;
+      min-width: 64px;
+      padding: 5px 12px;
+      font-size: 11px;
+    }
+    body.page-tribunes .tribunes-filter-switch-center .tribunes-filter-segment.tribunes-filter-segment-active {
+      background: #1a1f24;
+      border-color: #1a1f24;
+    }
+    /* .tribunes-custom-filter-btn a déjà sa propre pilule (margin auto,
+       fond mauve) : recentrée dans la colonne, plus compacte (padding réduit)
+       au lieu de son ancien margin:12px auto 0 pensé pour être sous le
+       switch entier. */
+    body.page-tribunes .tribunes-filter-switch-center .tribunes-custom-filter-btn {
+      margin: 0;
+      padding: 5px 12px;
+      font-size: 11px;
     }
     /* #tribunes-active-filters reste dans le DOM même vide (juste après
        Actualités régionales) avec sa réserve d'espace habituelle
@@ -351,12 +435,10 @@
       min-height: 0;
       margin-top: 0;
     }
-    body.page-tribunes .about-page-shell {
-      /* Comble le padding-top hérité de main (16px mobile / 28px desktop) :
-         sans ce fond, le body sombre (#243038) transparaît derrière la page
-         aux extrémités hautes de l'écran, entre la topbar et le panneau. */
-      background: linear-gradient(#dbe5e1, #dbe5e1) top / 100% 40px no-repeat;
-    }
+    /* Thème pétrole (#243038, demande du 04/09/2026) : body et panneau sont
+       désormais du même bleu pétrole, plus besoin de combler le padding-top
+       hérité de main avec un fond distinct — le body sombre qui transparaît
+       aux extrémités hautes de l'écran est maintenant la couleur voulue. */
     /* z-index : sous la modale iframe (#debate-iframe-modal, 9999) — le
        bouton occupait le même coin que la flèche de fermeture de la modale
        (10000) et interceptait le tap, renvoyant vers l'accueil. */
@@ -570,20 +652,20 @@
       left: 0;
       background: linear-gradient(
         to right,
-        rgba(219, 229, 225, 0.98) 0%,
-        rgba(219, 229, 225, 0.72) 34%,
-        rgba(219, 229, 225, 0.26) 70%,
-        rgba(219, 229, 225, 0) 100%
+        rgba(36, 48, 56, 0.98) 0%,
+        rgba(36, 48, 56, 0.72) 34%,
+        rgba(36, 48, 56, 0.26) 70%,
+        rgba(36, 48, 56, 0) 100%
       );
     }
     .tribunes-carousel-wrap::after {
       right: 0;
       background: linear-gradient(
         to left,
-        rgba(219, 229, 225, 0.98) 0%,
-        rgba(219, 229, 225, 0.72) 34%,
-        rgba(219, 229, 225, 0.26) 70%,
-        rgba(219, 229, 225, 0) 100%
+        rgba(36, 48, 56, 0.98) 0%,
+        rgba(36, 48, 56, 0.72) 34%,
+        rgba(36, 48, 56, 0.26) 70%,
+        rgba(36, 48, 56, 0) 100%
       );
     }
     .tribunes-theme-section.tribunes-row-at-start .tribunes-carousel-wrap::before,
@@ -807,19 +889,27 @@
       z-index: 1;
       align-self: stretch;
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr);
+      /* auto (pas 30px fixe) : .tribunes-options-btn a repris la taille compacte
+         par défaut (padding-based) de .debate-card-options-btn, plus étroite
+         qu'un carré 30x30px — une colonne fixe l'aurait fait déborder. */
+      grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
       align-items: center;
       gap: 6px;
       margin-top: -12px;
       padding-top: 4px;
     }
+    /* Taille par défaut de .debate-card-options-btn (padding-based, pas de
+       largeur/hauteur fixes) : demande du 04/09/2026, "comme ceux qui sont
+       dans les cartes page index" — avant, un carré 30x30px forcé rendait ce
+       bouton plus massif que sa version index. */
     .tribunes-options-btn {
       transform: translateY(4px);
-      width: 30px;
-      height: 30px;
-      min-width: 30px;
-      padding: 0;
       justify-self: start;
+      /* Même hauteur que "Ouvrir source"/"Ouvrir arène" (min-height:26px,
+         demande du 04/09/2026) : le padding vertical par défaut de
+         .debate-card-options-btn (7px) le rendait plus haut qu'eux. */
+      min-height: 26px;
+      padding: 0 12px;
     }
     .tribunes-arena-btn {
       transform: translateY(4px);
@@ -829,16 +919,16 @@
       padding: 3px 7px;
       font-size: 0.67rem;
       white-space: nowrap;
-      /* Palette neutre de la page (titres #111827, pilule active #1a1f24)
-         plutôt que le bleu-vert #243038 du style global. */
-      border-color: #111827;
-      background: #111827;
+      /* Même fond que le bouton "···" (.debate-card-options-btn, #243038) —
+         demande du 04/09/2026. */
+      border-color: #243038;
+      background: #243038;
       box-shadow: 0 6px 14px rgba(17, 24, 39, 0.16);
     }
     .tribunes-arena-btn:hover,
     .tribunes-arena-btn:focus-visible {
-      background: #000000;
-      border-color: #000000;
+      background: #2e3d47;
+      border-color: #2e3d47;
     }
     .tribunes-source-btn {
       transform: translateY(4px);
@@ -1042,46 +1132,53 @@
       .tribunes-carousel-wrap::before {
         background: linear-gradient(
           to right,
-          rgba(219, 229, 225, 0.55) 0%,
-          rgba(219, 229, 225, 0.38) 34%,
-          rgba(219, 229, 225, 0.14) 70%,
-          rgba(219, 229, 225, 0) 100%
+          rgba(36, 48, 56, 0.55) 0%,
+          rgba(36, 48, 56, 0.38) 34%,
+          rgba(36, 48, 56, 0.14) 70%,
+          rgba(36, 48, 56, 0) 100%
         );
       }
       .tribunes-carousel-wrap::after {
         background: linear-gradient(
           to left,
-          rgba(219, 229, 225, 0.55) 0%,
-          rgba(219, 229, 225, 0.38) 34%,
-          rgba(219, 229, 225, 0.14) 70%,
-          rgba(219, 229, 225, 0) 100%
+          rgba(36, 48, 56, 0.55) 0%,
+          rgba(36, 48, 56, 0.38) 34%,
+          rgba(36, 48, 56, 0.14) 70%,
+          rgba(36, 48, 56, 0) 100%
         );
       }
     }
 
-    /* #tribunes-list a un fond clair (#dbe5e1) mais ne prend que la hauteur de
-       son contenu — tant qu'il ne contient que le loader, une bande du fond
-       sombre du body (#243038) reste visible en dessous jusqu'en bas de
-       l'écran. On étire ce conteneur (pas le loader lui-même, pour garder le
-       sablier bien visible juste sous l'en-tête, sans scroll) pour masquer
-       cette bande pendant l'attente. */
+    /* #tribunes-list ne prend que la hauteur de son contenu — tant qu'il ne
+       contient que le loader, l'espace en dessous jusqu'en bas de l'écran
+       reste vide (mais du même bleu pétrole #243038 que le body, donc sans
+       bande visible). On étire quand même ce conteneur (pas le loader
+       lui-même, pour garder le sablier bien visible juste sous l'en-tête,
+       sans scroll) pour que le clic/scroll y reste cohérent pendant
+       l'attente. */
     #tribunes-list:has(.tribunes-initial-loading),
     #tribunes-list:has(.tribunes-empty-loading) {
       min-height: 70vh;
     }
-    /* Le loader "Chargement des recommandations" est injecté après le
-       premier rendu et peut raccourcir la liste avant la réponse réseau.
-       Pendant ces deux états seulement, le blanc cassé devient aussi le fond
-       du body : aucune bande bleue ne peut apparaître sous la liste, quelle
-       que soit la hauteur du viewport. */
-    body.page-tribunes:has(#tribunes-list .tribunes-initial-loading),
-    body.page-tribunes:has(#tribunes-list .tribunes-empty-loading) {
-      background-color: #dbe5e1 !important;
+    /* Fond pétrole (#243038) du body EN PERMANENCE, pas seulement pendant le
+       chargement (l'ancien scope :has(.tribunes-initial-loading/.tribunes-
+       empty-loading) laissait le body au gris clair par défaut du site,
+       body{background:#f3f4f6}, style.css, dès que le contenu était chargé) :
+       #tribunes-list (elle-même #243038) ne s'étire jamais exactement à toute
+       la hauteur du viewport (marge, contenu plus court…), laissant ce gris
+       clair percer en liseré blanc autour/sous elle — visible aussi bien une
+       fois les articles chargés que pendant le chargement lui-même (demande
+       du 04/09/2026, "le trait blanc est toujours là" / "visible aussi en bas
+       pendant le chargement des articles"). */
+    body.page-tribunes {
+      background-color: #243038 !important;
     }
     .tribunes-initial-loading {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 10px;
       padding: 48px 0;
     }
     .tribunes-initial-loading-img {
@@ -1090,6 +1187,15 @@
       object-fit: contain;
       opacity: 0.86;
       animation: createSubmitSpin 0.9s linear infinite;
+    }
+    /* Message ajouté (demande du 04/09/2026, "je veux que tu rajoutes un
+       message : chargement des articles") — même style que les libellés des
+       autres états de chargement de la liste (.tribunes-empty-loading span,
+       "Chargement des recommandations…"/"Chargement des articles…"). */
+    .tribunes-initial-loading-text {
+      color: #a0b0bb;
+      font-size: 13px;
+      font-weight: 600;
     }
 
     /* Chauffe téléphone : le sablier des vignettes (animation infinie de
@@ -1138,7 +1244,6 @@
     function tribunesSortSearchSetPinned(pinned) {
       var wrap = document.getElementById('tribunes-sort-search-wrap');
       var header = document.querySelector('.tribunes-page-header');
-      var positiveBtn = document.getElementById('tribunes-positive-filter-btn');
       var spacer = document.getElementById('tribunes-sort-search-spacer');
       var tags = document.getElementById('tribunes-active-filters');
       var tagsSpacer = document.getElementById('tribunes-active-filters-spacer');
@@ -1178,7 +1283,8 @@
           tagsSpacer.insertAdjacentElement('beforebegin', tags);
           tagsSpacer.remove();
         }
-        header.insertBefore(wrap, positiveBtn || header.firstChild);
+        var switchAnchor = document.getElementById('tribunes-filter-switch');
+        header.insertBefore(wrap, switchAnchor || null);
         if (spacer) spacer.remove();
       }
     }
@@ -1253,14 +1359,14 @@
         var topbar = document.querySelector('.topbar');
         var height = topbar && getComputedStyle(topbar).display !== 'none' ? Math.ceil(topbar.getBoundingClientRect().height) : 0;
         document.body.style.setProperty('--tribunes-topbar-offset', height + 'px');
-        // Point d'accroche du header sticky : calé pour que le bouton
-        // "Nouvelles positives" (ou, à défaut, le switch Tout/Gauche/Droite)
-        // se pose juste sous le haut du viewport (le bandeau n'est pas
-        // sticky et défile) — ou juste sous le bandeau quand celui-ci reste
-        // sticky (mode iframe). Titre + description sont masqués au-dessus.
-        // tribunesHeaderShift() compense le translateY éventuel du header.
+        // Point d'accroche du header sticky : calé pour que le switch
+        // Gauche/Recommandé/Droite se pose juste sous le haut du viewport
+        // (le bandeau n'est pas sticky et défile) — ou juste sous le
+        // bandeau quand celui-ci reste sticky (mode iframe). Titre +
+        // description sont masqués au-dessus. tribunesHeaderShift()
+        // compense le translateY éventuel du header.
         var header = document.querySelector('.tribunes-page-header');
-        var switchEl = document.getElementById('tribunes-positive-filter-btn') || document.getElementById('tribunes-filter-switch');
+        var switchEl = document.getElementById('tribunes-filter-switch');
         if (header && switchEl) {
           var topbarSticky = topbar && getComputedStyle(topbar).position === 'sticky';
           var switchOffset = switchEl.getBoundingClientRect().top - header.getBoundingClientRect().top;
@@ -1278,17 +1384,19 @@
         var stuck = header.getBoundingClientRect().top <= stickTop - tribunesHeaderShift() + 2;
         header.classList.toggle('tribunes-header-stuck', stuck);
       }
-      // Le bloc Trier/Rechercher reste au-dessus de "Nouvelles positives" dans
-      // le header, en mobile comme en desktop (donc épinglé avec les autres
-      // boutons au scroll) : ne fait que garantir sa position si un resize
-      // (ou une exécution précédente de ce script) l'avait déplacé ailleurs.
+      // Le bloc Trier/Rechercher reste sous le titre/sous-titre mais au-dessus
+      // du switch Gauche/Recommandé/Droite ET du bouton Personnalisé (demande
+      // du 04/09/2026), en mobile comme en desktop (donc épinglé avec les
+      // autres boutons au scroll) : ne fait que garantir sa position si un
+      // resize (ou une exécution précédente de ce script) l'avait déplacé
+      // ailleurs.
       function applyTribunesSortSearchLayout() {
         var wrap = document.getElementById('tribunes-sort-search-wrap');
         var header = document.querySelector('.tribunes-page-header');
-        var positiveBtn = document.getElementById('tribunes-positive-filter-btn');
+        var switchAnchor = document.getElementById('tribunes-filter-switch');
         if (!wrap || !header) return;
-        if (wrap.parentElement !== header || (positiveBtn && wrap.nextElementSibling !== positiveBtn)) {
-          header.insertBefore(wrap, positiveBtn || header.firstChild);
+        if (wrap.parentElement !== header || wrap.nextElementSibling !== switchAnchor) {
+          header.insertBefore(wrap, switchAnchor || null);
         }
       }
       applyTribunesSortSearchLayout();
@@ -1333,6 +1441,14 @@
   <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
 </head>
 <body class="page-tribunes">
+<!-- Flèche retour (demande du 04/09/2026, "petite flèche retour, permettant
+     de revenir sur page accueil, comme sur page débat") : le CSS et le JS
+     (.tribunes-mobile-back-button, cf. <style> plus haut et tribunesBackBtn
+     plus bas) existaient déjà, prêts à l'emploi — seul l'élément manquait
+     dans le HTML, jamais rendu jusqu'ici. -->
+<button type="button" class="tribunes-mobile-back-button" aria-label="Retour à l'accueil" title="Retour à l'accueil" onclick="openHomePageWithArenaLoading('/?skipStartup=1')">
+  <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+</button>
 <!-- Bandeau du haut : réplique exacte de la page index. Le wrapper
      display:contents porte les classes page-home/page-home-mobile (celles
      du body de l'index) pour activer les règles descendantes de style.css
@@ -1446,9 +1562,6 @@
     >
       <i class="fa-solid fa-power-off"></i>
     </button>
-
-    <img src="/appmnoria-192.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--mobile" onclick="openInstallModal()" role="button" tabindex="0">
-    <img src="/appmnoriaordi.png" alt="mnoria app" class="topbar-app-icon topbar-app-icon--desktop" onclick="openInstallModal()" role="button" tabindex="0">
 
     <div class="admin-controls-row" data-admin style="display:none;">
       <div class="admin-topbar-menu" id="admin-topbar-menu">
@@ -1624,20 +1737,17 @@ window.addEventListener("pageshow", function() {
         </div>
       </div>
 
-      <button type="button" id="tribunes-positive-filter-btn" class="tribunes-positive-filter-btn" aria-pressed="false" data-extra-filter="positive" data-active-class="tribunes-positive-filter-btn-active">
-        <i class="fa-solid fa-seedling" aria-hidden="true"></i> Nouvelles positives
-      </button>
-
-      <div id="tribunes-filter-switch" class="tribunes-filter-switch" role="group" aria-label="Filtrer les articles par orientation">
-        <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment" data-filter="left">Gauche</button>
-        <button type="button" id="tribunes-filter-recommande" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="recommande">Recommandé</button>
-        <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment" data-filter="right">Droite</button>
+      <div id="tribunes-filter-switch" class="tribunes-filter-switch tribunes-filter-switch-merged" role="group" aria-label="Filtrer les articles">
+        <button type="button" id="tribunes-filter-left" class="tribunes-filter-segment tribunes-filter-segment-side" data-filter="left">Gauche</button>
+        <div class="tribunes-filter-switch-center">
+          <button type="button" id="tribunes-filter-recommande" class="tribunes-filter-segment tribunes-filter-segment-active" data-filter="recommande">Recommandé</button>
+          <button type="button" id="tribunes-custom-filter-btn" class="tribunes-custom-filter-btn" aria-pressed="false" data-extra-filter="custom" data-active-class="tribunes-custom-filter-btn-active">
+            <i class="fa-solid fa-list-check" aria-hidden="true"></i> Personnalisé
+            <i class="fa-solid fa-gear tribunes-custom-filter-gear" aria-hidden="true" title="Choisir mes médias"></i>
+          </button>
+        </div>
+        <button type="button" id="tribunes-filter-right" class="tribunes-filter-segment tribunes-filter-segment-side" data-filter="right">Droite</button>
       </div>
-
-      <button type="button" id="tribunes-custom-filter-btn" class="tribunes-custom-filter-btn" aria-pressed="false" data-extra-filter="custom" data-active-class="tribunes-custom-filter-btn-active">
-        <i class="fa-solid fa-list-check" aria-hidden="true"></i> Personnalisé
-        <i class="fa-solid fa-gear tribunes-custom-filter-gear" aria-hidden="true" title="Choisir mes médias"></i>
-      </button>
 
       <div id="tribunes-active-filters" class="index-active-filters index-active-filters-empty"></div>
     </div>
@@ -1647,6 +1757,7 @@ window.addEventListener("pageshow", function() {
     <div class="tribunes-list" id="tribunes-list">
       <div class="tribunes-initial-loading" aria-label="Chargement">
         <img src="/sablier-96.png" alt="" class="tribunes-initial-loading-img">
+        <span class="tribunes-initial-loading-text">Chargement des articles</span>
       </div>
     </div>
   </section>
@@ -1685,6 +1796,11 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
+  <a href="/?skipStartup=1" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="event.preventDefault(); openHomePageWithArenaLoading('/?skipStartup=1')">
+    <i class="fa-solid fa-house" aria-hidden="true"></i>
+    <span>Accueil</span>
+  </a>
+
   <div class="home-bottom-nav-item-wrap">
     <button
       type="button"
@@ -1725,11 +1841,6 @@ window.addEventListener("pageshow", function() {
       </div>
     </div>
   </div>
-
-  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="event.preventDefault(); openDebateIframeModal('/create')">
-    <i class="fa-solid fa-plus"></i>
-    <span>Ouvrir</span>
-  </a>
 
   <button type="button" id="tribunes-refresh-btn" class="home-bottom-nav-item tribunes-refresh-nav-btn" aria-label="Actualiser les articles">
     <i class="fa-solid fa-rotate-right"></i>
@@ -1780,7 +1891,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
+<script src="/script.min.js?v=20260904-fast-veil-retry" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');
@@ -3523,7 +3634,38 @@ window.addEventListener("pageshow", function() {
   var previewObserver = null;
   var previewCacheByLink = {};
   var previewRequestByLink = {};
-  var MNORIA_FALLBACK_IMAGE = '/logovisuel.png';
+  // Remplace l'ancien logo agôn blanc fixe par les mêmes 15 visuels de fond
+  // Mnoria que les cartes de débat sans image sur l'accueil (cf.
+  // INDEX_DEFAULT_FALLBACK_IMAGES/getIndexDefaultFallbackImage, script.js) —
+  // demande du 04/09/2026, "remplace aussi dans le fond des cartes mis par
+  // défaut (logo agôn en blanc), tu mets à la place visuels mnoria (déjà
+  // présent dans cartes page index)". Sélection déterministe par hash du lien
+  // de l'article (pas d'id de débat ici), donc stable entre deux rendus.
+  var MNORIA_CARD_FALLBACK_IMAGES = [
+    "/visuels/mnoria-carte-fond-01.webp",
+    "/visuels/mnoria-carte-fond-02.webp",
+    "/visuels/mnoria-carte-fond-03.webp",
+    "/visuels/mnoria-carte-fond-04.webp",
+    "/visuels/mnoria-carte-fond-05.webp",
+    "/visuels/mnoria-carte-fond-06.webp",
+    "/visuels/mnoria-carte-fond-07.webp",
+    "/visuels/mnoria-carte-fond-08.webp",
+    "/visuels/mnoria-carte-fond-09.webp",
+    "/visuels/mnoria-carte-fond-10.webp",
+    "/visuels/mnoria-carte-fond-11.webp",
+    "/visuels/mnoria-carte-fond-12.webp",
+    "/visuels/mnoria-carte-fond-13.webp",
+    "/visuels/mnoria-carte-fond-14.webp",
+    "/visuels/mnoria-carte-fond-15.webp"
+  ];
+  function getMnoriaCardFallbackImage(article) {
+    var key = String(article && (article.link || article.title) || '');
+    var hash = 0;
+    for (var i = 0; i < key.length; i++) {
+      hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+    }
+    return MNORIA_CARD_FALLBACK_IMAGES[hash % MNORIA_CARD_FALLBACK_IMAGES.length];
+  }
   var LIBERATION_FALLBACK_IMAGE = 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Lib%C3%A9ration.svg/langfr-250px-Lib%C3%A9ration.svg.png';
   // lepoint.fr est protégé par un anti-bot (DataDome) qui bloque systématiquement
   // la récupération d'og:image (403 sur tous les profils UA testés côté serveur,
@@ -3578,7 +3720,7 @@ window.addEventListener("pageshow", function() {
       preview && preview.thumbnail,
       preview && preview.thumbnailUrl,
       preview && preview.ogImage
-    ].concat(getYouTubeThumbnailCandidates(videoId), [sourceFallback, MNORIA_FALLBACK_IMAGE]));
+    ].concat(getYouTubeThumbnailCandidates(videoId), [sourceFallback, getMnoriaCardFallbackImage(article)]));
   }
 
   function isExternalImageUrl(url) {
@@ -3744,8 +3886,19 @@ window.addEventListener("pageshow", function() {
   // /api/opinion-articles) : orientationArticles ne contient déjà que les articles du
   // groupe demandé, plus besoin de refiltrer ici. 'custom' reste à part (sélection par
   // média, toute orientation confondue, sur le pool allArticles resté mélangé).
+  // Onglet "Recommandé" vide (chargé, mais aucune recommandation) : montrer
+  // tous les articles plutôt qu'un onglet vide (demande du 04/09/2026, "si
+  // je n'ai pas de recommandations, on met tous les articles, pas rien").
+  // Tant que le fetch recommandé n'a pas résolu (!recommendedLoaded), on
+  // laisse recommendedArticles (vide) tel quel — c'est le sablier de
+  // chargement (render(), plus bas) qui gère cet état-là, pas ce repli.
+  function getRecommendedDisplayArticles() {
+    if (recommendedArticles.length || !recommendedLoaded) return recommendedArticles;
+    return allArticles;
+  }
+
   function articlesInScope() {
-    if (currentFilter === 'recommande') return recommendedArticles;
+    if (currentFilter === 'recommande') return getRecommendedDisplayArticles();
     if (currentFilter === 'custom') {
       return allArticles.filter(function(article) {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
@@ -3785,7 +3938,7 @@ window.addEventListener("pageshow", function() {
   function filterArticlesList(articles) {
     var filtered;
     if (currentFilter === 'recommande') {
-      filtered = recommendedArticles;
+      filtered = getRecommendedDisplayArticles();
     } else if (currentFilter === 'custom') {
       filtered = articles.filter(function(article) {
         return customMediaSelectionKeys.has(computeArticleMediaKey(article));
@@ -3810,7 +3963,7 @@ window.addEventListener("pageshow", function() {
   }
 
   function computeFiltered() {
-    if (currentFilter === 'recommande') return filterArticlesList(recommendedArticles);
+    if (currentFilter === 'recommande') return filterArticlesList(getRecommendedDisplayArticles());
     if (currentFilter === 'custom') return filterArticlesList(allArticles);
     return filterArticlesList(orientationLoadedForFilter === currentFilter ? orientationArticles : []);
   }

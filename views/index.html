@@ -124,7 +124,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix">
+  <link rel="stylesheet" href="/style.min.css?v=20260904-summary-bolder-black">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -271,29 +271,44 @@
        position:fixed + backdrop-filter se désynchronise sur iOS/WebKit quand la mise en
        page SOUS le calque continue de bouger (ici, la hauteur du cadre "Ma mémoire" qui se
        stabilise), le calque "suivant" visuellement ce mouvement au lieu de rester fixé au
-       vrai viewport. z-index 140 (au lieu de 9500) : demande du 01/09/2026, "le flou doit
-       s'arrêter au dessus du bandeau blanc" — plutôt que de réserver une hauteur exacte en
-       bas (fragile à mesurer pendant que la page se stabilise, cf. le commentaire abandonné
-       en ce sens sur updatePageArrivalLoadingOverlayBounds dans script.js), on passe
-       simplement SOUS .home-bottom-nav (z-index 145, style.css) : le bandeau blanc, plus
-       haut dans l'empilement, reste alors net et non flouté par-dessus le voile, sans
-       calcul de hauteur à synchroniser. Reste au-dessus du cadre "Ma mémoire" lui-même
-       (#mnoria-tag-trends-cloud, z-index 130). */
+       vrai viewport. z-index 140, SOUS .home-bottom-nav (z-index 145, style.css) : choix du
+       01/09/2026 pour laisser le bandeau blanc visible et net par-dessus le voile flouté —
+       inversé le 03/09/2026 ("je vois le bandeau blanc du bas") maintenant que le voile est
+       un plein écran opaque (plus de flou à préserver derrière) : z-index remonté à 10030,
+       même valeur que .page-arrival-loading-overlay-learning (script.js), pour couvrir
+       entièrement le bandeau comme les autres pages de chargement plein écran. */
     #mnoria-memoire-loading-veil {
       display: none;
     }
     @media (max-width: 768px) {
+      /* Plein écran opaque sablier (même habillage que .page-arrival-loading-
+         overlay-learning, script.js) au lieu du voile flouté + carte blanche
+         d'origine — unifié avec l'écran "Chargement de l'accueil en cours"
+         utilisé partout ailleurs pour revenir sur l'accueil (demande du
+         03/09/2026, "je veux avoir la même page de transition"). */
       body.is-standalone.page-home-mobile #mnoria-memoire-loading-veil {
         display: flex;
         position: fixed;
-        inset: 0;
-        z-index: 140;
+        top: 0;
+        left: 0;
+        right: 0;
+        /* Même construction que .mnoria-startup-loader (plus bas) : déborde
+           volontairement sous le bas visible, pour qu'un resize transitoire
+           du viewport (barre d'adresse Safari qui bouge) ne laisse jamais
+           entrevoir le fond de la page en dessous — bande basse signalée le
+           03/09/2026 ("elle doit s'étendre jusqu'en bas"). Compensé par un
+           padding-bottom équivalent (box-sizing:border-box) pour garder le
+           sablier centré sur le vrai viewport. */
+        bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
+        padding-bottom: calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
+        box-sizing: border-box;
+        z-index: 10030;
         align-items: center;
         justify-content: center;
-        padding: 20px;
-        background: rgba(17, 24, 39, 0.18);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        padding-left: 20px;
+        padding-right: 20px;
+        padding-top: 20px;
+        background: #243038;
         opacity: 1;
         transition: opacity 0.25s ease;
         will-change: transform;
@@ -306,12 +321,12 @@
       }
     }
     #mnoria-memoire-loading-veil-box {
-      width: min(92vw, 360px);
-      border-radius: 24px;
-      padding: 22px 20px 18px;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid rgba(17, 17, 17, 0.08);
-      box-shadow: 0 18px 50px rgba(17, 17, 17, 0.14);
+      width: auto;
+      max-width: min(90vw, 220px);
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
       text-align: center;
     }
     #mnoria-memoire-loading-veil-hourglass {
@@ -337,7 +352,8 @@
       font-size: 16px;
       font-weight: 700;
       line-height: 1.4;
-      color: #111111;
+      color: #ffffff;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
     }
     .mnoria-startup-loader {
       position: fixed;
@@ -795,7 +811,7 @@
 <div id="mnoria-memoire-loading-veil" role="status" aria-live="polite" aria-hidden="true">
   <div id="mnoria-memoire-loading-veil-box">
     <div id="mnoria-memoire-loading-veil-hourglass"><img src="/sablier-96.png" alt=""></div>
-    <div id="mnoria-memoire-loading-veil-title">Chargement en cours</div>
+    <div id="mnoria-memoire-loading-veil-title">Chargement de l'accueil en cours</div>
   </div>
 </div>
 <script>
@@ -1696,6 +1712,31 @@ window.addEventListener("pageshow", function() {
 
 </main>
 
+<!-- Flèches flottantes haut/bas (demande du 04/09/2026, "remettre les
+     flèches haut/bas, c'était déjà le cas avant") : le script juste en
+     dessous (mnoriaFloatingScrollBtnPos) les cible déjà par ces mêmes
+     classes/sélecteurs et le CSS (body.page-home .app-floating-refresh-btn,
+     style.css) existait toujours — seul ce markup manquait. -->
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-up"
+  onclick="scrollToAdjacentSection('up')"
+  title="Défiler vers le haut"
+  aria-label="Défiler vers le haut"
+>
+  <i class="fa-solid fa-chevron-up"></i>
+</button>
+
+<button
+  type="button"
+  class="app-floating-refresh-btn index-floating-refresh-btn index-floating-scroll-btn index-floating-scroll-down"
+  onclick="scrollToAdjacentSection('down')"
+  title="Défiler vers le bas"
+  aria-label="Défiler vers le bas"
+>
+  <i class="fa-solid fa-chevron-down"></i>
+</button>
+
 <script>
 /* Restaure la position des flèches calculée à la visite précédente
    (syncIndexFloatingScrollButtonsWithBottomNav la mémorise en sessionStorage)
@@ -1770,23 +1811,18 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <nav class="home-bottom-nav" aria-label="Navigation principale mobile">
-  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène" onclick="event.preventDefault(); openDebateIframeModal('/create')">
-    <i class="fa-solid fa-plus"></i>
-    <span>Ouvrir</span>
-  </a>
-
   <div class="home-bottom-nav-item-wrap">
     <button
       type="button"
       id="index-explorer-toggle"
-      class="home-bottom-nav-item index-mon-fil-preview"
-      aria-label="Mon fil"
-      aria-disabled="true"
-      tabindex="-1"
-      style="pointer-events:none;cursor:default"
+      class="home-bottom-nav-item"
+      aria-label="Explorer"
+      aria-haspopup="true"
+      aria-expanded="false"
+      onclick="toggleIndexExplorerMenu(event)"
     >
-      <i class="fa-solid fa-bars-staggered"></i>
-      <span>Mon fil</span>
+      <i class="fa-regular fa-compass"></i>
+      <span>Explorer</span>
     </button>
     <div id="index-explorer-menu" class="home-bottom-share-menu" onclick="event.stopPropagation()">
      <div class="index-explorer-menu-body">
@@ -1817,6 +1853,22 @@ window.addEventListener("pageshow", function() {
      </div>
     </div>
   </div>
+
+  <!-- Mon fil : réservé pour une future fonctionnalité (demande du
+       04/09/2026, "remplace Ouvrir par Explorer" — Explorer prend
+       maintenant la 1re place ci-dessus, Mon fil garde la sienne mais sort
+       du wrap qui portait le menu déroulant Explorer). -->
+  <button
+    type="button"
+    class="home-bottom-nav-item index-mon-fil-preview"
+    aria-label="Mon fil"
+    aria-disabled="true"
+    tabindex="-1"
+    style="pointer-events:none;cursor:default"
+  >
+    <i class="fa-solid fa-bars-staggered"></i>
+    <span>Mon fil</span>
+  </button>
 
   <!-- forceFullPageRefresh recrée immédiatement le véritable loader (logo +
        slogan), puis navigue seulement après sa première peinture. Aucun voile
@@ -2101,7 +2153,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
+<script src="/script.min.js?v=20260904-fast-veil-retry" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

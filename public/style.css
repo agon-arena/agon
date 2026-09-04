@@ -12332,57 +12332,14 @@ body:has(#home-bottom-share-menu.home-bottom-share-menu-open) .index-floating-re
   z-index: 130;
 }
 
-.topbar-app-icon {
-  display: none;
-  cursor: pointer;
-}
-
-@media (max-width: 768px) {
-  .page-home-mobile .topbar-app-icon--mobile {
-    display: block;
-    grid-area: spacer;
-    width: 130px;
-    height: 130px;
-    object-fit: cover;
-    border-radius: 18px;
-    margin: -35px 0 -45px -66px;
-  }
-
-  body.is-standalone .topbar-app-icon--mobile {
-    display: none !important;
-  }
-}
-
 @media (min-width: 769px) {
   .page-home-mobile .topbar-inner.topbar-home {
     grid-template-columns: 44px minmax(0, 1fr) 180px;
   }
 
-  .topbar-app-icon--desktop {
-    display: block;
-    grid-area: spacer;
-    width: 145px;
-    height: 145px;
-    object-fit: cover;
-    border-radius: 20px;
-    margin: 0 auto 0 0;
-    transform: translate(-25px, 16px);
-  }
-
-  body.is-standalone .topbar-app-icon--desktop {
-    display: none !important;
-  }
-
   body.is-standalone .topbar-refresh-btn {
     grid-area: spacer;
     margin: auto;
-  }
-}
-
-@media (display-mode: standalone) {
-  .topbar-app-icon--mobile,
-  .topbar-app-icon--desktop {
-    display: none !important;
   }
 }
 
@@ -19048,11 +19005,17 @@ body.page-home-mobile .debate-card.has-title-banner .debate-card-link {
   background: #243038 !important;
 }
 
-/* Suppression marges et coins droits en haut sur tous types de media */
+/* Suppression marges, coins et bordure sur tous types de media : ces trois
+   classes ont chacune un liseret gris clair (border:1px solid #e5e7eb, cf.
+   leur règle de base) pensé pour une carte isolée avec coins arrondis —
+   jamais retiré ici jusqu'ici, donc toujours visible juste avant le bandeau
+   titre (plus flagrant sur une vidéo, fond noir uni, que sur une photo —
+   signalé le 03/09/2026, capture à l'appui). */
 .index-card-media-with-title .debate-card-media-youtube,
 .index-card-media-with-title .debate-card-media-local-video,
 .index-card-media-with-title .debate-card-media-local-image {
   margin: 0 !important;
+  border: none !important;
   border-radius: 0 !important;
 }
 
@@ -22150,39 +22113,6 @@ body.page-home-mobile .topbar-social {
     grid-template-columns: 44px minmax(0, 1fr) 210px !important;
   }
 
-  body.page-home .topbar-app-icon--desktop,
-  body.page-home-mobile .topbar-app-icon--desktop {
-    width: 144px !important;
-    height: 144px !important;
-    border-radius: 18px !important;
-    margin: 0 !important;
-    transform: none !important;
-    align-self: center !important;
-    justify-self: center !important;
-    /* Rattaché au bandeau (et non à la fenêtre) : il suit exactement sa
-       translation et disparaît avec lui au défilement. */
-    position: absolute !important;
-    top: 6px !important;
-    /* Le PNG possède une marge transparente interne : décaler sa boîte rend
-       le dessin visible réellement affleurant au bord droit du bandeau. */
-    right: -27px !important;
-    z-index: 2 !important;
-  }
-}
-
-@media (max-width: 768px) {
-  body.page-home-mobile .topbar-app-icon--mobile {
-    width: 104px !important;
-    height: 104px !important;
-    border-radius: 16px !important;
-    margin: 0 !important;
-    /* Rattaché au bandeau pour ne jamais flotter pendant le défilement. */
-    position: absolute !important;
-    top: -1px !important;
-    /* Compensation équivalente pour la version mobile du PNG. */
-    right: -16px !important;
-    z-index: 2 !important;
-  }
 }
 
 @media (max-width: 768px) {
@@ -22840,9 +22770,21 @@ body.page-contact.in-iframe .contact-page-shell {
 }
 
 .page-tribunes .about-panel {
-  background: #dbe5e1;
+  background: #243038;
   padding: 16px;
   box-shadow: none;
+}
+
+/* .about-panel h1/p (plus haut) sont pensés pour le fond blanc par défaut
+   (#111827/#374151, texte sombre) : illisibles sur le bleu pétrole de cette
+   page, repris en clair ici (demande du 04/09/2026, "le reste aussi... en
+   haut de la page"). */
+.page-tribunes .about-panel h1 {
+  color: #e8e8e8;
+}
+
+.page-tribunes .about-panel p {
+  color: #c7ced4;
 }
 
 /* Lisibilité modales/formulaires : règles finales, après tous les overrides historiques. */
@@ -23472,7 +23414,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   gap: 22px;
   border: none;
   border-radius: 0 0 10px 10px;
-  background: #dbe5e1;
+  background: #243038;
 }
 
 .tribunes-theme-section {
@@ -23490,7 +23432,7 @@ body.page-create-mobile .create-card .create-submit-helper {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 800;
-  color: #243038;
+  color: #e8e8e8;
 }
 
 .tribunes-theme-count {
@@ -23909,8 +23851,9 @@ body.page-create-mobile .create-card .create-submit-helper {
 
 .tribunes-summary {
   margin: 0;
-  color: #4b5563;
+  color: #000000;
   font-size: 0.85rem;
+  font-weight: 600;
   line-height: 1.45;
 }
 
@@ -24020,41 +23963,6 @@ body.page-create-mobile .create-card .create-submit-helper {
      clipping interne. */
   box-shadow: 0 0 0 1px #e5e7eb;
   overflow: hidden;
-}
-
-.tribunes-positive-filter-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: max-content;
-  margin: 12px auto 0;
-  padding: 6px 16px;
-  border: 1px solid #bbe6c4;
-  border-radius: 999px;
-  background: #eafbf0;
-  color: #1a7a3d;
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.tribunes-positive-filter-btn:hover {
-  background: #d8f5e2;
-}
-
-.tribunes-positive-filter-btn.tribunes-positive-filter-btn-active {
-  background: #1a1f24;
-  border-color: #1a1f24;
-  color: #ffffff;
-}
-
-.tribunes-positive-filter-btn + .tribunes-filter-switch {
-  margin-top: 6px;
 }
 
 .tribunes-custom-filter-btn {
@@ -24727,6 +24635,8 @@ body.page-home .debate-card-source,
 body.page-home-mobile .debate-card-source,
 body.page-home .debate-card-media-youtube,
 body.page-home-mobile .debate-card-media-youtube,
+body.page-home .debate-card-media-local-video,
+body.page-home-mobile .debate-card-media-local-video,
 body.page-home .debate-card-media-local-image,
 body.page-home-mobile .debate-card-media-local-image,
 body.page-home .debate-source-card,
@@ -25242,7 +25152,13 @@ body.page-home-mobile .debate-card.debate-card--community .index-card-title-bann
 }
 
 .debate-card.debate-card--community .index-card-media-with-title::after {
-  height: 40px !important;
+  /* Hauteur réduite (40px -> 22px, demande du 03/09/2026) : sur un média avec
+     une zone sombre proche du bord bas (ex. bandeau de sous-titres d'une
+     vidéo TV en direct), 40px de fondu la traversait et créait une ligne
+     visible au niveau de la transition transparent -> blanc. Un fondu plus
+     court reste collé aux tout derniers pixels, moins susceptible de
+     chevaucher ce genre de zone. */
+  height: 22px !important;
   background: linear-gradient(
     to bottom,
     rgba(255, 255, 255, 0) 0%,
@@ -25251,18 +25167,6 @@ body.page-home-mobile .debate-card.debate-card--community .index-card-title-bann
     rgba(255, 255, 255, 0.85) 85%,
     #ffffff 100%
   ) !important;
-}
-
-/* Cartes communauté AVEC bandeau titre (has-title-banner) : pas de ce fondu sur le
-   média lui-même — le bandeau blanc opaque juste en dessous (margin-top:0, cf. plus
-   haut) fait déjà toute la transition à lui seul. Ce fondu en plus, dessiné par-dessus
-   une zone parfois sombre du média (ex. bandeau de sous-titres d'une vidéo TV en
-   direct), créait un "trait blanc" visible juste avant le titre (signalé le
-   03/09/2026, capture à l'appui). */
-.debate-card.debate-card--community.has-title-banner .index-card-media-with-title::after,
-body.page-home .debate-card.debate-card--community.has-title-banner .index-card-media-with-title::after,
-body.page-home-mobile .debate-card.debate-card--community.has-title-banner .index-card-media-with-title::after {
-  content: none !important;
 }
 
 /* La pastille source doit rester entièrement dans la partie nette de l'image.
@@ -25586,11 +25490,10 @@ body.page-create-mobile .create-card .create-submit-helper {
   body.page-tribunes {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
-    /* Cette page a un thème clair (#tribunes-list en #dbe5e1) contrairement
-       aux autres pages listées ci-dessus (thème sombre) : le fond #243038
-       imposé plus haut pour combler la safe-area laissait une bande bleu
-       nuit visible sous la liste quand son contenu n'atteint pas 100vh. */
-    background-color: #dbe5e1 !important;
+    /* Thème pétrole (#243038, demande du 04/09/2026, même fond que l'accueil) : plus besoin
+       de forcer un fond clair distinct ici pour combler la safe-area, #tribunes-list est
+       désormais du même bleu pétrole. */
+    background-color: #243038 !important;
   }
 
   body.page-home-mobile:not(.admin-edit-open)::after,

@@ -3131,10 +3131,15 @@ function applyPageArrivalLoadingVisuals() {
   const isCreateReturnTransition = isCreateToDebateLoadingTransition();
   const isCreateToDebate = isCreateToDebateOverlayContext();
   const isNotificationToDebate = isAiScorePopupOverlayContext();
-  let isHomeMemoryReturnLoading = false;
-  try { isHomeMemoryReturnLoading = sessionStorage.getItem("mnoria_home_memory_return_loading") === "1"; } catch (error) {}
+  // Toute arrivée top-level sur "/" ou "/notifications" (rafraîchissement,
+  // retour depuis une autre page…) prend systématiquement le plein écran
+  // opaque sablier d'Apprentissage — jamais la petite carte blanche floutée
+  // générique. Un seul et même type d'écran de transition partout, quelle
+  // que soit la page (demande du 03/09/2026, "je veux avoir la même page de
+  // transition que lorsque je reviens sur la page accueil depuis une autre
+  // page du site" + "mets aussi cette page de chargement sur notifications").
   const isLearningArrival = window.self === window.top && (
-    location.pathname === "/apprentissage" || (location.pathname === "/" && isHomeMemoryReturnLoading)
+    location.pathname === "/apprentissage" || location.pathname === "/" || location.pathname === "/notifications"
   );
   const loadingImage = overlay.querySelector('.page-arrival-loading-hourglass img');
 
@@ -3215,7 +3220,16 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
 
   const title = document.getElementById("page-arrival-loading-title");
   if (title) {
-    title.textContent = String(message || "").trim() || "Chargement en cours";
+    // "/" et "/notifications" ont toujours le même texte quel que soit
+    // l'appelant (arrivée directe, retour depuis une autre page…) — un seul
+    // écran de transition cohérent par page, cf. commentaire isLearningArrival
+    // ci-dessus (applyPageArrivalLoadingVisuals).
+    const isTopLevel = window.self === window.top;
+    title.textContent = (isTopLevel && location.pathname === "/")
+      ? "Chargement de l'accueil en cours"
+      : (isTopLevel && location.pathname === "/notifications")
+        ? "Chargement des notifications en cours"
+        : (String(message || "").trim() || "Chargement en cours");
   }
 
   updatePageArrivalLoadingOverlayBounds();
@@ -3354,11 +3368,15 @@ function initPageArrivalLoadingOverlay() {
   const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && !skipForFullscreenMemoryPage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
-    const arrivalMessage = waitForHomeMemoryReturn
+    // Le texte "/" et "/notifications" est forcé plus loin
+    // (showPageArrivalLoadingOverlay), quel que soit ce qui est passé ici.
+    const arrivalMessage = waitForHomeMemoryReturn || location.pathname === "/"
       ? "Chargement de l'accueil en cours"
       : location.pathname === "/apprentissage"
         ? "Chargement de mes apprentissages en cours"
-        : "Chargement en cours";
+        : location.pathname === "/notifications"
+          ? "Chargement des notifications en cours"
+          : "Chargement en cours";
     showPageArrivalLoadingOverlay(arrivalMessage);
   }
 
@@ -5310,7 +5328,7 @@ function getDebateIframeParentLoadingImageSrc() {
   return "/sablier-96.png";
 }
 
-function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
+function showDebateIframeParentLoadingOverlay(message = "Chargement en cours", options = {}) {
   // isTopLevelIframeModalPage() ne doit PAS servir ici : c'est une liste
   // blanche pensée pour la cloche de notifications (/, /debate, /create,
   // /notifications, /autres-sources, /debates), pas pour "toute page hôte du
@@ -5382,6 +5400,23 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours") {
 
   if (overlay.classList.contains("debate-iframe-parent-loading-overlay-visible")) {
     overlay.dataset.mnoriaBoundsFrozen = "true";
+    return;
+  }
+
+  // Apprentissages (demande du 03/09/2026, "la page de chargement doit se
+  // lancer immédiatement") : ce voile prend toujours .debate-iframe-parent-
+  // loading-learning-page (inset:0 !important, cf. ensureDebateIframeParentLoadingStyles),
+  // qui écrase déjà top/bottom/height — --debate-iframe-parent-loading-top
+  // calculé ci-dessous ne joue donc AUCUN rôle visuel pour ce cas précis. Les
+  // deux requestAnimationFrame en cascade n'existent que pour laisser ce top
+  // se stabiliser avant de révéler le voile (topbar qui passe position:fixed
+  // au clic, cf. règle CSS juste au-dessus) ; ils ne faisaient ici
+  // qu'ajouter ~2 frames + la durée de tout travail synchrone déjà en vol
+  // avant que le sablier n'apparaisse, perceptible au clic sur l'icône du
+  // bandeau bas. instant:true saute directement à l'état final.
+  if (options.instant) {
+    overlay.dataset.mnoriaBoundsFrozen = "true";
+    overlay.classList.add("debate-iframe-parent-loading-overlay-visible");
     return;
   }
 
@@ -5959,7 +5994,7 @@ function reloadDebateIframeModalFrame() {
   navigateDebateIframeModalFrame(frame, currentUrl);
 }
 
-function setDebateIframeModalLoadingState(isLoading, message = "Chargement en cours", showOverlay = true) {
+function setDebateIframeModalLoadingState(isLoading, message = "Chargement en cours", showOverlay = true, overlayOptions = {}) {
   const modal = document.getElementById("debate-iframe-modal");
   if (!modal) return;
 
@@ -5983,7 +6018,7 @@ function setDebateIframeModalLoadingState(isLoading, message = "Chargement en co
   modal.style.setProperty("--debate-iframe-modal-top", `${getStableTopbarBottomOffset()}px`);
 
   if (isLoading) {
-    if (showOverlay) showDebateIframeParentLoadingOverlay(message);
+    if (showOverlay) showDebateIframeParentLoadingOverlay(message, overlayOptions);
   } else {
     revealDebateIframeModalFrame();
     hideDebateIframeParentLoadingOverlay();
@@ -7207,8 +7242,27 @@ function openDebateIframeModal(url, options = {}) {
       parsedModalUrl.pathname === "/mon-univers";
     if (parsedModalUrl.origin === window.location.origin && !isIframeModalPath) {
       const pageTarget = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
-      if (window.top && window.top !== window) window.top.location.href = pageTarget;
-      else window.location.href = pageTarget;
+      const targetsTop = window.top && window.top !== window;
+      const navigate = () => {
+        if (targetsTop) window.top.location.href = pageTarget;
+        else window.location.href = pageTarget;
+      };
+      // Cloche de notifications : sans feedback immédiat, rien ne s'affiche
+      // pendant la navigation top-level + le parse de script.min.js sur la
+      // page de destination (demande du 03/09/2026, "la page de chargement
+      // doit se lancer immédiatement"). On réutilise le voile déjà posé pour
+      // le retour depuis une notification (beginNotificationTransition) et on
+      // laisse 40ms pour qu'il soit peint avant que le document courant ne
+      // commence à se décharger.
+      if (parsedModalUrl.pathname === "/notifications") {
+        try {
+          const overlayFn = targetsTop ? window.top.showPageArrivalLoadingOverlay : showPageArrivalLoadingOverlay;
+          if (typeof overlayFn === "function") overlayFn.call(targetsTop ? window.top : window, "Chargement en cours");
+        } catch (e) {}
+        setTimeout(navigate, 40);
+      } else {
+        navigate();
+      }
       return;
     }
   } catch (error) {}
@@ -7299,7 +7353,11 @@ function openDebateIframeModal(url, options = {}) {
       : iframeUrlPathname === "/apprentissage"
         ? "Chargement de mes apprentissages en cours"
         : "Chargement en cours",
-    !isIframePageWithoutLoadingOverlay(iframeUrlPathname)
+    !isIframePageWithoutLoadingOverlay(iframeUrlPathname),
+    // instant (demande du 03/09/2026) : le voile "learning-page" pose inset:0
+    // !important juste en dessous, qui écrase déjà --debate-iframe-parent-
+    // loading-top — inutile d'attendre 2 requestAnimationFrame pour ce cas.
+    { instant: iframeUrlPathname === "/apprentissage" }
   );
   if (iframeUrlPathname === "/apprentissage") {
     document.getElementById("debate-iframe-parent-loading-overlay")
@@ -34617,24 +34675,31 @@ async function _loadNotificationsPageChunk(offset = 0, append = false) {
   notificationsPageLoadInFlight = (async () => {
     _syncNotificationsLoadMoreButton();
     try {
-      const notifications = await fetchJSON(
+      // Lancées en parallèle : le badge de non-lus ne doit pas retarder
+      // l'affichage de la liste, ce sont deux requêtes indépendantes.
+      const notificationsPromise = fetchJSON(
         API + "/notifications?userKey=" + encodeURIComponent(getKey())
           + "&limit=" + NOTIF_PAGE_SIZE
           + "&offset=" + Math.max(0, Number(offset) || 0)
       );
+      const unreadPromise = !append
+        ? fetchJSON(API + "/notifications/unread-count?userKey=" + encodeURIComponent(getKey())).catch(() => null)
+        : null;
+
+      const notifications = await notificationsPromise;
       const safeNotifications = Array.isArray(notifications) ? notifications : [];
 
-      if (!append) {
-        const unreadPayload = await fetchJSON(
-          API + "/notifications/unread-count?userKey=" + encodeURIComponent(getKey())
-        ).catch(() => null);
-        if (unreadPayload) setStoredUnreadNotificationCount(Math.max(0, Number(unreadPayload.count) || 0));
-        _saveNotifPageCache(safeNotifications);
-      }
-
+      if (!append) _saveNotifPageCache(safeNotifications);
       _applyNotifPageList(safeNotifications, list, { append });
       notificationsPageOffset = Math.max(0, Number(offset) || 0) + safeNotifications.length;
       notificationsPageHasMore = safeNotifications.length === NOTIF_PAGE_SIZE;
+
+      if (unreadPromise) {
+        unreadPromise.then((unreadPayload) => {
+          if (unreadPayload) setStoredUnreadNotificationCount(Math.max(0, Number(unreadPayload.count) || 0));
+        });
+      }
+
       return safeNotifications;
     } finally {
       notificationsPageLoadInFlight = null;
@@ -36366,6 +36431,30 @@ function bindMnoriaMobileViewportBottomFillSync() {
   // émettre de resize (cf. initMnoriaDockAlignment) : relances différées pour
   // recaler l'ancrage de la légende et l'offset du bandeau une fois la
   // hauteur stabilisée.
+  //
+  // syncMnoriaHomeTrendsSectionMinHeight (juste au-dessus) n'accepte une
+  // mesure qu'après 2 passages consécutifs identiques, et ne retire le voile
+  // "Chargement de l'accueil en cours" (qui couvre aussi le bouton Trier/
+  // Rechercher et son liseret, cf. #mnoria-memoire-loading-veil, index.html)
+  // qu'une fois cette confirmation obtenue. Sans relance rapprochée, la
+  // confirmation devait attendre le prochain déclencheur — souvent ce filet à
+  // 1000ms — même quand la mise en page était en réalité déjà stable dès le
+  // premier rendu : le voile (et donc le bouton/liseret) restait affiché une
+  // seconde entière ou plus pour rien (remonté le 04/09/2026, "mettent trop
+  // de temps à apparaître"). Relances toutes les 100ms pendant 1,5s pour
+  // confirmer dès que possible ; les filets 1000/3000/7000 restent en
+  // dernier recours pour les cas réellement instables (cf. commentaire sur
+  // l'oscillation de sectionTop plus haut).
+  let __mnoriaFastRetryCount = 0;
+  const __mnoriaFastRetryInterval = window.setInterval(() => {
+    __mnoriaFastRetryCount += 1;
+    if (window.__mnoriaHomeTrendsSectionTopReady === true || __mnoriaFastRetryCount > 15) {
+      window.clearInterval(__mnoriaFastRetryInterval);
+      return;
+    }
+    scheduleHomeBottomNavViewportOffsetUpdate();
+  }, 100);
+
   setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 1000);
   setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 3000);
   setTimeout(scheduleHomeBottomNavViewportOffsetUpdate, 7000);

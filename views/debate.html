@@ -133,7 +133,22 @@
     if (document.hidden) markHidden();
     else markVisible();
   }, true);
-  goHomeIfStale();
+  // "mnoria_idle_hidden_at" est une clé sessionStorage PARTAGÉE entre /debate,
+  // /notifications et /create : une navigation fraîche (navType "navigate")
+  // n'a aucune raison d'hériter d'un horodatage périmé posé plus tôt par une
+  // AUTRE de ces pages laissée en arrière-plan — ça renvoyait alors
+  // immédiatement vers "/" (demande du 03/09/2026, "je clique sur icône
+  // notification depuis page accueil, je reviens vers l'accueil"). Seul un
+  // vrai retour (reload/back_forward, ex. bfcache) doit déclencher ce
+  // contrôle immédiat ; markVisible ci-dessus reste actif dans tous les cas
+  // pour la mise en arrière-plan qui surviendrait APRÈS cette navigation.
+  var navType = "unknown";
+  try {
+    var navEntry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+    if (navEntry) navType = navEntry.type;
+    else if (performance.navigation) navType = ["navigate", "reload", "back_forward", "reserved"][performance.navigation.type] || "unknown";
+  } catch (e) {}
+  if (navType !== "navigate") goHomeIfStale();
 })();
 </script>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -141,7 +156,7 @@
 <link rel="preconnect" href="https://www.youtube-nocookie.com">
 <link rel="preconnect" href="https://syndication.twitter.com">
 <link rel="preconnect" href="https://www.instagram.com">
-<link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix" />
+<link rel="stylesheet" href="/style.min.css?v=20260904-summary-bolder-black" />
 <style>
   /* === Bandeau du haut : réplique exacte de la page index. Les règles
      descendantes .page-home* de style.css s'appliquent via le wrapper du
@@ -1023,7 +1038,7 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-	<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
+	<script src="/script.min.js?v=20260904-fast-veil-retry" defer></script>
 <script>
 (function () {
   function isInteractive(target) {

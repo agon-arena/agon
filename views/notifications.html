@@ -82,14 +82,33 @@
     if (document.hidden) markHidden();
     else markVisible();
   }, true);
-  goHomeIfStale();
+  // "mnoria_idle_hidden_at" est une clé sessionStorage PARTAGÉE entre /debate,
+  // /notifications et /create : un clic frais sur la cloche depuis l'accueil
+  // (navType "navigate") n'a aucune raison d'hériter d'un horodatage périmé
+  // posé plus tôt par une AUTRE de ces pages laissée en arrière-plan — ça
+  // renvoyait alors immédiatement vers "/" (demande du 03/09/2026, "je clique
+  // sur icône notification depuis page accueil, je reviens vers l'accueil").
+  // Seul un vrai retour (reload/back_forward, ex. bfcache) doit déclencher ce
+  // contrôle immédiat ; markVisible ci-dessus reste actif dans tous les cas
+  // pour la mise en arrière-plan qui surviendrait APRÈS cette navigation.
+  var navType = "unknown";
+  try {
+    var navEntry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+    if (navEntry) navType = navEntry.type;
+    else if (performance.navigation) navType = ["navigate", "reload", "back_forward", "reserved"][performance.navigation.type] || "unknown";
+  } catch (e) {}
+  if (navType !== "navigate") goHomeIfStale();
 })();
 </script>
-<link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix" />
+<link rel="stylesheet" href="/style.min.css?v=20260904-summary-bolder-black" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
+  <!-- display=block (pas swap) : cette page partage le topbar de l'accueil (.topbar--mnoria-uniform,
+       cf. views/index.html) qui a le même correctif pour la même raison — swap affichait d'abord le
+       texte en police de repli (Arial/Impact) avant de basculer sur Oswald/Barlow Condensed une fois
+       chargée, perçu comme un "saut de police"/deux polices qui cohabitent (demande du 03/09/2026). -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <style>
     body { background-color: #243038; }
@@ -476,7 +495,7 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 
-	<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
+	<script src="/script.min.js?v=20260904-fast-veil-retry" defer></script>
   <script src="/ai-analysis-animation.js?v=20260703-ai-animation-bottom" defer></script>
 <script>
 (function() {

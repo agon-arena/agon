@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260903-community-media-seam-fix">
+  <link rel="stylesheet" href="/style.min.css?v=20260904-summary-bolder-black">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -1855,17 +1855,31 @@
     .qcm-mesqcm-table td:nth-child(1) {
       width: 45%;
     }
+    /* État (demande du 04/09/2026, "décalée sur la gauche de 8 pixels" —
+       après annulation d'un essai d'inversion avec la colonne Apprentissage,
+       qui reste en 1re position ; puis "encore décaler sur la gauche" —
+       left -12px au lieu du -8px précédent). */
     .qcm-mesqcm-table th:nth-child(2),
     .qcm-mesqcm-table td:nth-child(2) {
       width: 30%;
       position: relative;
-      left: -4px;
+      left: -12px;
     }
     .qcm-mesqcm-table th:nth-child(3),
     .qcm-mesqcm-table td:nth-child(3) {
       width: 25%;
       position: relative;
       left: -2px;
+    }
+    /* Décalage supplémentaire de la colonne Niveau (demande du 04/09/2026,
+       "uniquement dans les rubriques thématiques, pas dans Comprendre les
+       liens") : scopé à .qcm-mesqcm-theme-panel, qui n'entoure que les
+       rubriques thématiques (cf. renderMesAcquisList) — "Comprendre les
+       liens" est une section de premier niveau (.qcm-mesqcm-group--
+       comprehension), jamais dans ce panneau, et garde donc le -2px de base. */
+    .qcm-mesqcm-theme-panel .qcm-mesqcm-table th:nth-child(3),
+    .qcm-mesqcm-theme-panel .qcm-mesqcm-table td:nth-child(3) {
+      left: -6px;
     }
     /* État et Niveau centrés (nom/valeur au-dessus du chiffre/sous-libellé,
        l'un au-dessus de l'autre, plutôt que collés au bord gauche de la
@@ -1978,6 +1992,12 @@
       font-weight: 700;
       text-align: center;
       white-space: nowrap;
+      /* Contenu décalé pour retomber sous le titre "État" (demande du
+         04/09/2026, "on va encore décaler sur la gauche colonne état ainsi
+         que son contenu") : en plus du -12px déjà posé sur toute la colonne
+         (th ET td) — même traitement que .qcm-mesqcm-level pour Niveau. */
+      position: relative;
+      left: -4px;
     }
     .qcm-mesqcm-state.is-realized {
       background: #dcfce7;
@@ -2006,6 +2026,12 @@
       font-size: 12px;
       line-height: 1.08;
       white-space: nowrap;
+      /* Contenu décalé pour retomber sous le titre "Niveau" (demande du
+         04/09/2026, "le contenu de la colonne niveau doit aussi être
+         décalée sur la gauche, afin d'être bien aligné avec le titre") :
+         en plus du -2px déjà posé sur toute la colonne (th ET td). */
+      position: relative;
+      left: -4px;
     }
     .qcm-mesqcm-level-name {
       font-weight: 700;
@@ -3486,8 +3512,72 @@
     }
   </style>
   <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
+  <!-- Flèche retour/fermeture (accès direct/standalone à /apprentissage, hors
+       modale iframe) : reprend le visuel et l'emplacement exacts de
+       #learning-iframe-modal-close (script.js, ensureDebateIframeModal) —
+       même bouton rond dégradé bas-gauche que sur la page débat — puisque ce
+       bouton-là vit dans le document PARENT et n'existe donc pas ici (demande
+       du 03/09/2026). Réutilise .mobile-back-button (masquée globalement en
+       !important, cf. style.css fin de fichier) : la règle ci-dessous, plus
+       spécifique, la réactive UNIQUEMENT sur cette page. Masquée à son tour
+       quand la page est réellement embarquée dans la modale (html.in-iframe)
+       — le vrai #learning-iframe-modal-close du parent fait alors déjà ce
+       travail, pas besoin des deux.
+  -->
+  <style>
+    body.page-qcm-du-jour .mobile-back-button {
+      display: none;
+      position: fixed;
+      left: 16px;
+      bottom: 80px;
+      z-index: 10002;
+      width: 42px;
+      height: 42px;
+      min-width: 42px;
+      min-height: 42px;
+      padding: 0;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid transparent;
+      border-radius: 999px;
+      background:
+        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
+      color: #e5edf3;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    html:not(.in-iframe) body.page-qcm-du-jour .mobile-back-button {
+      display: inline-flex !important;
+    }
+    body.page-qcm-du-jour .mobile-back-button:hover,
+    body.page-qcm-du-jour .mobile-back-button:focus-visible {
+      background:
+        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
+        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
+      color: #ffffff;
+    }
+    @media (max-width: 768px) {
+      body.page-qcm-du-jour .mobile-back-button {
+        left: calc(20% - 13px);
+        bottom: 59px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+        font-size: 16px;
+      }
+    }
+  </style>
 </head>
 <body class="page-qcm-du-jour qcm-learning-background">
+<button type="button" class="mobile-back-button" aria-label="Retour à l'accueil" title="Retour à l'accueil" onclick="qcmBottomNavHome()">
+  <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+</button>
 <header class="topbar topbar--mnoria-uniform">
   <div class="container topbar-inner topbar-home">
     <div class="home-brand-block">
@@ -3626,7 +3716,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260903-notion-quiz-failed-notif" defer></script>
+<script src="/script.min.js?v=20260904-fast-veil-retry" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');

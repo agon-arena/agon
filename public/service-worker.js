@@ -2,7 +2,19 @@
 // susceptible de resservir, via cachedFallback, une ancienne version de la
 // page antérieure au câblage de la route progressive (audit read-only du
 // 03/09/2026 — cf. server.js POST /api/users/notion-quizzes/custom/progressive).
-const SW_VERSION = "20260903-progressive-routing-fix";
+// Invalidation du 03/09/2026 (bis) : "/" manquait de navigationNetworkFirst
+// ci-dessous — la page servait donc l'ancien HTML en cache (vieux ?v= sur
+// script.min.js/style.min.css) à chaque rechargement de l'accueil tant que la
+// revalidation arrière-plan n'avait pas eu lieu, et rien ne forçait de
+// rechargement automatique une fois le cache mis à jour (mnoria:page-stale ne
+// fait que poser window.__mnoriaPageUpdateAvailable, jamais lu ailleurs) —
+// un correctif visuel sur l'accueil semblait donc systématiquement "ne pas
+// prendre" au premier rechargement.
+// Invalidation du 04/09/2026 : même bug, /autres-sources manquait aussi de
+// navigationNetworkFirst — plusieurs correctifs visuels successifs sur cette
+// page ("toujours gris très clair") semblaient ne jamais prendre alors qu'ils
+// étaient bien servis côté serveur, pour la même raison.
+const SW_VERSION = "20260904-autres-sources-network-first";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -175,11 +187,13 @@ self.addEventListener("fetch", (event) => {
     const requestUrl = new URL(request.url);
     const forcedFresh = requestUrl.searchParams.has("_swrefresh");
     const navigationNetworkFirst = [
+      "/",
       "/apprentissage",
       "/create",
       "/notifications",
       "/contributions",
-      "/mon-univers"
+      "/mon-univers",
+      "/autres-sources"
     ].includes(requestUrl.pathname);
     let cacheKeyRequest = request;
     if (forcedFresh) {
