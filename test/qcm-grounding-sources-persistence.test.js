@@ -129,8 +129,12 @@ test("l'insert daily_quiz étale bien progressiveExtra (donc grounding_sources) 
 // ── API : GET /api/users/notion-quizzes/fiche résout grounding_sources ──
 
 test("GET .../fiche sélectionne grounding_sources dans les DEUX chemins (linkType/linkSourceId et slot+date)", () => {
-  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("quiz_date, slot, questions, grounding_sources"\)/);
-  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources"\)\.eq\("quiz_date", quizDate\)\.eq\("slot", slot\)\.maybeSingle\(\);/);
+  // Phase 2.2 (04/09/2026) : progressive_status ajoutée aux deux .select()
+  // (plafond de niveau progressif des questions, cf.
+  // test/qcm-progressive-level-ceiling-wiring.test.js), grounding_sources
+  // inchangée.
+  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources, progressive_status"\)\s*\n\s*\.eq\("slot", match\.slot\)\.eq\("quiz_date", match\.quiz_date\)\.maybeSingle\(\);/);
+  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources, progressive_status"\)\.eq\("quiz_date", quizDate\)\.eq\("slot", slot\)\.maybeSingle\(\);/);
 });
 
 // Réécrit (Phase 2.1, item 8 — fiche scopée au niveau réellement servi,
@@ -148,7 +152,7 @@ test("GET .../fiche renvoie groundingSources dans la réponse JSON, au niveau du
 });
 
 test("groundingSources retombe sur [] (jamais undefined/null) quand grounding_sources est absent en base — comportement sûr pour tout quiz legacy", () => {
-  assert.match(SERVER_SOURCE, /groundingSources = match\.grounding_sources \|\| \[\];/);
+  assert.match(SERVER_SOURCE, /groundingSources = fullRow\?\.grounding_sources \|\| \[\];/);
   assert.match(SERVER_SOURCE, /groundingSources = data\?\.grounding_sources \|\| \[\];/);
 });
 

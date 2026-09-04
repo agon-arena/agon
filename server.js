@@ -65,6 +65,7 @@ const {
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
   selectQuestionsForRequestedLevel,
+  restrictQuestionsToProgressiveLevelCeiling,
   isMasterEligibleQuiz,
   MIN_MASTER_QUESTIONS,
   MIN_ELEMENTARY_READY_QUESTIONS,
@@ -155,7 +156,7 @@ const {
   buildSourceExpansionQuery
 } = require("./lib/grounding-source-expansion");
 const { extractGroundingReasonCounts } = require("./lib/qcm-grounding-metrics");
-const { truncateAtTextBoundary } = require("./lib/text-boundaries");
+const { truncateAtTextBoundary, truncateAtSentenceBoundary } = require("./lib/text-boundaries");
 const {
   classifyAiError,
   generationFailure,
@@ -14843,7 +14844,14 @@ function parseFicheAndKnowledgeCandidates(parsed, fallbackName, levelConfig) {
   const sourceName = capitalizeFirstLetter(String(parsed?.sourceName || fallbackName).trim()).slice(0, 120);
   const sections = Array.isArray(parsed?.sections)
     ? parsed.sections
-        .map((s) => ({ label: s?.label ? String(s.label).trim().slice(0, 80) : null, text: String(s?.text || "").trim().slice(0, sectionTextLimit) }))
+        // Plafond de texte à la frontière de PHRASE COMPLÈTE (Phase 2.2,
+        // 04/09/2026, correctif "paragraphe pédagogique jamais servi
+        // tronqué en milieu de phrase", cf. lib/text-boundaries.js) — les
+        // prompts (buildElementaryFichePrompt/buildProgressiveContinuationFichePrompt)
+        // ne transmettent à Luna qu'un lengthHint indicatif, jamais ce
+        // chiffre exact : un léger dépassement de sectionTextLimit est donc
+        // le cas normal, jamais une anomalie à corriger côté prompt.
+        .map((s) => ({ label: s?.label ? String(s.label).trim().slice(0, 80) : null, text: truncateAtSentenceBoundary(s?.text, sectionTextLimit) }))
         .filter((s) => s.text)
         .slice(0, maxSections)
     : [];
@@ -16016,13 +16024,13 @@ async function findExistingQuizMaster(candidateSlots) {
   for (const row of rows || []) {
     const { data: fullRow, error: fullError } = await supabase
       .from("daily_quiz")
-      .select("questions")
+      .select("questions, progressive_status")
       .eq("slot", row.slot)
       .eq("quiz_date", row.quiz_date)
       .maybeSingle();
     if (fullError) throw new Error(fullError.message);
     if (isMasterEligibleQuiz(fullRow?.questions)) {
-      return { slot: row.slot, quizDate: row.quiz_date, questions: fullRow.questions };
+      return { slot: row.slot, quizDate: row.quiz_date, questions: fullRow.questions, progressiveStatus: fullRow.progressive_status };
     }
   }
   return null;
@@ -16334,7 +16342,7 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
 async function findEquivalentGeneratedCustomTopic(topic, level) {
   const { data: rows, error } = await supabase
     .from("daily_quiz")
-    .select("slot, quiz_date, questions")
+    .select("slot, quiz_date, questions, progressive_status")
     .like("slot", "notion:custom:%");
   if (error) throw new Error(error.message);
 
@@ -16349,7 +16357,7 @@ async function findEquivalentGeneratedCustomTopic(topic, level) {
   for (const row of latestBySlot.values()) {
     const topicText = row.questions?.[0]?.searchTopic || row.questions?.[0]?.sourceName || null;
     if (!topicText) continue;
-    const candidate = { slot: row.slot, quizDate: row.quiz_date, questions: row.questions, topicText };
+    const candidate = { slot: row.slot, quizDate: row.quiz_date, questions: row.questions, progressiveStatus: row.progressive_status, topicText };
     if (isMasterEligibleQuiz(row.questions)) {
       masterCandidates.push(candidate);
     } else if (parseCustomTopicSlotLevel(row.slot) === level) {
@@ -18121,12 +18129,19 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
   }
   const { data, error } = await supabase
     .from("daily_quiz")
-    .select("questions")
+    .select("questions, progressive_status")
     .eq("quiz_date", quizDate)
     .eq("slot", slot)
     .maybeSingle();
   if (error) throw new Error(error.message);
   const rawQuestions = data?.questions || [];
+  const effectiveServingLevel = effectiveRequestedLevel || rawQuestions[0]?.level;
+  // Plafond de niveau progressif (Phase 2.2, 04/09/2026, "une question ne
+  // doit jamais dépasser le niveau pédagogique visible") : AVANT le
+  // tranchage par rang+compte — no-op strict si progressive_status est
+  // NULL (legacy, comportement V4.0/V4.1 inchangé au caractère près), cf.
+  // lib/question-formats.js pour le détail complet et le garde-fou legacy.
+  const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveServingLevel, data?.progressive_status);
   // Serving par niveau (V4.0, 01/09/2026 — "corpus maître de 20 questions") :
   // selectQuestionsForRequestedLevel est un no-op strict (même référence) pour
   // tout quiz sans pedagogicalRank — donc pour TOUT slot qui n'est pas un
@@ -18138,7 +18153,7 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
   // niveau STOCKÉ sur les questions — nécessaire dès qu'un même master
   // partagé est consulté par des visiteurs à des niveaux différents ; repli
   // sur `rawQuestions[0]?.level` sinon, comportement V4.0 inchangé.
-  const baseQuestions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[effectiveRequestedLevel || rawQuestions[0]?.level]?.target);
+  const baseQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveServingLevel]?.target);
   _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
   return baseQuestions;
 }
@@ -19557,6 +19572,12 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
 
     let questions;
     let effectiveSlot = slot;
+    // Statut progressif de la ligne servie — jamais renseigné par cette
+    // route (ensureNotionMasterGenerated ci-dessous n'insère jamais
+    // progressive_status, seul le pipeline /custom/progressive le fait) :
+    // reste undefined dans ce cas, donc restrictQuestionsToProgressiveLevelCeiling
+    // no-op strict comme pour tout master legacy.
+    let progressiveStatus;
     // V4.1 (01/09/2026, mutualisation inter-niveaux) : un master déjà généré
     // pour cette notion — à N'IMPORTE QUEL niveau — est prioritaire, même
     // principe que POST /api/users/notion-quizzes/custom ci-dessous (cf. son
@@ -19575,6 +19596,7 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
       questions = existingMaster.questions || [];
       quizDate = existingMaster.quizDate;
       effectiveSlot = existingMaster.slot;
+      progressiveStatus = existingMaster.progressiveStatus;
     } else {
       // Recherche par slot SEUL, sans filtrer sur quizDate (comportement
       // V4.0 et antérieur inchangé, cf. POST /api/users/notion-quizzes/custom) :
@@ -19590,7 +19612,7 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
       // pointe vers la bonne date.
       const { data: existingQuizRows, error: existingQuizError } = await supabase
         .from("daily_quiz")
-        .select("quiz_date, questions")
+        .select("quiz_date, questions, progressive_status")
         .eq("slot", slot)
         .order("quiz_date", { ascending: false })
         .limit(1);
@@ -19600,6 +19622,7 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
       if (existingQuiz) {
         questions = existingQuiz.questions || [];
         quizDate = existingQuiz.quiz_date;
+        progressiveStatus = existingQuiz.progressive_status;
       } else {
         // Génération réelle — verrou en mémoire keyed par identité de master
         // (masterSlot, indépendant du niveau), cf. ensureNotionMasterGenerated.
@@ -19611,6 +19634,10 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
       }
     }
 
+    // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : no-op strict si
+    // progressiveStatus est undefined/null (cas de cette route, cf. plus
+    // haut) — cf. lib/question-formats.js pour le détail complet.
+    questions = restrictQuestionsToProgressiveLevelCeiling(questions, level, progressiveStatus);
     // Serving par niveau (V4.0, 01/09/2026) : no-op strict pour tout quiz
     // sans pedagogicalRank (legacy Éclairages/Histoire, ou tout quiz
     // notion/débat antérieur à cette version) — cf. son commentaire complet
@@ -19694,6 +19721,12 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
 
     let questions;
     let reused = false;
+    // Statut progressif de la ligne servie — cf. la même variable dans
+    // POST /api/users/notion-quizzes ci-dessus pour le détail : reste
+    // undefined pour toute réutilisation/génération purement legacy de
+    // cette route, donc restrictQuestionsToProgressiveLevelCeiling reste
+    // un no-op strict dans ce cas.
+    let progressiveStatus;
     // Slot effectivement utilisé pour le rattachement utilisateur et la
     // réponse — égal à `slot` sauf en cas de réutilisation master/niveau 2
     // (cf. plus bas), où on pointe alors vers le slot déjà existant plutôt
@@ -19715,6 +19748,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
       questions = existingMaster.questions || [];
       quizDate = existingMaster.quizDate;
       effectiveSlot = existingMaster.slot;
+      progressiveStatus = existingMaster.progressiveStatus;
       reused = true;
     } else {
       // Niveau 1 historique (comportement V4.0 et antérieur inchangé) :
@@ -19725,7 +19759,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
       // quizDate), une seule ligne suffit et limite fortement l'egress JSONB.
       const { data: existingQuizRows, error: existingQuizError } = await supabase
         .from("daily_quiz")
-        .select("quiz_date, questions")
+        .select("quiz_date, questions, progressive_status")
         .eq("slot", slot)
         .order("quiz_date", { ascending: false })
         .limit(1);
@@ -19737,6 +19771,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
         // On redonne exactement le QCM existant : même niveau et donc
         // exactement le même nombre de questions, sans aucun appel à l'IA.
         quizDate = existingQuiz.quiz_date;
+        progressiveStatus = existingQuiz.progressive_status;
         reused = true;
       } else {
         // Niveau 2 (dedup locale sans IA, audit du 24/08/2026, cf.
@@ -19752,6 +19787,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
           questions = equivalent.questions || [];
           quizDate = equivalent.quizDate;
           effectiveSlot = equivalent.slot;
+          progressiveStatus = equivalent.progressiveStatus;
           reused = true;
         } else {
           // Génération réelle — verrou en mémoire keyed par identité de
@@ -19777,10 +19813,16 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
           questions = result.questions;
           quizDate = result.quizDate;
           effectiveSlot = result.slot;
+          progressiveStatus = result.progressiveStatus;
         }
       }
     }
 
+    // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : no-op strict si
+    // progressiveStatus est undefined/null (route purement legacy dans
+    // l'écrasante majorité des cas, cf. plus haut) — cf.
+    // lib/question-formats.js pour le détail complet.
+    questions = restrictQuestionsToProgressiveLevelCeiling(questions, level, progressiveStatus);
     // Serving par niveau (V4.0, 01/09/2026) : no-op strict pour tout quiz
     // sans pedagogicalRank — cf. commentaire complet dans
     // getDailyQuizQuestions. Appliqué AVANT la réponse HTTP ET avant
@@ -19947,10 +19989,19 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
       );
     if (linkError) throw new Error(linkError.message);
 
+    // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : la continuation
+    // ci-dessus peut avoir déjà avancé jusqu'à Avancé/Expert (prep en
+    // arrière-plan) alors que `requestedLevel` reste Élémentaire — sans ce
+    // filtre, selectQuestionsForRequestedLevel comblerait le quota
+    // Élémentaire avec des questions de niveau supérieur dès que le nombre
+    // de questions élémentaires validées est < NOTION_QUIZ_LEVELS.elementaire.target
+    // (cas normal, cf. MIN_ELEMENTARY_READY_QUESTIONS). Cf.
+    // lib/question-formats.js pour le détail complet.
+    const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, requestedLevel, progressiveStatus);
     // Sous-ensemble réellement servi pour ce niveau (même mécanisme que le
     // master legacy, cf. POST .../custom) : `questions` en base porte
     // toujours le corpus complet atteint jusqu'ici, jamais tronqué.
-    const servedQuestions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[requestedLevel]?.target);
+    const servedQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[requestedLevel]?.target);
     const achievedRank = progressiveStatus ? (PROGRESSIVE_STATUS_RANK[progressiveStatus] ?? -1) : Infinity; // NULL = master legacy complet
     const levelFullyAchieved = achievedRank === Infinity || achievedRank >= progressiveLevelRank(requestedLevel);
 
@@ -20359,7 +20410,7 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // la mise en vol change.
     const quizRowsPromise = supabase
       .from("daily_quiz")
-      .select("quiz_date, slot, questions")
+      .select("quiz_date, slot, questions, progressive_status")
       .or(pairFilter);
 
     // Même rubrique que « Ma mémoire » : celle-ci ne se contente pas de la
@@ -20444,6 +20495,7 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (fsrsStatesError) throw new Error(fsrsStatesError.message);
 
     const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
+    const progressiveStatusByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.progressive_status || null]));
     const durableAcquisBySourceId = new Map(
       durableAcquis.map((item) => [String(item.sourceDebateId), item])
     );
@@ -20483,7 +20535,11 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // NULL), comportement V4.0 strictement inchangé dans ce cas.
       const persistedLevel = resolveNotionQuizLevel(link.requested_level).level;
       const effectiveLevel = persistedLevel || rawQuestions[0]?.level || null;
-      const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
+      // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : no-op strict
+      // pour toute ligne legacy (progressive_status NULL) — cf.
+      // lib/question-formats.js pour le détail complet.
+      const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveLevel, progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`));
+      const questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
       let creditSum = 0;
       let answeredCount = 0;
       // Distinct de answeredCount (qui inclut aussi les questions passées, cf.
@@ -20591,6 +20647,7 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // ([]) pour tout quiz sans grounding (legacy Éclairages/Histoire/import,
     // ou génération sans source web trouvée), comportement inchangé.
     let groundingSources = [];
+    let progressiveStatus = null;
     if (linkType && linkSourceId) {
       // Phase 1 (léger, audit egress du 03/09/2026) : le matching ne regarde
       // jamais que questions[0] (sourceType/sourceDebateId partagés par tout
@@ -20616,22 +20673,24 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       // Phase 2 : le tableau complet + grounding_sources ne sont relus que
       // pour la SEULE ligne trouvée, jamais pour tout l'historique candidat.
       const { data: fullRow, error: fullError } = await supabase
-        .from("daily_quiz").select("questions, grounding_sources")
+        .from("daily_quiz").select("questions, grounding_sources, progressive_status")
         .eq("slot", match.slot).eq("quiz_date", match.quiz_date).maybeSingle();
       if (fullError) throw new Error(fullError.message);
       questions = fullRow?.questions || [];
       resolvedSlot = match.slot;
       resolvedQuizDate = match.quiz_date;
       groundingSources = fullRow?.grounding_sources || [];
+      progressiveStatus = fullRow?.progressive_status || null;
     } else {
       if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
         return res.status(400).json({ error: "Requête invalide." });
       }
       const { data, error } = await supabase
-        .from("daily_quiz").select("questions, grounding_sources").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+        .from("daily_quiz").select("questions, grounding_sources, progressive_status").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
       if (error) throw new Error(error.message);
       questions = data?.questions || [];
       groundingSources = data?.grounding_sources || [];
+      progressiveStatus = data?.progressive_status || null;
     }
     if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
 
@@ -20676,7 +20735,13 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // ci-dessous reflète donc ce sous-ensemble, jamais le corpus maître
     // complet stocké en base.
     const effectiveLevel = persistedLevel || requestedLevel || questions[0]?.level || null;
-    questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
+    // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : no-op strict si
+    // progressiveStatus est NULL (legacy) — cf. lib/question-formats.js pour
+    // le détail complet. Applique la même règle que la fiche de chaque
+    // section (déjà filtrée par niveau plus bas via sourceDetail), pour que
+    // les questions renvoyées par cette route restent cohérentes avec elle.
+    const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, effectiveLevel, progressiveStatus);
+    questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
 
     const first = questions[0];
     const links = first.sourceType && first.sourceDebateId

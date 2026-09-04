@@ -234,7 +234,7 @@ test("generateProgressiveLevelBlock tague chaque section de sourceDetail avec so
 test("GET .../fiche filtre sourceDetail.sections au niveau demandé (cumulatif jusqu'à effectiveLevel) — sections sans `level` (legacy) jamais filtrées, effectiveLevel non reconnu = aucun filtrage (repli sûr)", () => {
   const idx = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"');
   assert.ok(idx > 0);
-  const routeBody = SERVER_SOURCE.slice(idx, idx + 8000);
+  const routeBody = SERVER_SOURCE.slice(idx, idx + 9000);
   assert.match(routeBody, /const effectiveLevelRank = progressiveLevelRank\(effectiveLevel\);/);
   assert.match(routeBody, /sections: effectiveLevelRank < 0\s*\n\s*\? first\.sourceDetail\.sections\s*\n\s*: \(first\.sourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => !s\.level \|\| progressiveLevelRank\(s\.level\) <= effectiveLevelRank\)/);
 });

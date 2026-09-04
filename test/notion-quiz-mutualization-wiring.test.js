@@ -147,7 +147,7 @@ test("GET /api/users/notion-quizzes/fiche résout requestedLevel (query &level=)
   assert.ok(routeIndex > 0);
   const resolveIndex = SERVER_SOURCE.indexOf("const requestedLevel = resolveNotionQuizLevel(req.query.level).level;", routeIndex);
   const effectiveIndex = SERVER_SOURCE.indexOf("const effectiveLevel = persistedLevel || requestedLevel || questions[0]?.level || null;", routeIndex);
-  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
+  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
   assert.ok(resolveIndex > routeIndex && effectiveIndex > resolveIndex && selectIndex > effectiveIndex);
 });
 
@@ -164,7 +164,7 @@ test("isSafeTopicEquivalent/findEquivalentCustomTopic (lib/topic-dedup.js) ne so
 test("la recherche exacte historique au même niveau (POST /custom, comportement V4.0) reste présente telle quelle, comme repli avant la génération", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom"');
   const exactIndex = SERVER_SOURCE.indexOf(
-    '.from("daily_quiz")\n        .select("quiz_date, questions")\n        .eq("slot", slot)\n        .order("quiz_date", { ascending: false })\n        .limit(1);',
+    '.from("daily_quiz")\n        .select("quiz_date, questions, progressive_status")\n        .eq("slot", slot)\n        .order("quiz_date", { ascending: false })\n        .limit(1);',
     routeIndex
   );
   assert.ok(exactIndex > routeIndex, "la recherche exacte au même niveau (legacy) doit rester un repli, jamais supprimée");

@@ -28,7 +28,11 @@ test("findExistingQuizMaster ne sélectionne plus `questions` dans le fetch init
 test("findExistingQuizMaster ne relit `questions` que ligne par ligne (eq slot + eq quiz_date + maybeSingle), jamais toutes en une fois", () => {
   const fnIndex = SERVER_SOURCE.indexOf("async function findExistingQuizMaster(candidateSlots)");
   const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 900);
-  assert.match(fnBody, /\.select\("questions"\)\s*\n\s*\.eq\("slot", row\.slot\)\s*\n\s*\.eq\("quiz_date", row\.quiz_date\)\s*\n\s*\.maybeSingle\(\)/);
+  // Phase 2.2 (04/09/2026) : progressive_status ajoutée à ce select (plafond
+  // de niveau progressif des questions, cf.
+  // test/qcm-progressive-level-ceiling-wiring.test.js) — l'egress reste
+  // ligne par ligne, seule la colonne supplémentaire change.
+  assert.match(fnBody, /\.select\("questions, progressive_status"\)\s*\n\s*\.eq\("slot", row\.slot\)\s*\n\s*\.eq\("quiz_date", row\.quiz_date\)\s*\n\s*\.maybeSingle\(\)/);
   assert.match(fnBody, /isMasterEligibleQuiz\(fullRow\?\.questions\)/);
 });
 

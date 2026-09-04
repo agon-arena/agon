@@ -124,7 +124,7 @@ test("GET /api/users/notion-quizzes sélectionne requested_level et l'utilise en
   const selectIndex = SERVER_SOURCE.indexOf('.select("quiz_date, slot, added_at, requested_level")', routeIndex);
   const persistedIndex = SERVER_SOURCE.indexOf("const persistedLevel = resolveNotionQuizLevel(link.requested_level).level;", routeIndex);
   const effectiveIndex = SERVER_SOURCE.indexOf("const effectiveLevel = persistedLevel || rawQuestions[0]?.level || null;", routeIndex);
-  const selectQuestionsIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
+  const selectQuestionsIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
   assert.ok(selectIndex > routeIndex, "requested_level doit être sélectionné dans la requête des liens");
   assert.ok(persistedIndex > selectIndex && effectiveIndex > persistedIndex && selectQuestionsIndex > effectiveIndex);
 });
@@ -134,7 +134,13 @@ test("GET /api/users/notion-quizzes sélectionne requested_level et l'utilise en
 test("le repli persistedLevel -> requestedLevel/param -> questions[0].level est explicite partout (jamais un accès direct à rawQuestions[0].level en V4.1.1)", () => {
   // getDailyQuizQuestions
   assert.match(SERVER_SOURCE, /const effectiveRequestedLevel = persistedLevel \|\| requestedLevel \|\| null;/);
-  assert.match(SERVER_SOURCE, /NOTION_QUIZ_LEVELS\[effectiveRequestedLevel \|\| rawQuestions\[0\]\?\.level\]\?\.target/);
+  // Phase 2.2 (04/09/2026) : le repli inline a été factorisé dans
+  // `effectiveServingLevel` pour être réutilisé aussi par le plafond de
+  // niveau progressif (restrictQuestionsToProgressiveLevelCeiling) —
+  // même valeur, même ordre de priorité, juste nommée pour éviter la
+  // duplication entre les deux appels qui en dépendent désormais.
+  assert.match(SERVER_SOURCE, /const effectiveServingLevel = effectiveRequestedLevel \|\| rawQuestions\[0\]\?\.level;/);
+  assert.match(SERVER_SOURCE, /NOTION_QUIZ_LEVELS\[effectiveServingLevel\]\?\.target/);
   // fiche
   assert.match(SERVER_SOURCE, /const effectiveLevel = persistedLevel \|\| requestedLevel \|\| questions\[0\]\?\.level \|\| null;/);
   // liste

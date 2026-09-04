@@ -99,12 +99,16 @@ test("attachPedagogicalRanks est appelé juste avant le retour final de generate
 // points de lecture/écriture concernés, jamais au stockage lui-même. ──────
 
 test("getDailyQuizQuestions applique selectQuestionsForRequestedLevel avant la mise en cache/le retour (V4.1.1 : effectiveRequestedLevel = persistedLevel || requestedLevel || rawQuestions[0].level)", () => {
-  assert.match(SERVER_SOURCE, /const baseQuestions = selectQuestionsForRequestedLevel\(rawQuestions, NOTION_QUIZ_LEVELS\[effectiveRequestedLevel \|\| rawQuestions\[0\]\?\.level\]\?\.target\);/);
+  // Phase 2.2 (04/09/2026) : rawQuestions passe désormais par
+  // restrictQuestionsToProgressiveLevelCeiling (levelCeiledQuestions) avant
+  // selectQuestionsForRequestedLevel — no-op strict en legacy, cf.
+  // lib/question-formats.js.
+  assert.match(SERVER_SOURCE, /const baseQuestions = selectQuestionsForRequestedLevel\(levelCeiledQuestions, NOTION_QUIZ_LEVELS\[effectiveServingLevel\]\?\.target\);/);
 });
 
 test("GET /api/users/notion-quizzes/fiche applique selectQuestionsForRequestedLevel avant questionCount/first", () => {
   const ficheRouteIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"');
-  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", ficheRouteIndex);
+  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", ficheRouteIndex);
   const firstIndex = SERVER_SOURCE.indexOf("const first = questions[0];", ficheRouteIndex);
   assert.ok(ficheRouteIndex > 0);
   assert.ok(selectIndex > ficheRouteIndex, "le filtrage doit être appliqué dans la route fiche");
@@ -113,7 +117,7 @@ test("GET /api/users/notion-quizzes/fiche applique selectQuestionsForRequestedLe
 
 test("GET /api/users/notion-quizzes (progression) applique selectQuestionsForRequestedLevel (V4.1.1 : effectiveLevel = persistedLevel || rawQuestions[0].level) avant tous les calculs de progression", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
-  const selectIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(rawQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
+  const selectIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
   const denominatorIndex = SERVER_SOURCE.indexOf("let progressDenominator = 0;", routeIndex);
   assert.ok(routeIndex > 0);
   assert.ok(selectIndex > routeIndex, "le filtrage doit être appliqué dans la route de progression");
@@ -175,5 +179,8 @@ test("les fonctions V4.0/V4.1 et le plancher master sont bien importés depuis l
   // ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE/computeElementaryCandidateDistribution/
   // selectOneQuestionPerKnowledgeTarget (sur-génération initiale, 03/09/2026) :
   // trois imports additifs de plus, juste après MIN_ELEMENTARY_READY_QUESTIONS.
-  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*selectQuestionsForRequestedLevel,\s*\n\s*isMasterEligibleQuiz,\s*\n\s*MIN_MASTER_QUESTIONS,\s*\n\s*MIN_ELEMENTARY_READY_QUESTIONS,\s*\n\s*ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE,\s*\n\s*computeElementaryCandidateDistribution,\s*\n\s*selectOneQuestionPerKnowledgeTarget\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
+  // restrictQuestionsToProgressiveLevelCeiling (Phase 2.2, 04/09/2026) :
+  // import additif juste après selectQuestionsForRequestedLevel, jamais un
+  // remplacement.
+  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*selectQuestionsForRequestedLevel,\s*\n\s*restrictQuestionsToProgressiveLevelCeiling,\s*\n\s*isMasterEligibleQuiz,\s*\n\s*MIN_MASTER_QUESTIONS,\s*\n\s*MIN_ELEMENTARY_READY_QUESTIONS,\s*\n\s*ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE,\s*\n\s*computeElementaryCandidateDistribution,\s*\n\s*selectOneQuestionPerKnowledgeTarget\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
 });

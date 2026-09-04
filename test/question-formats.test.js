@@ -21,6 +21,7 @@ const {
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
   selectQuestionsForRequestedLevel,
+  restrictQuestionsToProgressiveLevelCeiling,
   isMasterEligibleQuiz,
   MIN_ELEMENTARY_READY_QUESTIONS,
   ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE,
@@ -1254,4 +1255,77 @@ test("isMasterEligibleQuiz : progressiveStatus inconnu/vide retombe sur le compo
   assert.equal(isMasterEligibleQuiz(questions, { progressiveStatus: "" }), false);
   assert.equal(isMasterEligibleQuiz(questions, { progressiveStatus: "unknown_status" }), false);
   assert.equal(isMasterEligibleQuiz(questions, {}), false);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// restrictQuestionsToProgressiveLevelCeiling (Phase 2.2, 04/09/2026,
+// "une question ne doit jamais dépasser le niveau pédagogique visible" —
+// cas réel : question "Corpus juris civilis" servie parmi les questions
+// Élémentaires d'un apprentissage sur Justinien alors que cette connaissance
+// n'était pas dans la fiche Élémentaire visible).
+// ══════════════════════════════════════════════════════════════════════
+
+function q(level, rank, knowledgeTarget) {
+  return { level, pedagogicalRank: rank, knowledgeTarget, question: `Q sur ${knowledgeTarget}`, type: "qcm", options: ["a", "b", "c", "d"], correctIndex: 0, explanation: "e" };
+}
+
+test("1. K1/K2 Élémentaire + K3 Approfondi -> K3 est strictement interdite au niveau Élémentaire", () => {
+  const questions = [q("elementaire", 1, "K1"), q("elementaire", 2, "K2"), q("avance", 3, "K3")];
+  const result = restrictQuestionsToProgressiveLevelCeiling(questions, "elementaire", "elementary_ready");
+  assert.deepEqual(result.map((r) => r.knowledgeTarget), ["K1", "K2"]);
+});
+
+test("2. la même K3 devient éligible dès que le niveau demandé est Approfondi (cumulatif)", () => {
+  const questions = [q("elementaire", 1, "K1"), q("elementaire", 2, "K2"), q("avance", 3, "K3")];
+  const result = restrictQuestionsToProgressiveLevelCeiling(questions, "avance", "deepening_ready");
+  assert.deepEqual(result.map((r) => r.knowledgeTarget), ["K1", "K2", "K3"]);
+});
+
+test("3. 4 questions Élémentaires + 10 questions supérieures déjà ajoutées par la continuation -> une demande Élémentaire retourne EXACTEMENT 4 questions, jamais 5 (reproduction du bug réel \"Corpus juris civilis\")", () => {
+  const elementary = [q("elementaire", 1, "K1"), q("elementaire", 2, "K2"), q("elementaire", 3, "K3"), q("elementaire", 4, "K4")];
+  const higher = Array.from({ length: 10 }, (_, i) => q(i < 5 ? "avance" : "expert", 5 + i, `K${5 + i}`));
+  const allQuestions = [...elementary, ...higher];
+  const ceilinged = restrictQuestionsToProgressiveLevelCeiling(allQuestions, "elementaire", "ready");
+  assert.equal(ceilinged.length, 4, "aucune fuite d'une connaissance supérieure ne doit jamais compléter jusqu'à 5");
+  const served = selectQuestionsForRequestedLevel(ceilinged, 5); // target=5, comme NOTION_QUIZ_LEVELS.elementaire.target
+  assert.equal(served.length, 4);
+  assert.ok(served.every((s) => s.level === "elementaire"));
+});
+
+test("4. Expert récupère Élémentaire + Approfondi + Expert, dans les limites prévues, jamais au-delà", () => {
+  const questions = [
+    q("elementaire", 1, "K1"), q("elementaire", 2, "K2"),
+    q("avance", 3, "K3"), q("avance", 4, "K4"),
+    q("expert", 5, "K5"), q("expert", 6, "K6")
+  ];
+  const result = restrictQuestionsToProgressiveLevelCeiling(questions, "expert", "ready");
+  assert.equal(result.length, 6);
+  assert.deepEqual(result.map((r) => r.knowledgeTarget), ["K1", "K2", "K3", "K4", "K5", "K6"]);
+});
+
+test("5. une question progressive avec .level absent/inconnu n'est JAMAIS servie en Élémentaire ni Approfondi — éligible uniquement à Expert (fallback défensif, jamais un contournement silencieux)", () => {
+  const withMissingLevel = q(undefined, 7, "K-orphan");
+  const questions = [q("elementaire", 1, "K1"), withMissingLevel];
+  assert.deepEqual(restrictQuestionsToProgressiveLevelCeiling(questions, "elementaire", "elementary_ready").map((r) => r.knowledgeTarget), ["K1"]);
+  assert.deepEqual(restrictQuestionsToProgressiveLevelCeiling(questions, "avance", "deepening_ready").map((r) => r.knowledgeTarget), ["K1"]);
+  assert.deepEqual(restrictQuestionsToProgressiveLevelCeiling(questions, "expert", "ready").map((r) => r.knowledgeTarget), ["K1", "K-orphan"]);
+});
+
+test("6. master LEGACY (progressiveStatus absent) : comportement strictement inchangé, même référence renvoyée, aucun filtrage — y compris si .level est incohérent avec le niveau demandé (master généré via une requête 'expert', question toutes tagged 'expert', requête 'elementaire')", () => {
+  const questions = [q("expert", 1, "K1"), q("expert", 2, "K2"), q("expert", 3, "K3")];
+  const result = restrictQuestionsToProgressiveLevelCeiling(questions, "elementaire", null);
+  assert.strictEqual(result, questions, "doit renvoyer EXACTEMENT la même référence, jamais une copie filtrée");
+  assert.equal(result.length, 3, "un master legacy ne doit jamais être vidé par ce garde-fou");
+});
+
+test("niveau demandé non reconnu (absent/mal formé) : repli sûr, aucun filtrage, jamais un master progressif vidé par excès de prudence", () => {
+  const questions = [q("elementaire", 1, "K1"), q("expert", 2, "K2")];
+  const result = restrictQuestionsToProgressiveLevelCeiling(questions, "niveau-inexistant", "elementary_ready");
+  assert.strictEqual(result, questions);
+});
+
+test("progressiveStatus vide/falsy (chaîne vide, undefined) : traité comme legacy, jamais filtré — cohérent avec isMasterEligibleQuiz/progressiveEligibilityMinimum", () => {
+  const questions = [q("expert", 1, "K1")];
+  assert.strictEqual(restrictQuestionsToProgressiveLevelCeiling(questions, "elementaire", ""), questions);
+  assert.strictEqual(restrictQuestionsToProgressiveLevelCeiling(questions, "elementaire", undefined), questions);
 });
