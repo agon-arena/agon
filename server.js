@@ -74,7 +74,13 @@ const {
 } = require("./lib/question-formats");
 const {
   buildSemanticReviewPrompt,
-  runQuestionQualityPipeline
+  runQuestionQualityPipeline,
+  // parseSemanticReviews (V2 pipeline progressif, 03/09/2026, section 7 de
+  // la demande — critic en shadow-mode) : réutilisée telle quelle pour
+  // interpréter la réponse du critic sémantique HORS du chemin bloquant de
+  // runQuestionQualityPipeline, jamais un second parseur dupliqué. Absente
+  // de tout usage avant ce chantier — n'affecte aucun appelant existant.
+  parseSemanticReviews
 } = require("./lib/qcm-quality");
 // Evidence grounding en amont (V1, 03/09/2026, cf. audit read-only du même
 // jour) : validateKnowledgeEvidence/applyEvidenceGroundingOverride,
@@ -84,7 +90,13 @@ const {
 // part ailleurs dans ce fichier.
 const {
   validateKnowledgeEvidence,
-  applyEvidenceGroundingOverride
+  applyEvidenceGroundingOverride,
+  // validateParagraphGrounding (V2 pipeline progressif, 03/09/2026, section 6
+  // de la demande — grounding pédagogique) : utilisée UNIQUEMENT par les
+  // blocs Elementary/Deepening/Expert progressifs (cf. generateElementaryBlock/
+  // generateDeepeningBlock/generateExpertBlock plus bas) — jamais par le
+  // pipeline legacy/master, qui ne l'importe nulle part ailleurs.
+  validateParagraphGrounding
 } = require("./lib/question-grounding-validation");
 const {
   buildKnowledgeAdmissionPrompt,
@@ -93,7 +105,8 @@ const {
   buildKnowledgeVerificationPrompt,
   applyKnowledgeVerificationDecisions,
   sanitizeImageSearchQuery,
-  buildElementaryFichePrompt
+  buildElementaryFichePrompt,
+  buildProgressiveContinuationFichePrompt
 } = require("./lib/knowledge-admission");
 // Génération progressive (Phase 1, 02/09/2026 ; taille FLEXIBLE, 02/09/2026
 // suite) — cf. lib/notion-quiz-curriculum.js pour le détail de chaque
@@ -405,7 +418,15 @@ app.use((req, res, next) => {
   if (req.method === "POST" && req.path === "/api/photo-knowledge/analyze") return next();
   return defaultJsonParser(req, res, next);
 });
-app.use(express.static("public", { maxAge: "2m" }));
+// Tous les assets sous public/ (script.min.js, style.min.css, images, icônes,
+// polices vendor) sont référencés avec un ?v=... rebumpé à chaque modif (cf.
+// pipeline npm run build) : leur URL change dès que leur contenu change, donc
+// aucun risque de contenu périmé à cacher longtemps. maxAge à 2 minutes
+// forçait pourtant un aller-retour réseau quasi systématique même pour des
+// pages consultées plusieurs fois par jour (ex. /apprentissage, script.min.js
+// ~900 Ko) — immutable évite même la requête de revalidation conditionnelle
+// une fois l'asset en cache.
+app.use(express.static("public", { maxAge: "1y", immutable: true }));
 
 const { createHistoricalEventsRouter } = require("./routes/historical-events");
 app.use("/api/historical-events", createHistoricalEventsRouter());
@@ -13649,6 +13670,26 @@ const DAILY_QUIZ_CRITIC_MODEL = process.env.OPENAI_DAILY_QUIZ_CRITIC_MODEL || DA
 const QCM_SEMANTIC_REVIEW_ENABLED = !/^(?:0|false|off|no)$/i.test(String(process.env.QCM_SEMANTIC_REVIEW_ENABLED || "true").trim());
 const QCM_SEMANTIC_REVIEW_MAX_RETRIES = Math.max(0, Math.min(2, Number.parseInt(process.env.QCM_SEMANTIC_REVIEW_MAX_RETRIES || "2", 10) || 0));
 const QCM_CRITIC_TECHNICAL_MAX_RETRIES = Math.max(0, Math.min(3, Number.parseInt(process.env.QCM_CRITIC_TECHNICAL_MAX_RETRIES || "2", 10) || 0));
+// ── Modèles distincts par rôle (V2 pipeline progressif, 03/09/2026, section
+// 16 de la demande — "ne pas hardcoder l'architecture à un nom de modèle,
+// distinguer extraction/curriculum, rédaction paragraphes, génération
+// questions, shadow critic"). Chacun retombe par défaut sur EXACTEMENT
+// DAILY_QUIZ_NARRATIVE_MODEL — donc AUCUN changement de modèle actif tant
+// qu'aucune de ces nouvelles variables d'env n'est explicitement définie
+// (vérifié en production le 03/09/2026 : DAILY_QUIZ_NARRATIVE_MODEL/
+// DAILY_QUIZ_CRITIC_MODEL valent déjà "gpt-5.6-luna" via .env — ces alias ne
+// font qu'exposer des points de configuration séparés sur ce même modèle,
+// jamais une bascule automatique vers gpt-4o-mini ou un autre modèle).
+const DAILY_QUIZ_CURRICULUM_MODEL = process.env.OPENAI_DAILY_QUIZ_CURRICULUM_MODEL || DAILY_QUIZ_NARRATIVE_MODEL;
+const DAILY_QUIZ_PARAGRAPH_MODEL = process.env.OPENAI_DAILY_QUIZ_PARAGRAPH_MODEL || DAILY_QUIZ_NARRATIVE_MODEL;
+const DAILY_QUIZ_QUESTION_MODEL = process.env.OPENAI_DAILY_QUIZ_QUESTION_MODEL || DAILY_QUIZ_NARRATIVE_MODEL;
+// Shadow critic (section 7 de la demande) : critic sémantique non-bloquant,
+// lancé APRÈS persistance d'un bloc progressif, jamais dans le chemin
+// bloquant ELEMENTARY_READY/DEEPENING_READY/EXPERT_READY. Désactivable
+// indépendamment de QCM_SEMANTIC_REVIEW_ENABLED (qui, lui, contrôle
+// uniquement le critic BLOQUANT du pipeline legacy — les deux flags sont
+// strictement indépendants, jamais couplés).
+const QCM_PROGRESSIVE_SHADOW_CRITIC_ENABLED = !/^(?:0|false|off|no)$/i.test(String(process.env.QCM_PROGRESSIVE_SHADOW_CRITIC_ENABLED || "true").trim());
 
 // Pseudo-slot "Renforcement des connaissances" : jamais généré ni stocké
 // dans `daily_quiz`, composé exclusivement des repasses de répétition espacée dues aujourd'hui
@@ -14529,7 +14570,17 @@ async function qualityControlRawQuestions({
   // (undefined) pour tout autre appelant, comportement STRICTEMENT inchangé
   // (applyEvidenceGroundingOverride est un no-op explicite sans elle, cf.
   // lib/question-grounding-validation.js).
-  evidenceByKnowledgeTarget
+  evidenceByKnowledgeTarget,
+  // semanticReviewEnabled/maxRetries (V2 pipeline progressif, 03/09/2026,
+  // section 7/9 de la demande — critic hors chemin bloquant, une seule
+  // réparation ciblée) : optionnels, par défaut EXACTEMENT
+  // QCM_SEMANTIC_REVIEW_ENABLED/QCM_SEMANTIC_REVIEW_MAX_RETRIES — donc AUCUN
+  // changement de comportement pour tout appelant existant qui ne les
+  // fournit pas (legacy generateNotionLevelQuiz, buildNotionQuestions...).
+  // Seuls les blocs Elementary/Deepening/Expert progressifs les surchargent
+  // désormais (semanticReviewEnabled:false, maxRetries:1).
+  semanticReviewEnabled = QCM_SEMANTIC_REVIEW_ENABLED,
+  maxRetries = QCM_SEMANTIC_REVIEW_MAX_RETRIES
 }) {
   const startedAt = Date.now();
   // onCycle (V1 latence, 02/09/2026, cf. audit read-only) : un log par cycle
@@ -14572,12 +14623,23 @@ async function qualityControlRawQuestions({
   // jamais aucun autre champ de la question (question/options/correctIndex/
   // knowledgeTarget restent exactement ce que le modèle a écrit).
   const applyEvidence = (questions) => applyEvidenceGroundingOverride(questions, evidenceByKnowledgeTarget);
+  // hasEvidenceOverride (Phase 2.1, correctif du 04/09/2026, diagnostic réel
+  // "Grande Muraille de Chine") : no-op strict (jamais fourni, donc jamais
+  // appelé) quand evidenceByKnowledgeTarget est absent/vide — comportement
+  // legacy STRICTEMENT inchangé. Actif UNIQUEMENT pour les blocs progressifs
+  // grounded, où supporting_claim est forcé à un evidence_text déjà
+  // vérifié : cf. lib/question-grounding-validation.js pour le diagnostic
+  // complet (deux exemples réels) justifiant ce correctif ciblé.
+  const hasEvidenceOverride = evidenceByKnowledgeTarget && evidenceByKnowledgeTarget.size
+    ? (question) => evidenceByKnowledgeTarget.has(normalizeFactText(question?.knowledgeTarget))
+    : undefined;
   const outcome = await runQuestionQualityPipeline(applyEvidence(rawQuestions), {
-    semanticReviewEnabled: QCM_SEMANTIC_REVIEW_ENABLED,
-    maxRetries: QCM_SEMANTIC_REVIEW_MAX_RETRIES,
+    semanticReviewEnabled,
+    maxRetries,
     maxTechnicalRetries: QCM_CRITIC_TECHNICAL_MAX_RETRIES,
     context,
     groundingSources,
+    hasEvidenceOverride,
     earlyStopAtAccepted,
     earlyStopCountFn,
     filterRejectedForRegeneration,
@@ -14748,8 +14810,9 @@ async function qualityControlRawQuestions({
     generationId,
     route,
     model: DAILY_QUIZ_NARRATIVE_MODEL,
-    criticModel: QCM_SEMANTIC_REVIEW_ENABLED ? DAILY_QUIZ_CRITIC_MODEL : null,
-    semanticReviewEnabled: QCM_SEMANTIC_REVIEW_ENABLED,
+    criticModel: semanticReviewEnabled ? DAILY_QUIZ_CRITIC_MODEL : null,
+    semanticReviewEnabled,
+    maxRetries,
     latencyMs: Date.now() - startedAt,
     ...outcome.metrics
   }));
@@ -18369,71 +18432,61 @@ async function resolveMasterInsertConflict(masterSlot, questions, fallbackQuizDa
 // Generated, qui restent strictement inchangés pour tout appelant existant
 // (route POST /api/users/notion-quizzes/custom, legacy).
 
-// Au-delà de ce nombre de tentatives de réparation ciblée, échec propre —
-// jamais une boucle non bornée (même philosophie que QCM_SEMANTIC_REVIEW_
-// MAX_RETRIES/contentAttempts ailleurs dans ce fichier, qui utilisent aussi
-// une petite valeur fixe plutôt qu'un calcul dynamique).
-const CURRICULUM_REPAIR_MAX_ATTEMPTS = 2;
-
-// Construit le plan pédagogique de 15 à 20 connaissances PROPOSÉES, puis
-// vérifie (knowledge_verification, RÉUTILISÉE telle quelle — cf.
-// lib/knowledge-admission.js buildKnowledgeVerificationPrompt/
-// applyKnowledgeVerificationDecisions, aucune modification) et répare
-// UNIQUEMENT le sous-ensemble "elementary" (03/09/2026, latence — audit réel
-// "Les oiseaux migrateurs" : vérifier les 15-20 connaissances entières avant
-// de servir 4-5 questions était un chemin critique inutilement long).
-//
-// Étapes : 1 génération → split PROVISOIRE (computeCurriculumSplit sur la
-// taille brute du pool, AVANT toute vérification — c'est le seul moment où
-// l'on sait déjà combien de connaissances seront "elementary" par position,
-// sans dépendre du résultat de la vérification) → extraction du
-// sous-ensemble elementary → vérification + éviction de quasi-doublons +
-// réparation (jusqu'à CURRICULUM_REPAIR_MAX_ATTEMPTS) UNIQUEMENT sur ce
-// sous-ensemble, ciblant son propre effectif plutôt que MIN_PROGRESSIVE_
-// CURRICULUM (15, jamais changé, toujours utilisé pour le PROMPT initial et
-// le plafond `MAX_PROGRESSIVE_CURRICULUM`).
-//
-// Les connaissances deepening/expert ne sont ni vérifiées ni dédoublonnées
-// ici : elles restent dans le curriculum retourné, chacune marquée
-// explicitement `verified: false` (jamais considérées admises ni
-// silencieusement traitées comme telles) — leur vérification est différée à
-// une phase future (Phase 2, non implémentée). Le champ `verified` est la
-// seule source de vérité sur cet état ; rien dans ce chantier ne l'ignore ni
-// ne le contourne.
-// evidenceModeActive (V1 evidence grounding, 03/09/2026, cf. audit
-// read-only du même jour — "déplacer la preuve en amont") : actif
-// UNIQUEMENT quand grounding.identifiedSources existe réellement (sources
-// web citables par SOURCE_N, cf. lib/web-search-grounding.js) — sinon
-// (sujet sans grounding réel, comportement de tout appelant qui atteignait
-// déjà cette fonction avant ce chantier) reste strictement le comportement
-// existant au caractère près : buildCurriculumPrompt/buildCurriculumRepairPrompt
-// reçoivent `identifiedSourcesBlock: null`, retombent sur leur branche
-// `groundingText` inchangée. Périmètre strict de cette V1 : jamais le
-// pipeline legacy/master (generateNotionLevelQuiz), qui n'appelle jamais
-// cette fonction.
-async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, grounding) {
-  const curriculumStartedAt = Date.now();
+// ── Gate evidence déterministe + AU PLUS UNE réparation ciblée d'un
+// SOUS-ENSEMBLE du curriculum par niveau (Phase 2.1, 03/09/2026,
+// "3 appels IA nominaux avant ELEMENTARY_READY" + "maximum UNE tentative de
+// réparation, jamais deux") ── Remplace verifyAndRepairCurriculumSubset
+// (Phase 2, qui appelait encore knowledge_verification — un second appel IA
+// de vérification indépendante — avant ET après toute réparation). Ce
+// second appel IA disparaît ENTIÈREMENT ici, sur demande explicite : une
+// connaissance est admise UNIQUEMENT si son evidence_text est réellement
+// retrouvé dans la source citée (validateKnowledgeEvidence, déterministe,
+// lib/question-grounding-validation.js) — jamais un second jugement IA sous
+// un autre nom. `initialPool` : items BRUTS de ce niveau, DÉJÀ munis (ou non)
+// de source_id/evidence_text par le SEUL appel d'extraction (curriculum_
+// generation) — cette fonction n'appelle plus jamais buildKnowledgeVerification
+// Prompt. Réparation bornée à EXACTEMENT une tentative (jamais une boucle) :
+// initial → [1 repair si besoin] → STOP, quel que soit le résultat.
+async function evidenceGateAndRepairCurriculumSubset({
+  apiKey, subject, contextHint, id, grounding, initialPool, targetSize,
+  repairFeature,
+  // globalMaxOrder : plafond réel à partir duquel les `order` temporaires de
+  // réparation doivent démarrer — cf. commentaire historique conservé plus
+  // bas sur son usage exact. Optionnel, absent pour Elementary (retombe sur
+  // le max local du sous-ensemble, sans risque car intégralement renormalisé
+  // ensuite par resolveProgressiveCurriculum), fourni explicitement par
+  // continueProgressiveGeneration pour Deepening/Expert.
+  globalMaxOrder = null,
+  // preAccepted (Phase 2.1, 03/09/2026) : connaissances DÉJÀ evidence-gated
+  // avec succès contre le grounding D'ORIGINE (cf. resolveProgressiveCurriculum,
+  // gate Deepening/Expert appliqué pendant que ce grounding est encore
+  // fiable) — utilisées TELLES QUELLES comme base, JAMAIS re-passées par
+  // applyEvidenceGate ici : `grounding` reçu par CET appel (continuation)
+  // peut être une résolution FRAÎCHE, différente de celle d'origine (cf.
+  // continueProgressiveGeneration) — re-gater `preAccepted` contre un
+  // grounding différent rejetterait à tort des preuves pourtant valides
+  // (bug réel corrigé le 03/09/2026, cf. rapport Phase 2). Seul `initialPool`
+  // (les nouveaux ajouts de réparation) est gaté contre `grounding` ici.
+  // Absent (comportement du bloc Elementary) : `initialPool` reste gaté
+  // normalement, comportement strictement inchangé.
+  preAccepted = null
+}) {
   const evidenceModeActive = !!grounding?.identifiedSources?.length;
-  // Instrumentation minimale (section 11 de la demande) : comptés sur
-  // TOUTE la résolution du curriculum (pool initial + chaque tentative de
-  // réparation), jamais réinitialisés en cours de route — permet de
-  // comparer, après un test réel, la fréquence de GROUNDING_CLAIM_NOT_
-  // GROUNDED_IN_SOURCE côté question AVANT/APRÈS ce chantier. Neutres
+  // Instrumentation minimale (section 11 de la demande initiale) : comptés
+  // sur toute la résolution de CE sous-ensemble (pool initial + la
+  // réparation éventuelle), jamais réinitialisés en cours de route. Neutres
   // (0/vide) quand evidenceModeActive est faux, jamais confondus avec "0
-  // rejet" au sens qualitatif — cf. qcm-progressive-timing plus bas.
+  // rejet" au sens qualitatif.
   let evidenceCandidates = 0;
   let evidenceValid = 0;
   const evidenceRejectionReasons = {};
   const trackEvidenceRejection = (reason) => {
     evidenceRejectionReasons[reason] = (evidenceRejectionReasons[reason] || 0) + 1;
   };
-  // Filtre déterministe (jamais un jugement IA, jamais un assouplissement
-  // d'un seuil de validateQuestionGrounding) : un item dont l'evidence_text
-  // n'est pas réellement retrouvé dans la source citée n'est jamais admis
-  // artificiellement — il est simplement retiré ici, comme n'importe quel
-  // rejet de knowledge_verification (même mécanisme de réparation existant
-  // plus bas, jamais une nouvelle boucle dédiée, cf. section 8 de la
-  // demande).
+  // Filtre déterministe (jamais un jugement IA) : un item dont source_id ou
+  // evidence_text est absent, ou dont l'evidence_text n'est pas réellement
+  // retrouvé dans la source citée, est simplement rejeté — jamais admis
+  // artificiellement, jamais "réparé" individuellement par un appel dédié.
   const applyEvidenceGate = (items) => {
     if (!evidenceModeActive) return items;
     return items.filter((item) => {
@@ -18445,13 +18498,95 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
     });
   };
 
+  // Écarte toute quasi-équivalence entre connaissances ACCEPTÉES d'un
+  // sous-ensemble donné (cf. lib/notion-quiz-curriculum.js findNearDuplicates)
+  // : la plus tardive (order le plus grand, donc apparue en second) des deux
+  // est retirée.
+  const evictNearDuplicates = (items) => {
+    let current = [...items].sort((a, b) => a.order - b.order);
+    let evicted = true;
+    while (evicted) {
+      evicted = false;
+      const pair = findNearDuplicateCurriculumKnowledge(current)[0];
+      if (pair) {
+        const orderToEvict = Math.max(pair[0].order, pair[1].order);
+        current = current.filter((k) => k.order !== orderToEvict);
+        evicted = true;
+      }
+    }
+    return current;
+  };
+
+  let accepted = preAccepted != null ? preAccepted : evictNearDuplicates(applyEvidenceGate(initialPool));
+  let repairAttempted = false;
+
+  // Réparation : AU PLUS UNE tentative, jamais une boucle (section 3 de la
+  // demande du 03/09/2026 — "initial → éventuellement repair 1 → STOP").
+  if (accepted.length < targetSize) {
+    repairAttempted = true;
+    const neededCount = missingCurriculumCount(accepted.length, targetSize);
+    console.warn(`[notion-quiz-progressive:${id}] curriculum ${repairFeature} incomplet (réparation unique) : ${accepted.length}/${targetSize}, ${neededCount} connaissance(s) à ajouter.`);
+    try {
+      const repairContent = await _callOpenAI(apiKey, [{
+        role: "user",
+        content: buildCurriculumRepairPrompt(subject, contextHint, neededCount, accepted, grounding?.groundingText || null, evidenceModeActive ? grounding.identifiedSourcesBlock : null)
+      }], {
+        model: DAILY_QUIZ_CURRICULUM_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" },
+        timeoutMs: 60_000,
+        feature: repairFeature,
+        generationId: id
+      });
+      // Ordres temporaires au-delà du max réel (globalMaxOrder si fourni,
+      // sinon le max local du sous-ensemble) : garantit qu'un ajout ne
+      // collisionne jamais avec un `order` déjà utilisé ailleurs dans le
+      // curriculum (cf. commentaire de tête sur globalMaxOrder).
+      const startOrder = Math.max(
+        globalMaxOrder != null ? globalMaxOrder : 0,
+        initialPool.reduce((max, k) => Math.max(max, k.order), 0)
+      );
+      // Spread de `a` (jamais une reconstruction champ par champ) : préserve
+      // source_id/evidence_text tels que fournis par le modèle.
+      const additions = parseCurriculumRepairAdditions(JSON.parse(repairContent)?.additions, neededCount)
+        .map((a, index) => ({ ...a, id: `repair-${startOrder + index + 1}`, order: startOrder + index + 1 }));
+      // Même gate déterministe que le pool initial (jamais un nouveau
+      // mécanisme, jamais un second appel IA de vérification) : un ajout de
+      // réparation sans preuve réelle n'est jamais accepté artificiellement.
+      const acceptedAdditions = applyEvidenceGate(additions);
+      accepted = evictNearDuplicates(mergeCurriculumAdditions(accepted, acceptedAdditions));
+    } catch (error) {
+      console.warn(`[notion-quiz-progressive:${id}] réparation curriculum ${repairFeature} :`, error.message);
+    }
+  }
+
+  return { accepted, repairAttempted, evidenceCandidates, evidenceValid, evidenceRejectionReasons };
+}
+
+// Construit le plan pédagogique de 15 à 20 connaissances en UN SEUL appel IA
+// (curriculum_generation — Phase 2.1, 03/09/2026, "3 appels IA nominaux
+// avant ELEMENTARY_READY") : ce même appel produit directement
+// knowledgeTarget + source_id + evidence_text pour CHAQUE connaissance,
+// quel que soit son niveau — plus aucun second appel IA de vérification
+// (knowledge_verification a disparu, cf. evidenceGateAndRepairCurriculumSubset).
+// L'admission est décidée UNIQUEMENT par validateKnowledgeEvidence
+// (déterministe). Étapes : 1 génération → split PROVISOIRE
+// (computeCurriculumSplit sur la taille brute du pool) → gate evidence +
+// AU PLUS UNE réparation ciblée sur le sous-ensemble "elementary" (seul
+// niveau sur le chemin critique) → gate evidence (sans réparation) sur
+// Deepening/Expert, pendant que `grounding` est encore fiable — leur
+// éventuelle réparation est différée à continueProgressiveGeneration.
+async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, grounding) {
+  const curriculumStartedAt = Date.now();
+  const evidenceModeActive = !!grounding?.identifiedSources?.length;
+
   let pool;
   try {
     const content = await _callOpenAI(apiKey, [{
       role: "user",
       content: buildCurriculumPrompt(subject, contextHint, grounding?.groundingText || null, evidenceModeActive ? grounding.identifiedSourcesBlock : null)
     }], {
-      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      model: DAILY_QUIZ_CURRICULUM_MODEL,
       temperature: 0.4,
       responseFormat: { type: "json_object" },
       timeoutMs: 90_000,
@@ -18474,118 +18609,22 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
   // vérifiée) est le seul choix possible ici : le split doit être connu
   // AVANT la vérification pour savoir QUOI vérifier en premier.
   const leveledPool = assignCurriculumLevels(normalizeCurriculumOrder(pool));
-  let elementaryPool = selectCurriculumLevel(leveledPool, "elementary");
-  const deferredCandidates = leveledPool.filter((item) => item.level !== "elementary");
-  const elementaryTarget = elementaryPool.length;
-  // Gate evidence AVANT toute vérification IA (section 3 de la demande) :
-  // un item sans preuve textuelle réelle ne mérite pas qu'on dépense un
-  // appel de knowledge_verification dessus, son sort est déjà scellé.
-  // elementaryTarget (ci-dessus) reste calculé sur le pool AVANT ce gate —
-  // la réparation plus bas cible donc toujours la taille réelle attendue du
-  // bloc elementary, quelle que soit la raison (evidence OU vérification)
-  // pour laquelle un item en a été retiré.
-  elementaryPool = applyEvidenceGate(elementaryPool);
+  const elementaryPoolRaw = selectCurriculumLevel(leveledPool, "elementary");
+  const deferredCandidatesRaw = leveledPool.filter((item) => item.level !== "elementary");
+  const elementaryTarget = elementaryPoolRaw.length;
 
-  // Vérifie un sous-ensemble de candidats (`{fact, order}`) et renvoie les
-  // `order` acceptés — jamais les `id`, pour ne jamais dépendre du format
-  // exact d'id renvoyé par l'IA (cf. lib/notion-quiz-curriculum.js). Réutilise
-  // buildKnowledgeVerificationPrompt/applyKnowledgeVerificationDecisions SANS
-  // AUCUNE modification : `candidates[i].fact` est le seul champ qu'elles
-  // lisent, `order` les traverse tel quel (spread préservé par le filtre).
-  const verifyOrders = async (candidates) => {
-    if (!candidates.length) return new Set();
-    const verificationCandidates = candidates.map((k) => ({ fact: k.knowledgeTarget, order: k.order }));
-    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildKnowledgeVerificationPrompt(verificationCandidates, subject, grounding?.groundingText || null) }], {
-      model: DAILY_QUIZ_NARRATIVE_MODEL,
-      temperature: 0.2,
-      responseFormat: { type: "json_object" },
-      timeoutMs: 60_000,
-      feature: "knowledge_verification",
-      generationId: id
-    });
-    const decisions = JSON.parse(content);
-    const accepted = applyKnowledgeVerificationDecisions(verificationCandidates, decisions?.decisions);
-    return new Set(accepted.map((c) => c.order));
-  };
-
-  // Écarte toute quasi-équivalence entre connaissances ACCEPTÉES d'un
-  // sous-ensemble donné (cf. lib/notion-quiz-curriculum.js findNearDuplicates)
-  // : la plus tardive (order le plus grand, donc apparue en second) des deux
-  // est retirée — même mécanisme de réparation que pour un rejet de
-  // knowledge_verification, jamais une seconde logique.
-  const evictNearDuplicates = (items) => {
-    let current = [...items].sort((a, b) => a.order - b.order);
-    let evicted = true;
-    while (evicted) {
-      evicted = false;
-      const pair = findNearDuplicateCurriculumKnowledge(current)[0];
-      if (pair) {
-        const orderToEvict = Math.max(pair[0].order, pair[1].order);
-        current = current.filter((k) => k.order !== orderToEvict);
-        evicted = true;
-      }
-    }
-    return current;
-  };
-
-  let acceptedOrders;
-  try {
-    acceptedOrders = await verifyOrders(elementaryPool);
-  } catch (error) {
-    console.warn(`[notion-quiz-progressive:${id}] vérification curriculum (elementary) :`, error.message);
-    acceptedOrders = new Set();
-  }
-  let acceptedElementary = evictNearDuplicates(elementaryPool.filter((k) => acceptedOrders.has(k.order)));
-
-  for (let attempt = 1; attempt <= CURRICULUM_REPAIR_MAX_ATTEMPTS; attempt += 1) {
-    if (acceptedElementary.length >= elementaryTarget) break; // déjà au complet, jamais de réparation superflue
-    const neededCount = missingCurriculumCount(acceptedElementary.length, elementaryTarget);
-    console.warn(`[notion-quiz-progressive:${id}] curriculum elementary incomplet (réparation ${attempt}/${CURRICULUM_REPAIR_MAX_ATTEMPTS}) : ${acceptedElementary.length}/${elementaryTarget}, ${neededCount} connaissance(s) à ajouter.`);
-    let additions = [];
-    try {
-      const repairContent = await _callOpenAI(apiKey, [{
-        role: "user",
-        content: buildCurriculumRepairPrompt(subject, contextHint, neededCount, acceptedElementary, grounding?.groundingText || null, evidenceModeActive ? grounding.identifiedSourcesBlock : null)
-      }], {
-        model: DAILY_QUIZ_NARRATIVE_MODEL,
-        temperature: 0.4,
-        responseFormat: { type: "json_object" },
-        timeoutMs: 60_000,
-        feature: "curriculum_repair",
-        generationId: id
-      });
-      // Ordres temporaires au-delà du max courant du POOL ELEMENTARY (jamais
-      // du pool entier — les candidats deepening/expert ne sont jamais
-      // touchés par cette réparation) : garantit qu'un ajout ne collisionne
-      // jamais avec un `order` déjà utilisé dans ce sous-ensemble.
-      const startOrder = elementaryPool.reduce((max, k) => Math.max(max, k.order), 0);
-      // Spread de `a` (jamais une reconstruction champ par champ) : préserve
-      // source_id/evidence_text quand présents SANS jamais poser une clé
-      // explicite à `undefined` pour les ajouts sans preuve (comportement
-      // legacy) — même précédent que normalizeCurriculumOrder ci-dessus.
-      additions = parseCurriculumRepairAdditions(JSON.parse(repairContent)?.additions, neededCount)
-        .map((a, index) => ({ ...a, id: `repair-${startOrder + index + 1}`, order: startOrder + index + 1 }));
-      // Même gate déterministe que le pool initial (jamais un nouveau
-      // mécanisme) : un ajout de réparation sans preuve réelle n'est jamais
-      // accepté artificiellement — aucun retry supplémentaire n'est
-      // introduit ici, la boucle de réparation existante (CURRICULUM_REPAIR_
-      // MAX_ATTEMPTS) absorbe déjà ce cas exactement comme un rejet de
-      // knowledge_verification.
-      additions = applyEvidenceGate(additions);
-    } catch (error) {
-      console.warn(`[notion-quiz-progressive:${id}] réparation curriculum elementary (tentative ${attempt}) :`, error.message);
-      continue;
-    }
-    if (!additions.length) continue;
-    elementaryPool = mergeCurriculumAdditions(elementaryPool, additions);
-    try {
-      const newlyAcceptedOrders = await verifyOrders(additions);
-      const newlyAccepted = additions.filter((a) => newlyAcceptedOrders.has(a.order));
-      acceptedElementary = evictNearDuplicates(mergeCurriculumAdditions(acceptedElementary, newlyAccepted));
-    } catch (error) {
-      console.warn(`[notion-quiz-progressive:${id}] vérification réparation elementary (tentative ${attempt}) :`, error.message);
-    }
-  }
+  const {
+    accepted: acceptedElementary,
+    repairAttempted: elementaryCurriculumRepairAttempted,
+    evidenceCandidates,
+    evidenceValid,
+    evidenceRejectionReasons
+  } = await evidenceGateAndRepairCurriculumSubset({
+    apiKey, subject, contextHint, id, grounding,
+    initialPool: elementaryPoolRaw,
+    targetSize: elementaryTarget,
+    repairFeature: "curriculum_repair"
+  });
 
   const curriculumMs = Date.now() - curriculumStartedAt;
   // MIN_ELEMENTARY_READY_QUESTIONS (jamais MIN_PROGRESSIVE_CURRICULUM) : en
@@ -18593,135 +18632,172 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
   // seuil de disponibilité (cf. lib/question-formats.js) — inutile de
   // poursuivre vers la génération de fiche/questions.
   if (acceptedElementary.length < MIN_ELEMENTARY_READY_QUESTIONS) {
-    console.warn(`[notion-quiz-progressive:${id}] curriculum elementary incomplet après ${CURRICULUM_REPAIR_MAX_ATTEMPTS} réparation(s) : ${acceptedElementary.length}/${MIN_ELEMENTARY_READY_QUESTIONS} minimum.`);
+    console.warn(`[notion-quiz-progressive:${id}] curriculum elementary incomplet après réparation : ${acceptedElementary.length}/${MIN_ELEMENTARY_READY_QUESTIONS} minimum.`);
     return generationFailure("CURRICULUM_INCOMPLETE", "curriculum_repair", {
       reason: `Seulement ${acceptedElementary.length} connaissance(s) elementary fiable(s) et validée(s) sur ${MIN_ELEMENTARY_READY_QUESTIONS} minimum pour ce sujet.`
     });
   }
 
+  // Gate evidence déterministe des connaissances Deepening/Expert (Phase
+  // 2.1, 03/09/2026, section 2 de la demande) : appliqué ICI, PENDANT que
+  // `grounding` (sources complètes, en mémoire) est encore fiable et
+  // cohérent avec les source_id cités par CET appel d'extraction — jamais
+  // différé à la continuation, qui devrait sinon re-résoudre un grounding
+  // potentiellement différent (source du bug corrigé le 03/09/2026, cf.
+  // rapport Phase 2). AUCUN appel IA ici (ni curriculum_repair ni knowledge_
+  // verification) : Deepening/Expert ne sont PAS réparés à ce stade — une
+  // connaissance insuffisamment sourcée reste simplement `verified:false`,
+  // sa réparation éventuelle (bornée à une tentative, comme Elementary) est
+  // différée à continueProgressiveGeneration, HORS du chemin critique
+  // Élémentaire. Réutilise `evidenceModeActive` déjà calculé en tête de
+  // fonction — jamais une seconde évaluation.
+  let deferredEvidenceCandidates = 0;
+  let deferredEvidenceValid = 0;
+  const deferredEvidenceRejectionReasons = {};
+  const deferredGated = deferredCandidatesRaw.map((item) => {
+    if (!evidenceModeActive) return { ...item, verified: false };
+    deferredEvidenceCandidates += 1;
+    const result = validateKnowledgeEvidence(item, grounding.identifiedSources);
+    if (result.ok) { deferredEvidenceValid += 1; return { ...item, verified: true }; }
+    deferredEvidenceRejectionReasons[result.reason] = (deferredEvidenceRejectionReasons[result.reason] || 0) + 1;
+    return { ...item, verified: false };
+  });
+
   // Renormalisation DU SEUL sous-ensemble elementary (id/order 1..N
   // séquentiels, ordre pédagogique préservé), niveau/statut attachés
   // explicitement. Les candidats deepening/expert sont ensuite renumérotés
   // à la suite (jamais re-triés selon un nouveau critère) pour éviter toute
-  // collision d'id/order avec les items elementary renormalisés — ils
-  // restent des PROPOSITIONS non vérifiées (`verified: false`), jamais
-  // dédupliquées, jamais garanties complètes : Phase 2 (non implémentée)
-  // reprendra leur vérification/réparation le moment venu, exactement comme
-  // le sous-ensemble elementary vient de l'être ici.
+  // collision d'id/order avec les items elementary renormalisés.
+  // source_id/evidence_text PRÉSERVÉS explicitement (spread de `item` avant
+  // les champs recalculés) — correctif Phase 2.1 (03/09/2026) : l'ancienne
+  // construction de `deferredFinal` ne recopiait QUE knowledgeTarget/order/
+  // level/verified, perdant silencieusement source_id/evidence_text pour
+  // TOUTE connaissance Deepening/Expert même quand le modèle les avait bien
+  // fournis — cause racine réelle, vérifiée, du taux élevé de
+  // "missing_source_id" observé en continuation lors du rapport Phase 2
+  // (jamais un problème de conformité du prompt à lui seul).
   const elementaryFinal = normalizeCurriculumOrder(acceptedElementary).map((item) => ({ ...item, level: "elementary", verified: true }));
-  const deferredFinal = deferredCandidates.map((item, index) => ({
+  const deferredFinal = deferredGated.map((item, index) => ({
+    ...item,
     id: `k${elementaryFinal.length + index + 1}`,
-    knowledgeTarget: item.knowledgeTarget,
-    order: elementaryFinal.length + index + 1,
-    level: item.level,
-    verified: false
+    order: elementaryFinal.length + index + 1
   }));
   const finalCurriculum = [...elementaryFinal, ...deferredFinal];
   return {
     curriculum: finalCurriculum,
     curriculumMs,
     elementaryVerificationCount: elementaryFinal.length,
+    elementaryCurriculumRepairAttempted,
     deferredVerificationCount: deferredFinal.length,
-    // Instrumentation evidence grounding (V1, section 11 de la demande) :
-    // evidenceCandidates=0 quand evidenceModeActive est faux (sujet sans
-    // grounding réel) — jamais confondu avec "0 rejet", cf. qcm-progressive-timing.
+    // Instrumentation evidence grounding (V1, section 11 de la demande
+    // d'audit) : evidenceCandidates=0 quand evidenceModeActive est faux
+    // (sujet sans grounding réel) — jamais confondu avec "0 rejet".
     elementaryEvidenceCandidates: evidenceCandidates,
     elementaryEvidenceValid: evidenceValid,
     elementaryEvidenceRejected: evidenceCandidates - evidenceValid,
-    elementaryEvidenceRejectionReasons: evidenceRejectionReasons
+    elementaryEvidenceRejectionReasons: evidenceRejectionReasons,
+    // deferredEvidence* (Phase 2.1) : mesure, dès le premier appel
+    // d'extraction, le taux de connaissances Deepening/Expert réellement
+    // sourcées — cf. rapport Phase 2.1, point 3.
+    deferredEvidenceCandidates,
+    deferredEvidenceValid,
+    deferredEvidenceRejected: deferredEvidenceCandidates - deferredEvidenceValid,
+    deferredEvidenceRejectionReasons
   };
 }
 
-// Rédige la fiche élémentaire (toutes les connaissances de niveau
-// "elementary" du curriculum, dont le NOMBRE dépend de la taille réelle du
-// curriculum — 4 ou 5 selon les cas, cf. computeCurriculumSplit ; la fiche
-// couvre TOUJOURS l'intégralité de `elementaryKnowledge`, jamais réduite au
-// sous-ensemble qui finit par avoir une question — cf. buildElementaryFiche
-// Prompt, non modifié par ce correctif) puis génère et valide des questions
-// pour ces connaissances — MÊME chaîne qualité que le master legacy
-// (validation déterministe + critic Luna + régénération ciblée, via
-// qualityControlRawQuestions INCHANGÉE dans ses critères ; V3.2 réutilisé
-// tel quel, cf. rapport section 10). Qualité > quantité (03/09/2026, audit
-// réel "Bouddhisme tibétain") : le bloc devient prêt dès `elementaryReady
-// Threshold` (= min(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge.
-// length), donc toujours 4 en pratique puisque le curriculum ne descend
-// jamais sous 4 connaissances elementary) questions RÉELLEMENT validées,
-// jamais besoin d'une question par connaissance — la connaissance restée
-// sans question valide n'est ni supprimée ni comptée comme validée, elle
-// demeure disponible pour une réparation future (Phase 2, non implémentée
-// ici) sans qu'aucun code de cette phase n'en dépende. Aucun critère de
-// VALIDATION n'est modifié : une question rejetée reste rejetée dans tous
-// les cas.
-// Fiche et questions n'ont aucune dépendance mutuelle (audit read-only du
-// 03/09/2026) : toutes deux ne lisent que `elementaryKnowledge`/`grounding`,
-// jamais le résultat l'une de l'autre — lancées en parallèle (03/09/2026,
-// latence) plutôt que séquentiellement. Gain modeste et borné (la fiche est
-// déjà rapide, ~4 s) mais gratuit architecturalement, sans toucher au
-// contenu ni aux critères des deux appels.
-async function generateElementaryBlock(apiKey, subject, contextHint, id, elementaryKnowledge, grounding) {
-  const levelConfig = NOTION_QUIZ_LEVELS.elementaire;
+// Concatène les sections {label, text} d'une fiche (ou d'un sous-ensemble de
+// sections) en un texte brut unique — utilisé pour (a) fournir le paragraphe
+// "réellement enseigné" au prompt de génération des questions
+// (buildQuestionsFromKnowledgePrompt) et (b) au contrôle déterministe
+// validateParagraphGrounding. Jamais affiché tel quel à l'utilisateur (qui
+// voit les sections structurées, cf. GET .../fiche) — uniquement un texte de
+// travail interne au pipeline.
+function flattenFicheSectionsText(sections) {
+  return (Array.isArray(sections) ? sections : [])
+    .map((s) => [s?.label, s?.text].filter(Boolean).join(" — "))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+// ── Génération d'UN bloc progressif (paragraphe + questions) pour un niveau
+// donné du curriculum ── Cœur commun à Elementary/Deepening/Expert (V2,
+// 03/09/2026, "terminer et simplifier le pipeline progressif") : factorise
+// ce qui était dupliqué entre les 3 blocs plutôt que d'écrire trois copies
+// quasi identiques. Règle centrale (section 5 de la demande) : le paragraphe
+// est TOUJOURS rédigé et connu AVANT toute génération de questions — plus de
+// parallélisation fiche/questions (l'ancienne optimisation latence du
+// 03/09/2026 est explicitement abandonnée ici, remplacée par la garantie
+// pédagogique demandée). Le critic sémantique IA ne bloque plus ce chemin
+// (semanticReviewEnabled:false) et au plus UNE réparation ciblée
+// déterministe est tentée (maxRetries:1) — cf. rapport section REGENERATIONS.
+// V3.2 (expandGroundingAndRegenerateMissingQuestions) n'est PLUS appelé ici :
+// une connaissance sans preuve valide n'entre simplement pas dans le
+// curriculum (gate evidence en amont, resolveProgressiveCurriculum/
+// evidenceGateAndRepairCurriculumSubset) — cf. rapport section V3.2.
+// `ficheBuilder(subject, contextHint, levelKnowledge, levelConfig, groundingText)`
+// : construit le prompt de fiche (buildElementaryFichePrompt pour Elementary,
+// buildProgressiveContinuationFichePrompt pour Deepening/Expert) — seule
+// différence structurelle entre les 3 blocs, injectée par l'appelant plutôt
+// que dupliquée ici.
+async function generateProgressiveLevelBlock({
+  apiKey, subject, contextHint, id, levelKey, levelKnowledge, grounding,
+  ficheBuilder, questionFeaturePrefix, regenerationFeature, logStage, readyThreshold
+}) {
+  const levelConfig = NOTION_QUIZ_LEVELS[levelKey];
   const contentAttempts = 2;
-  const timeoutMs = Math.min(120_000, 45_000 + elementaryKnowledge.length * 3_000);
-  const elementaryReadyThreshold = Math.min(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge.length);
-  // Sur-génération initiale (03/09/2026, audit latence réel "Empire
-  // carolingien") : répartition déterministe de ELEMENTARY_INITIAL_CANDIDATE_
-  // POOL_SIZE candidats sur les connaissances elementary — cf. lib/
-  // question-formats.js computeElementaryCandidateDistribution pour le
-  // rationale complet et son comportement de repli (targetCount>=poolSize).
-  const initialCandidateCounts = computeElementaryCandidateDistribution(elementaryKnowledge.length, ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE);
-  const totalInitialCandidates = initialCandidateCounts.reduce((sum, n) => sum + n, 0) || elementaryKnowledge.length;
+  const timeoutMs = Math.min(120_000, 45_000 + levelKnowledge.length * 3_000);
+  const blockReadyThreshold = Math.min(readyThreshold, levelKnowledge.length);
+  const initialCandidateCounts = computeElementaryCandidateDistribution(levelKnowledge.length, ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE);
+  const totalInitialCandidates = initialCandidateCounts.reduce((sum, n) => sum + n, 0) || levelKnowledge.length;
 
-  // Chaque tâche capture ses propres erreurs et renvoie un résultat
-  // discriminé (`{error}` ou son résultat utile) au lieu de rejeter/retourner
-  // directement — nécessaire pour orchestrer les deux en parallèle tout en
-  // conservant EXACTEMENT les mêmes codes d'échec et la même granularité
-  // qu'avant ce correctif (aucun changement de comportement en cas d'échec).
-  const ficheTask = (async () => {
-    const ficheStartedAt = Date.now();
-    let ficheResult;
-    for (let attempt = 1; attempt <= contentAttempts; attempt += 1) {
-      let content;
-      try {
-        content = await _callOpenAI(apiKey, [{ role: "user", content: buildElementaryFichePrompt(subject, contextHint, elementaryKnowledge, levelConfig, grounding?.groundingText || null) }], {
-          model: DAILY_QUIZ_NARRATIVE_MODEL,
-          temperature: 0.4,
-          responseFormat: { type: "json_object" },
-          timeoutMs,
-          feature: "elementary_fiche_generation",
-          generationId: id
-        });
-      } catch (error) {
-        const code = classifyAiError(error);
-        console.error(`[notion-quiz-progressive:${id}] stage=elementary_fiche_generation code=${code} :`, error.message);
-        return { error: generationFailure(code, "elementary_fiche_generation") };
-      }
-      try {
-        const candidate = JSON.parse(content);
-        const parsed = parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig);
-        if (parsed) { ficheResult = parsed; break; }
-        console.warn(`[notion-quiz-progressive:${id}] fiche élémentaire non conforme (tentative ${attempt}/${contentAttempts}).`);
-      } catch (error) {
-        console.warn(`[notion-quiz-progressive:${id}] JSON fiche élémentaire invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
-      }
+  // 1. Fiche D'ABORD (section 5 de la demande) — jamais en parallèle des
+  // questions, jamais après.
+  const ficheStartedAt = Date.now();
+  let ficheResult;
+  for (let attempt = 1; attempt <= contentAttempts; attempt += 1) {
+    let content;
+    try {
+      content = await _callOpenAI(apiKey, [{ role: "user", content: ficheBuilder(subject, contextHint, levelKnowledge, levelConfig, grounding?.groundingText || null) }], {
+        model: DAILY_QUIZ_PARAGRAPH_MODEL,
+        temperature: 0.4,
+        responseFormat: { type: "json_object" },
+        timeoutMs,
+        feature: `${questionFeaturePrefix}_fiche_generation`,
+        generationId: id
+      });
+    } catch (error) {
+      const code = classifyAiError(error);
+      console.error(`[${logStage}:${id}] stage=${questionFeaturePrefix}_fiche_generation code=${code} :`, error.message);
+      return generationFailure(code, `${questionFeaturePrefix}_fiche_generation`);
     }
-    const ficheMs = Date.now() - ficheStartedAt;
-    if (!ficheResult) return { error: generationFailure("CONTENT_UNUSABLE", "elementary_fiche_generation") };
-    return { ficheResult, ficheMs };
-  })();
+    try {
+      const candidate = JSON.parse(content);
+      const parsed = parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig);
+      if (parsed) { ficheResult = parsed; break; }
+      console.warn(`[${logStage}:${id}] fiche ${levelKey} non conforme (tentative ${attempt}/${contentAttempts}).`);
+    } catch (error) {
+      console.warn(`[${logStage}:${id}] JSON fiche ${levelKey} invalide (tentative ${attempt}/${contentAttempts}) :`, error.message);
+    }
+  }
+  const ficheMs = Date.now() - ficheStartedAt;
+  if (!ficheResult) return generationFailure("CONTENT_UNUSABLE", `${questionFeaturePrefix}_fiche_generation`);
+  const { sourceName, sourceDetail, imageSearchQuery } = ficheResult;
+  const paragraphText = flattenFicheSectionsText(sourceDetail?.sections);
 
-  // sequential/clearBoundary volontairement à `false` (Phase 1) : le
-  // curriculum ne les produit pas (structure minimale demandée, cf. rapport
-  // section 6) — conséquence assumée et documentée : les formats "ordre"/
-  // "intrus" ne sont jamais proposés pour un bloc progressif dans cette
-  // phase (buildQuestionsFromKnowledgePrompt reste, lui, strictement
-  // inchangé). Revisitable en Phase 2 si le curriculum les fournit un jour.
-  // source_id/evidence_text (V1 evidence grounding, 03/09/2026) : propagés
-  // depuis le curriculum UNIQUEMENT quand présents et déjà validés (cf.
-  // resolveProgressiveCurriculum applyEvidenceGate) — jamais posés à
-  // undefined pour une connaissance sans preuve (mêmes précédents que
-  // parseCurriculumItems/normalizeCurriculumOrder plus haut dans le
-  // fichier).
-  const admittedKnowledge = elementaryKnowledge.map((k) => ({
+  const imagePromise = imageSearchQuery
+    ? searchKnowledgeImage(imageSearchQuery, { logLabel: `${id}:${sourceName}:${levelKey}` }).catch((error) => {
+        console.warn(`[${logStage}:${id}] recherche image ${levelKey} :`, error.message);
+        return null;
+      })
+    : Promise.resolve(null);
+
+  // sequential/clearBoundary volontairement à `false` (Phase 1/2) : le
+  // curriculum ne les produit pas (structure minimale, cf. rapport section
+  // 6) — les formats "ordre"/"intrus" ne sont jamais proposés pour un bloc
+  // progressif. source_id/evidence_text : propagés depuis le curriculum
+  // UNIQUEMENT quand présents et déjà validés.
+  const admittedKnowledge = levelKnowledge.map((k) => ({
     fact: k.knowledgeTarget,
     sequential: false,
     clearBoundary: false,
@@ -18730,13 +18806,6 @@ async function generateElementaryBlock(apiKey, subject, contextHint, id, element
   const groundingSourcesMap = grounding?.identifiedSources?.length
     ? new Map(grounding.identifiedSources.map((s) => [s.sourceId, s]))
     : null;
-  // evidenceByKnowledgeTarget (V1 evidence grounding, 03/09/2026) : construite
-  // UNE SEULE FOIS ici, réutilisée par le lot initial ET par V3.2 (cf. plus
-  // bas) — jamais reconstruite séparément, jamais une seconde source de
-  // vérité. Vide (Map de taille 0) quand aucune connaissance elementary ne
-  // porte de preuve validée (sujet sans grounding réel, ou toutes les
-  // preuves rejetées par le gate déterministe) : applyEvidenceGroundingOverride
-  // est alors un no-op strict, comportement identique à avant ce chantier.
   const evidenceByKnowledgeTarget = new Map();
   for (const k of admittedKnowledge) {
     if (k.source_id && k.evidence_text) {
@@ -18744,174 +18813,216 @@ async function generateElementaryBlock(apiKey, subject, contextHint, id, element
     }
   }
 
-  const questionsTask = (async () => {
-    let validated = [];
-    let questionQualityMetrics = null;
-    let currentGrounding = grounding;
-    let initialBatchDistinctCount = null;
-    let elementaryReadyAfterInitialBatch = false;
-    try {
-      const formatBlock = buildQuestionFormatsPromptBlock("sourceId", totalInitialCandidates, true, undefined, currentGrounding?.identifiedSourcesBlock || null);
-      const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, levelConfig.instruction, formatBlock, initialCandidateCounts);
-      const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
-        model: DAILY_QUIZ_NARRATIVE_MODEL,
-        temperature: 0.4,
-        responseFormat: { type: "json_object" },
-        timeoutMs,
-        feature: "elementary_question_generation",
-        generationId: id
-      });
-      const questionsParsed = JSON.parse(content);
-      const qualityApproved = await qualityControlRawQuestions({
-        apiKey,
-        rawQuestions: questionsParsed?.questions,
-        basePrompt: questionPrompt,
-        route: "free_search_progressive_elementary",
-        timeoutMs,
-        context: {
-          hasIndependentSource: !!groundingSourcesMap,
-          sourceExcerptFor: (_sourceId, q) => String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200)
-        },
-        groundingSources: groundingSourcesMap,
-        metricsSink: (metrics) => { questionQualityMetrics = metrics; },
-        generationId: id,
-        reviewFeature: "elementary_semantic_review",
-        regenerationFeature: "elementary_targeted_regeneration",
-        // Qualité > quantité (03/09/2026) : inutile de régénérer une fois
-        // `elementaryReadyThreshold` connaissances DISTINCTES réellement
-        // validées obtenues — cf. lib/qcm-quality.js pour la garantie que
-        // ceci n'assouplit jamais un critère de validation.
-        earlyStopAtAccepted: elementaryReadyThreshold,
-        // Sur-génération initiale (03/09/2026) : plusieurs candidats
-        // acceptés peuvent désormais couvrir la même connaissance (cf.
-        // initialCandidateCounts) — earlyStopCountFn compte les
-        // connaissances DISTINCTES, jamais le nombre brut de questions
-        // acceptées, pour ne jamais retarder l'arrêt à cause d'un doublon
-        // ni, à l'inverse, s'arrêter trop tôt en confondant candidats et
-        // connaissances.
-        earlyStopCountFn: (acceptedList) => selectOneQuestionPerKnowledgeTarget(acceptedList).length,
-        // Ne dépense jamais un cycle de régénération pour une connaissance
-        // qui dispose déjà d'une question acceptée (via un autre candidat
-        // du pool initial ou d'un cycle précédent) — seules les
-        // connaissances encore réellement non couvertes déclenchent une
-        // régénération ciblée.
-        filterRejectedForRegeneration: (rejected, acceptedList) => {
-          const coveredTargets = new Set(selectOneQuestionPerKnowledgeTarget(acceptedList).map((q) => normalizeFactText(q?.knowledgeTarget)));
-          return rejected.filter((entry) => !coveredTargets.has(normalizeFactText(entry.question?.knowledgeTarget)));
-        },
-        onInitialBatchAccepted: (acceptedList) => { initialBatchDistinctCount = selectOneQuestionPerKnowledgeTarget(acceptedList).length; },
-        evidenceByKnowledgeTarget
-      });
-      const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], totalInitialCandidates, totalInitialCandidates);
-      const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, admittedKnowledge);
-      const knowledgeConstrained = filterVariantsByKnowledgeConstraints(knowledgeMatched, admittedKnowledge);
-      // Consolidation (sur-génération initiale, 03/09/2026) : au plus une
-      // question par knowledgeTarget distinct, AVANT toute décision de
-      // couverture/V3.2 — le pool initial peut légitimement contenir
-      // plusieurs candidats validés pour la même connaissance, jamais
-      // compté plus d'une fois pour la disponibilité du bloc ni pour la
-      // décision V3.2 (shouldExpandGroundingSources), qui ne doit jamais
-      // transformer ce surplus en un ratio artificiellement gonflé (ex.
-      // 4/8 au lieu de 4/5, cf. rapport section 5).
-      validated = selectOneQuestionPerKnowledgeTarget(knowledgeConstrained);
-      elementaryReadyAfterInitialBatch = questionQualityMetrics?.regenerationCycles === 0 && validated.length >= elementaryReadyThreshold;
-
-      // V3.2 (fallback d'enrichissement des sources) : orchestration
-      // réutilisée TEL QUEL (audit confirmé, rapport section 10) — seule
-      // `finalAccepted` transmis à la décision (shouldExpandGroundingSources)
-      // est corrigé ici pour refléter `validated.length` déjà consolidé
-      // (connaissances DISTINCTES), jamais le nombre brut de candidats
-      // acceptés par le pipeline qualité (qui peut dépasser le nombre de
-      // connaissances elementary avec la sur-génération). missingKnowledge,
-      // côté expandGroundingAndRegenerateMissingQuestions, compare déjà
-      // `validated` (donc consolidé) aux connaissances admises — inchangé.
-      if (questionQualityMetrics && currentGrounding?.identifiedSources?.length) {
-        const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions({
-          apiKey, subject, id, instruction: levelConfig.instruction, timeoutMs,
-          grounding: currentGrounding, accepted: admittedKnowledge, validated,
-          questionQualityMetrics: { ...questionQualityMetrics, finalAccepted: validated.length },
-          evidenceByKnowledgeTarget
-        });
-        // Re-consolidation défensive : expandGroundingAndRegenerateMissingQuestions
-        // ne cible que missingKnowledge (jamais de doublon attendu), mais le
-        // bloc servi ne doit jamais dépendre de cette garantie interne pour
-        // rester à au plus une question par connaissance distincte.
-        validated = selectOneQuestionPerKnowledgeTarget(expansionOutcome.validated);
-        currentGrounding = expansionOutcome.grounding;
-      }
-    } catch (error) {
-      if (error?.status) {
-        const code = classifyAiError(error);
-        console.error(`[notion-quiz-progressive:${id}] stage=elementary_question_generation code=${code} :`, error.message);
-        return { error: generationFailure(code, "elementary_question_generation") };
-      }
-      console.warn(`[notion-quiz-progressive:${id}] JSON questions élémentaires invalide :`, error.message);
-    }
-    return {
-      validated,
-      elementaryInitialCandidateCount: totalInitialCandidates,
-      elementaryInitialDistinctTargetsValidated: initialBatchDistinctCount,
-      elementaryRegenerationCalls: questionQualityMetrics?.regenerationCycles ?? null,
-      elementaryReadyAfterInitialBatch
-    };
-  })();
-
-  const ficheOutcome = await ficheTask;
-  if (ficheOutcome.error) return ficheOutcome.error;
-  const { sourceName, sourceDetail, imageSearchQuery } = ficheOutcome.ficheResult;
-  const ficheMs = ficheOutcome.ficheMs;
-
-  const imagePromise = imageSearchQuery
-    ? searchKnowledgeImage(imageSearchQuery, { logLabel: `${id}:${sourceName}:elementary` }).catch((error) => {
-        console.warn(`[notion-quiz-progressive:${id}] recherche image élémentaire :`, error.message);
-        return null;
-      })
-    : Promise.resolve(null);
-
-  const questionsOutcome = await questionsTask;
-  if (questionsOutcome.error) return questionsOutcome.error;
-  const {
-    validated,
-    elementaryInitialCandidateCount,
-    elementaryInitialDistinctTargetsValidated,
-    elementaryRegenerationCalls,
-    elementaryReadyAfterInitialBatch
-  } = questionsOutcome;
-
-  // Qualité > quantité (03/09/2026, audit réel "Bouddhisme tibétain") : le
-  // seuil de disponibilité est `elementaryReadyThreshold` (4 en pratique),
-  // jamais `elementaryKnowledge.length` (4 OU 5 selon le curriculum) — une
-  // connaissance elementary restée sans question valide n'empêche plus le
-  // bloc de devenir prêt. Aucune tolérance EN DESSOUS de ce seuil : une
-  // question rejetée par le déterministe ou le critique (`validated` ne
-  // contient jamais que des questions réellement acceptées, cf. lib/
-  // qcm-quality.js) n'est jamais comptée ni servie pour combler l'écart.
-  if (validated.length < elementaryReadyThreshold) {
-    console.warn(`[notion-quiz-progressive:${id}] bloc élémentaire incomplet : ${validated.length}/${elementaryKnowledge.length} question(s) valide(s) (minimum requis : ${elementaryReadyThreshold}).`);
-    return generationFailure("QCM_UNUSABLE", "elementary_question_validation", {
-      reason: `${validated.length}/${elementaryKnowledge.length} question(s) élémentaire(s) valide(s) et traçable(s) (minimum requis : ${elementaryReadyThreshold}).`
+  // 2. Questions ENSUITE, à partir du paragraphe réellement rédigé
+  // ci-dessus (section 5 de la demande) — jamais avant, jamais en parallèle.
+  let validated = [];
+  let questionQualityMetrics = null;
+  let paragraphGroundingRejectedCount = 0;
+  try {
+    const formatBlock = buildQuestionFormatsPromptBlock("sourceId", totalInitialCandidates, true, undefined, grounding?.identifiedSourcesBlock || null);
+    const questionPrompt = buildQuestionsFromKnowledgePrompt("sourceId", id, admittedKnowledge, levelConfig.instruction, formatBlock, initialCandidateCounts, paragraphText);
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: questionPrompt }], {
+      model: DAILY_QUIZ_QUESTION_MODEL,
+      temperature: 0.4,
+      responseFormat: { type: "json_object" },
+      timeoutMs,
+      feature: `${questionFeaturePrefix}_question_generation`,
+      generationId: id
     });
+    const questionsParsed = JSON.parse(content);
+    // Critic IA hors chemin bloquant (section 7 de la demande) :
+    // semanticReviewEnabled:false. Une seule réparation ciblée déterministe
+    // (section 9) : maxRetries:1 — jamais de cycle critic→regen→critic.
+    const qualityApproved = await qualityControlRawQuestions({
+      apiKey,
+      rawQuestions: questionsParsed?.questions,
+      basePrompt: questionPrompt,
+      route: `progressive_${levelKey}`,
+      timeoutMs,
+      context: {
+        hasIndependentSource: !!groundingSourcesMap,
+        sourceExcerptFor: (_sourceId, q) => String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200)
+      },
+      groundingSources: groundingSourcesMap,
+      metricsSink: (metrics) => { questionQualityMetrics = metrics; },
+      generationId: id,
+      reviewFeature: `${questionFeaturePrefix}_semantic_review`,
+      regenerationFeature,
+      semanticReviewEnabled: false,
+      maxRetries: 1,
+      earlyStopAtAccepted: blockReadyThreshold,
+      earlyStopCountFn: (acceptedList) => selectOneQuestionPerKnowledgeTarget(acceptedList).length,
+      filterRejectedForRegeneration: (rejected, acceptedList) => {
+        const coveredTargets = new Set(selectOneQuestionPerKnowledgeTarget(acceptedList).map((q) => normalizeFactText(q?.knowledgeTarget)));
+        return rejected.filter((entry) => !coveredTargets.has(normalizeFactText(entry.question?.knowledgeTarget)));
+      },
+      evidenceByKnowledgeTarget
+    });
+    const structurallyValid = validateNarrativeQuizQuestions(qualityApproved, [id], totalInitialCandidates, totalInitialCandidates);
+    const knowledgeMatched = filterQuestionsToAdmittedKnowledge(structurallyValid, admittedKnowledge);
+    const knowledgeConstrained = filterVariantsByKnowledgeConstraints(knowledgeMatched, admittedKnowledge);
+    // Grounding PÉDAGOGIQUE (section 6 de la demande) : déterministe, local
+    // au paragraphe de CE bloc uniquement — jamais un second appel IA. Une
+    // question dont knowledgeTarget n'est pas mécaniquement représenté dans
+    // le paragraphe réellement rédigé est écartée ici, jamais réparée par un
+    // cycle supplémentaire (cohérent avec "une seule réparation ciblée").
+    const paragraphGrounded = knowledgeConstrained.filter((q) => {
+      const result = validateParagraphGrounding(q, paragraphText);
+      if (!result.ok) paragraphGroundingRejectedCount += 1;
+      return result.ok;
+    });
+    validated = selectOneQuestionPerKnowledgeTarget(paragraphGrounded);
+  } catch (error) {
+    if (error?.status) {
+      const code = classifyAiError(error);
+      console.error(`[${logStage}:${id}] stage=${questionFeaturePrefix}_question_generation code=${code} :`, error.message);
+      return generationFailure(code, `${questionFeaturePrefix}_question_generation`);
+    }
+    console.warn(`[${logStage}:${id}] JSON questions ${levelKey} invalide :`, error.message);
+  }
+
+  // Fallback minimal (section 14 de la demande) : 0 valide = échec propre ;
+  // 1..(seuil-1) = servi en état DÉGRADÉ (jamais bloqué, jamais une boucle
+  // supplémentaire) ; >= seuil = prêt normalement. Aucune tolérance EN
+  // DESSOUS de 1 : une question rejetée reste rejetée dans tous les cas.
+  if (!validated.length) {
+    console.warn(`[${logStage}:${id}] bloc ${levelKey} : 0 question valide sur ${levelKnowledge.length} connaissance(s).`);
+    return generationFailure("QCM_UNUSABLE", `${questionFeaturePrefix}_question_validation`, {
+      reason: `0 question ${levelKey} valide et traçable sur ${levelKnowledge.length} connaissance(s).`
+    });
+  }
+  const degraded = validated.length < blockReadyThreshold;
+  if (degraded) {
+    console.warn(`[${logStage}:${id}] bloc ${levelKey} DÉGRADÉ : ${validated.length}/${blockReadyThreshold} question(s) valide(s) minimum — servi tel quel (section 9 de la demande).`);
   }
 
   const resolvedImage = await imagePromise;
   sourceDetail.image = resolvedImage;
+  // level posé sur CHAQUE section (item 8, audit 04/09/2026 — "affichage
+  // des paragraphes corrects" : un lecteur qui n'a demandé que le niveau
+  // Élémentaire ne doit jamais voir les sections Approfondi/Expert déjà
+  // préparées en arrière-plan, découvert par test réel API — la fiche
+  // servie mélangeait tout). `level` absent = comportement legacy inchangé
+  // (aucun fiche pré-Phase-2 ne porte ce champ, jamais filtrée à tort, cf.
+  // GET .../fiche).
+  sourceDetail.sections = (sourceDetail.sections || []).map((s) => ({ ...s, level: levelKey }));
   return {
     sourceName,
     sourceDetail,
+    paragraphText,
     validated,
+    degraded,
     ficheMs,
-    elementaryInitialCandidateCount,
-    elementaryInitialDistinctTargetsValidated,
-    elementaryRegenerationCalls,
-    elementaryReadyAfterInitialBatch
+    initialCandidateCount: totalInitialCandidates,
+    regenerationCalls: questionQualityMetrics?.regenerationCycles ?? null,
+    paragraphGroundingRejectedCount
   };
 }
 
-// Orchestrateur complet Phase 1 : grounding → curriculum → bloc élémentaire →
-// persistance. Réutilise le MÊME verrou en mémoire que le chemin legacy
-// (_notionQuizMasterGenerationPromises, même clé `masterSlot`) : empêche
-// qu'une génération legacy et une génération progressive tournent en même
-// temps sur le même sujet et se marchent dessus à l'insertion.
+async function generateElementaryBlock(apiKey, subject, contextHint, id, elementaryKnowledge, grounding) {
+  return generateProgressiveLevelBlock({
+    apiKey, subject, contextHint, id, levelKey: "elementaire",
+    levelKnowledge: elementaryKnowledge, grounding,
+    ficheBuilder: buildElementaryFichePrompt,
+    questionFeaturePrefix: "elementary",
+    regenerationFeature: "elementary_targeted_regeneration",
+    logStage: "notion-quiz-progressive",
+    readyThreshold: MIN_ELEMENTARY_READY_QUESTIONS
+  });
+}
+
+// Seuil de disponibilité générique pour Deepening/Expert : même principe que
+// MIN_ELEMENTARY_READY_QUESTIONS (qualité > quantité), jamais un nombre
+// distinct inventé sans raison — cf. rapport section FALLBACKS MINIMAUX.
+const MIN_PROGRESSIVE_BLOCK_READY_QUESTIONS = MIN_ELEMENTARY_READY_QUESTIONS;
+
+// ── Bloc Approfondi (Deepening) — Phase 2, 03/09/2026 ── Même moteur que
+// generateElementaryBlock (generateProgressiveLevelBlock), avec deux
+// différences : (1) la fiche est une CONTINUATION (buildProgressiveContinuation
+// FichePrompt), qui reçoit le texte déjà écrit pour compléter sans jamais le
+// réécrire (section 12 de la demande) ; (2) le grounding pédagogique des
+// questions Deepening reste LOCAL au seul paragraphe Deepening (jamais
+// cumulé avec Elementary) — cf. rapport section APPROFONDI/EXPERT, option A.
+async function generateDeepeningBlock(apiKey, subject, contextHint, id, deepeningKnowledge, grounding, priorSectionsText) {
+  return generateProgressiveLevelBlock({
+    apiKey, subject, contextHint, id, levelKey: "avance",
+    levelKnowledge: deepeningKnowledge, grounding,
+    ficheBuilder: (s, c, k, lc, gt) => buildProgressiveContinuationFichePrompt(s, c, k, lc, gt, priorSectionsText, "Approfondi"),
+    questionFeaturePrefix: "deepening",
+    regenerationFeature: "deepening_targeted_regeneration",
+    logStage: "notion-quiz-progressive-continuation",
+    readyThreshold: MIN_PROGRESSIVE_BLOCK_READY_QUESTIONS
+  });
+}
+
+// ── Bloc Expert — Phase 2, 03/09/2026 ── Même principe que generateDeepeningBlock,
+// `priorSectionsText` couvrant alors Elementary + Deepening déjà rédigés (le
+// bloc Expert complète les deux précédents, section 13 de la demande).
+async function generateExpertBlock(apiKey, subject, contextHint, id, expertKnowledge, grounding, priorSectionsText) {
+  return generateProgressiveLevelBlock({
+    apiKey, subject, contextHint, id, levelKey: "expert",
+    levelKnowledge: expertKnowledge, grounding,
+    ficheBuilder: (s, c, k, lc, gt) => buildProgressiveContinuationFichePrompt(s, c, k, lc, gt, priorSectionsText, "Expert"),
+    questionFeaturePrefix: "expert",
+    regenerationFeature: "expert_targeted_regeneration",
+    logStage: "notion-quiz-progressive-continuation",
+    readyThreshold: MIN_PROGRESSIVE_BLOCK_READY_QUESTIONS
+  });
+}
+
+// ── Critic sémantique en SHADOW-MODE (V2, 03/09/2026, section 7 de la
+// demande) ── Ne bloque JAMAIS ELEMENTARY_READY/DEEPENING_READY/EXPERT_READY
+// : appelée en fire-and-forget APRÈS persistance du bloc (jamais awaitée par
+// l'appelant), désactivable indépendamment (QCM_PROGRESSIVE_SHADOW_CRITIC_
+// ENABLED), et ne modifie JAMAIS les questions déjà servies — seul son
+// verdict est logué, pour mesurer ce que le critic aurait rejeté si le
+// pipeline V2 l'avait gardé bloquant (notamment CRITIC_CORRECT_INDEX_
+// MISMATCH, cf. rapport section CRITIC IA). Réutilise buildSemanticReviewPrompt/
+// parseSemanticReviews de lib/qcm-quality.js TELS QUELS — jamais un second
+// prompt/parseur dupliqué.
+function runShadowSemanticReview({ apiKey, generationId, levelKey, questions, hasIndependentSource, reviewFeature }) {
+  if (!QCM_PROGRESSIVE_SHADOW_CRITIC_ENABLED || !Array.isArray(questions) || !questions.length) return;
+  (async () => {
+    const startedAt = Date.now();
+    const entries = questions.map((q, index) => ({
+      id: `shadow-${index + 1}`,
+      sourceId: q?.sourceId || q?.sourceDebateId || null,
+      knowledgeTarget: q?.knowledgeTarget || null,
+      sourceExcerpt: String(q?.supporting_claim || q?.knowledgeTarget || "").slice(0, 1200),
+      ...q
+    }));
+    const context = { hasIndependentSource };
+    const content = await _callOpenAI(apiKey, [{ role: "user", content: buildSemanticReviewPrompt(entries, context) }], {
+      model: DAILY_QUIZ_CRITIC_MODEL,
+      temperature: 0.1,
+      responseFormat: { type: "json_object" },
+      timeoutMs: 90_000,
+      feature: reviewFeature,
+      generationId
+    });
+    const parsed = parseSemanticReviews(JSON.parse(content), entries.map((e) => e.id));
+    if (!parsed.valid) {
+      console.warn(`[qcm-shadow-critic:${generationId}] level=${levelKey} réponse critic invalide (${parsed.errorCode}).`);
+      return;
+    }
+    const rejected = parsed.reviews.filter((r) => r.verdict !== "accept");
+    const reasonCounts = {};
+    for (const r of rejected) for (const code of r.reasonCodes) reasonCounts[code] = (reasonCounts[code] || 0) + 1;
+    console.info("[qcm-shadow-critic]", JSON.stringify({
+      generationId, levelKey, questionCount: questions.length,
+      rejectedCount: rejected.length, reasonCounts, latencyMs: Date.now() - startedAt
+    }));
+  })().catch((error) => {
+    console.warn(`[qcm-shadow-critic:${generationId}] échec (best-effort, jamais bloquant) :`, error.message);
+  });
+}
+
+// Orchestrateur complet du bloc Élémentaire : grounding → curriculum → bloc
+// élémentaire → persistance. Réutilise le MÊME verrou en mémoire que le
+// chemin legacy (_notionQuizMasterGenerationPromises, même clé
+// `masterSlot`) : empêche qu'une génération legacy et une génération
+// progressive tournent en même temps sur le même sujet et se marchent
+// dessus à l'insertion.
 async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userId) {
   const pending = _notionQuizMasterGenerationPromises.get(masterSlot);
   if (pending) return pending;
@@ -18926,8 +19037,9 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
     const curriculumResult = await resolveProgressiveCurriculum(apiKey, topic, null, id, grounding);
     if (curriculumResult.error) return curriculumResult;
     const {
-      curriculum, curriculumMs, elementaryVerificationCount, deferredVerificationCount,
-      elementaryEvidenceCandidates, elementaryEvidenceValid, elementaryEvidenceRejected, elementaryEvidenceRejectionReasons
+      curriculum, curriculumMs, elementaryVerificationCount, elementaryCurriculumRepairAttempted, deferredVerificationCount,
+      elementaryEvidenceCandidates, elementaryEvidenceValid, elementaryEvidenceRejected, elementaryEvidenceRejectionReasons,
+      deferredEvidenceCandidates, deferredEvidenceValid, deferredEvidenceRejected, deferredEvidenceRejectionReasons
     } = curriculumResult;
 
     const elementaryKnowledge = selectCurriculumLevel(curriculum, "elementary");
@@ -18937,11 +19049,11 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       sourceName,
       sourceDetail,
       validated,
+      degraded,
       ficheMs,
-      elementaryInitialCandidateCount,
-      elementaryInitialDistinctTargetsValidated,
-      elementaryRegenerationCalls,
-      elementaryReadyAfterInitialBatch
+      initialCandidateCount: elementaryInitialCandidateCount,
+      regenerationCalls: elementaryRegenerationCalls,
+      paragraphGroundingRejectedCount
     } = blockResult;
 
     // pedagogicalRank = order du curriculum (dans [1, taille du curriculum],
@@ -18968,6 +19080,16 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
     const expertKnowledgeCount = curriculum.filter((k) => k.level === "expert").length;
     const elementaryReadyThreshold = Math.min(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge.length);
     const timeToElementaryReadyMs = Date.now() - groundingStartedAt;
+    // elementary_ai_call_count (Phase 2.1, section 1/10 de la demande —
+    // "démontre par logs qu'un cas nominal Elementary utilise exactement 3
+    // appels IA avant READY") : compte RÉEL des appels IA effectués sur CE
+    // chemin, calculé à partir des mêmes signaux déjà loggés individuellement
+    // (jamais une valeur supposée) — 1 (curriculum_generation, TOUJOURS) +
+    // [1 si elementaryCurriculumRepairAttempted] + 1 (elementary_fiche_generation,
+    // TOUJOURS) + 1 (elementary_question_generation, TOUJOURS) + [1 si une
+    // réparation ciblée des questions a eu lieu, elementaryRegenerationCalls>0].
+    // Cas nominal (aucune réparation nulle part) = exactement 3.
+    const elementaryAiCallCount = 1 + (elementaryCurriculumRepairAttempted ? 1 : 0) + 1 + 1 + (elementaryRegenerationCalls > 0 ? 1 : 0);
     console.info("[qcm-progressive-timing]", JSON.stringify({
       generationId: id,
       route: "free_search_progressive",
@@ -18979,26 +19101,45 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       elementary_target_count: elementaryKnowledge.length,
       elementary_validated_count: validated.length,
       elementary_ready_threshold: elementaryReadyThreshold,
+      elementary_ai_call_count: elementaryAiCallCount,
+      elementary_curriculum_repair_attempted: elementaryCurriculumRepairAttempted,
       // elementary_verification_count/deferred_verification_count (latence,
-      // 03/09/2026, audit réel "Les oiseaux migrateurs") : combien de
-      // connaissances ont réellement été passées par knowledge_verification
-      // avant Block A (toujours = curriculum_size au total, jamais plus) —
-      // permet de vérifier en production que seules les elementary le sont.
+      // 03/09/2026, audit réel "Les oiseaux migrateurs") : depuis Phase 2.1,
+      // "verification" désigne le gate evidence DÉTERMINISTE (plus aucun
+      // appel IA knowledge_verification) — combien de connaissances ont
+      // réellement été gatées avant Block A (toujours = curriculum_size au
+      // total, jamais plus).
       elementary_verification_count: elementaryVerificationCount,
       deferred_verification_count: deferredVerificationCount,
       deepening_count: deepeningKnowledgeCount,
       expert_count: expertKnowledgeCount,
-      // elementary_initial_candidate_count/elementary_initial_distinct_targets_
-      // validated/elementary_regeneration_calls/elementary_ready_after_initial_
-      // batch (sur-génération initiale, 03/09/2026, audit latence réel "Empire
-      // carolingien") : permettent de vérifier en production qu'un pool initial
-      // plus large réduit réellement le besoin de cycles de régénération
-      // séquentiels — cf. server.js generateElementaryBlock pour le détail de
-      // chaque champ.
+      // deferred_evidence_* (Phase 2.1, section 2/10 de la demande) : mesure,
+      // dès le premier appel d'extraction, le taux de connaissances
+      // Deepening/Expert réellement sourcées (source_id+evidence_text
+      // valides) — indicateur direct du succès du renforcement de
+      // buildCurriculumPrompt + du correctif de préservation des champs.
+      deferred_evidence_candidates: deferredEvidenceCandidates,
+      deferred_evidence_valid: deferredEvidenceValid,
+      deferred_evidence_rejected: deferredEvidenceRejected,
+      deferred_evidence_rejection_reasons: deferredEvidenceRejectionReasons,
+      // elementary_initial_candidate_count/elementary_regeneration_calls
+      // (sur-génération initiale, 03/09/2026, audit latence réel "Empire
+      // carolingien") : permettent de vérifier en production qu'un pool
+      // initial plus large réduit réellement le besoin de la réparation
+      // ciblée (au plus 1 désormais, cf. rapport section REGENERATIONS) —
+      // cf. server.js generateProgressiveLevelBlock pour le détail.
       elementary_initial_candidate_count: elementaryInitialCandidateCount,
-      elementary_initial_distinct_targets_validated: elementaryInitialDistinctTargetsValidated,
       elementary_regeneration_calls: elementaryRegenerationCalls,
-      elementary_ready_after_initial_batch: elementaryReadyAfterInitialBatch,
+      // elementary_degraded/paragraph_grounding_rejected_count (V2, section
+      // 6/9 de la demande) : elementary_degraded=true signifie que le bloc a
+      // été servi avec MOINS que elementary_ready_threshold questions (1 à
+      // 3) plutôt qu'échouer — jamais un critère de validation assoupli,
+      // seulement moins de connaissances couvertes. paragraph_grounding_
+      // rejected_count compte les questions écartées car non représentées
+      // dans le paragraphe réellement rédigé (contrôle déterministe local,
+      // jamais un second appel IA).
+      elementary_degraded: degraded,
+      paragraph_grounding_rejected_count: paragraphGroundingRejectedCount,
       // elementary_evidence_candidates/valid/rejected/rejection_reasons (V1
       // evidence grounding, 03/09/2026, section 11 de la demande) : mesurent,
       // pour un run comparable, la fréquence à laquelle un item de curriculum
@@ -19035,30 +19176,42 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
     // connaissance elementary restée sans question (cas 4/5) reste donc
     // visible dans ce curriculum, disponible pour une réparation future.
     // `progressive_status: "elementary_ready"` est un état INTERMÉDIAIRE,
-    // jamais un marqueur de fin de génération : rien dans ce chantier ne
-    // referme la possibilité de continuer en arrière-plan vers "deepening"/
-    // "expert" puis un master complet (`progressive_status='ready'`, déjà
-    // supporté par progressiveEligibilityMinimum, lib/question-formats.js) —
-    // cette continuation reste non implémentée ici (Phase 2), volontairement.
+    // jamais un marqueur de fin de génération : la suite (Deepening puis
+    // Expert, cf. continueProgressiveGeneration plus bas) est déclenchée par
+    // l'APPELANT de cette fonction (route HTTP), en arrière-plan, une fois
+    // la réponse envoyée — jamais ici, pour garder cette fonction focalisée
+    // sur le seul bloc Élémentaire.
     // grounding_sources (chantier "persister les sources factuelles",
     // 03/09/2026, audit réel "Empire carolingien") : provenance PUBLIQUE
     // minimale ({sourceId, domain, url}, cf. buildPublicGroundingSources)
-    // dérivée du grounding INITIAL uniquement (`grounding`, jamais
-    // `currentGrounding` interne à generateElementaryBlock post-V3.2) —
-    // même précédent que sourceDetail.sources côté master legacy
-    // (generateNotionLevelQuiz) : l'enrichissement V3.2 ne concerne que les
-    // questions manquantes, jamais la provenance affichée. Liste globale
-    // dédupliquée par URL, jamais répétée par question (cf. rapport).
+    // dérivée du grounding INITIAL (`grounding`) — V3.2 n'existant plus dans
+    // ce chemin (section V3.2 du rapport), c'est désormais aussi la seule
+    // provenance possible, jamais un enrichissement ultérieur à fusionner.
     const publicGroundingSources = buildPublicGroundingSources(grounding?.identifiedSources);
     const progressiveExtra = { curriculum, progressive_status: "elementary_ready", grounding_sources: publicGroundingSources };
+    // grounding_full envisagée puis ABANDONNÉE (Phase 2.1, 03/09/2026, audit
+    // migration du 04/09/2026) : nécessaire sous l'ancien design de
+    // continuation (qui re-vérifiait les connaissances Deepening/Expert DÉJÀ
+    // evidence-gatées contre un grounding re-résolu, potentiellement
+    // différent). Depuis que resolveProgressiveCurriculum evidence-gate TOUS
+    // les niveaux immédiatement (cf. plus haut) et que continueProgressiveGeneration
+    // ne re-gate plus jamais un item déjà vérifié (paramètre `preAccepted`),
+    // une connaissance déjà admise n'est plus jamais réévaluée contre un
+    // grounding différent — persister le grounding complet n'apporte donc
+    // plus qu'une économie de latence marginale (éviter une recherche Brave
+    // par continuation), jamais une garantie de correction. Simplifié :
+    // aucune colonne supplémentaire, aucune migration requise.
     const { error: insertError } = await supabase.from("daily_quiz").insert({
-      quiz_date: quizDate,
-      slot: masterSlot,
-      questions,
-      source_debate_ids: [],
-      ...progressiveExtra
+      quiz_date: quizDate, slot: masterSlot, questions, source_debate_ids: [], ...progressiveExtra
     });
-    if (!insertError) return { questions, quizDate, slot: masterSlot, curriculum, progressiveStatus: "elementary_ready" };
+    // Shadow critic (section 7 de la demande) : fire-and-forget, APRÈS
+    // persistance réussie, jamais awaité — ne retarde jamais ELEMENTARY_READY.
+    runShadowSemanticReview({
+      apiKey, generationId: id, levelKey: "elementaire", questions: validated,
+      hasIndependentSource: !!grounding?.identifiedSources?.length,
+      reviewFeature: "elementary_semantic_review_shadow"
+    });
+    if (!insertError) return { questions, quizDate, slot: masterSlot, curriculum, progressiveStatus: "elementary_ready", degraded };
     if (insertError.code !== "23505") throw new Error(insertError.message);
     // Course avec un autre worker (legacy OU progressif) ayant démarré une
     // génération sur le même sujet entre-temps.
@@ -19070,6 +19223,243 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
   } finally {
     if (_notionQuizMasterGenerationPromises.get(masterSlot) === generation) {
       _notionQuizMasterGenerationPromises.delete(masterSlot);
+    }
+  }
+}
+
+// ── Continuation Phase 2 (03/09/2026, "terminer le pipeline progressif") ──
+// Fait progresser un master déjà `elementary_ready` (ou `deepening_ready`)
+// vers le(s) niveau(x) suivant(s), jusqu'à `targetLevel` inclus — jamais audelà,
+// jamais en dessous de ce qui est déjà atteint. Verrou en mémoire DÉDIÉ
+// (`_notionQuizContinuationPromises`, jamais le même Map que la génération
+// initiale) : une continuation en arrière-plan (déclenchée après avoir servi
+// Élémentaire) et une continuation synchrone (déclenchée par une requête
+// utilisateur "Avancé"/"Expert" pendant que la première tourne encore)
+// attendent la MÊME promesse plutôt que de dupliquer le travail.
+// Principe non négociable de la demande (section 1) : le parcours complet
+// est TOUJOURS préparé jusqu'à Expert — cette fonction est donc appelée à la
+// fois en fire-and-forget (niveau demandé = Élémentaire, on complète quand
+// même jusqu'à Expert derrière) et en attente explicite (niveau demandé =
+// Avancé/Expert, cf. POST .../custom/progressive).
+const _notionQuizContinuationPromises = new Map();
+const PROGRESSIVE_LEVEL_ORDER = ["elementaire", "avance", "expert"];
+const CURRICULUM_LEVEL_FOR_QUIZ_LEVEL = { elementaire: "elementary", avance: "deepening", expert: "expert" };
+const PROGRESSIVE_STATUS_FOR_QUIZ_LEVEL = { elementaire: "elementary_ready", avance: "deepening_ready", expert: "ready" };
+const PROGRESSIVE_STATUS_RANK = { elementary_ready: 0, deepening_ready: 1, ready: 2 };
+
+function progressiveLevelRank(level) {
+  return PROGRESSIVE_LEVEL_ORDER.indexOf(level);
+}
+
+async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel) {
+  const targetRank = progressiveLevelRank(targetLevel);
+  if (targetRank <= 0) return null; // "elementaire" seul : rien à continuer ici.
+
+  const pending = _notionQuizContinuationPromises.get(masterSlot);
+  if (pending) return pending;
+
+  const continuation = (async () => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return generationFailure("AI_CONFIG_MISSING", "configuration");
+
+    const { data: row, error: rowError } = await supabase
+      .from("daily_quiz")
+      .select("quiz_date, questions, curriculum, progressive_status")
+      .eq("slot", masterSlot)
+      .order("quiz_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (rowError) throw new Error(rowError.message);
+    // Rangée introuvable ou legacy (progressive_status NULL = master complet
+    // déjà, ou ligne non progressive) : rien à continuer ici, jamais une
+    // tentative de "réparer" un état que cette fonction ne connaît pas.
+    if (!row || !row.progressive_status || !Array.isArray(row.curriculum)) return null;
+
+    let currentQuestions = row.questions || [];
+    let currentCurriculum = row.curriculum;
+    let currentStatus = row.progressive_status;
+    const quizDate = row.quiz_date;
+    const currentRank = PROGRESSIVE_STATUS_RANK[currentStatus] ?? -1;
+    if (currentRank >= targetRank) {
+      return { questions: currentQuestions, quizDate, slot: masterSlot, curriculum: currentCurriculum, progressiveStatus: currentStatus };
+    }
+
+    // Re-résolution du grounding (Phase 2.1, audit migration du 04/09/2026) :
+    // JAMAIS un problème de correction — les connaissances Deepening/Expert
+    // déjà admises (curriculum[].verified) l'ont été contre le grounding
+    // D'ORIGINE pendant resolveProgressiveCurriculum et ne sont plus jamais
+    // re-gatées ici (cf. `preAccepted` dans evidenceGateAndRepairCurriculumSubset,
+    // plus bas) — une résolution FRAÎCHE ne sert plus qu'à (a) fournir un
+    // groundingText pour la rédaction de la fiche de continuation et (b),
+    // le cas échéant, gater les ÉVENTUELS ajouts de réparation, contre
+    // LEURS PROPRES sources fraîches (toujours cohérent avec lui-même,
+    // jamais un mélange). Coût accepté car cette continuation tourne en
+    // arrière-plan, jamais sur le chemin critique Élémentaire.
+    const groundingStartedAt = Date.now();
+    const grounding = await resolveWebSearchGrounding(apiKey, topic, id);
+    const groundingMs = Date.now() - groundingStartedAt;
+
+    let priorSectionsText = flattenFicheSectionsText(currentQuestions[0]?.sourceDetail?.sections);
+    const authoritativeSourceName = currentQuestions[0]?.sourceName || topic;
+
+    for (const quizLevel of PROGRESSIVE_LEVEL_ORDER.slice(currentRank + 1, targetRank + 1)) {
+      const curriculumLevelKey = CURRICULUM_LEVEL_FOR_QUIZ_LEVEL[quizLevel];
+      const featurePrefix = quizLevel === "avance" ? "deepening" : "expert";
+      const rawSubset = selectCurriculumLevel(currentCurriculum, curriculumLevelKey);
+      if (!rawSubset.length) {
+        console.warn(`[qcm-progressive-continuation:${id}] niveau ${quizLevel} : curriculum vide, arrêt propre de la continuation.`);
+        break;
+      }
+
+      const stageStartedAt = Date.now();
+      const globalMaxOrder = currentCurriculum.reduce((max, k) => Math.max(max, Number(k.order) || 0), 0);
+      // preAccepted = les items DÉJÀ evidence-gated avec succès pendant
+      // resolveProgressiveCurriculum, contre le grounding D'ORIGINE (Phase
+      // 2.1, section 2 de la demande) — utilisés TELS QUELS, jamais re-gatés
+      // ici contre `grounding` (qui peut être une résolution FRAÎCHE, cf.
+      // plus haut). Seul le manque éventuel (rawSubset.length - déjà
+      // vérifiés) déclenche AU PLUS UNE réparation, gatée contre CE
+      // grounding (cohérent avec lui-même, jamais un mélange).
+      const alreadyVerified = rawSubset.filter((k) => k.verified);
+      const { accepted: verifiedSubset, repairAttempted, evidenceCandidates, evidenceValid, evidenceRejectionReasons } = await evidenceGateAndRepairCurriculumSubset({
+        apiKey, subject: topic, contextHint: null, id, grounding,
+        initialPool: [],
+        preAccepted: alreadyVerified,
+        targetSize: rawSubset.length,
+        repairFeature: `curriculum_repair_${featurePrefix}`,
+        globalMaxOrder
+      });
+
+      // Fallback minimal (section 14D de la demande) : aucune connaissance
+      // exploitable pour ce niveau après vérification/réparation bornée →
+      // échec propre de CE niveau, jamais de boucle — le niveau précédent
+      // reste servi tel quel (ex. Deepening échoue, Élémentaire reste
+      // disponible et EXPERT N'EST PAS TENTÉ).
+      if (!verifiedSubset.length) {
+        console.warn(`[qcm-progressive-continuation:${id}] niveau ${quizLevel} : 0 connaissance vérifiée sur ${rawSubset.length}, arrêt propre de la continuation.`);
+        break;
+      }
+
+      // Fusion dans le curriculum courant : connaissances vérifiées avec
+      // leur `order` d'origine préservé, marquées verified:true, ajoutées à
+      // la suite (order au-delà de globalMaxOrder pour les ajouts de
+      // réparation, cf. evidenceGateAndRepairCurriculumSubset) — jamais de
+      // renumérotation qui romprait l'appariement pedagogicalRank déjà
+      // utilisé par les niveaux déjà servis. Les items ORIGINAUX de ce
+      // niveau qui n'ont PAS survécu au gate evidence/à la réparation (rejetés,
+      // jamais remplacés par un ajout au même `order`) sont retirés ici,
+      // jamais laissés en l'état `verified:false` indéfiniment : sans ce
+      // retrait, ils gonfleraient artificiellement le compte de connaissances
+      // de ce niveau côté progressiveEligibilityMinimum (lib/question-formats.js,
+      // qui compte par `level` sans jamais filtrer sur `verified`), rendant un
+      // master progressif complet à tort jugé insuffisant lors d'une future
+      // vérification d'éligibilité.
+      // `level: curriculumLevelKey` posé EXPLICITEMENT sur chaque item fusionné
+      // (mêmes items d'origine ET ajouts de réparation) : les ajouts produits
+      // par evidenceGateAndRepairCurriculumSubset (cf. parseCurriculumRepairAdditions,
+      // lib/notion-quiz-curriculum.js) ne portent JAMAIS de champ `level` —
+      // exactement comme pour le bloc Elementary (cf. resolveProgressiveCurriculum,
+      // `elementaryFinal = ....map(item => ({...item, level:"elementary",...}))`),
+      // jamais laissé absent : un item de réparation sans `level` deviendrait
+      // invisible à tout comptage par niveau (progressiveEligibilityMinimum),
+      // au bug réel constaté lors du test "photosynthèse" (03/09/2026).
+      const verifiedByOrder = new Map(verifiedSubset.map((k) => [k.order, k]));
+      const existingOrders = new Set(currentCurriculum.map((k) => k.order));
+      currentCurriculum = currentCurriculum
+        .filter((item) => item.level !== curriculumLevelKey || verifiedByOrder.has(item.order))
+        .map((item) => (verifiedByOrder.has(item.order) ? { ...verifiedByOrder.get(item.order), level: curriculumLevelKey, verified: true } : item))
+        .concat(verifiedSubset.filter((k) => !existingOrders.has(k.order)).map((k) => ({ ...k, level: curriculumLevelKey, verified: true })));
+
+      const blockResult = quizLevel === "avance"
+        ? await generateDeepeningBlock(apiKey, topic, null, id, verifiedSubset, grounding, priorSectionsText)
+        : await generateExpertBlock(apiKey, topic, null, id, verifiedSubset, grounding, priorSectionsText);
+
+      // Fallback minimal (section 14C) : bloc de questions inexploitable
+      // pour ce niveau → arrêt propre, le niveau précédent reste servi.
+      if (blockResult.error) {
+        console.warn(`[qcm-progressive-continuation:${id}] niveau ${quizLevel} : génération questions échouée (${blockResult.code || "?"}), arrêt propre de la continuation.`);
+        break;
+      }
+
+      const rankedCurriculum = currentCurriculum.map((k) => ({ fact: k.knowledgeTarget, pedagogicalRank: k.order }));
+      const rankedNewQuestions = attachPedagogicalRanks(blockResult.validated, rankedCurriculum);
+      const mergedSections = [
+        ...(currentQuestions[0]?.sourceDetail?.sections || []),
+        ...(blockResult.sourceDetail?.sections || [])
+      ];
+      // sourceDetail FUSIONNÉ (section 8 : "la fiche finale = concaténation
+      // logique des blocs") : meta/image proviennent TOUJOURS du bloc le
+      // plus ancien déjà servi (jamais réécrits par un niveau ultérieur, cf.
+      // buildProgressiveContinuationFichePrompt qui renvoie meta:null et
+      // n'a jamais la responsabilité de l'image) — seul `sections` grandit.
+      const mergedSourceDetail = {
+        ...(currentQuestions[0]?.sourceDetail || {}),
+        sections: mergedSections
+      };
+      const newQuestions = rankedNewQuestions.map((q, index) => ({
+        id: `notion:custom:${id}-${quizLevel}-q${index + 1}`,
+        ...q,
+        sourceType: "custom",
+        sourceScope: null,
+        sourceName: authoritativeSourceName,
+        sourceDetail: mergedSourceDetail,
+        sourceThemes: [],
+        sourcePlacement: null,
+        level: quizLevel,
+        sourceDebateId: id,
+        searchTopic: topic
+      }));
+      // sourceDetail réécrit aussi sur les questions DÉJÀ persistées (jamais
+      // uniquement les nouvelles) : sans cela, la fiche lue depuis
+      // `questions[0]` (toujours une question Élémentaire, cf. GET
+      // .../fiche) ne montrerait jamais les sections Approfondi/Expert.
+      const allQuestions = [
+        ...currentQuestions.map((q) => ({ ...q, sourceDetail: mergedSourceDetail })),
+        ...newQuestions
+      ];
+
+      const newStatus = PROGRESSIVE_STATUS_FOR_QUIZ_LEVEL[quizLevel];
+      const { error: updateError } = await supabase
+        .from("daily_quiz")
+        .update({ questions: allQuestions, curriculum: currentCurriculum, progressive_status: newStatus })
+        .eq("slot", masterSlot)
+        .eq("quiz_date", quizDate);
+      if (updateError) {
+        console.error(`[qcm-progressive-continuation:${id}] niveau ${quizLevel} : échec persistance (${updateError.message}), arrêt propre de la continuation.`);
+        break;
+      }
+
+      runShadowSemanticReview({
+        apiKey, generationId: id, levelKey: quizLevel, questions: blockResult.validated,
+        hasIndependentSource: !!grounding?.identifiedSources?.length,
+        reviewFeature: `${featurePrefix}_semantic_review_shadow`
+      });
+
+      console.info("[qcm-progressive-continuation]", JSON.stringify({
+        generationId: id, level: quizLevel, route: "progressive_continuation",
+        grounding_ms: groundingMs, stage_ms: Date.now() - stageStartedAt,
+        curriculum_target_count: rawSubset.length, curriculum_already_verified_count: alreadyVerified.length,
+        curriculum_repair_attempted: repairAttempted, curriculum_final_count: verifiedSubset.length,
+        fiche_ms: blockResult.ficheMs, validated_count: blockResult.validated.length,
+        degraded: blockResult.degraded, regeneration_calls: blockResult.regenerationCalls,
+        paragraph_grounding_rejected_count: blockResult.paragraphGroundingRejectedCount,
+        evidence_candidates: evidenceCandidates, evidence_valid: evidenceValid, evidence_rejection_reasons: evidenceRejectionReasons
+      }));
+
+      currentQuestions = allQuestions;
+      currentStatus = newStatus;
+      priorSectionsText = flattenFicheSectionsText(mergedSections);
+    }
+
+    return { questions: currentQuestions, quizDate, slot: masterSlot, curriculum: currentCurriculum, progressiveStatus: currentStatus };
+  })();
+
+  _notionQuizContinuationPromises.set(masterSlot, continuation);
+  try {
+    return await continuation;
+  } finally {
+    if (_notionQuizContinuationPromises.get(masterSlot) === continuation) {
+      _notionQuizContinuationPromises.delete(masterSlot);
     }
   }
 }
@@ -19454,17 +19844,20 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
   }
 });
 
-// ── Génération progressive — PHASE 1 (02/09/2026) ──────────────────────────
-// Route ENTIÈREMENT NOUVELLE et distincte de POST .../custom ci-dessus, qui
-// reste intégralement inchangée : aucun trafic existant n'est routé ici tant
-// que le frontend n'appelle pas explicitement cette URL. Sert UNIQUEMENT le
-// bloc élémentaire (5 connaissances/5 questions) — jamais "deepening"/
-// "expert" (Phase 2, non implémentée). Volontairement plus simple que
-// POST .../custom : pas de mutualisation multi-niveaux ni de déduplication
-// de niveau 2 (le progressif ne connaît, pour l'instant, qu'un seul niveau),
-// pas de déclenchement Noès ni de notification push (le cas d'usage validé
-// ici est le premier bloc pendant que l'utilisateur reste sur place — cf.
-// rapport, section Phase 2 pour l'extension).
+// ── Génération progressive — PHASE 1+2 (02-03/09/2026) ─────────────────────
+// Route distincte de POST .../custom ci-dessus, qui reste intégralement
+// inchangée : le legacy continue de servir les imports, Éclairages/Histoire,
+// et sert de filet pour tout appelant qui n'utiliserait pas encore cette
+// route. Sert désormais les 3 niveaux (Élémentaire/Avancé/Expert, cf.
+// `level` dans le corps de la requête, défaut "elementaire") : le backend
+// prépare TOUJOURS Élémentaire en premier (chemin critique inchangé, 3
+// appels IA nominaux, cf. rapport), puis, si le niveau demandé va plus loin,
+// attend (dans CETTE requête, comme le fait déjà .../custom pour le master
+// legacy — même tolérance frontend aux requêtes longues) la continuation
+// jusqu'à ce niveau via continueProgressiveGeneration. Quel que soit le
+// niveau demandé, le parcours complet continue ensuite en arrière-plan
+// jusqu'à Expert (section 1 de la demande, non négociable), sans jamais
+// bloquer cette réponse HTTP au-delà du niveau réellement demandé.
 app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30), async (req, res) => {
   let masterSlotForFailureTracking = null;
   try {
@@ -19475,6 +19868,11 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
     if (topic.length < 3 || topic.length > 150) {
       return res.status(400).json({ ok: false, error: "Sujet invalide (3 à 150 caractères)." });
     }
+    // Niveau réellement demandé (défaut "elementaire", comportement Phase 1
+    // inchangé si absent) — resolveNotionQuizLevel retombe sur `level:null`
+    // pour toute valeur inconnue, jamais interprété comme "elementaire" par
+    // erreur silencieuse.
+    const requestedLevel = resolveNotionQuizLevel(req.body?.level).level || "elementaire";
 
     const id = normalizeCustomTopicKey(topic);
     const masterSlot = buildCustomTopicMasterSlot(id);
@@ -19487,7 +19885,10 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
     // génération pour la même chose. `isMasterEligibleQuiz` avec le contexte
     // progressif accepte aussi bien un master legacy complet
     // (progressive_status NULL, >= MIN_MASTER_QUESTIONS) qu'un bloc
-    // "elementary_ready" (>= 5) — cf. lib/question-formats.js.
+    // progressif déjà valide à son propre niveau — cf. lib/question-formats.js.
+    // Ne dit RIEN, en revanche, sur le niveau demandé ICI : c'est la
+    // continuation ci-dessous qui, le cas échéant, complète jusqu'au niveau
+    // réellement demandé.
     const { data: existingRows, error: existingError } = await supabase
       .from("daily_quiz")
       .select("quiz_date, questions, curriculum, progressive_status")
@@ -19523,24 +19924,63 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
       progressiveStatus = result.progressiveStatus || null;
     }
 
+    // Continuation SYNCHRONE jusqu'au niveau réellement demandé (section 15
+    // de la demande : "l'utilisateur choisit Avancé/Expert → le frontend
+    // attend ce niveau"). No-op immédiat si `progressiveStatus` est déjà
+    // NULL (master legacy complet, reused ci-dessus) ou couvre déjà ce
+    // niveau — cf. continueProgressiveGeneration.
+    if (progressiveStatus && progressiveLevelRank(requestedLevel) > (PROGRESSIVE_STATUS_RANK[progressiveStatus] ?? -1)) {
+      const continued = await continueProgressiveGeneration(masterSlot, topic, id, user.id, requestedLevel);
+      if (continued) {
+        questions = continued.questions;
+        quizDate = continued.quizDate;
+        curriculum = continued.curriculum;
+        progressiveStatus = continued.progressiveStatus;
+      }
+    }
+
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
       .upsert(
-        { user_id: user.id, quiz_date: quizDate, slot: masterSlot, requested_level: "elementaire" },
+        { user_id: user.id, quiz_date: quizDate, slot: masterSlot, requested_level: requestedLevel },
         { onConflict: "user_id,quiz_date,slot" }
       );
     if (linkError) throw new Error(linkError.message);
+
+    // Sous-ensemble réellement servi pour ce niveau (même mécanisme que le
+    // master legacy, cf. POST .../custom) : `questions` en base porte
+    // toujours le corpus complet atteint jusqu'ici, jamais tronqué.
+    const servedQuestions = selectQuestionsForRequestedLevel(questions, NOTION_QUIZ_LEVELS[requestedLevel]?.target);
+    const achievedRank = progressiveStatus ? (PROGRESSIVE_STATUS_RANK[progressiveStatus] ?? -1) : Infinity; // NULL = master legacy complet
+    const levelFullyAchieved = achievedRank === Infinity || achievedRank >= progressiveLevelRank(requestedLevel);
 
     res.json({
       ok: true,
       slot: masterSlot,
       quizDate,
-      label: questions[0]?.sourceName || null,
-      questionCount: questions.length,
+      label: servedQuestions[0]?.sourceName || questions[0]?.sourceName || null,
+      questionCount: servedQuestions.length,
       curriculumCount: Array.isArray(curriculum) ? curriculum.length : 0,
       progressiveStatus,
+      level: requestedLevel,
+      // levelFullyAchieved (section 14 de la demande, fallback gracieux) :
+      // false si la continuation vers `requestedLevel` a échoué en cours de
+      // route (0 connaissance vérifiée, échec de génération...) — le client
+      // reçoit alors quand même le meilleur niveau atteint plutôt qu'une
+      // erreur, cf. continueProgressiveGeneration.
+      levelFullyAchieved,
       reused
     });
+
+    // Le parcours complet est TOUJOURS préparé jusqu'à Expert (section 1,
+    // non négociable) — en arrière-plan, jamais awaité, jamais avant la
+    // réponse ci-dessus. No-op immédiat si Expert est déjà atteint (cf.
+    // continueProgressiveGeneration, `targetRank<=currentRank`).
+    if (progressiveStatus && progressiveStatus !== "ready") {
+      continueProgressiveGeneration(masterSlot, topic, id, user.id, "expert").catch((error) => {
+        console.error(`[notion-quizzes:progressive-continuation:${id}] échec arrière-plan :`, error.message);
+      });
+    }
   } catch (error) {
     const publicError = publicGenerationError("STORAGE_TEMPORARY");
     console.error("[notion-quizzes:progressive] création :", error.message);
@@ -20243,6 +20683,23 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       ? await fetchCultureGeneraleNotionLinks(first.sourceType, String(first.sourceDebateId), linkOwnerUserId)
       : [];
     const primaryTheme = getPrimaryNotionQuizTheme(first);
+    // Sections filtrées au niveau réellement servi (Phase 2.1, item 8, audit
+    // réel du 04/09/2026 — "affichage des paragraphes corrects") : un lecteur
+    // Élémentaire ne doit jamais voir les sections Approfondi/Expert déjà
+    // préparées en arrière-plan (découvert par test réel : la fiche
+    // Élémentaire d'un master "ready" affichait les 9 sections cumulées,
+    // Pluton/Kuiper/Oort inclus, pour une demande "elementaire"). `level`
+    // absent sur une section = comportement legacy inchangé (aucune fiche
+    // antérieure à ce correctif ne porte ce champ, jamais filtrée à tort) ;
+    // `effectiveLevel` non reconnu (rang < 0) = aucun filtrage (repli sûr,
+    // jamais un risque de tout masquer par excès de prudence).
+    const effectiveLevelRank = progressiveLevelRank(effectiveLevel);
+    const sourceDetailForResponse = first.sourceDetail ? {
+      ...first.sourceDetail,
+      sections: effectiveLevelRank < 0
+        ? first.sourceDetail.sections
+        : (first.sourceDetail.sections || []).filter((s) => !s.level || progressiveLevelRank(s.level) <= effectiveLevelRank)
+    } : null;
     res.json({
       slot: resolvedSlot,
       quizDate: resolvedQuizDate,
@@ -20263,7 +20720,7 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       level: effectiveLevel,
       questionCount: questions.length,
       themes: primaryTheme ? [primaryTheme] : [],
-      sourceDetail: first.sourceDetail || null,
+      sourceDetail: sourceDetailForResponse,
       // groundingSources (chantier "persister les sources factuelles",
       // 03/09/2026) : liste GLOBALE dédupliquée pour ce QCM entier — jamais
       // répétée par question ci-dessous, jamais à confondre avec

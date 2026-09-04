@@ -81,15 +81,22 @@ test("le cas réel 3/5 (\"Bouddhisme tibétain\") reste PAS ready même avec le 
 // ne peut jamais être satisfait par un nombre de `questions` supérieur à ce
 // que `validated` a réellement produit côté serveur : cf. wiring ci-dessous.)
 
-test("F. le gate serveur compare validated.length (jamais rawQuestions/generated) à elementaryReadyThreshold — aucune question rejetée ne peut être comptée", () => {
-  assert.match(SERVER_SOURCE, /if \(validated\.length < elementaryReadyThreshold\) \{/);
+// Réécrit (Phase 2.1, section 9 de la demande) : le gate n'est plus un échec
+// sec en dessous du seuil — 0 valide échoue, 1..(seuil-1) est servi DÉGRADÉ
+// (jamais un critère de validation assoupli, seulement moins de couverture).
+// `validated` provient toujours de la même chaîne qualité, avec en plus le
+// filtre grounding pédagogique (paragraphGrounded) avant consolidation.
+test("F. le gate serveur compare validated.length (jamais rawQuestions/generated) à blockReadyThreshold — 0 valide échoue, sinon servi (dégradé si < seuil)", () => {
+  assert.match(SERVER_SOURCE, /if \(!validated\.length\) \{/);
+  assert.match(SERVER_SOURCE, /const degraded = validated\.length < blockReadyThreshold;/);
   // validated provient de la chaîne qualité (qualityControlRawQuestions ->
   // filterQuestionsToAdmittedKnowledge -> filterVariantsByKnowledgeConstraints
-  // -> selectOneQuestionPerKnowledgeTarget, sur-génération initiale,
-  // 03/09/2026), jamais de rawQuestions/questionsParsed directement.
+  // -> grounding pédagogique (validateParagraphGrounding) ->
+  // selectOneQuestionPerKnowledgeTarget), jamais de rawQuestions/questionsParsed
+  // directement.
   assert.match(SERVER_SOURCE, /const knowledgeMatched = filterQuestionsToAdmittedKnowledge\(structurallyValid, admittedKnowledge\);/);
   assert.match(SERVER_SOURCE, /const knowledgeConstrained = filterVariantsByKnowledgeConstraints\(knowledgeMatched, admittedKnowledge\);/);
-  assert.match(SERVER_SOURCE, /validated = selectOneQuestionPerKnowledgeTarget\(knowledgeConstrained\);/);
+  assert.match(SERVER_SOURCE, /validated = selectOneQuestionPerKnowledgeTarget\(paragraphGrounded\);/);
 });
 
 // ── G. le curriculum complet (15-20) reste intégralement persisté ────────
@@ -108,8 +115,14 @@ test("G. server.js persiste `curriculum` (le curriculum COMPLET renvoyé par res
   assert.doesNotMatch(SERVER_SOURCE, /curriculum\.filter\([^)]*validated/);
 });
 
-test("G. la fiche élémentaire couvre toutes les connaissances elementary du curriculum, jamais réduite à celles ayant une question validée (buildElementaryFichePrompt reçoit elementaryKnowledge, jamais `validated`)", () => {
-  assert.match(SERVER_SOURCE, /buildElementaryFichePrompt\(subject, contextHint, elementaryKnowledge, levelConfig, grounding\?\.groundingText \|\| null\)/);
+// Réécrit (Phase 2.1) : depuis la factorisation generateProgressiveLevelBlock,
+// buildElementaryFichePrompt n'est plus appelée par son nom en dur — elle est
+// passée par référence comme `ficheBuilder` (jamais réécrite, jamais un
+// sous-ensemble filtré sur `validated`, qui n'existe même pas encore à ce
+// stade puisque la fiche est désormais rédigée AVANT les questions).
+test("G. la fiche élémentaire couvre toutes les connaissances elementary du curriculum, jamais réduite à celles ayant une question validée (ficheBuilder appelé avec levelKnowledge, jamais `validated`)", () => {
+  assert.match(SERVER_SOURCE, /ficheBuilder: buildElementaryFichePrompt,/);
+  assert.match(SERVER_SOURCE, /content: ficheBuilder\(subject, contextHint, levelKnowledge, levelConfig, grounding\?\.groundingText \|\| null\)/);
 });
 
 // ── H. le frontend accepte "4 questions" sans placeholder pour la 5e ────
@@ -153,11 +166,14 @@ test("J. aucun code de cette phase ne supprime ni ne marque \"validée\" la conn
   assert.match(curriculumSource, /function selectCurriculumLevel\(curriculum, level\) \{\s*\n\s*return \(Array\.isArray\(curriculum\) \? curriculum : \[\]\)/);
 });
 
-test("J. B/C (deepening/expert) restent non implémentés : aucun appel de génération de questions deepening/expert dans server.js", () => {
-  assert.doesNotMatch(SERVER_SOURCE, /deepening_question_generation/);
-  assert.doesNotMatch(SERVER_SOURCE, /expert_question_generation/);
-  assert.doesNotMatch(SERVER_SOURCE, /generateDeepeningBlock/);
-  assert.doesNotMatch(SERVER_SOURCE, /generateExpertBlock/);
+// Inversé (Phase 2.1, "terminer le pipeline progressif") : B/C (deepening/
+// expert) sont désormais RÉELLEMENT implémentés, via le même moteur
+// generateProgressiveLevelBlock que Elementary — jamais une seconde logique
+// dupliquée. Verrou complet sur leur comportement : test/qcm-progressive-v2-wiring.test.js.
+test("J. B/C (deepening/expert) sont implémentés via generateDeepeningBlock/generateExpertBlock, tous deux délégant à generateProgressiveLevelBlock", () => {
+  assert.match(SERVER_SOURCE, /feature: `\$\{questionFeaturePrefix\}_question_generation`,/);
+  assert.match(SERVER_SOURCE, /async function generateDeepeningBlock\(/);
+  assert.match(SERVER_SOURCE, /async function generateExpertBlock\(/);
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -174,14 +190,21 @@ test("H.1 : curriculum réel à 19 connaissances -> split exact 5/5/9 (cas réel
   assert.deepEqual(computeCurriculumSplit(19), { elementary: 5, deepening: 5, expert: 9 });
 });
 
-test("H.1 : seul le sous-ensemble elementary est transmis à knowledge_verification — jamais deepening/expert (deferredCandidates n'apparaît dans aucun appel verifyOrders)", () => {
-  assert.match(SERVER_SOURCE, /acceptedOrders = await verifyOrders\(elementaryPool\);/);
-  assert.doesNotMatch(SERVER_SOURCE, /verifyOrders\(deferredCandidates\)/);
-  assert.doesNotMatch(SERVER_SOURCE, /verifyOrders\(leveledPool\)/);
+// Réécrit (Phase 2.1, section 1 de la demande) : knowledge_verification (IA)
+// a disparu entièrement — seul knowledge_generation (extraction unique) est
+// transmis à l'admission, elementary ET deepening/expert sont evidence-gatés
+// (déterministe) dans la MÊME passe, cf. resolveProgressiveCurriculum.
+test("H.1 : elementary ET deepening/expert sont evidence-gatés dans la MÊME passe déterministe (evidenceGateAndRepairCurriculumSubset pour elementary, gate inline pour deepening/expert) — plus de knowledge_verification IA", () => {
+  assert.match(SERVER_SOURCE, /initialPool: elementaryPoolRaw,\s*\n\s*targetSize: elementaryTarget,\s*\n\s*repairFeature: "curriculum_repair"/);
+  assert.match(SERVER_SOURCE, /const deferredGated = deferredCandidatesRaw\.map\(\(item\) => \{/);
+  assert.doesNotMatch(SERVER_SOURCE, /buildKnowledgeVerificationPrompt\(verificationCandidates/);
 });
 
-test("H.2 : les connaissances deepening/expert différées portent verified:false explicite — jamais un champ absent qui laisserait supposer une admission implicite", () => {
-  assert.match(SERVER_SOURCE, /verified: false\s*\n\s*\}\)\);/);
+// Réécrit (Phase 2.1, section 2) : verified reflète désormais le résultat
+// RÉEL du gate evidence pour deepening/expert (plus jamais toujours false).
+test("H.2 : les connaissances deepening/expert différées portent verified DÉRIVÉ du gate evidence réel — jamais un champ absent, jamais toujours false", () => {
+  assert.match(SERVER_SOURCE, /if \(result\.ok\) \{ deferredEvidenceValid \+= 1; return \{ \.\.\.item, verified: true \}; \}/);
+  assert.match(SERVER_SOURCE, /return \{ \.\.\.item, verified: false \};/);
   assert.match(SERVER_SOURCE, /level: "elementary", verified: true/);
 });
 
@@ -189,8 +212,8 @@ test("H.2 : les connaissances deepening/expert différées portent verified:fals
 
 test("H.3 : le curriculum final combine TOUJOURS elementaryFinal ET deferredFinal — aucune connaissance deepening/expert n'est abandonnée en cours de route", () => {
   assert.match(SERVER_SOURCE, /const finalCurriculum = \[\.\.\.elementaryFinal, \.\.\.deferredFinal\];/);
-  // Le nombre de candidats différés vient directement du pool initial (deferredCandidates), jamais recalculé/filtré.
-  assert.match(SERVER_SOURCE, /const deferredCandidates = leveledPool\.filter\(\(item\) => item\.level !== "elementary"\);/);
+  // Le nombre de candidats différés vient directement du pool initial (deferredCandidatesRaw), jamais recalculé/filtré.
+  assert.match(SERVER_SOURCE, /const deferredCandidatesRaw = leveledPool\.filter\(\(item\) => item\.level !== "elementary"\);/);
 });
 
 test("H.3 : la persistance daily_quiz insère toujours `curriculum` (elementary + deepening + expert combinés), jamais un sous-ensemble", () => {
@@ -229,14 +252,18 @@ test("H.9 : aucun modèle ni température touchés par ce chantier (DAILY_QUIZ_N
   assert.match(SERVER_SOURCE, /model: DAILY_QUIZ_NARRATIVE_MODEL,\s*\n\s*temperature: 0\.2,/);
 });
 
-test("H.9 : QCM_SEMANTIC_REVIEW_MAX_RETRIES/QCM_CRITIC_TECHNICAL_MAX_RETRIES/CURRICULUM_REPAIR_MAX_ATTEMPTS restent des constantes déclarées une seule fois, jamais réassignées ailleurs", () => {
-  for (const constant of ["QCM_SEMANTIC_REVIEW_MAX_RETRIES", "QCM_CRITIC_TECHNICAL_MAX_RETRIES", "CURRICULUM_REPAIR_MAX_ATTEMPTS"]) {
+// Réécrit (Phase 2.1, section 3 de la demande) : CURRICULUM_REPAIR_MAX_ATTEMPTS
+// a été SUPPRIMÉE — la réparation curriculum n'est plus bornée par un compteur
+// de boucle (jusqu'à 2), elle est structurellement unique (un seul bloc
+// conditionnel, jamais une boucle for/while) dans evidenceGateAndRepairCurriculumSubset.
+test("H.9 : QCM_SEMANTIC_REVIEW_MAX_RETRIES/QCM_CRITIC_TECHNICAL_MAX_RETRIES restent des constantes déclarées une seule fois (legacy, jamais réassignées) ; CURRICULUM_REPAIR_MAX_ATTEMPTS a été supprimée (réparation structurellement unique désormais)", () => {
+  for (const constant of ["QCM_SEMANTIC_REVIEW_MAX_RETRIES", "QCM_CRITIC_TECHNICAL_MAX_RETRIES"]) {
     const declarations = SERVER_SOURCE.match(new RegExp(`const ${constant}\\s*=`, "g")) || [];
     assert.equal(declarations.length, 1, `${constant} doit être déclarée exactement une fois (via const), trouvé ${declarations.length}`);
     const reassignments = SERVER_SOURCE.match(new RegExp(`(?<!const )\\b${constant}\\s*=(?!=)`, "g")) || [];
     assert.equal(reassignments.length, 0, `${constant} ne doit jamais être réassignée`);
   }
-  assert.match(SERVER_SOURCE, /const CURRICULUM_REPAIR_MAX_ATTEMPTS = 2;/);
+  assert.doesNotMatch(SERVER_SOURCE, /CURRICULUM_REPAIR_MAX_ATTEMPTS/);
 });
 
 test("H.9 : MIN_ELEMENTARY_READY_QUESTIONS reste 4 — non modifié par ce chantier", () => {

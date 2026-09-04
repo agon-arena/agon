@@ -33,25 +33,18 @@ const VIEW_SOURCE = fs.readFileSync(path.join(__dirname, "..", "views", "qcm-du-
 const SERVER_SOURCE = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
 const QUESTION_FORMATS_SOURCE = fs.readFileSync(path.join(__dirname, "..", "lib", "question-formats.js"), "utf8");
 
-// ── 1. Le formulaire custom UI appelle bien /custom/progressive (pour le
-// niveau "elementaire" uniquement — les blocs deepening/expert n'existant
-// pas encore côté backend, cf. rapport Phase 1) ────────────────────────────
+// ── 1. Le formulaire custom UI appelle TOUJOURS /custom/progressive, pour
+// les 3 niveaux (Phase 2.1, "terminer le pipeline progressif") ─────────────
 
-test("startCustomTopicGeneration route vers /custom/progressive quand level==='elementaire'", () => {
-  assert.match(
-    VIEW_SOURCE,
-    /var creationEndpoint = level === 'elementaire'\s*\n\s*\? '\/api\/users\/notion-quizzes\/custom\/progressive'\s*\n\s*: '\/api\/users\/notion-quizzes\/custom';/
-  );
+// Réécrit (Phase 2, puis 2.1) : depuis que deepening/expert sont réellement
+// implémentés côté backend, /custom/progressive sert TOUJOURS de point
+// d'entrée, quel que soit le niveau choisi — le backend sert Élémentaire en
+// premier, puis attend (dans la même requête) le niveau réellement demandé
+// si Avancé/Expert, cf. server.js POST /custom/progressive. Il n'y a donc
+// plus de branchement conditionnel côté UI.
+test("startCustomTopicGeneration route TOUJOURS vers /custom/progressive, quel que soit le niveau (plus de branchement conditionnel vers /custom legacy)", () => {
+  assert.match(VIEW_SOURCE, /var creationEndpoint = '\/api\/users\/notion-quizzes\/custom\/progressive';/);
   assert.match(VIEW_SOURCE, /fetch\(creationEndpoint, \{/);
-});
-
-test("un choix 'avance' ou 'expert' continue d'utiliser la route legacy (blocs deepening/expert non implémentés, jamais routés vers la progressive)", () => {
-  // La branche ternaire ne connaît que deux issues : 'elementaire' -> progressive,
-  // tout le reste (dont explicitement 'avance'/'expert') -> legacy. On verrouille
-  // qu'aucune autre valeur de `level` n'apparaît jamais du côté "progressive".
-  const branch = VIEW_SOURCE.match(/var creationEndpoint = level === 'elementaire'[\s\S]{0,150}?;/)?.[0] || "";
-  assert.doesNotMatch(branch, /'avance'/);
-  assert.doesNotMatch(branch, /'expert'/);
 });
 
 // ── 2. La route legacy /custom n'est pas supprimée ─────────────────────────
@@ -79,15 +72,20 @@ test("le frontend ne lit que ok/slot/quizDate/label/questionCount/code/error/dia
   for (const field of fieldsReadByFrontend) {
     assert.match(VIEW_SOURCE, new RegExp(`result\\.data\\.${field}\\b`), `le frontend doit lire result.data.${field}`);
   }
+  // Recherche élargie (jusqu'à la première occurrence de "\n});" APRÈS le
+  // premier res.json de succès) : la route contient désormais un second
+  // bloc (continuation arrière-plan) après ce premier res.json — cf. section
+  // 15 de la demande Phase 2.
   const progressiveRouteStart = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
-  const progressiveRouteEnd = SERVER_SOURCE.indexOf("\n});", progressiveRouteStart) + 4;
+  const progressiveRouteEnd = SERVER_SOURCE.indexOf("\n});", SERVER_SOURCE.indexOf("res.json({", progressiveRouteStart)) + 4;
   const progressiveRouteSource = SERVER_SOURCE.slice(progressiveRouteStart, progressiveRouteEnd);
   // Succès : ok/slot/quizDate/label/questionCount doivent être présents (mêmes noms que legacy).
-  assert.match(progressiveRouteSource, /res\.json\(\{\s*\n\s*ok: true,\s*\n\s*slot: masterSlot,\s*\n\s*quizDate,\s*\n\s*label: questions\[0\]\?\.sourceName \|\| null,\s*\n\s*questionCount: questions\.length,/);
+  assert.match(progressiveRouteSource, /res\.json\(\{\s*\n\s*ok: true,\s*\n\s*slot: masterSlot,\s*\n\s*quizDate,\s*\n\s*label: servedQuestions\[0\]\?\.sourceName \|\| questions\[0\]\?\.sourceName \|\| null,\s*\n\s*questionCount: servedQuestions\.length,/);
   // Échec : publicGenerationError produit toujours {status, body:{ok:false, code, error}} —
   // réutilisé tel quel (même fonction que la route legacy), donc même contrat d'échec.
-  assert.match(progressiveRouteSource, /const publicError = publicGenerationError\(code, result\.reason\);/);
-  assert.match(progressiveRouteSource, /return res\.status\(publicError\.status\)\.json\(publicError\.body\);/);
+  const failureSource = SERVER_SOURCE.slice(progressiveRouteStart, SERVER_SOURCE.indexOf("res.json({", progressiveRouteStart));
+  assert.match(failureSource, /const publicError = publicGenerationError\(code, result\.reason\);/);
+  assert.match(failureSource, /return res\.status\(publicError\.status\)\.json\(publicError\.body\);/);
 });
 
 test("publicGenerationError (réutilisée sans modification par les deux routes) produit toujours exactement {ok:false, code, error} — contrat d'échec partagé, jamais divergent", () => {
@@ -151,12 +149,16 @@ test("buildElementaryFichePrompt n'est pas modifié par ce correctif de câblage
   assert.match(knowledgeAdmissionSource, /function buildElementaryFichePrompt\(subject, contextHint, elementaryKnowledge, levelConfig, groundingText = null\) \{/);
 });
 
-// ── 7. Aucun changement des réglages/backend hors du strict nécessaire ────
+// ── 7. La route lit désormais `level` (Phase 2.1) — voir plus bas ────────
 
-test("la route progressive elle-même n'a pas été modifiée par ce correctif : elle ignore toujours `level` (seule l'UI décide, en amont, quand l'appeler)", () => {
+// Inversé (Phase 2.1, section 1 de la demande utilisateur du 04/09/2026) :
+// la route lit désormais `level` explicitement — c'est elle qui pilote la
+// continuation synchrone (Avancé/Expert) et l'arrière-plan (jusqu'à Expert).
+test("la route progressive lit `level` explicitement et enregistre requested_level DYNAMIQUE (jamais la chaîne fixe 'elementaire')", () => {
   const progressiveRouteStart = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
-  const progressiveRouteEnd = SERVER_SOURCE.indexOf("\n});", progressiveRouteStart) + 4;
+  const progressiveRouteEnd = SERVER_SOURCE.indexOf("\n});", SERVER_SOURCE.indexOf("res.json({", progressiveRouteStart)) + 4;
   const progressiveRouteSource = SERVER_SOURCE.slice(progressiveRouteStart, progressiveRouteEnd);
-  assert.doesNotMatch(progressiveRouteSource, /req\.body\?\.level/);
-  assert.match(progressiveRouteSource, /requested_level: "elementaire"/);
+  assert.match(progressiveRouteSource, /const requestedLevel = resolveNotionQuizLevel\(req\.body\?\.level\)\.level \|\| "elementaire";/);
+  assert.match(progressiveRouteSource, /requested_level: requestedLevel/);
+  assert.doesNotMatch(progressiveRouteSource, /requested_level: "elementaire" \}/);
 });

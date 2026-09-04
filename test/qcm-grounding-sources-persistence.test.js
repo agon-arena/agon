@@ -113,8 +113,17 @@ test("le grounding utilisé pour grounding_sources est l'INITIAL (`grounding`), 
   assert.match(SERVER_SOURCE, /sourceDetail\.sources = grounding\?\.sources \|\| null;/);
 });
 
+// Réécrit pour V2.1 (04/09/2026, audit migration grounding_full — abandonnée)
+// : l'insert est revenu à un bloc littéral unique (plus de tentative
+// grounding_full/repli, cf. server.js ensureProgressiveElementaryGenerated)
+// — le principe testé (progressiveExtra, donc grounding_sources, atterrit
+// bien dans la ligne insérée) reste inchangé.
 test("l'insert daily_quiz étale bien progressiveExtra (donc grounding_sources) dans la ligne insérée", () => {
-  assert.match(SERVER_SOURCE, /const \{ error: insertError \} = await supabase\.from\("daily_quiz"\)\.insert\(\{\s*\n\s*quiz_date: quizDate,\s*\n\s*slot: masterSlot,\s*\n\s*questions,\s*\n\s*source_debate_ids: \[\],\s*\n\s*\.\.\.progressiveExtra\s*\n\s*\}\);/);
+  assert.match(SERVER_SOURCE, /const progressiveExtra = \{ curriculum, progressive_status: "elementary_ready", grounding_sources: publicGroundingSources \};/);
+  assert.match(
+    SERVER_SOURCE,
+    /const \{ error: insertError \} = await supabase\.from\("daily_quiz"\)\.insert\(\{\s*\n\s*quiz_date: quizDate, slot: masterSlot, questions, source_debate_ids: \[\], \.\.\.progressiveExtra\s*\n\s*\}\);/
+  );
 });
 
 // ── API : GET /api/users/notion-quizzes/fiche résout grounding_sources ──
@@ -124,8 +133,14 @@ test("GET .../fiche sélectionne grounding_sources dans les DEUX chemins (linkTy
   assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources"\)\.eq\("quiz_date", quizDate\)\.eq\("slot", slot\)\.maybeSingle\(\);/);
 });
 
+// Réécrit (Phase 2.1, item 8 — fiche scopée au niveau réellement servi,
+// 04/09/2026) : `sourceDetail: first.sourceDetail || null` a été remplacé par
+// `sourceDetailForResponse` (filtre les sections par niveau, cf.
+// test/qcm-progressive-v2-wiring.test.js pour le verrou complet sur ce
+// filtre) — le principe testé ici (groundingSources au niveau du QCM,
+// jamais répété par question) reste inchangé.
 test("GET .../fiche renvoie groundingSources dans la réponse JSON, au niveau du QCM (jamais répété par question)", () => {
-  assert.match(SERVER_SOURCE, /sourceDetail: first\.sourceDetail \|\| null,[\s\S]{0,700}?groundingSources,\s*\n\s*links,/);
+  assert.match(SERVER_SOURCE, /sourceDetail: sourceDetailForResponse,[\s\S]{0,700}?groundingSources,\s*\n\s*links,/);
   // Jamais injecté dans le mapping questions.map(...) ci-dessous.
   const mapStart = SERVER_SOURCE.indexOf("questions: questions.map((q) => {");
   const mapEnd = SERVER_SOURCE.indexOf("})\n    });", mapStart);

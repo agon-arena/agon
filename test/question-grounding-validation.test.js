@@ -518,11 +518,81 @@ test("H — validateQuestionGrounding accepte naturellement supporting_claim=evi
   assert.equal(result.ok, true);
 });
 
-test("I — GROUNDING_ANSWER_NOT_IN_CLAIM continue de rejeter une bonne réponse non soutenue par evidence_text, même quand supporting_claim=evidence_text (le contrôle reste pleinement actif, jamais contourné)", () => {
+test("I — GROUNDING_ANSWER_NOT_IN_CLAIM continue de rejeter une bonne réponse non soutenue par evidence_text, même quand supporting_claim=evidence_text (le contrôle reste pleinement actif, jamais contourné PAR DÉFAUT)", () => {
   const sources = { SOURCE_1: { text: "Charlemagne est couronné empereur d'Occident par le pape Léon III le 25 décembre 800." } };
   // evidence_text (donc supporting_claim, forcé identique) ne mentionne
   // JAMAIS Aix-la-Chapelle comme lieu du sacre — une bonne réponse qui
   // l'affirmerait irait au-delà de ce que la preuve démontre réellement.
+  const result = validateQuestionGrounding({
+    type: "qcm",
+    options: ["À Rome", "À Aix-la-Chapelle", "À Reims", "À Paris"],
+    correctIndex: 1,
+    supporting_claim: "Charlemagne est couronné empereur d'Occident par le pape Léon III le 25 décembre 800.",
+    source_ids: ["SOURCE_1"]
+  }, sources);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "answer_not_in_claim");
+});
+
+// ── J-L : skipAnswerAlignmentCheck (Phase 2.1, correctif du 04/09/2026,
+// diagnostic réel "Grande Muraille de Chine" — cf. commentaire de tête de
+// validateQuestionGrounding pour l'analyse complète) ──────────────────────
+
+test("J — reproduction du cas réel 1 (\"Grande Muraille de Chine\", generationId cc53c0ed025b2b54) : rejeté par défaut, accepté avec skipAnswerAlignmentCheck (paraphrase fidèle, jamais une information non soutenue)", () => {
+  const sources = { SOURCE_1: { text: "La Grande Muraille fut construites, détruites et reconstruites en plusieurs fois et à plusieurs endroits au fil des dynasties." } };
+  const question = {
+    type: "qcm",
+    knowledgeTarget: "La Grande Muraille a été construite, détruite puis reconstruite à plusieurs reprises et en plusieurs endroits.",
+    options: ["Elle a été construite, détruite puis reconstruite à plusieurs reprises et en plusieurs endroits.", "Elle a été construite une seule fois, au même endroit.", "Elle n'a jamais été détruite.", "Elle a été reconstruite une seule fois."],
+    correctIndex: 0,
+    supporting_claim: "construites, détruites et reconstruites en plusieurs fois et à plusieurs endroits",
+    source_ids: ["SOURCE_1"]
+  };
+  const withoutSkip = validateQuestionGrounding(question, sources);
+  assert.equal(withoutSkip.ok, false);
+  assert.equal(withoutSkip.reason, "answer_not_in_claim");
+  const withSkip = validateQuestionGrounding(question, sources, { skipAnswerAlignmentCheck: true });
+  assert.equal(withSkip.ok, true);
+});
+
+test("K — reproduction du cas réel 2 (même génération, texte exact du log) : evidence_text fragmentaire (\"et d'abris pour se protéger\"), réponse reformulée fidèlement (\"à protéger les personnes qui s'y trouvaient\")", () => {
+  const sources = { SOURCE_1: { text: "La muraille était pourvue de tours de guet et d'abris pour se protéger des attaques." } };
+  // Texte de l'option reproduit EXACTEMENT le detail loggé en réel
+  // ("\"À protéger les personnes qui s'y trouvaient\" n'apparaît pas dans
+  // l'affirmation citée.") — jamais reconstitué approximativement.
+  const question = {
+    type: "qcm",
+    knowledgeTarget: "La Grande Muraille comportait des abris destinés à protéger les personnes qui s'y trouvaient.",
+    options: ["À protéger les personnes qui s'y trouvaient.", "Des puits d'eau potable.", "Des jardins suspendus.", "Des écuries pour les chevaux."],
+    correctIndex: 0,
+    supporting_claim: "et d'abris pour se protéger",
+    source_ids: ["SOURCE_1"]
+  };
+  const withoutSkip = validateQuestionGrounding(question, sources);
+  assert.equal(withoutSkip.ok, false);
+  assert.equal(withoutSkip.reason, "answer_not_in_claim");
+  assert.equal(validateQuestionGrounding(question, sources, { skipAnswerAlignmentCheck: true }).ok, true);
+});
+
+test("L — skipAnswerAlignmentCheck ne désactive JAMAIS les contrôles claim-vs-source (missing_supporting_claim/unknown_source/claim_not_grounded_in_source restent pleinement actifs) — jamais un assouplissement global", () => {
+  const sources = { SOURCE_1: { text: "Un texte totalement sans rapport avec l'affirmation citée ci-dessous, sujet différent." } };
+  // supporting_claim ne recoupe PAS la source citée : doit rester rejeté
+  // même avec skipAnswerAlignmentCheck=true, car ce garde-fou porte sur la
+  // FIABILITÉ DE LA CITATION elle-même, jamais sur l'alignement réponse<->claim.
+  const question = {
+    type: "qcm",
+    options: ["A", "B", "C", "D"],
+    correctIndex: 0,
+    supporting_claim: "Une affirmation précise sur un fait historique daté du XIIe siècle.",
+    source_ids: ["SOURCE_1"]
+  };
+  const result = validateQuestionGrounding(question, sources, { skipAnswerAlignmentCheck: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "claim_not_grounded_in_source");
+});
+
+test("M — sans skipAnswerAlignmentCheck (absent), le comportement reste identique au caractère près à avant ce correctif — aucun changement pour tout appelant existant", () => {
+  const sources = { SOURCE_1: { text: "Charlemagne est couronné empereur d'Occident par le pape Léon III le 25 décembre 800." } };
   const result = validateQuestionGrounding({
     type: "qcm",
     options: ["À Rome", "À Aix-la-Chapelle", "À Reims", "À Paris"],

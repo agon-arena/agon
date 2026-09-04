@@ -1,17 +1,19 @@
 "use strict";
 
-// Verrous de câblage — Génération progressive PHASE 1 (02/09/2026, cf.
-// rapport d'architecture du même jour) ; taille FLEXIBLE du curriculum
-// (02/09/2026, suite). server.js ne peut pas être `require()` dans un test
-// (il démarre tout le serveur Express à l'import, cf. commentaire en tête de
-// lib/question-formats.js) : ce fichier vérifie donc, en lisant server.js
-// comme un TEXTE brut (jamais exécuté), que le câblage attendu est bien en
-// place — même principe que test/notion-quiz-master-wiring.test.js et
-// test/knowledge-admission-wiring.test.js. La logique curriculum elle-même
-// (split 25/25/50, quasi-doublons, réparation vers le minimum, renormali-
-// sation) est testée en isolation, sur de vraies données, dans
-// test/notion-quiz-curriculum.test.js — ce fichier ne la reteste jamais, il
-// verrouille uniquement le BRANCHEMENT dans server.js.
+// Verrous de câblage — Génération progressive, curriculum + route (Phase
+// 2.1, 03/09/2026, "finalisation V2 : 3 appels IA nominaux, une seule
+// réparation, plus de knowledge_verification systématique"). Réécrit à
+// partir du fichier Phase 1 (02/09/2026) : les tests qui verrouillaient la
+// génération BLOC (fiche/questions, séquentielle depuis Phase 2, critic
+// hors chemin bloquant, V3.2 absent, grounding pédagogique) ont été
+// déplacés/couverts dans test/qcm-progressive-v2-wiring.test.js — ce fichier
+// se concentre désormais sur : la résolution du CURRICULUM (extraction
+// unique, gate evidence, réparation bornée à une tentative), la route HTTP
+// (dédoublonnage, réutilisation), et la non-régression des mécanismes
+// partagés avec le legacy (isMasterEligibleQuiz, progressiveEligibilityMinimum,
+// migration additive). server.js ne peut pas être `require()` en test (il
+// démarre tout le serveur Express à l'import) — lecture en TEXTE brut, même
+// principe que les autres fichiers *-wiring.test.js de ce dépôt.
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -20,12 +22,38 @@ const path = require("path");
 
 const SERVER_SOURCE = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
 
+function extractFunctionBody(source, signaturePattern) {
+  const match = signaturePattern.exec(source);
+  assert.ok(match, `signature introuvable : ${signaturePattern}`);
+  const openParen = source.indexOf("(", match.index);
+  let parenDepth = 0;
+  let i = openParen;
+  for (; i < source.length; i += 1) {
+    if (source[i] === "(") parenDepth += 1;
+    else if (source[i] === ")") {
+      parenDepth -= 1;
+      if (parenDepth === 0) break;
+    }
+  }
+  const bodyStart = source.indexOf("{", i);
+  let depth = 0;
+  let j = bodyStart;
+  for (; j < source.length; j += 1) {
+    if (source[j] === "{") depth += 1;
+    else if (source[j] === "}") {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+  }
+  return source.slice(bodyStart, j + 1);
+}
+
 // ── Curriculum : taille flexible (15-20), plus de quota fixe ─────────────
 
 test("resolveProgressiveCurriculum construit le prompt curriculum puis parse via parseCurriculumItems (jamais un parsing maison)", () => {
   assert.match(
     SERVER_SOURCE,
-    /async function resolveProgressiveCurriculum\(apiKey, subject, contextHint, id, grounding\) \{[\s\S]{0,2500}?buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)[\s\S]{0,300}?pool = parseCurriculumItems\(JSON\.parse\(content\)\?\.curriculum\);/
+    /async function resolveProgressiveCurriculum\(apiKey, subject, contextHint, id, grounding\) \{[\s\S]{0,1200}?buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)[\s\S]{0,300}?pool = parseCurriculumItems\(JSON\.parse\(content\)\?\.curriculum\);/
   );
 });
 
@@ -34,17 +62,30 @@ test("resolveProgressiveCurriculum ne force plus jamais un total de 20 : aucune 
   assert.doesNotMatch(SERVER_SOURCE, /CURRICULUM_TOTAL/);
 });
 
-test("resolveProgressiveCurriculum renormalise le SEUL sous-ensemble elementary (id/order 1..N) et attache verified:true, level:\"elementary\" — jamais l'inverse", () => {
+test("resolveProgressiveCurriculum renormalise le SEUL sous-ensemble elementary (id/order 1..N) et attache verified:true, level:\"elementary\"", () => {
   assert.match(
     SERVER_SOURCE,
     /const elementaryFinal = normalizeCurriculumOrder\(acceptedElementary\)\.map\(\(item\) => \(\{ \.\.\.item, level: "elementary", verified: true \}\)\);/
   );
 });
 
-test("les connaissances deepening/expert différées sont renumérotées à la suite de l'elementary, avec verified:false explicite — jamais silencieusement considérées admises", () => {
+// Réécrit (Phase 2.1, section 2 de la demande) : les connaissances
+// Deepening/Expert ne sont plus TOUJOURS verified:false — elles sont
+// désormais evidence-gated dès ce même appel, `verified` reflète le
+// résultat RÉEL du gate, et source_id/evidence_text sont PRÉSERVÉS (bug
+// réel corrigé le 03/09/2026, cause racine du taux élevé de
+// "missing_source_id" observé en continuation lors du rapport Phase 2).
+test("les connaissances deepening/expert sont evidence-gated (déterministe, sans appel IA) dès resolveProgressiveCurriculum — verified reflète le résultat réel, jamais toujours false", () => {
   assert.match(
     SERVER_SOURCE,
-    /const deferredFinal = deferredCandidates\.map\(\(item, index\) => \(\{\s*\n\s*id: `k\$\{elementaryFinal\.length \+ index \+ 1\}`,\s*\n\s*knowledgeTarget: item\.knowledgeTarget,\s*\n\s*order: elementaryFinal\.length \+ index \+ 1,\s*\n\s*level: item\.level,\s*\n\s*verified: false\s*\n\s*\}\)\);/
+    /const deferredGated = deferredCandidatesRaw\.map\(\(item\) => \{\s*\n\s*if \(!evidenceModeActive\) return \{ \.\.\.item, verified: false \};\s*\n\s*deferredEvidenceCandidates \+= 1;\s*\n\s*const result = validateKnowledgeEvidence\(item, grounding\.identifiedSources\);\s*\n\s*if \(result\.ok\) \{ deferredEvidenceValid \+= 1; return \{ \.\.\.item, verified: true \}; \}/
+  );
+});
+
+test("les items deferredFinal (deepening/expert) préservent source_id/evidence_text via spread — jamais une reconstruction champ par champ qui les perdrait", () => {
+  assert.match(
+    SERVER_SOURCE,
+    /const deferredFinal = deferredGated\.map\(\(item, index\) => \(\{\s*\n\s*\.\.\.item,\s*\n\s*id: `k\$\{elementaryFinal\.length \+ index \+ 1\}`,\s*\n\s*order: elementaryFinal\.length \+ index \+ 1\s*\n\s*\}\)\);/
   );
   assert.match(SERVER_SOURCE, /const finalCurriculum = \[\.\.\.elementaryFinal, \.\.\.deferredFinal\];/);
 });
@@ -53,31 +94,43 @@ test("resolveProgressiveCurriculum écarte les quasi-doublons via findNearDuplic
   assert.match(SERVER_SOURCE, /const pair = findNearDuplicateCurriculumKnowledge\(current\)\[0\];/);
 });
 
-// ── Split provisoire + vérification scindée elementary-only (latence,
-// 03/09/2026, audit réel "Les oiseaux migrateurs") ───────────────────────
-
-test("le split est calculé sur le pool BRUT (avant vérification), via normalizeCurriculumOrder + assignCurriculumLevels réutilisés tels quels — jamais une seconde logique de split", () => {
+test("le split est calculé sur le pool BRUT (avant tout gate evidence), via normalizeCurriculumOrder + assignCurriculumLevels réutilisés tels quels — jamais une seconde logique de split", () => {
   assert.match(SERVER_SOURCE, /const leveledPool = assignCurriculumLevels\(normalizeCurriculumOrder\(pool\)\);/);
-  assert.match(SERVER_SOURCE, /let elementaryPool = selectCurriculumLevel\(leveledPool, "elementary"\);/);
-  assert.match(SERVER_SOURCE, /const deferredCandidates = leveledPool\.filter\(\(item\) => item\.level !== "elementary"\);/);
+  assert.match(SERVER_SOURCE, /const elementaryPoolRaw = selectCurriculumLevel\(leveledPool, "elementary"\);/);
+  assert.match(SERVER_SOURCE, /const deferredCandidatesRaw = leveledPool\.filter\(\(item\) => item\.level !== "elementary"\);/);
 });
 
-test("knowledge_verification ne porte QUE sur le sous-ensemble elementary — jamais sur le pool entier (verifyOrders appelé avec elementaryPool, jamais pool)", () => {
-  assert.match(SERVER_SOURCE, /acceptedOrders = await verifyOrders\(elementaryPool\);/);
-  assert.doesNotMatch(SERVER_SOURCE, /acceptedOrders = await verifyOrders\(pool\);/);
+// ── knowledge_verification supprimé (Phase 2.1, section 1 de la demande) ──
+
+test("knowledge_verification (appel IA de vérification indépendante) a disparu ENTIÈREMENT du curriculum : plus aucun buildKnowledgeVerificationPrompt/applyKnowledgeVerificationDecisions dans le chemin progressif", () => {
+  const fnStart = SERVER_SOURCE.indexOf("async function evidenceGateAndRepairCurriculumSubset");
+  const fnEnd = SERVER_SOURCE.indexOf("async function resolveProgressiveCurriculum");
+  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
+  assert.doesNotMatch(fnBody, /buildKnowledgeVerificationPrompt/);
+  assert.doesNotMatch(fnBody, /applyKnowledgeVerificationDecisions/);
+  assert.doesNotMatch(fnBody, /feature:\s*verificationFeature/);
 });
 
-// ── Réparation : uniquement pour revenir à la cible ELEMENTARY, jamais à 20 ──
-
-test("le curriculum elementary n'est réparé que s'il tombe sous sa propre cible (elementaryTarget) — jamais un seuil de 15 ni un retour à 20", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /for \(let attempt = 1; attempt <= CURRICULUM_REPAIR_MAX_ATTEMPTS; attempt \+= 1\) \{\s*\n\s*if \(acceptedElementary\.length >= elementaryTarget\) break; \/\/ déjà au complet, jamais de réparation superflue/
-  );
+test("l'admission d'une connaissance dépend UNIQUEMENT de validateKnowledgeEvidence (déterministe) — jamais un second jugement IA sous un autre nom", () => {
+  const body = extractFunctionBody(SERVER_SOURCE, /async function evidenceGateAndRepairCurriculumSubset\(\{/);
+  assert.match(body, /const result = validateKnowledgeEvidence\(item, grounding\.identifiedSources\);/);
+  // Aucun _callOpenAI hors du seul call de réparation (curriculum_repair) :
+  assert.equal((body.match(/_callOpenAI\(/g) || []).length, 1);
 });
 
-test("le nombre de connaissances demandées en réparation est calculé via missingCurriculumCount(acceptedElementary.length, elementaryTarget) — jamais un total fixe de remplacement", () => {
-  assert.match(SERVER_SOURCE, /const neededCount = missingCurriculumCount\(acceptedElementary\.length, elementaryTarget\);/);
+// ── Réparation : AU PLUS UNE tentative, jamais une boucle (section 3) ────
+
+test("evidenceGateAndRepairCurriculumSubset répare AU PLUS UNE fois (bloc conditionnel unique, jamais une boucle for/while)", () => {
+  const body = extractFunctionBody(SERVER_SOURCE, /async function evidenceGateAndRepairCurriculumSubset\(\{/);
+  assert.doesNotMatch(body, /\bfor\s*\(/);
+  assert.doesNotMatch(body, /\bwhile\s*\(/.source === undefined ? /NEVER/ : /while \(accepted/); // pas de boucle de réparation (evictNearDuplicates a sa propre boucle interne légitime, non concernée ici)
+  assert.match(body, /if \(accepted\.length < targetSize\) \{/);
+  assert.match(body, /repairAttempted = true;/);
+});
+
+test("le nombre de connaissances demandées en réparation est calculé via missingCurriculumCount(accepted.length, targetSize) — jamais un total fixe de remplacement", () => {
+  const body = extractFunctionBody(SERVER_SOURCE, /async function evidenceGateAndRepairCurriculumSubset\(\{/);
+  assert.match(body, /const neededCount = missingCurriculumCount\(accepted\.length, targetSize\);/);
 });
 
 test("missingCurriculumCount reste rétrocompatible : target optionnel, défaut MIN_PROGRESSIVE_CURRICULUM inchangé pour tout appelant existant", () => {
@@ -85,17 +138,12 @@ test("missingCurriculumCount reste rétrocompatible : target optionnel, défaut 
   assert.match(curriculumSource, /function missingCurriculumCount\(acceptedCount, target = MIN_PROGRESSIVE_CURRICULUM\) \{/);
 });
 
-test("les ajouts de réparation sont fusionnés via mergeCurriculumAdditions, sur le pool ET l'accepté ELEMENTARY uniquement (jamais un merge maison, jamais le pool deepening/expert touché)", () => {
-  assert.match(SERVER_SOURCE, /elementaryPool = mergeCurriculumAdditions\(elementaryPool, additions\);/);
-  assert.match(SERVER_SOURCE, /acceptedElementary = evictNearDuplicates\(mergeCurriculumAdditions\(acceptedElementary, newlyAccepted\)\);/);
+test("les ajouts de réparation sont fusionnés via mergeCurriculumAdditions puis evictNearDuplicates, une seule fois — jamais un merge maison", () => {
+  const body = extractFunctionBody(SERVER_SOURCE, /async function evidenceGateAndRepairCurriculumSubset\(\{/);
+  assert.match(body, /accepted = evictNearDuplicates\(mergeCurriculumAdditions\(accepted, acceptedAdditions\)\);/);
 });
 
-test("CURRICULUM_REPAIR_MAX_ATTEMPTS plafonne les réparations à 2 tentatives (jamais une boucle non bornée)", () => {
-  assert.match(SERVER_SOURCE, /const CURRICULUM_REPAIR_MAX_ATTEMPTS = 2;/);
-  assert.match(SERVER_SOURCE, /for \(let attempt = 1; attempt <= CURRICULUM_REPAIR_MAX_ATTEMPTS; attempt \+= 1\) \{/);
-});
-
-test("un curriculum elementary toujours sous MIN_ELEMENTARY_READY_QUESTIONS après le plafond de réparations échoue proprement avec le code CURRICULUM_INCOMPLETE — jamais un seuil de 15", () => {
+test("un curriculum elementary toujours sous MIN_ELEMENTARY_READY_QUESTIONS après l'unique réparation échoue proprement avec le code CURRICULUM_INCOMPLETE", () => {
   assert.match(
     SERVER_SOURCE,
     /if \(acceptedElementary\.length < MIN_ELEMENTARY_READY_QUESTIONS\) \{[\s\S]{0,400}?return generationFailure\("CURRICULUM_INCOMPLETE", "curriculum_repair", \{/
@@ -107,201 +155,8 @@ test("CURRICULUM_INCOMPLETE est un code d'erreur public déclaré (422, message 
   assert.match(errorsSource, /CURRICULUM_INCOMPLETE:\s*\{\s*status:\s*422,/);
 });
 
-// ── Bloc A : dynamique (nombre de connaissances "elementary" du curriculum,
-// pas toujours 5) ──────────────────────────────────────────────────────
-
 test("le bloc élémentaire est extrait du curriculum via selectCurriculumLevel(curriculum, \"elementary\") (jamais tout le curriculum)", () => {
   assert.match(SERVER_SOURCE, /const elementaryKnowledge = selectCurriculumLevel\(curriculum, "elementary"\);/);
-});
-
-test("generateElementaryBlock utilise NOTION_QUIZ_LEVELS.elementaire comme levelConfig (jamais un autre niveau)", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /async function generateElementaryBlock\(apiKey, subject, contextHint, id, elementaryKnowledge, grounding\) \{\s*\n\s*const levelConfig = NOTION_QUIZ_LEVELS\.elementaire;/
-  );
-});
-
-test("le timeout et la cible de questions du bloc élémentaire dépendent de elementaryKnowledge.length — jamais d'un compte fixe", () => {
-  assert.match(SERVER_SOURCE, /const timeoutMs = Math\.min\(120_000, 45_000 \+ elementaryKnowledge\.length \* 3_000\);/);
-});
-
-test("le bloc élémentaire exige elementaryReadyThreshold (= min(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge.length)) questions validées — qualité > quantité, jamais elementaryKnowledge.length exact", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /const elementaryReadyThreshold = Math\.min\(MIN_ELEMENTARY_READY_QUESTIONS, elementaryKnowledge\.length\);/
-  );
-  assert.match(
-    SERVER_SOURCE,
-    /if \(validated\.length < elementaryReadyThreshold\) \{[\s\S]{0,400}?return generationFailure\("QCM_UNUSABLE", "elementary_question_validation", \{/
-  );
-});
-
-test("qualityControlRawQuestions reçoit earlyStopAtAccepted: elementaryReadyThreshold — inutile de régénérer une fois le seuil atteint", () => {
-  assert.match(SERVER_SOURCE, /earlyStopAtAccepted: elementaryReadyThreshold/);
-});
-
-// ── Sur-génération initiale du bloc élémentaire (03/09/2026, audit latence
-// réel "Empire carolingien") : pool de candidats plus large dès le premier
-// appel, jamais un assouplissement de validateur/critique/grounding/seuil/
-// modèle/température/retry. Comportement pur (distribution, consolidation)
-// testé sur de vraies données dans test/question-formats.test.js et
-// test/qcm-quality.test.js — ce bloc verrouille uniquement le CÂBLAGE dans
-// generateElementaryBlock. ─────────────────────────────────────────────
-
-test("6. le pool initial est calculé via computeElementaryCandidateDistribution(elementaryKnowledge.length, ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE) — jamais un calcul maison ni un nombre fixe", () => {
-  assert.match(SERVER_SOURCE, /const initialCandidateCounts = computeElementaryCandidateDistribution\(elementaryKnowledge\.length, ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE\);/);
-  assert.match(SERVER_SOURCE, /const totalInitialCandidates = initialCandidateCounts\.reduce\(\(sum, n\) => sum \+ n, 0\) \|\| elementaryKnowledge\.length;/);
-});
-
-test("6. buildQuestionsFromKnowledgePrompt reçoit initialCandidateCounts comme 6e argument — le pool initial, jamais un lot de taille fixe à 1 par connaissance", () => {
-  assert.match(SERVER_SOURCE, /const questionPrompt = buildQuestionsFromKnowledgePrompt\("sourceId", id, admittedKnowledge, levelConfig\.instruction, formatBlock, initialCandidateCounts\);/);
-});
-
-test("perKnowledgeCandidateCounts reste optionnel et rétrocompatible : sans lui, buildQuestionsFromKnowledgePrompt produit le prompt EXACTEMENT comme avant ce chantier", () => {
-  const knowledgeAdmissionSource = fs.readFileSync(path.join(__dirname, "..", "lib", "knowledge-admission.js"), "utf8");
-  assert.match(knowledgeAdmissionSource, /function buildQuestionsFromKnowledgePrompt\(sourceIdField, sourceId, admittedKnowledge, levelInstruction, formatBlockLines, perKnowledgeCandidateCounts\) \{/);
-  assert.match(knowledgeAdmissionSource, /"- Au maximum une question par connaissance de la liste — jamais plus\./);
-});
-
-test("2. la répartition garantit au moins un candidat par connaissance elementary — jamais un target totalement absent du premier lot", () => {
-  const formatsSource = fs.readFileSync(path.join(__dirname, "..", "lib", "question-formats.js"), "utf8");
-  assert.match(formatsSource, /const counts = new Array\(count\)\.fill\(1\);/);
-});
-
-test("le format block et validateNarrativeQuizQuestions utilisent totalInitialCandidates (le pool), jamais admittedKnowledge.length (le nombre de connaissances) pour ce bloc", () => {
-  assert.match(SERVER_SOURCE, /const formatBlock = buildQuestionFormatsPromptBlock\("sourceId", totalInitialCandidates, true, undefined, currentGrounding\?\.identifiedSourcesBlock \|\| null\);/);
-  assert.match(SERVER_SOURCE, /const structurallyValid = validateNarrativeQuizQuestions\(qualityApproved, \[id\], totalInitialCandidates, totalInitialCandidates\);/);
-});
-
-test("qualityControlRawQuestions (bloc élémentaire) reçoit earlyStopCountFn/filterRejectedForRegeneration/onInitialBatchAccepted, en plus de earlyStopAtAccepted", () => {
-  assert.match(SERVER_SOURCE, /earlyStopCountFn: \(acceptedList\) => selectOneQuestionPerKnowledgeTarget\(acceptedList\)\.length,/);
-  assert.match(SERVER_SOURCE, /filterRejectedForRegeneration: \(rejected, acceptedList\) => \{\s*\n\s*const coveredTargets = new Set\(selectOneQuestionPerKnowledgeTarget\(acceptedList\)\.map\(\(q\) => normalizeFactText\(q\?\.knowledgeTarget\)\)\);\s*\n\s*return rejected\.filter\(\(entry\) => !coveredTargets\.has\(normalizeFactText\(entry\.question\?\.knowledgeTarget\)\)\);\s*\n\s*\},/);
-  assert.match(SERVER_SOURCE, /onInitialBatchAccepted: \(acceptedList\) => \{ initialBatchDistinctCount = selectOneQuestionPerKnowledgeTarget\(acceptedList\)\.length; \}/);
-});
-
-test("5/6. validated est consolidé via selectOneQuestionPerKnowledgeTarget AVANT la décision V3.2, puis re-consolidé défensivement après — au plus une question par connaissance distincte servie, quel que soit le chemin emprunté", () => {
-  assert.match(SERVER_SOURCE, /validated = selectOneQuestionPerKnowledgeTarget\(knowledgeConstrained\);/);
-  assert.match(SERVER_SOURCE, /validated = selectOneQuestionPerKnowledgeTarget\(expansionOutcome\.validated\);/);
-});
-
-test("8. V3.2 : shouldExpandGroundingSources reçoit finalAccepted: validated.length (déjà consolidé, distinct), jamais le nombre brut de candidats acceptés par le pipeline qualité", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /questionQualityMetrics: \{ \.\.\.questionQualityMetrics, finalAccepted: validated\.length \}/
-  );
-});
-
-test("aucun modèle/température/retry touché par ce chantier : elementary_question_generation garde model: DAILY_QUIZ_NARRATIVE_MODEL, temperature: 0.4, et QCM_SEMANTIC_REVIEW_MAX_RETRIES/QCM_CRITIC_TECHNICAL_MAX_RETRIES restent des constantes déclarées une seule fois", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /feature: "elementary_question_generation",\s*\n\s*generationId: id\s*\n\s*\}\);/
-  );
-  const genIndex = SERVER_SOURCE.indexOf('feature: "elementary_question_generation"');
-  const callBlock = SERVER_SOURCE.slice(Math.max(0, genIndex - 300), genIndex);
-  assert.match(callBlock, /model: DAILY_QUIZ_NARRATIVE_MODEL,\s*\n\s*temperature: 0\.4,/);
-  for (const constant of ["QCM_SEMANTIC_REVIEW_MAX_RETRIES", "QCM_CRITIC_TECHNICAL_MAX_RETRIES"]) {
-    const declarations = SERVER_SOURCE.match(new RegExp(`const ${constant}\\s*=`, "g")) || [];
-    assert.equal(declarations.length, 1, `${constant} doit rester déclarée exactement une fois`);
-  }
-});
-
-test("aucun validateur touché : validateQuestionQuality/validateQuestionBatchQuality/validateQuestionGrounding restent définis exactement une fois dans lib/qcm-quality.js et lib/question-grounding-validation.js", () => {
-  const qualitySource = fs.readFileSync(path.join(__dirname, "..", "lib", "qcm-quality.js"), "utf8");
-  const groundingValidationSource = fs.readFileSync(path.join(__dirname, "..", "lib", "question-grounding-validation.js"), "utf8");
-  assert.equal((qualitySource.match(/^function validateQuestionQuality\(/gm) || []).length, 1);
-  assert.equal((qualitySource.match(/^function validateQuestionBatchQuality\(/gm) || []).length, 1);
-  assert.equal((groundingValidationSource.match(/^function validateQuestionGrounding\(/gm) || []).length, 1);
-});
-
-test("7/8. le log qcm-progressive-timing porte elementary_initial_candidate_count/elementary_initial_distinct_targets_validated/elementary_regeneration_calls/elementary_ready_after_initial_batch", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /expert_count: expertKnowledgeCount,[\s\S]{0,700}?elementary_initial_candidate_count: elementaryInitialCandidateCount,\s*\n\s*elementary_initial_distinct_targets_validated: elementaryInitialDistinctTargetsValidated,\s*\n\s*elementary_regeneration_calls: elementaryRegenerationCalls,\s*\n\s*elementary_ready_after_initial_batch: elementaryReadyAfterInitialBatch/
-  );
-});
-
-test("elementaryReadyAfterInitialBatch est dérivé de regenerationCycles===0 ET validated.length>=elementaryReadyThreshold — jamais un nouveau compteur indépendant qui pourrait diverger", () => {
-  assert.match(SERVER_SOURCE, /elementaryReadyAfterInitialBatch = questionQualityMetrics\?\.regenerationCycles === 0 && validated\.length >= elementaryReadyThreshold;/);
-});
-
-test("les 4 nouveaux champs de blockResult sont bien destructurés dans ensureProgressiveElementaryGenerated, jamais recalculés localement", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /const \{\s*\n\s*sourceName,\s*\n\s*sourceDetail,\s*\n\s*validated,\s*\n\s*ficheMs,\s*\n\s*elementaryInitialCandidateCount,\s*\n\s*elementaryInitialDistinctTargetsValidated,\s*\n\s*elementaryRegenerationCalls,\s*\n\s*elementaryReadyAfterInitialBatch\s*\n\s*\} = blockResult;/
-  );
-});
-
-// ── Instrumentation : taille réelle du curriculum + seuil de disponibilité ─
-
-test("le log qcm-progressive-timing porte curriculum_size/elementary_target_count/elementary_validated_count/elementary_ready_threshold/deepening_count/expert_count/elementary_verification_count/deferred_verification_count, en plus des durées", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /console\.info\("\[qcm-progressive-timing\]", JSON\.stringify\(\{\s*\n\s*generationId: id,\s*\n\s*route: "free_search_progressive",\s*\n\s*grounding_ms: groundingMs,\s*\n\s*curriculum_ms: curriculumMs,\s*\n\s*elementary_fiche_ms: ficheMs,\s*\n\s*time_to_elementary_ready_ms: timeToElementaryReadyMs,\s*\n\s*curriculum_size: curriculum\.length,\s*\n\s*elementary_target_count: elementaryKnowledge\.length,\s*\n\s*elementary_validated_count: validated\.length,\s*\n\s*elementary_ready_threshold: elementaryReadyThreshold,[\s\S]{0,500}?elementary_verification_count: elementaryVerificationCount,\s*\n\s*deferred_verification_count: deferredVerificationCount,\s*\n\s*deepening_count: deepeningKnowledgeCount,\s*\n\s*expert_count: expertKnowledgeCount/
-  );
-});
-
-test("elementaryVerificationCount/deferredVerificationCount proviennent de resolveProgressiveCurriculum, jamais recalculés localement", () => {
-  assert.match(SERVER_SOURCE, /const \{\s*\n\s*curriculum, curriculumMs, elementaryVerificationCount, deferredVerificationCount,[\s\S]{0,200}?\} = curriculumResult;/);
-  assert.match(SERVER_SOURCE, /elementaryVerificationCount: elementaryFinal\.length,\s*\n\s*deferredVerificationCount: deferredFinal\.length/);
-});
-
-test("le curriculum et sa réparation sont journalisés sous des features dédiées curriculum_generation / curriculum_repair", () => {
-  assert.match(SERVER_SOURCE, /feature: "curriculum_generation",/);
-  assert.match(SERVER_SOURCE, /feature: "curriculum_repair",/);
-});
-
-test("la vérification du curriculum réutilise la feature knowledge_verification existante (jamais une feature 'curriculum_verification' distincte)", () => {
-  assert.match(SERVER_SOURCE, /feature: "knowledge_verification",/);
-  assert.doesNotMatch(SERVER_SOURCE, /curriculum_verification/);
-});
-
-test("la fiche et les questions élémentaires sont journalisées sous elementary_fiche_generation / elementary_question_generation", () => {
-  assert.match(SERVER_SOURCE, /feature: "elementary_fiche_generation",/);
-  assert.match(SERVER_SOURCE, /feature: "elementary_question_generation",/);
-});
-
-test("qualityControlRawQuestions reçoit reviewFeature/regenerationFeature dédiés pour le bloc élémentaire (elementary_semantic_review / elementary_targeted_regeneration)", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /reviewFeature: "elementary_semantic_review",\s*\n\s*regenerationFeature: "elementary_targeted_regeneration"/
-  );
-});
-
-test("qualityControlRawQuestions garde des noms de feature legacy par défaut (question_semantic_review/question_targeted_regeneration) pour tout appelant qui ne précise rien", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /reviewFeature = "question_semantic_review",\s*\n\s*regenerationFeature = "question_targeted_regeneration"/
-  );
-});
-
-test("le même generationId (id) traverse grounding, curriculum, réparation, fiche et questions élémentaires — jamais un id recalculé en cours de route", () => {
-  const block = SERVER_SOURCE.slice(
-    SERVER_SOURCE.indexOf("async function resolveProgressiveCurriculum"),
-    SERVER_SOURCE.indexOf("async function ensureProgressiveElementaryGenerated") + 2000
-  );
-  const generationIdOccurrences = block.match(/generationId: id/g) || [];
-  assert.ok(generationIdOccurrences.length >= 4, `attendu au moins 4 usages de generationId: id, trouvé ${generationIdOccurrences.length}`);
-});
-
-// ── V3.2 : réutilisé tel quel, jamais adapté à une cible variable ────────
-
-test("expandGroundingAndRegenerateMissingQuestions (V3.2) est réutilisé sans condition ni désactivation pour le bloc élémentaire", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /if \(questionQualityMetrics && currentGrounding\?\.identifiedSources\?\.length\) \{\s*\n\s*const expansionOutcome = await expandGroundingAndRegenerateMissingQuestions\(\{/
-  );
-});
-
-test("fiche et questions élémentaires sont lancées en parallèle (deux tâches indépendantes démarrées avant tout await) — jamais séquentielles", () => {
-  const fnStart = SERVER_SOURCE.indexOf("async function generateElementaryBlock");
-  const fnEnd = SERVER_SOURCE.indexOf("\n// Orchestrateur complet Phase 1", fnStart);
-  const fnBlock = SERVER_SOURCE.slice(fnStart, fnEnd);
-  const ficheTaskIndex = fnBlock.indexOf("const ficheTask = (async () => {");
-  const questionsTaskIndex = fnBlock.indexOf("const questionsTask = (async () => {");
-  const firstAwaitFicheTaskIndex = fnBlock.indexOf("const ficheOutcome = await ficheTask;");
-  assert.ok(ficheTaskIndex >= 0 && questionsTaskIndex >= 0 && firstAwaitFicheTaskIndex >= 0);
-  // Les deux tâches doivent être DÉCLENCHÉES (IIFE invoquée) avant que l'une des deux ne soit awaitée.
-  assert.ok(ficheTaskIndex < firstAwaitFicheTaskIndex && questionsTaskIndex < firstAwaitFicheTaskIndex, "les deux tâches doivent démarrer avant tout await — sinon elles ne sont pas réellement parallèles");
 });
 
 // ── Verrou en mémoire partagé (dédup legacy/progressif sur le même sujet) ─
@@ -311,20 +166,23 @@ test("ensureProgressiveElementaryGenerated réutilise _notionQuizMasterGeneratio
     SERVER_SOURCE,
     /async function ensureProgressiveElementaryGenerated\(masterSlot, topic, id, userId\) \{\s*\n\s*const pending = _notionQuizMasterGenerationPromises\.get\(masterSlot\);/
   );
-  const fnStart = SERVER_SOURCE.indexOf("async function ensureProgressiveElementaryGenerated");
-  const fnEnd = SERVER_SOURCE.indexOf("\nasync function ensureCustomTopicMasterGenerated", fnStart);
-  const fnBlock = SERVER_SOURCE.slice(fnStart, fnEnd);
-  assert.match(fnBlock, /_notionQuizMasterGenerationPromises\.set\(masterSlot, generation\);/);
 });
 
-// ── Route : nouvelle, isolée de la route legacy ───────────────────────────
+test("continueProgressiveGeneration utilise son PROPRE verrou en mémoire, distinct de celui de la génération initiale — jamais le même Map", () => {
+  assert.match(SERVER_SOURCE, /const _notionQuizContinuationPromises = new Map\(\);/);
+  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
+  assert.match(body, /_notionQuizContinuationPromises\.get\(masterSlot\)/);
+  assert.doesNotMatch(body, /_notionQuizMasterGenerationPromises/);
+});
+
+// ── Route : dédoublonnage, réutilisation, niveau ──────────────────────────
 
 test("la route POST /api/users/notion-quizzes/custom/progressive existe et est distincte de la route legacy POST .../custom", () => {
   assert.match(SERVER_SOURCE, /app\.post\("\/api\/users\/notion-quizzes\/custom\/progressive", rateLimit\("users", 30\), async \(req, res\) => \{/);
   assert.match(SERVER_SOURCE, /app\.post\("\/api\/users\/notion-quizzes\/custom", rateLimit\("users", 30\), async \(req, res\) => \{/);
 });
 
-test("la route progressive n'appelle ni triggerAutomaticNoesVideo ni createNotification (choix de portée Phase 1 assumé, pas un oubli)", () => {
+test("la route progressive n'appelle ni triggerAutomaticNoesVideo ni createNotification (choix de portée assumé, pas un oubli)", () => {
   const routeStart = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
   const routeEnd = SERVER_SOURCE.indexOf("\n});", routeStart) + 4;
   const routeSource = SERVER_SOURCE.slice(routeStart, routeEnd);
@@ -332,11 +190,16 @@ test("la route progressive n'appelle ni triggerAutomaticNoesVideo ni createNotif
   assert.doesNotMatch(routeSource, /createNotification/);
 });
 
-test("la route progressive relie l'utilisateur au QCM via user_notion_quizzes (accès immédiat, requested_level='elementaire')", () => {
+// Réécrit (Phase 2.1) : requested_level est désormais DYNAMIQUE (le niveau
+// réellement demandé), jamais la chaîne fixe "elementaire" de la Phase 1 —
+// cf. aussi test/qcm-progressive-v2-wiring.test.js pour le verrou complet
+// sur `requestedLevel`.
+test("la route progressive relie l'utilisateur au QCM via user_notion_quizzes avec requested_level DYNAMIQUE (jamais la chaîne fixe 'elementaire')", () => {
   assert.match(
     SERVER_SOURCE,
-    /\.upsert\(\s*\n\s*\{ user_id: user\.id, quiz_date: quizDate, slot: masterSlot, requested_level: "elementaire" \}/
+    /\.upsert\(\s*\n\s*\{ user_id: user\.id, quiz_date: quizDate, slot: masterSlot, requested_level: requestedLevel \}/
   );
+  assert.doesNotMatch(SERVER_SOURCE, /requested_level: "elementaire" \}/);
 });
 
 test("la route progressive sélectionne aussi curriculum (pas seulement questions/progressive_status) pour juger l'éligibilité d'une ligne existante", () => {
@@ -384,7 +247,7 @@ test("progressiveEligibilityMinimum (lib/question-formats.js) n'écrase jamais M
 
 // ── generateNotionLevelQuiz / buildCustomTopicQuiz / ensureCustomTopicMasterGenerated : non touchés ──
 
-test("generateNotionLevelQuiz, buildCustomTopicQuiz et ensureCustomTopicMasterGenerated ne sont ni appelés ni modifiés par le chemin progressif (chemin entièrement nouveau et additif)", () => {
+test("generateNotionLevelQuiz, buildCustomTopicQuiz et ensureCustomTopicMasterGenerated ne sont ni appelés ni modifiés par le chemin progressif", () => {
   const progressiveBlockStart = SERVER_SOURCE.indexOf("async function resolveProgressiveCurriculum");
   const progressiveBlockEnd = SERVER_SOURCE.indexOf("async function ensureCustomTopicMasterGenerated");
   const progressiveBlock = SERVER_SOURCE.slice(progressiveBlockStart, progressiveBlockEnd);
@@ -392,74 +255,60 @@ test("generateNotionLevelQuiz, buildCustomTopicQuiz et ensureCustomTopicMasterGe
   assert.doesNotMatch(progressiveBlock, /buildCustomTopicQuiz\(/);
 });
 
-// ── Pas de nouvelle migration nécessaire (colonnes déjà appliquées en base) ─
+// ── Migration : additive, curriculum/progressive_status déjà appliquées ──
 
-test("la migration curriculum/progressive_status reste celle déjà appliquée — additive, aucune nouvelle table, aucun nouveau fichier de migration requis par ce correctif", () => {
+test("la migration curriculum/progressive_status reste celle déjà appliquée — additive, aucune nouvelle table", () => {
   const migrationSource = fs.readFileSync(path.join(__dirname, "../data/migration-daily-quiz-progressive.sql"), "utf8");
   assert.match(migrationSource, /ALTER TABLE daily_quiz ADD COLUMN IF NOT EXISTS curriculum JSONB;/);
   assert.match(migrationSource, /ALTER TABLE daily_quiz ADD COLUMN IF NOT EXISTS progressive_status TEXT;/);
   assert.doesNotMatch(migrationSource, /CREATE TABLE/i);
 });
 
-// ── Evidence grounding en amont (V1, 03/09/2026) : câblage server.js ──────
+// grounding_full envisagée (Phase 2) puis ABANDONNÉE (Phase 2.1, audit
+// migration du 04/09/2026) : n'était nécessaire que sous l'ancien design de
+// continuation, qui re-vérifiait des connaissances déjà evidence-gatées
+// contre un grounding re-résolu. Depuis que resolveProgressiveCurriculum
+// evidence-gate TOUS les niveaux immédiatement et que la continuation ne
+// re-gate plus jamais un item déjà vérifié (`preAccepted`), aucune colonne
+// supplémentaire n'est nécessaire — aucun fichier de migration à appliquer.
+test("aucune colonne grounding_full : la continuation re-résout un grounding frais sans jamais re-gater un item déjà vérifié (preAccepted)", () => {
+  // Aucune sélection/insertion Supabase ne référence plus grounding_full —
+  // seul un commentaire explique pourquoi cette colonne a été envisagée puis
+  // abandonnée (légitime, jamais un usage réel).
+  assert.doesNotMatch(SERVER_SOURCE, /\.select\([^)]*grounding_full/);
+  assert.doesNotMatch(SERVER_SOURCE, /grounding_full:/);
+  const dataFiles = fs.readdirSync(path.join(__dirname, "../data"));
+  assert.ok(!dataFiles.includes("migration-daily-quiz-progressive-v2.sql"), "aucune migration grounding_full ne doit exister : elle n'est plus justifiée sous Phase 2.1");
+});
+
+// ── Evidence grounding en amont (V1) : câblage server.js ──────────────────
 
 test("evidenceModeActive est dérivé UNIQUEMENT de grounding.identifiedSources.length — jamais un flag séparé ni une option de l'appelant", () => {
   assert.match(SERVER_SOURCE, /const evidenceModeActive = !!grounding\?\.identifiedSources\?\.length;/);
 });
 
-test("le gate evidence (applyEvidenceGate) est appliqué au pool elementary AVANT verifyOrders, et à chaque lot d'ajouts de réparation — jamais un nouveau retry, jamais une nouvelle boucle", () => {
-  const fnStart = SERVER_SOURCE.indexOf("async function resolveProgressiveCurriculum");
-  const fnEnd = SERVER_SOURCE.indexOf("// Rédige la fiche élémentaire");
-  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
-  assert.match(fnBody, /elementaryPool = applyEvidenceGate\(elementaryPool\);/);
-  assert.match(fnBody, /additions = applyEvidenceGate\(additions\);/);
-  // Un seul mécanisme de réparation (CURRICULUM_REPAIR_MAX_ATTEMPTS déjà
-  // existant) traite un rejet evidence exactement comme un rejet de
-  // knowledge_verification — jamais une seconde boucle "evidence-specific".
-  assert.equal((fnBody.match(/for \(let attempt = 1; attempt <= CURRICULUM_REPAIR_MAX_ATTEMPTS/g) || []).length, 1);
-});
-
-test("knowledge_verification (verifyOrders/buildKnowledgeVerificationPrompt) ne voit et ne renvoie jamais que {fact, order} — structurellement incapable de lire, réécrire ou fabriquer source_id/evidence_text", () => {
-  assert.match(SERVER_SOURCE, /const verificationCandidates = candidates\.map\(\(k\) => \(\{ fact: k\.knowledgeTarget, order: k\.order \}\)\);/);
-  assert.match(SERVER_SOURCE, /return new Set\(accepted\.map\(\(c\) => c\.order\)\);/);
-});
-
-test("acceptedElementary est reconstruit en filtrant les items ORIGINAUX de elementaryPool par order — jamais une reconstruction {fact, order} qui aurait perdu source_id/evidence_text en route", () => {
-  assert.match(SERVER_SOURCE, /acceptedElementary = evictNearDuplicates\(elementaryPool\.filter\(\(k\) => acceptedOrders\.has\(k\.order\)\)\);/);
+test("le gate evidence (applyEvidenceGate) est appliqué au pool initial ET aux ajouts de réparation — jamais un nouveau retry, jamais une nouvelle boucle", () => {
+  const body = extractFunctionBody(SERVER_SOURCE, /async function evidenceGateAndRepairCurriculumSubset\(\{/);
+  assert.match(body, /accepted = preAccepted != null \? preAccepted : evictNearDuplicates\(applyEvidenceGate\(initialPool\)\);/);
+  assert.match(body, /const acceptedAdditions = applyEvidenceGate\(additions\);/);
 });
 
 test("buildCurriculumPrompt/buildCurriculumRepairPrompt reçoivent identifiedSourcesBlock UNIQUEMENT quand evidenceModeActive, jamais groundingText en plus dans ce cas", () => {
   assert.match(SERVER_SOURCE, /buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
-  assert.match(SERVER_SOURCE, /buildCurriculumRepairPrompt\(subject, contextHint, neededCount, acceptedElementary, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
+  assert.match(SERVER_SOURCE, /buildCurriculumRepairPrompt\(subject, contextHint, neededCount, accepted, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
 });
 
-test("generateElementaryBlock construit evidenceByKnowledgeTarget UNE SEULE FOIS depuis admittedKnowledge, et le relaie au lot initial ET à l'expansion V3.2 — jamais deux Map distinctes", () => {
-  const fnStart = SERVER_SOURCE.indexOf("async function generateElementaryBlock");
-  const fnEnd = SERVER_SOURCE.indexOf("async function ensureProgressiveElementaryGenerated");
-  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
-  assert.equal((fnBody.match(/const evidenceByKnowledgeTarget = new Map\(\);/g) || []).length, 1);
-  assert.match(fnBody, /evidenceByKnowledgeTarget\s*\n\s*\}\);/); // lot initial : qualityControlRawQuestions({..., evidenceByKnowledgeTarget})
-  assert.match(fnBody, /questionQualityMetrics: \{ \.\.\.questionQualityMetrics, finalAccepted: validated\.length \},\s*\n\s*evidenceByKnowledgeTarget/); // V3.2
-});
-
-test("qualityControlRawQuestions applique applyEvidenceGroundingOverride au lot initial ET à chaque lot retourné par regenerate() — jamais laissé au modèle de recopier source_ids/supporting_claim", () => {
-  const fnStart = SERVER_SOURCE.indexOf("async function qualityControlRawQuestions");
-  const fnEnd = SERVER_SOURCE.indexOf("// QCM d'une seule notion");
-  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
-  assert.match(fnBody, /const applyEvidence = \(questions\) => applyEvidenceGroundingOverride\(questions, evidenceByKnowledgeTarget\);/);
-  assert.match(fnBody, /runQuestionQualityPipeline\(applyEvidence\(rawQuestions\), \{/);
-  assert.match(fnBody, /return applyEvidence\(regenerated\);/);
-});
-
-test("qcm-progressive-timing journalise elementary_evidence_candidates/valid/rejected/rejection_reasons — jamais le texte des sources ni des extraits", () => {
+test("qcm-progressive-timing journalise elementary_evidence_candidates/valid/rejected/rejection_reasons ET deferred_evidence_* — jamais le texte des sources ni des extraits", () => {
   assert.match(SERVER_SOURCE, /elementary_evidence_candidates: elementaryEvidenceCandidates,\s*\n\s*elementary_evidence_valid: elementaryEvidenceValid,\s*\n\s*elementary_evidence_rejected: elementaryEvidenceRejected,\s*\n\s*elementary_evidence_rejection_reasons: elementaryEvidenceRejectionReasons/);
+  assert.match(SERVER_SOURCE, /deferred_evidence_candidates: deferredEvidenceCandidates,\s*\n\s*deferred_evidence_valid: deferredEvidenceValid,\s*\n\s*deferred_evidence_rejected: deferredEvidenceRejected,\s*\n\s*deferred_evidence_rejection_reasons: deferredEvidenceRejectionReasons/);
 });
 
-test("aucun changement de modèle/température/seuil/retry : DAILY_QUIZ_NARRATIVE_MODEL et les températures 0.4/0.2 restent utilisées pour curriculum_generation/knowledge_verification, MIN_ELEMENTARY_READY_QUESTIONS n'est jamais réassigné dans ce chantier", () => {
-  const fnStart = SERVER_SOURCE.indexOf("async function resolveProgressiveCurriculum");
-  const fnEnd = SERVER_SOURCE.indexOf("// Rédige la fiche élémentaire");
-  const fnBody = SERVER_SOURCE.slice(fnStart, fnEnd);
-  assert.match(fnBody, /model: DAILY_QUIZ_NARRATIVE_MODEL,\s*\n\s*temperature: 0\.4,[\s\S]{0,200}?feature: "curriculum_generation"/);
-  assert.match(fnBody, /model: DAILY_QUIZ_NARRATIVE_MODEL,\s*\n\s*temperature: 0\.2,[\s\S]{0,200}?feature: "knowledge_verification"/);
-  assert.doesNotMatch(fnBody, /MIN_ELEMENTARY_READY_QUESTIONS\s*=[^=]/);
+// ── Observabilité : compte exact d'appels IA nominaux (section 1/10) ─────
+
+test("elementary_ai_call_count est calculé à partir des signaux RÉELS de repair (curriculum ET question), jamais une valeur supposée fixe", () => {
+  assert.match(
+    SERVER_SOURCE,
+    /const elementaryAiCallCount = 1 \+ \(elementaryCurriculumRepairAttempted \? 1 : 0\) \+ 1 \+ 1 \+ \(elementaryRegenerationCalls > 0 \? 1 : 0\);/
+  );
+  assert.match(SERVER_SOURCE, /elementary_ai_call_count: elementaryAiCallCount,/);
 });

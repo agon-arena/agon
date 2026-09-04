@@ -5870,19 +5870,15 @@
         closeAiGenerateModal();
         if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
 
-        // Câblage Phase 1 (03/09/2026, "rendre la génération progressive
-        // accessible depuis l'UI") : la route .../custom/progressive ne sait
-        // encore produire QUE le bloc élémentaire (blocs deepening/expert non
-        // implémentés, cf. rapport Phase 1) — elle ignore d'ailleurs
-        // silencieusement `level` côté serveur. Un choix "Avancé"/"Expert" ne
-        // doit donc jamais y être routé (l'utilisateur recevrait 4-5
-        // questions élémentaires au lieu du niveau demandé) : seul le choix
-        // "Élémentaire" utilise la nouvelle route ; "Avancé"/"Expert"
-        // continuent d'utiliser .../custom (legacy, master complet),
-        // strictement inchangé.
-        var creationEndpoint = level === 'elementaire'
-          ? '/api/users/notion-quizzes/custom/progressive'
-          : '/api/users/notion-quizzes/custom';
+        // Câblage Phase 2 (03/09/2026, "terminer le pipeline progressif") :
+        // .../custom/progressive sait désormais produire les 3 niveaux — le
+        // backend sert toujours Élémentaire en premier (chemin critique
+        // court), puis attend, DANS cette même requête, jusqu'au niveau
+        // réellement choisi si "Avancé"/"Expert" (même tolérance aux
+        // requêtes longues que l'ancien flux .../custom ci-dessous, cf.
+        // commentaires du .catch() plus bas). Le parcours complet continue
+        // ensuite en arrière-plan jusqu'à Expert quel que soit le choix.
+        var creationEndpoint = '/api/users/notion-quizzes/custom/progressive';
 
         fetch(creationEndpoint, {
           method: 'POST',
