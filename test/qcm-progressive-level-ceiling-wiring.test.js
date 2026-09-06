@@ -101,8 +101,12 @@ test("Site 4/6 — POST /api/users/notion-quizzes/custom/progressive plafonne au
 test("Site 5/6 — GET /api/users/notion-quizzes sélectionne progressive_status par ligne et plafonne chaque quiz avant selectQuestionsForRequestedLevel", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
   assert.ok(routeIndex > 0);
-  const selectIndex = SERVER_SOURCE.indexOf('.select("quiz_date, slot, questions, progressive_status")', routeIndex);
-  assert.ok(selectIndex > routeIndex, "progressive_status doit être sélectionné dans quizRowsPromise");
+  // Diagnostic de lenteur du 04/09/2026 (cf. data/migration-daily-quiz-question-summaries.sql) :
+  // `questions` complet remplacé par la fonction résumé calculée côté base
+  // (daily_quiz_question_summaries), progressive_status reste sélectionné
+  // tel quel en colonne à plat.
+  const selectIndex = SERVER_SOURCE.indexOf('.select("quiz_date, slot, progressive_status, summary:daily_quiz_question_summaries")', routeIndex);
+  assert.ok(selectIndex > routeIndex, "progressive_status doit être sélectionné dans quizRowsPromise, questions remplacé par le résumé calculé");
   const mapIndex = SERVER_SOURCE.indexOf("const progressiveStatusByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.progressive_status || null]));", routeIndex);
   assert.ok(mapIndex > selectIndex, "une map par clé quiz_date:slot doit indexer progressive_status, même principe que questionsByKey");
   const ceilingIndex = SERVER_SOURCE.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveLevel, progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`));", routeIndex);

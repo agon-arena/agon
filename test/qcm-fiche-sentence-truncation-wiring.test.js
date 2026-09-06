@@ -75,7 +75,11 @@ test("9. GET /api/users/notion-quizzes/fiche ne re-tronque jamais section.text (
   // Le filtrage par niveau des sections (déjà en place, cf. §8 du chantier
   // précédent) porte sur le TABLEAU sections lui-même (garde/retire des
   // sections entières), jamais sur le contenu textuel d'une section gardée.
-  assert.match(routeBody, /\(first\.sourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => !s\.level \|\| progressiveLevelRank\(s\.level\) <= effectiveLevelRank\)/);
+  // `fullSourceDetail` (correctif egress du 04/09/2026, cf.
+  // findCanonicalSourceDetail) a remplacé `first.sourceDetail` comme base de
+  // ce filtre — même principe, la source n'est plus forcément portée par
+  // `first` depuis que sourceDetail n'est plus dupliqué sur chaque question.
+  assert.match(routeBody, /\(fullSourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => !s\.level \|\| progressiveLevelRank\(s\.level\) <= effectiveLevelRank\)/);
 });
 
 // ── 10. Frontend : rendu direct, aucune troncature JS du texte affiché. ───

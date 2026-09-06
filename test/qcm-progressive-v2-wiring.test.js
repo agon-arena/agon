@@ -124,9 +124,38 @@ test("continueProgressiveGeneration persiste progressive_status='deepening_ready
   assert.match(SERVER_SOURCE, /PROGRESSIVE_STATUS_FOR_QUIZ_LEVEL = \{ elementaire: "elementary_ready", avance: "deepening_ready", expert: "ready" \};/);
 });
 
-test("continueProgressiveGeneration fusionne sourceDetail.sections sur TOUTES les questions déjà persistées, jamais uniquement les nouvelles (la fiche affichée doit être la concaténation des blocs)", () => {
+// Réécrit (correctif egress du 04/09/2026, "sourceDetail dupliqué sur
+// CHAQUE question ×20+ dans la même ligne daily_quiz", cf. rapport
+// diagnostic egress) : la fiche complète (mergedSourceDetail, sections
+// grandissantes) n'est plus réécrite QUE sur la question d'indice 0 — seule
+// porteuse durable, cf. slimSourceDetailForDuplicateQuestion/
+// findCanonicalSourceDetail. Les autres questions déjà persistées gardent
+// une version allégée (image uniquement). L'INVARIANT métier reste
+// inchangé : la fiche affichée (GET .../fiche, via findCanonicalSourceDetail)
+// est toujours la concaténation de tous les blocs — seul le SUPPORT de
+// stockage change, jamais le contenu servi.
+test("continueProgressiveGeneration ne réécrit la fiche complète (mergedSourceDetail) QUE sur la question d'indice 0 — les autres gardent une version allégée (image uniquement)", () => {
   const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
-  assert.match(body, /currentQuestions\.map\(\(q\) => \(\{ \.\.\.q, sourceDetail: mergedSourceDetail \}\)\)/);
+  assert.match(body, /currentQuestions\.map\(\(q, index\) => \(\{\s*\n\s*\.\.\.q,\s*\n\s*sourceDetail: index === 0 \? mergedSourceDetail : slimSourceDetailForDuplicateQuestion\(mergedSourceDetail\)\s*\n\s*\}\)\)/);
+  assert.match(body, /sourceDetail: slimSourceDetailForDuplicateQuestion\(mergedSourceDetail\)/);
+  assert.doesNotMatch(body, /currentQuestions\.map\(\(q\) => \(\{ \.\.\.q, sourceDetail: mergedSourceDetail \}\)\)/);
+});
+
+test("slimSourceDetailForDuplicateQuestion ne garde que l'image (jamais sections/meta, le vrai poids) — findCanonicalSourceDetail retrouve la fiche complète sans supposer sa position", () => {
+  assert.match(SERVER_SOURCE, /function slimSourceDetailForDuplicateQuestion\(sourceDetail\) \{\s*\n\s*return sourceDetail\?\.image \? \{ image: sourceDetail\.image \} : null;\s*\n\}/);
+  assert.match(SERVER_SOURCE, /function findCanonicalSourceDetail\(rawQuestions\) \{\s*\n\s*return \(Array\.isArray\(rawQuestions\) \? rawQuestions : \[\]\)\.find\(\(q\) => q\?\.sourceDetail\?\.sections\?\.length\)\?\.sourceDetail \|\| null;\s*\n\}/);
+});
+
+test("ensureProgressiveElementaryGenerated applique la même règle dès la toute première écriture : seule la question d'indice 0 garde la fiche complète", () => {
+  assert.match(
+    SERVER_SOURCE,
+    /sourceDetail: index === 0 \? sourceDetail : slimSourceDetailForDuplicateQuestion\(sourceDetail\),/
+  );
+});
+
+test("GET .../fiche retrouve la fiche complète via findCanonicalSourceDetail sur le tableau BRUT, jamais en supposant que questions[0] la porte après le tri par pedagogicalRank", () => {
+  assert.match(SERVER_SOURCE, /const canonicalSourceDetail = findCanonicalSourceDetail\(questions\);/);
+  assert.match(SERVER_SOURCE, /const fullSourceDetail = canonicalSourceDetail \|\| first\.sourceDetail \|\| null;/);
 });
 
 test("un échec de vérification/génération d'un niveau interrompt proprement la continuation (break), jamais une boucle ou un retry supplémentaire", () => {
@@ -234,12 +263,18 @@ test("generateProgressiveLevelBlock tague chaque section de sourceDetail avec so
   assert.match(body, /sourceDetail\.sections = \(sourceDetail\.sections \|\| \[\]\)\.map\(\(s\) => \(\{\s*\n\s*\.\.\.s,\s*\n\s*level: levelKey,/);
 });
 
+// `fullSourceDetail` (correctif egress du 04/09/2026, cf.
+// findCanonicalSourceDetail) a remplacé `first.sourceDetail` comme base de
+// ce filtre — même filtrage, la fiche complète n'étant plus forcément
+// portée par `first` depuis que sourceDetail n'est plus dupliqué sur chaque
+// question (cf. slimSourceDetailForDuplicateQuestion).
 test("GET .../fiche filtre sourceDetail.sections au niveau demandé (cumulatif jusqu'à effectiveLevel) — sections sans `level` (legacy) jamais filtrées, effectiveLevel non reconnu = aucun filtrage (repli sûr)", () => {
   const idx = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"');
   assert.ok(idx > 0);
-  const routeBody = SERVER_SOURCE.slice(idx, idx + 9000);
+  const routeBody = SERVER_SOURCE.slice(idx, idx + 10000);
   assert.match(routeBody, /const effectiveLevelRank = progressiveLevelRank\(effectiveLevel\);/);
-  assert.match(routeBody, /sections: effectiveLevelRank < 0\s*\n\s*\? first\.sourceDetail\.sections\s*\n\s*: \(first\.sourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => !s\.level \|\| progressiveLevelRank\(s\.level\) <= effectiveLevelRank\)/);
+  assert.match(routeBody, /const fullSourceDetail = canonicalSourceDetail \|\| first\.sourceDetail \|\| null;/);
+  assert.match(routeBody, /sections: effectiveLevelRank < 0\s*\n\s*\? fullSourceDetail\.sections\s*\n\s*: \(fullSourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => !s\.level \|\| progressiveLevelRank\(s\.level\) <= effectiveLevelRank\)/);
 });
 
 // ── GROUNDING_ANSWER_NOT_IN_CLAIM : correctif ciblé (diagnostic réel du

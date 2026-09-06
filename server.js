@@ -18824,6 +18824,38 @@ function flattenFicheSectionsText(sections) {
     .join("\n\n");
 }
 
+// Correctif egress (diagnostic du 04/09/2026) : dans le pipeline progressif,
+// TOUTES les questions d'une même ligne daily_quiz partagent la MÊME fiche
+// (un seul sujet par ligne) — jusqu'ici, `sourceDetail` (sections + image,
+// jusqu'à ~9,6 Ko de texte au niveau Expert) était pourtant recopié tel quel
+// sur CHAQUE question (ensureProgressiveElementaryGenerated,
+// continueProgressiveGeneration), dupliquant ce contenu jusqu'à 20+ fois
+// dans une même ligne. Mesuré en prod : une ligne "ready" à 14 questions
+// pesait 112 Ko de JSON réellement transféré depuis Supabase pour ~2,2 Ko de
+// contenu unique. Seule la question d'indice 0 du tableau BRUT (invariant
+// conservé à travers toutes les continuations, cf. ensureProgressiveElementaryGenerated
+// et continueProgressiveGeneration) garde désormais la fiche complète ; les
+// autres ne gardent que `image` (seul champ de sourceDetail relu par
+// question ailleurs, cf. stripQuestionForClient) — jamais `sections`/`meta`,
+// le vrai poids. GET .../fiche (seul consommateur du contenu complet)
+// retrouve la fiche via findCanonicalSourceDetail plutôt que de supposer sa
+// position, car selectQuestionsForRequestedLevel retrie par pedagogicalRank
+// et peut placer une AUTRE question en position 0 à l'affichage.
+function slimSourceDetailForDuplicateQuestion(sourceDetail) {
+  return sourceDetail?.image ? { image: sourceDetail.image } : null;
+}
+
+// Retrouve la fiche complète (sections/meta) dans le tableau BRUT (avant
+// tri/troncature par niveau) d'une ligne daily_quiz progressive — jamais en
+// supposant que `questions[0]` la porte encore après un tri par rang. Sur
+// toute ligne non concernée par slimSourceDetailForDuplicateQuestion
+// (legacy, imports, culture générale : chaque question y garde déjà sa
+// propre fiche complète), retombe naturellement sur la première trouvée,
+// comportement strictement inchangé.
+function findCanonicalSourceDetail(rawQuestions) {
+  return (Array.isArray(rawQuestions) ? rawQuestions : []).find((q) => q?.sourceDetail?.sections?.length)?.sourceDetail || null;
+}
+
 // ── Génération d'UN bloc progressif (paragraphe + questions) pour un niveau
 // donné du curriculum ── Cœur commun à Elementary/Deepening/Expert (V2,
 // 03/09/2026, "terminer et simplifier le pipeline progressif") : factorise
@@ -19276,7 +19308,10 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       sourceType: "custom",
       sourceScope: null,
       sourceName,
-      sourceDetail,
+      // index 0 = seule porteuse de la fiche complète, cf.
+      // slimSourceDetailForDuplicateQuestion — invariant conservé à travers
+      // toutes les continuations (continueProgressiveGeneration).
+      sourceDetail: index === 0 ? sourceDetail : slimSourceDetailForDuplicateQuestion(sourceDetail),
       sourceThemes: [],
       sourcePlacement: null,
       level: "elementaire",
@@ -19512,25 +19547,37 @@ async function continueProgressiveGeneration(masterSlot, topic, id, userId, targ
         ...(currentQuestions[0]?.sourceDetail || {}),
         sections: mergedSections
       };
+      // sourceDetail (correctif egress du 04/09/2026, cf.
+      // slimSourceDetailForDuplicateQuestion) : les nouvelles questions ne
+      // sont JAMAIS en position 0 du tableau complet (currentQuestions en
+      // contient toujours déjà au moins une) — elles ne gardent donc que
+      // `image`, jamais la fiche complète.
       const newQuestions = rankedNewQuestions.map((q, index) => ({
         id: `notion:custom:${id}-${quizLevel}-q${index + 1}`,
         ...q,
         sourceType: "custom",
         sourceScope: null,
         sourceName: authoritativeSourceName,
-        sourceDetail: mergedSourceDetail,
+        sourceDetail: slimSourceDetailForDuplicateQuestion(mergedSourceDetail),
         sourceThemes: [],
         sourcePlacement: null,
         level: quizLevel,
         sourceDebateId: id,
         searchTopic: topic
       }));
-      // sourceDetail réécrit aussi sur les questions DÉJÀ persistées (jamais
-      // uniquement les nouvelles) : sans cela, la fiche lue depuis
-      // `questions[0]` (toujours une question Élémentaire, cf. GET
-      // .../fiche) ne montrerait jamais les sections Approfondi/Expert.
+      // sourceDetail (fiche fusionnée, grandissante) réécrit UNIQUEMENT sur
+      // la question d'indice 0 (seule porteuse, cf.
+      // slimSourceDetailForDuplicateQuestion) — les autres questions déjà
+      // persistées gardent leur version allégée, jamais réécrite avec le
+      // contenu complet à chaque niveau franchi (c'était la cause de la
+      // duplication x20+ mesurée en prod, cf. diagnostic egress du
+      // 04/09/2026). GET .../fiche retrouve toujours la fiche complète via
+      // findCanonicalSourceDetail, jamais en supposant sa position.
       const allQuestions = [
-        ...currentQuestions.map((q) => ({ ...q, sourceDetail: mergedSourceDetail })),
+        ...currentQuestions.map((q, index) => ({
+          ...q,
+          sourceDetail: index === 0 ? mergedSourceDetail : slimSourceDetailForDuplicateQuestion(mergedSourceDetail)
+        })),
         ...newQuestions
       ];
 
@@ -20509,9 +20556,21 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // l'autre : lancées en parallèle (Promise.all plus bas) plutôt qu'en
     // série (demande du 03/09/2026) — mêmes requêtes, même volume lu, seule
     // la mise en vol change.
+    // daily_quiz_question_summaries (diagnostic de lenteur du 04/09/2026,
+    // cf. data/migration-daily-quiz-question-summaries.sql) : "colonne
+    // calculée" PostgREST, même principe déjà en place pour
+    // debates.media_extras_list_preview — Postgres calcule un résumé
+    // compact (sourceName/sourceType/sourceDebateId/sourcePlacement.category/
+    // sourceThemes + {id,level,pedagogicalRank} par question) et NE
+    // TRANSFÈRE QUE ÇA sur le fil, jamais `questions` en entier (options,
+    // explications, variantes, sourceDetail avec sections/highlights/image...)
+    // — cette route n'a jamais eu besoin de rien d'autre. Mesuré : 330 Ko ->
+    // 17,5 Ko pour un utilisateur réel à 25 QCM adoptés. Toute autre route
+    // (fiche, getDailyQuizQuestions, génération...) continue de lire
+    // `questions` intégralement, comportement strictement inchangé.
     const quizRowsPromise = supabase
       .from("daily_quiz")
-      .select("quiz_date, slot, questions, progressive_status")
+      .select("quiz_date, slot, progressive_status, summary:daily_quiz_question_summaries")
       .or(pairFilter);
 
     // Même rubrique que « Ma mémoire » : celle-ci ne se contente pas de la
@@ -20595,7 +20654,13 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     if (quizRowsError) throw new Error(quizRowsError.message);
     if (fsrsStatesError) throw new Error(fsrsStatesError.message);
 
-    const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.questions || []]));
+    // `row.summary` : résumé compact calculé côté base (cf. commentaire de
+    // quizRowsPromise ci-dessus) — jamais le `questions` complet. Absent
+    // (null) uniquement si la fonction n'a rien pu calculer (ligne sans
+    // aucune question, cas déjà géré comme "contenu introuvable" plus bas
+    // via `!rawQuestions.length`), jamais une erreur.
+    const questionsByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.summary?.questions || []]));
+    const quizMetaByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.summary || {}]));
     const progressiveStatusByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.progressive_status || null]));
     const durableAcquisBySourceId = new Map(
       durableAcquis.map((item) => [String(item.sourceDebateId), item])
@@ -20676,16 +20741,24 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         }
       }
       const progressPct = progressDenominator > 0 ? Math.round((creditSum / progressDenominator) * 100) : 0;
-      const durableAcquisState = durableAcquisBySourceId.get(String(questions[0]?.sourceDebateId || ""));
-      const firstQuestion = questions[0];
-      const memoryKnowledgeKey = `${firstQuestion?.sourceType || ""}:${firstQuestion?.sourceDebateId || ""}`;
+      // quizMeta : résumé de la ligne calculé côté base (cf.
+      // daily_quiz_question_summaries) — remplace l'ancien `questions[0]`
+      // (jamais lu ici que pour ces 5 champs, cf. commentaire de
+      // quizRowsPromise). `getPrimaryNotionQuizTheme` attend un objet
+      // {sourcePlacement.category, sourceThemes} : reconstruit à l'identique
+      // depuis les deux champs à plat renvoyés par la fonction — fonction
+      // elle-même inchangée, jamais appelée ailleurs qu'ici avec un vrai
+      // objet question complet (cf. son propre usage historique).
+      const quizMeta = quizMetaByKey.get(`${link.quiz_date}:${link.slot}`) || {};
+      const durableAcquisState = durableAcquisBySourceId.get(String(quizMeta.sourceDebateId || ""));
+      const memoryKnowledgeKey = `${quizMeta.sourceType || ""}:${quizMeta.sourceDebateId || ""}`;
       const primaryTheme = memoryGalaxyByKnowledgeKey.get(memoryKnowledgeKey)
-        || getPrimaryNotionQuizTheme(firstQuestion);
+        || getPrimaryNotionQuizTheme({ sourcePlacement: { category: quizMeta.sourcePlacementCategory }, sourceThemes: quizMeta.sourceThemes });
       quizzes.push({
         slot: link.slot,
         quizDate: link.quiz_date,
-        label: questions[0]?.sourceName || null,
-        sourceType: questions[0]?.sourceType || null,
+        label: quizMeta.sourceName || null,
+        sourceType: quizMeta.sourceType || null,
         // Une connaissance ne doit apparaître que dans sa rubrique la plus
         // pertinente, y compris pour les anciens QCM stockés avec plusieurs
         // sourceThemes.
@@ -20836,6 +20909,15 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // ci-dessous reflète donc ce sous-ensemble, jamais le corpus maître
     // complet stocké en base.
     const effectiveLevel = persistedLevel || requestedLevel || questions[0]?.level || null;
+    // canonicalSourceDetail (correctif egress du 04/09/2026, cf.
+    // slimSourceDetailForDuplicateQuestion/findCanonicalSourceDetail) : capturé
+    // sur le tableau BRUT, AVANT le tri par pedagogicalRank ci-dessous — sur
+    // une ligne progressive, seule une question précise (pas forcément
+    // celle qui atterrit en position 0 après ce tri) porte encore la fiche
+    // complète (sections/meta). Sur toute ligne non concernée (legacy,
+    // imports, culture générale), retombe naturellement sur la première
+    // question trouvée — comportement strictement inchangé.
+    const canonicalSourceDetail = findCanonicalSourceDetail(questions);
     // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : no-op strict si
     // progressiveStatus est NULL (legacy) — cf. lib/question-formats.js pour
     // le détail complet. Applique la même règle que la fiche de chaque
@@ -20860,11 +20942,17 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // `effectiveLevel` non reconnu (rang < 0) = aucun filtrage (repli sûr,
     // jamais un risque de tout masquer par excès de prudence).
     const effectiveLevelRank = progressiveLevelRank(effectiveLevel);
-    const sourceDetailForResponse = first.sourceDetail ? {
-      ...first.sourceDetail,
+    // fullSourceDetail : la fiche complète de CETTE ligne, quelle que soit la
+    // question qui la porte réellement (canonicalSourceDetail, capturé plus
+    // haut) — repli sur first.sourceDetail pour rester inchangé si jamais
+    // aucune question de la ligne n'en porte (cas défensif, ne devrait pas
+    // arriver).
+    const fullSourceDetail = canonicalSourceDetail || first.sourceDetail || null;
+    const sourceDetailForResponse = fullSourceDetail ? {
+      ...fullSourceDetail,
       sections: effectiveLevelRank < 0
-        ? first.sourceDetail.sections
-        : (first.sourceDetail.sections || []).filter((s) => !s.level || progressiveLevelRank(s.level) <= effectiveLevelRank)
+        ? fullSourceDetail.sections
+        : (fullSourceDetail.sections || []).filter((s) => !s.level || progressiveLevelRank(s.level) <= effectiveLevelRank)
     } : null;
     res.json({
       slot: resolvedSlot,
