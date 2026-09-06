@@ -458,12 +458,12 @@ test("selectCurriculumLevel : retourne exactement les connaissances \"expert\" a
 
 const SOURCES_BLOCK = 'SOURCE_1\ntitle: Charlemagne\nurl: https://fr.wikipedia.org/wiki/Charlemagne\ncontent: Charlemagne est couronné empereur d\'Occident par le pape Léon III le 25 décembre 800.';
 
-test("buildCurriculumPrompt : sans identifiedSourcesBlock, le prompt reste IDENTIQUE au caractère près à avant ce paramètre (legacy inchangé)", () => {
+test("buildCurriculumPrompt : sans identifiedSourcesBlock, le prompt reste IDENTIQUE au caractère près à avant ce paramètre (legacy inchangé) hors ajout du champ topicValidation", () => {
   const prompt = buildCurriculumPrompt("Charlemagne", null, "Un texte de grounding brut, sans identifiant de source.");
   assert.match(prompt, /Un texte de grounding brut, sans identifiant de source\./);
   assert.doesNotMatch(prompt, /source_id/);
   assert.doesNotMatch(prompt, /evidence_text/);
-  assert.match(prompt, /\{"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1\}, \.\.\.\]\}/);
+  assert.match(prompt, /"topicValidation":\{"status":"valid","normalizedTopic":"\.\.\."\|null\},"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1\}, \.\.\.\]\}/);
 });
 
 test("buildCurriculumPrompt : avec identifiedSourcesBlock, exige source_id + evidence_text par connaissance et injecte le bloc SOURCE_N (jamais groundingText en plus, même contenu sous une autre forme)", () => {
@@ -475,7 +475,28 @@ test("buildCurriculumPrompt : avec identifiedSourcesBlock, exige source_id + evi
   assert.match(prompt, /"evidence_text"/);
   assert.match(prompt, /COPIÉ TEXTUELLEMENT/);
   assert.match(prompt, /N'invente jamais une citation/);
-  assert.match(prompt, /\{"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1,"source_id":"SOURCE_1","evidence_text":"extrait exact copié depuis SOURCE_1"\}, \.\.\.\]\}/);
+  assert.match(prompt, /"topicValidation":\{"status":"valid","normalizedTopic":"\.\.\."\|null\},"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1,"source_id":"SOURCE_1","evidence_text":"extrait exact copié depuis SOURCE_1"\}, \.\.\.\]\}/);
+});
+
+// ── topicValidation (demande du 06/09/2026, incident "Baudouin de Hainaut")
+// : buildCurriculumPrompt intègre désormais la vérification de clarté/
+// identité du sujet — cf. lib/topic-identity-validation.js. ──────────────
+
+test("buildCurriculumPrompt : inclut les instructions de vérification d'identité du sujet, avec et sans sources", () => {
+  const withSources = buildCurriculumPrompt("Baudouin de Hainaut", null, "[Source 1] Contenu réel de la source.");
+  assert.match(withSources, /référent UNIQUE et non ambigu/);
+  assert.match(withSources, /au vu des sources ci-dessus/);
+  assert.match(withSources, /CONFUSION ENTRE PLUSIEURS RÉFÉRENTS DISTINCTS/);
+
+  const withoutSources = buildCurriculumPrompt("Baudouin de Hainaut", null, null);
+  assert.match(withoutSources, /référent UNIQUE et non ambigu/);
+  assert.match(withoutSources, /au vu de tes connaissances/);
+});
+
+test("buildCurriculumPrompt : reste conservateur — un sujet vaste ou une simple divergence documentaire ne doit pas être présenté comme une ambiguïté", () => {
+  const prompt = buildCurriculumPrompt("Empire romain", null, null);
+  assert.match(prompt, /n'est PAS une ambiguïté/);
+  assert.match(prompt, /en cas de doute réel, réponds toujours "valid"/);
 });
 
 test("buildCurriculumRepairPrompt : sans identifiedSourcesBlock, reste identique au caractère près (legacy inchangé)", () => {

@@ -6397,10 +6397,11 @@ function ensureDebateIframeModal() {
       left: 16px;
       bottom: 80px;
       z-index: 10002;
-      width: 42px;
-      height: 42px;
-      min-width: 42px;
-      min-height: 42px;
+      /* Taille réduite (demande du 06/09/2026, "un peu moins grosses") */
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      min-height: 38px;
       padding: 0;
       align-items: center;
       justify-content: center;
@@ -18580,6 +18581,23 @@ function adminToggleEditPanel(btn) {
     adminLoadStorySelect(p);
     adminInitDragPanel(p);
     adminInitResizeHandles(p);
+    // Charge le texte complet du champ Description à l'ouverture (correctif
+    // egress du 06/09/2026) : le textarea n'affiche jusqu'ici qu'un aperçu
+    // (cf. buildAdminEditPanelHtml) — sans ce chargement, "Enregistrer"
+    // écraserait le vrai contenu avec cet aperçu tronqué. Ne touche jamais
+    // le champ si l'admin a déjà tapé dedans entre-temps (data-content-loaded
+    // déjà 'true', posé par l'oninput du textarea) ou si c'est déjà le texte
+    // complet (ligne legacy). Réutilise fetchIndexContextFullText (même
+    // cache, même route /api/debates/:id déjà utilisée par "en savoir plus").
+    const contentField = p.querySelector('[data-edit-field="content"]');
+    if (contentField && contentField.getAttribute('data-content-loaded') !== 'true') {
+      const debateId = p.getAttribute('data-debate-id');
+      fetchIndexContextFullText(debateId).then((fullText) => {
+        if (contentField.getAttribute('data-content-loaded') === 'true') return;
+        contentField.value = fullText;
+        contentField.setAttribute('data-content-loaded', 'true');
+      });
+    }
   } else {
     if (p._adminOriginalParent) {
       p._adminOriginalParent.insertBefore(p, p._adminOriginalNextSibling || null);
@@ -18592,6 +18610,16 @@ function adminToggleEditPanel(btn) {
 }
 
 function buildAdminEditPanelHtml(d) {
+  // content (correctif egress du 06/09/2026, cf. content_list_preview côté
+  // serveur) : `d.content` peut désormais être {preview, hasMore} sur une
+  // carte issue de la liste — sans ce repli, escapeHtml(d.content) aurait
+  // affiché ET, au clic "Enregistrer", ré-écrit littéralement la chaîne
+  // "[object Object]" à la place du vrai contenu (String() d'un objet). Le
+  // textarea affiche l'aperçu en attendant que adminToggleEditPanel charge
+  // le texte complet à l'ouverture du panneau (data-content-loaded="false"
+  // = pas encore le vrai texte, jamais enregistrable tel quel avant ça).
+  const isLegacyStringContent = typeof d.content === 'string';
+  const contentPreviewText = isLegacyStringContent ? d.content : String(d.content?.preview || '');
   const isOpen = d.type === 'open' || d.type === 'question';
   const selectedCategories = getDebateCategoryList(d.category);
   const initialCategoryValue = joinDebateCategories(selectedCategories);
@@ -18628,7 +18656,7 @@ function buildAdminEditPanelHtml(d) {
         </div>
         <div class="admin-edit-field">
           <label class="admin-edit-label">Description</label>
-          <textarea class="admin-edit-textarea" data-edit-field="content" rows="3">${escapeHtml(d.content || '')}</textarea>
+          <textarea class="admin-edit-textarea" data-edit-field="content" data-content-loaded="${isLegacyStringContent ? 'true' : 'false'}" oninput="this.setAttribute('data-content-loaded','true')" rows="3">${escapeHtml(contentPreviewText)}</textarea>
         </div>
         <div class="admin-edit-info">
           <span>Type : <strong>${escapeHtml(d.type || 'debate')}</strong></span>
@@ -18858,12 +18886,28 @@ function buildIndexCardNotionsHtml(debate) {
 }
 
 function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", shareHtml = "", episodeNavHtml = "", notionsHtml = "") {
-  const fullText = String(debate?.content || '').trim();
+  // content (correctif egress du 06/09/2026, cf. content_list_preview côté
+  // serveur) : la liste ne reçoit plus le texte intégral d'un débat, mais
+  // {preview, hasMore} — le texte complet n'était utile qu'ICI, au clic
+  // "en savoir plus" (une minorité de cartes), jamais pour la carte fermée
+  // (qui n'affiche que la 1ère phrase, getIndexContextClosedPreviewText).
+  // Repli sur une chaîne brute pour toute réponse non passée par cette
+  // colonne calculée (ne devrait pas arriver pour la liste accueil, mais
+  // jamais un crash si un appelant fournit encore l'ancien format).
+  const contentField = debate?.content;
+  const isLegacyStringContent = typeof contentField === 'string';
+  const previewText = String(isLegacyStringContent ? contentField : (contentField?.preview || '')).trim();
+  const hasMoreFromServer = isLegacyStringContent ? null : !!contentField?.hasMore;
   const hasExtra = !!(scoresHtml || metaHtml || shareHtml || episodeNavHtml || notionsHtml);
-  if (!fullText && !hasExtra) return "";
+  if (!previewText && !hasExtra) return "";
 
-  const shortText = getIndexContextClosedPreviewText(fullText);
-  const needsToggle = fullText !== shortText || hasExtra;
+  const shortText = getIndexContextClosedPreviewText(previewText);
+  // needsToggle : `hasMoreFromServer` (nouveau signal explicite, cf.
+  // content_list_preview) prime dès qu'il est connu — l'ancienne comparaison
+  // previewText!==shortText ne détecterait plus rien puisque previewText est
+  // déjà tronqué côté serveur. Repli sur cette ancienne comparaison
+  // uniquement pour le format legacy (chaîne brute).
+  const needsToggle = (hasMoreFromServer !== null ? hasMoreFromServer : previewText !== shortText) || hasExtra;
 
   const debateId = escapeAttribute(String(debate?.id || ""));
 
@@ -18877,10 +18921,12 @@ function buildIndexContextPreviewHtml(debate, scoresHtml = "", metaHtml = "", sh
       onkeydown="(function(e){ if(e.key==='Enter'||e.key===' '){ const btn = e.currentTarget.querySelector('[data-index-context-toggle]'); if(btn){ e.preventDefault(); toggleIndexContextPreview(btn); } } })(event)"
       style="cursor:pointer;"
     >
-      ${fullText ? `<div
+      ${previewText ? `<div
         class="debate-card-context-text"
         data-index-context-text
-        data-full-text="${escapeAttribute(fullText)}"
+        data-debate-id="${debateId}"
+        data-full-text-loaded="${isLegacyStringContent ? 'true' : 'false'}"
+        data-full-text="${escapeAttribute(isLegacyStringContent ? previewText : '')}"
         data-short-text="${escapeAttribute(shortText)}"
         data-debate-open="${isOpenDebate(debate) ? '1' : '0'}"
         data-expanded="false"
@@ -19184,6 +19230,47 @@ function keepIndexCardSourceImagesAlive(article, durationMs = 5000) {
   });
 }
 
+// Affiche le texte court ou complet dans une carte (extrait de
+// toggleIndexContextPreview pour être réutilisable après le chargement à la
+// demande du texte complet, cf. fetchIndexContextFullText) — même rendu
+// qu'avant ce correctif, seule la source du texte complet a changé.
+function renderIndexContextToggleText(textEl, expanded) {
+  if (!textEl) return;
+  const nextText = expanded
+    ? String(textEl.getAttribute('data-full-text') || '')
+    : String(textEl.getAttribute('data-short-text') || '');
+  const clampSpan = textEl.querySelector('.context-text-clamp');
+  if (clampSpan) {
+    clampSpan.innerHTML = renderIndexContextPreviewText(nextText, expanded, textEl.getAttribute('data-debate-open') === '1');
+  } else {
+    textEl.textContent = nextText;
+  }
+}
+
+// Correctif egress du 06/09/2026 (cf. content_list_preview côté serveur) :
+// la liste des débats n'envoie plus que {preview, hasMore} pour `content` —
+// le texte complet n'est chargé qu'au clic "en savoir plus", ici, jamais au
+// chargement de l'accueil. Réutilise GET /api/debates/:id (déjà caché 3 min
+// côté serveur), jamais une nouvelle route dédiée. Cache mémoire par
+// debateId : un second dépliage de la même carte, ou une carte dupliquée
+// dans un autre carousel, ne refait jamais le fetch.
+const _indexContextFullTextCache = new Map();
+async function fetchIndexContextFullText(debateId) {
+  const id = String(debateId || '').trim();
+  if (!id) return '';
+  if (_indexContextFullTextCache.has(id)) return _indexContextFullTextCache.get(id);
+  try {
+    const res = await fetch(`/api/debates/${encodeURIComponent(id)}`);
+    if (!res.ok) return '';
+    const data = await res.json();
+    const fullText = String(data?.debate?.content || '').trim();
+    _indexContextFullTextCache.set(id, fullText);
+    return fullText;
+  } catch (e) {
+    return '';
+  }
+}
+
 function toggleIndexContextPreview(button) {
   const card = button?.closest('[data-index-context-card]');
   const article = button?.closest('.debate-card');
@@ -19204,16 +19291,26 @@ function toggleIndexContextPreview(button) {
   }
 
   if (textEl) {
-    const nextText = nextExpanded
-      ? String(textEl.getAttribute('data-full-text') || '')
-      : String(textEl.getAttribute('data-short-text') || '');
-    const clampSpan = textEl.querySelector('.context-text-clamp');
-    if (clampSpan) {
-      clampSpan.innerHTML = renderIndexContextPreviewText(nextText, nextExpanded, textEl.getAttribute('data-debate-open') === '1');
-    } else {
-      textEl.textContent = nextText;
-    }
+    renderIndexContextToggleText(textEl, nextExpanded);
     textEl.setAttribute('data-expanded', nextExpanded ? 'true' : 'false');
+    // Chargement à la demande du texte complet (correctif egress du
+    // 06/09/2026, cf. content_list_preview côté serveur) : la liste n'envoie
+    // plus qu'un aperçu — le texte complet n'est récupéré qu'au premier
+    // dépliage de CETTE carte, jamais au chargement de l'accueil. Réutilise
+    // GET /api/debates/:id (déjà caché 3 min côté serveur,
+    // DEBATE_DETAIL_CACHE_TTL_MS), jamais une nouvelle route.
+    if (nextExpanded && textEl.getAttribute('data-full-text-loaded') !== 'true') {
+      const debateId = textEl.getAttribute('data-debate-id');
+      fetchIndexContextFullText(debateId).then((fullText) => {
+        textEl.setAttribute('data-full-text', fullText || textEl.getAttribute('data-short-text') || '');
+        textEl.setAttribute('data-full-text-loaded', 'true');
+        // Ne réaffiche que si la carte est toujours dépliée : l'utilisateur
+        // a pu la refermer pendant le temps du fetch.
+        if (textEl.getAttribute('data-expanded') === 'true') {
+          renderIndexContextToggleText(textEl, true);
+        }
+      });
+    }
   }
 
   if (metaEl) {

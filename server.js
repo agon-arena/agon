@@ -125,6 +125,11 @@ const {
   mergeCurriculumAdditions,
   selectCurriculumLevel
 } = require("./lib/notion-quiz-curriculum");
+// topicValidation (demande du 06/09/2026, incident "Baudouin de Hainaut") :
+// interprète le champ topicValidation renvoyé par curriculum_generation
+// (pipeline progressif) et fiche_generation (pipeline legacy) — cf. son
+// commentaire de tête pour le détail complet du point d'intégration.
+const { parseTopicValidationField } = require("./lib/topic-identity-validation");
 const { findEquivalentCustomTopic, parseCustomTopicSlotLevel } = require("./lib/topic-dedup");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
 const {
@@ -2251,7 +2256,16 @@ async function saveUploadedDebateVideo(debateId, buffer, fileName, mimeType, opt
 
 function enrichDebateWithStoredImage(debate) {
   if (!debate) return debate;
-  const resolvedContent = normalizeDebateContent(debate.content || "");
+  // content (correctif egress du 06/09/2026, cf. content_list_preview) :
+  // cette fonction est PARTAGÉE entre la route détail (content = chaîne
+  // brute, comportement inchangé) et la route liste (content = {preview,
+  // hasMore} depuis la colonne calculée) — normalizeDebateContent attend une
+  // chaîne ; lui passer l'objet aurait silencieusement produit la chaîne
+  // littérale "[object Object]" sur CHAQUE carte (String({...}) côté
+  // stripNullChars). Objet passé tel quel, jamais renormalisé.
+  const resolvedContent = typeof debate.content === "string"
+    ? normalizeDebateContent(debate.content || "")
+    : debate.content;
   const episodeNav = debate?.episode_nav && typeof debate.episode_nav === "object" ? debate.episode_nav : {};
   const trendData = getDebateTrend(debate?.id);
   const trendScore = trendData !== null ? (trendData.trend ?? 0) : 0;
@@ -2915,7 +2929,18 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "option_a",
   "option_b",
   "type",
-  "content",
+  // Colonne calculée PostgREST (cf. data/migration-debates-content-preview.sql,
+  // exécutée le 06/09/2026) : renvoie {preview, hasMore} au lieu du texte
+  // intégral — la carte fermée n'affiche que la 1ère phrase
+  // (getIndexContextClosedPreviewText, public/script.js), le reste (~600
+  // octets/débat en moyenne, mesuré) ne servait qu'au clic "en savoir plus"
+  // (buildIndexContextPreviewHtml), désormais chargé à la demande
+  // (fetchIndexContextFullText, réutilise GET /api/debates/:id déjà caché).
+  // Alias `content` conservé côté réponse JSON : seul son TYPE change (objet
+  // au lieu de chaîne), cf. buildIndexContextPreviewHtml pour la lecture. La
+  // page débat individuelle (DEBATE_DETAIL_SELECT_COLUMNS) garde `content`
+  // en clair, comportement inchangé.
+  "content:content_list_preview",
   "category",
   "source_url",
   "image_url",
@@ -15509,6 +15534,21 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
         parsed = candidate;
         break;
       }
+      // topicValidation (demande du 06/09/2026, incident "Baudouin de
+      // Hainaut") : même règle que resolveProgressiveCurriculum ci-dessus —
+      // un sujet ambigu au vu des sources ne doit jamais atteindre la
+      // rédaction/l'admission de connaissances, et n'est jamais rejoué (même
+      // logique que le refus explicite juste au-dessus). Cf.
+      // lib/topic-identity-validation.js pour le détail complet.
+      const topicValidation = parseTopicValidationField(candidate?.topicValidation);
+      if (topicValidation.status === "ambiguous") {
+        console.warn(`[topic-validation] status=ambiguous topic="${subject}" candidates=${topicValidation.candidates.length}`);
+        return generationFailure("TOPIC_AMBIGUOUS", "topic_validation", {
+          reason: topicValidation.reason || "Plusieurs sujets distincts correspondent à cette recherche.",
+          candidates: topicValidation.candidates,
+          normalizedTopic: topicValidation.normalizedTopic
+        });
+      }
       const parsedCandidate = parseFicheAndKnowledgeCandidates(candidate, subject, levelConfig);
       // TEMPORAIRE — diagnostic (cf. commentaire plus haut) : raw = ce que le
       // modèle a proposé dans "knowledge" avant tout filtre ; accepted = ce
@@ -15518,6 +15558,7 @@ async function generateNotionLevelQuiz(apiKey, subject, contextHint, id, levelCo
       // manquait pour trancher entre génération/admission/grounding.
       console.log(`[notion-quiz:${id}] knowledge_candidates raw=${Array.isArray(candidate?.knowledge) ? candidate.knowledge.length : 0} accepted=${parsedCandidate ? parsedCandidate.candidates.length : 0}`);
       if (parsedCandidate && parsedCandidate.candidates.length >= min) {
+        console.info(`[topic-validation] status=valid topic="${subject}"`);
         parsed = candidate;
         break;
       }
@@ -18685,6 +18726,7 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
   const evidenceModeActive = !!grounding?.identifiedSources?.length;
 
   let pool;
+  let topicValidation;
   try {
     const content = await _callOpenAI(apiKey, [{
       role: "user",
@@ -18697,12 +18739,31 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
       feature: "curriculum_generation",
       generationId: id
     });
-    pool = parseCurriculumItems(JSON.parse(content)?.curriculum);
+    const rawParsed = JSON.parse(content);
+    topicValidation = parseTopicValidationField(rawParsed?.topicValidation);
+    pool = parseCurriculumItems(rawParsed?.curriculum);
   } catch (error) {
     const code = classifyAiError(error);
     console.error(`[notion-quiz-progressive:${id}] stage=curriculum_generation code=${code} :`, error.message);
     return { error: "failed", code, stage: "curriculum_generation" };
   }
+
+  // topicValidation (demande du 06/09/2026, incident "Baudouin de Hainaut") :
+  // vérifié AVANT tout découpage/gate du curriculum — jamais de fiche ni de
+  // question générée pour un sujet dont les sources mélangent plusieurs
+  // référents distincts. Cf. lib/topic-identity-validation.js pour le détail
+  // (conservateur par construction : un sujet vaste ou une simple divergence
+  // documentaire entre deux sources sur le MÊME référent ne déclenche jamais
+  // ce statut).
+  if (topicValidation.status === "ambiguous") {
+    console.warn(`[topic-validation] status=ambiguous topic="${subject}" candidates=${topicValidation.candidates.length}`);
+    return generationFailure("TOPIC_AMBIGUOUS", "topic_validation", {
+      reason: topicValidation.reason || "Plusieurs sujets distincts correspondent à cette recherche.",
+      candidates: topicValidation.candidates,
+      normalizedTopic: topicValidation.normalizedTopic
+    });
+  }
+  console.info(`[topic-validation] status=valid topic="${subject}"`);
 
   // Split PROVISOIRE : réutilise normalizeCurriculumOrder (comble les trous
   // laissés par des entrées malformées écartées au parsing, sans quoi
@@ -19949,6 +20010,11 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
             const code = result.code || (result.error === "rejected" ? "CONTENT_UNUSABLE" : "INTERNAL_ERROR");
             const publicError = publicGenerationError(code, result.reason);
             const safeDiagnostics = result.diagnostics && typeof result.diagnostics === "object" ? result.diagnostics : null;
+            // candidates/normalizedTopic (topicValidation, demande du
+            // 06/09/2026) : uniquement pour TOPIC_AMBIGUOUS — permet au
+            // frontend d'afficher les 2-4 référents proposés, jamais un champ
+            // présent pour un autre code d'échec.
+            const safeCandidates = code === "TOPIC_AMBIGUOUS" && Array.isArray(result.candidates) ? result.candidates : null;
             console.warn(`[notion-quizzes:custom:${id}] response stage=${result.stage || "subject_validation"} code=${publicError.body.code}${safeDiagnostics ? ` diagnostics=${JSON.stringify(safeDiagnostics)}` : ""}`);
             // Best-effort, jamais awaité (même règle que recordAiUsage) : un vrai
             // échec confirmé par le backend doit devenir visible du polling
@@ -19956,7 +20022,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
             // s'est déjà déconnecté entre-temps (coupure réseau pendant la
             // génération) et ne verra donc jamais cette réponse HTTP.
             recordNotionQuizGenerationFailure(supabase, { identity: masterSlot, code: publicError.body.code, reason: result.reason });
-            return res.status(publicError.status).json({ ...publicError.body, ...(safeDiagnostics ? { diagnostics: safeDiagnostics } : {}) });
+            return res.status(publicError.status).json({ ...publicError.body, ...(safeDiagnostics ? { diagnostics: safeDiagnostics } : {}), ...(safeCandidates ? { candidates: safeCandidates, normalizedTopic: result.normalizedTopic || null } : {}) });
           }
           questions = result.questions;
           quizDate = result.quizDate;
@@ -20106,7 +20172,15 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
         const publicError = publicGenerationError(code, result.reason);
         console.warn(`[notion-quizzes:progressive:${id}] stage=${result.stage || "unknown"} code=${publicError.body.code} : ${result.reason || "échec contrôlé."}`);
         recordNotionQuizGenerationFailure(supabase, { identity: masterSlot, code: publicError.body.code, reason: result.reason });
-        return res.status(publicError.status).json(publicError.body);
+        // candidates/normalizedTopic (topicValidation, demande du 06/09/2026,
+        // incident "Baudouin de Hainaut") : uniquement pour TOPIC_AMBIGUOUS —
+        // permet au frontend d'afficher les 2-4 référents proposés et de
+        // relancer la génération avec celui choisi par l'utilisateur.
+        const safeCandidates = code === "TOPIC_AMBIGUOUS" && Array.isArray(result.candidates) ? result.candidates : null;
+        return res.status(publicError.status).json({
+          ...publicError.body,
+          ...(safeCandidates ? { candidates: safeCandidates, normalizedTopic: result.normalizedTopic || null } : {})
+        });
       }
       questions = result.questions;
       quizDate = result.quizDate;
@@ -20633,10 +20707,24 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // (computeQuestionStreaks), qui ne reflétait plus le rythme réel des
     // repasses une fois celui-ci piloté par due_at plutôt que par des
     // paliers fixes.
+    // Bornée aux slots réellement adoptés (diagnostic de lenteur du
+    // 04/09/2026, second correctif) : sans `!inner`+`.in(...)`, cette lecture
+    // ramenait TOUT l'historique FSRS de l'utilisateur — y compris des
+    // repasses issues de contenu jamais présent dans `links` (Éclairages/
+    // Histoire, ou un slot notion depuis retiré) — un volume qui ne fait que
+    // croître avec l'ancienneté du compte, sans aucun rapport avec ce que
+    // cette route affiche réellement. `memory_items!inner(...)` (jamais un
+    // simple embed, qui laisserait `.in("memory_items.slot", ...)` sans
+    // effet sur le WHERE côté PostgREST) restreint la JOINTURE elle-même —
+    // mêmes lignes utiles, mêmes clés lues, comportement de
+    // stateByQuestionKey strictement inchangé pour tout slot présent dans
+    // `links`.
+    const linkSlots = [...new Set(links.map((l) => l.slot))];
     const fsrsStatesPromise = supabase
       .from("memory_item_fsrs_states")
-      .select("state, stability, last_review_at, memory_items(slot, quiz_date, question_id)")
-      .eq("user_id", userRow.id);
+      .select("state, stability, last_review_at, memory_items!inner(slot, quiz_date, question_id)")
+      .eq("user_id", userRow.id)
+      .in("memory_items.slot", linkSlots);
 
     const [
       { data: quizRows, error: quizRowsError },

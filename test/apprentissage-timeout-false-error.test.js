@@ -38,7 +38,7 @@ function sliceBetween(haystack, startMarker, endMarker, label) {
 
 const startCustomTopicGeneration = sliceBetween(
   view,
-  "function startCustomTopicGeneration(topic, onCreated) {",
+  "function startCustomTopicGeneration(topic, onCreated, presetLevel) {",
   "function submitCustomTopic(e) {",
   "startCustomTopicGeneration"
 );
@@ -61,7 +61,7 @@ const successBranch = startCustomTopicGeneration.slice(
 const networkCatchBranch = sliceBetween(
   startCustomTopicGeneration,
   ".catch(function () {",
-  "});\n      });\n    });\n  }",
+  "});\n      });\n    };\n    if (presetLevel)",
   "catch réseau"
 );
 

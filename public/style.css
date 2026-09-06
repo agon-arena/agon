@@ -8565,6 +8565,17 @@ body.page-home-mobile #debates-list {
     line-height: 1;
   }
 
+  /* Taille réduite uniquement pour la page débat (demande du 06/09/2026, "un
+     peu moins grosses") : règle séparée du sélecteur partagé ci-dessus pour
+     ne pas toucher .page-notifications-mobile. */
+  .page-debate .mobile-back-button {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    font-size: 16px;
+  }
+
   .page-notifications-mobile .mobile-back-button:hover,
   .page-debate .mobile-back-button:hover {
     background:
@@ -26000,11 +26011,12 @@ body.page-create-mobile .create-card .create-submit-helper {
      alignés sur la même ligne quel que soit l'état de la barre Safari. */
   body.page-debate.debate-embedded-frame .mobile-back-button {
     bottom: calc(var(--mnoria-dock-button-bottom, 68px) + 24px) !important;
-    width: 38px !important;
-    height: 38px !important;
-    min-width: 38px !important;
-    min-height: 38px !important;
-    font-size: 16px !important;
+    /* Taille réduite (demande du 06/09/2026, "un peu moins grosses") */
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+    font-size: 14px !important;
     transform: none !important;
   }
 

@@ -83,9 +83,13 @@ test("le frontend ne lit que ok/slot/quizDate/label/questionCount/code/error/dia
   assert.match(progressiveRouteSource, /res\.json\(\{\s*\n\s*ok: true,\s*\n\s*slot: masterSlot,\s*\n\s*quizDate,\s*\n\s*label: servedQuestions\[0\]\?\.sourceName \|\| questions\[0\]\?\.sourceName \|\| null,\s*\n\s*questionCount: servedQuestions\.length,/);
   // Échec : publicGenerationError produit toujours {status, body:{ok:false, code, error}} —
   // réutilisé tel quel (même fonction que la route legacy), donc même contrat d'échec.
+  // candidates/normalizedTopic (topicValidation, demande du 06/09/2026,
+  // incident "Baudouin de Hainaut") : mergés dans le corps UNIQUEMENT pour
+  // TOPIC_AMBIGUOUS (cf. test/topic-identity-validation-wiring.test.js) —
+  // jamais un contrat différent pour les autres codes d'échec.
   const failureSource = SERVER_SOURCE.slice(progressiveRouteStart, SERVER_SOURCE.indexOf("res.json({", progressiveRouteStart));
   assert.match(failureSource, /const publicError = publicGenerationError\(code, result\.reason\);/);
-  assert.match(failureSource, /return res\.status\(publicError\.status\)\.json\(publicError\.body\);/);
+  assert.match(failureSource, /return res\.status\(publicError\.status\)\.json\(\{\s*\n\s*\.\.\.publicError\.body,\s*\n\s*\.\.\.\(safeCandidates \? \{ candidates: safeCandidates, normalizedTopic: result\.normalizedTopic \|\| null \} : \{\}\)\s*\n\s*\}\);/);
 });
 
 test("publicGenerationError (réutilisée sans modification par les deux routes) produit toujours exactement {ok:false, code, error} — contrat d'échec partagé, jamais divergent", () => {

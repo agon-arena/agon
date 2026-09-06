@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
-  <link rel="stylesheet" href="/style.min.css?v=20260904-tribunes-scrollbar">
+  <link rel="stylesheet" href="/style.min.css?v=20260906-back-btn-compact">
   <style>
     .tribunes-page-header {
       position: sticky;
@@ -144,6 +144,52 @@
     body.page-tribunes .home-bottom-nav-item-active {
       background: rgba(0, 0, 0, 0.06);
       color: #000000;
+    }
+    /* Bouton menu plus compact (demande du 06/09/2026) : uniquement le
+       hamburger en haut. Scopé à cette page uniquement. */
+    body.page-tribunes .home-topbar-menu-toggle,
+    body.page-tribunes .home-topbar-login-icon {
+      width: 32px !important;
+      height: 32px !important;
+      border-radius: 9px !important;
+    }
+    body.page-tribunes .home-topbar-menu-toggle i,
+    body.page-tribunes .home-topbar-login-icon i {
+      font-size: 14px !important;
+    }
+    /* Boutons du bandeau bas : REVENU à la taille d'origine (unifiée avec
+       toutes les autres pages via la règle globale "html body .home-bottom-
+       nav..." de style.css) — demande du 06/09/2026, "je veux que tu le
+       remettes un peu plus gros (comme avant)" après avoir constaté que la
+       compacité n'était appliquée que sur index/autres-sources et pas sur
+       apprentissage (ouvert dans la modale par-dessus index), d'où une
+       incohérence de taille d'une page à l'autre. Ne plus recompacter ce
+       bandeau spécifiquement par page : soit une taille pour toutes, soit
+       aucune. */
+    /* Flèches flottantes haut/bas juste au-dessus du bandeau bas (demande du
+       06/09/2026, "un peu moins grosses") : classe .index-floating-scroll-btn
+       propre à ces boutons (index/autres-sources uniquement, cf. grep), donc
+       pas besoin de scoper par body.page-tribunes ni de !important — le
+       double sélecteur de classe suffit à l'emporter sur
+       .app-floating-refresh-btn (46px / 44px mobile) partagé avec
+       notifications.html/create.html. */
+    .app-floating-refresh-btn.index-floating-scroll-btn {
+      width: 40px;
+      height: 40px;
+    }
+    .app-floating-refresh-btn.index-floating-scroll-btn i {
+      font-size: 16px;
+    }
+    @media (max-width: 768px) {
+      .app-floating-refresh-btn.index-floating-scroll-btn {
+        width: 38px;
+        height: 38px;
+        /* Recentré sur la jonction avec le bandeau bas : bottom:34px+44px de
+           haut (style.css) plaçait le centre du bouton d'origine à 56px du
+           bas ; +3px compense les 6px perdus en hauteur pour garder le même
+           centre avec ce bouton plus petit (38px). */
+        bottom: 37px !important;
+      }
     }
     .tribunes-page-header h1,
     .tribunes-page-header p {
@@ -475,18 +521,22 @@
     body.page-tribunes .tribunes-mobile-back-button {
       position: fixed;
       left: calc(20% - 13px);
-      bottom: 34px;
+      /* Aligné avec les flèches haut/bas (.index-floating-scroll-btn, même
+         bottom:37px+hauteur 38px depuis leur recentrage du 06/09/2026) :
+         demande du 06/09/2026, "pas alignés" — les deux boutons avaient
+         gardé des bottom différents (34 vs 37) après la réduction de taille. */
+      bottom: 37px;
       z-index: 9000;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      /* Même taille que les flèches haut/bas (.app-floating-refresh-btn) :
-         44px en mobile, 56px en desktop, bordure comprise. */
+      /* Taille réduite (demande du 06/09/2026, "un peu moins grosses") :
+         38px en mobile, 48px en desktop, bordure comprise. */
       box-sizing: border-box;
-      width: 44px;
-      min-width: 44px;
-      height: 44px;
-      min-height: 44px;
+      width: 38px;
+      min-width: 38px;
+      height: 38px;
+      min-height: 38px;
       border-radius: 999px;
       border: 3px solid transparent;
       background:
@@ -499,7 +549,7 @@
       -webkit-backdrop-filter: blur(8px);
       cursor: pointer;
       padding: 0;
-      font-size: 18px;
+      font-size: 16px;
       line-height: 1;
     }
     /* Lecture vidéo (modal .tribunes-video-modal, z-index 1000) : la flèche
@@ -519,14 +569,15 @@
     @media (min-width: 769px) {
       body.page-tribunes .tribunes-mobile-back-button {
         left: 24px;
-        /* Même hauteur que les flèches haut/bas (.index-floating-refresh-btn),
-           plutôt que collé au coin bas de l'écran. */
-        bottom: calc(48px + env(safe-area-inset-bottom, 0px));
-        width: 56px;
-        min-width: 56px;
-        height: 56px;
-        min-height: 56px;
-        font-size: 22px;
+        /* Même hauteur ET même bottom que les flèches haut/bas
+           (.index-floating-scroll-btn) pour rester alignés (demande du
+           06/09/2026, "pas alignés"). */
+        bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        font-size: 16px;
       }
     }
     html.in-iframe body.page-tribunes .tribunes-page-header,
@@ -1921,7 +1972,7 @@ window.addEventListener("pageshow", function() {
     <button type="button" class="tribunes-custom-media-modal-save" id="tribunes-custom-media-modal-save">Enregistrer</button>
   </div>
 </div>
-<script src="/script.min.js?v=20260904-desktop-dpr-floor" defer></script>
+<script src="/script.min.js?v=20260906-back-btn-compact" defer></script>
 <script>
 (function() {
   var list = document.getElementById('tribunes-list');

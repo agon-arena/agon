@@ -62,6 +62,38 @@ test("aucune autre route (fiche, getDailyQuizQuestions, génération) n'est touc
   assert.match(SERVER_SOURCE, /\.select\("questions, grounding_sources, progressive_status"\)/, "la route fiche inchangée");
 });
 
+// ── Second correctif du même diagnostic (04/09/2026) : memory_item_fsrs_states
+// lisait TOUT l'historique FSRS de l'utilisateur, sans aucun rapport avec les
+// QCM affichés par cette route — volume qui croît sans fin avec l'ancienneté
+// du compte. Restreint via memory_items!inner + .in("memory_items.slot", ...),
+// jamais une migration (simple changement de requête). Sortie HTTP vérifiée
+// byte-for-byte identique avant/après sur un utilisateur réel (25 QCM
+// adoptés), cf. rapport. ───────────────────────────────────────────────────
+
+test("fsrsStatesPromise restreint la jointure memory_items aux slots réellement adoptés (jamais tout l'historique FSRS de l'utilisateur)", () => {
+  const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
+  const nextRouteIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"', routeIndex);
+  assert.ok(routeIndex > 0 && nextRouteIndex > routeIndex);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, nextRouteIndex);
+  assert.match(routeBody, /const linkSlots = \[\.\.\.new Set\(links\.map\(\(l\) => l\.slot\)\)\];/);
+  assert.match(routeBody, /\.select\("state, stability, last_review_at, memory_items!inner\(slot, quiz_date, question_id\)"\)/);
+  assert.match(routeBody, /\.eq\("user_id", userRow\.id\)\s*\n\s*\.in\("memory_items\.slot", linkSlots\);/);
+  // `!inner` est indispensable : un simple embed (sans lui) laisserait
+  // `.in("memory_items.slot", ...)` sans effet réel sur la jointure côté
+  // PostgREST — jamais un embed non filtrant réintroduit par erreur.
+  assert.doesNotMatch(routeBody, /\.select\("state, stability, last_review_at, memory_items\(slot, quiz_date, question_id\)"\)/, "l'ancien embed non filtré ne doit plus exister sur cette route");
+});
+
+test("linkSlots est dérivé de `links` (les QCM réellement adoptés), jamais d'un univers plus large", () => {
+  const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
+  const nextRouteIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"', routeIndex);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, nextRouteIndex);
+  const linksIndex = routeBody.indexOf('.from("user_notion_quizzes")');
+  const linkSlotsIndex = routeBody.indexOf("const linkSlots = [...new Set(links.map((l) => l.slot))];");
+  const fsrsPromiseIndex = routeBody.indexOf('.from("memory_item_fsrs_states")');
+  assert.ok(linksIndex > 0 && linkSlotsIndex > linksIndex && fsrsPromiseIndex > linkSlotsIndex, "linkSlots doit être calculé depuis `links` (déjà chargé), avant la construction de fsrsStatesPromise");
+});
+
 test("le fichier de migration documente la mesure réelle (330 Ko -> 17,5 Ko) et suit le même principe que debates.media_extras_list_preview déjà en place", () => {
   const migrationPath = path.join(__dirname, "../data/migration-daily-quiz-question-summaries.sql");
   assert.ok(fs.existsSync(migrationPath), "le fichier de migration doit exister dans data/");

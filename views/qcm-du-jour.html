@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260904-tribunes-scrollbar">
+  <link rel="stylesheet" href="/style.min.css?v=20260906-back-btn-compact">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -1209,6 +1209,40 @@
     }
     .qcm-generate-confirm-ok:hover {
       background: #1a262e;
+    }
+    /* Désambiguïsation du sujet (demande du 06/09/2026, incident "Baudouin de
+       Hainaut") : liste verticale de référents proposés, même famille
+       visuelle que .qcm-generate-confirm-* ci-dessus. */
+    .qcm-topic-disambig-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 0 16px;
+    }
+    .qcm-topic-disambig-option {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-topic-disambig-option:hover {
+      background: #eef3f6;
+    }
+    .qcm-topic-disambig-option-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: #243038;
+    }
+    .qcm-topic-disambig-option-desc {
+      font-size: 12px;
+      color: #6b7280;
     }
     .qcm-explore-item-meta {
       flex: 0 0 auto;
@@ -3559,10 +3593,11 @@
       left: 16px;
       bottom: 80px;
       z-index: 10002;
-      width: 42px;
-      height: 42px;
-      min-width: 42px;
-      min-height: 42px;
+      /* Taille réduite (demande du 06/09/2026, "un peu moins grosses") */
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      min-height: 38px;
       padding: 0;
       align-items: center;
       justify-content: center;
@@ -3576,7 +3611,7 @@
       -webkit-backdrop-filter: blur(8px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.22);
       cursor: pointer;
-      font-size: 18px;
+      font-size: 16px;
       line-height: 1;
     }
     html:not(.in-iframe) body.page-qcm-du-jour .mobile-back-button {
@@ -3593,11 +3628,11 @@
       body.page-qcm-du-jour .mobile-back-button {
         left: calc(20% - 13px);
         bottom: 59px;
-        width: 38px;
-        height: 38px;
-        min-width: 38px;
-        min-height: 38px;
-        font-size: 16px;
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+        font-size: 14px;
       }
     }
   </style>
@@ -3745,7 +3780,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260904-desktop-dpr-floor" defer></script>
+<script src="/script.min.js?v=20260906-back-btn-compact" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -5887,6 +5922,68 @@
     });
   }
 
+  // Désambiguïsation du sujet (demande du 06/09/2026, incident réel "Baudouin
+  // de Hainaut" : la recherche de sources a ramené à la fois un diplomate du
+  // XIIIe siècle et un comte de Hainaut du XIIe siècle, fusionnés à tort dans
+  // un même apprentissage). Affichée quand le backend renvoie
+  // code:"TOPIC_AMBIGUOUS" avec 2 à 4 `candidates` ({label, description}),
+  // cf. server.js resolveProgressiveCurriculum / lib/topic-identity-validation.js.
+  // Même famille visuelle que showGenerateConfirmModal ci-dessus. `onPick`
+  // reçoit le `label` du candidat choisi — l'appelant relance simplement
+  // startCustomTopicGeneration avec ce nouveau sujet, jamais un deuxième
+  // chemin de génération.
+  function showTopicDisambiguationModal(topic, reason, candidates, onPick) {
+    var overlay = document.createElement('div');
+    overlay.className = 'qcm-fiche-overlay';
+    var optionsHtml = candidates.map(function (candidate, index) {
+      var label = String((candidate && candidate.label) || '').trim();
+      var description = String((candidate && candidate.description) || '').trim();
+      if (!label) return '';
+      return '<button type="button" class="qcm-topic-disambig-option" data-index="' + index + '">' +
+        '<span class="qcm-topic-disambig-option-label">' + escapeHtml(label) + '</span>' +
+        (description ? '<span class="qcm-topic-disambig-option-desc">' + escapeHtml(description) + '</span>' : '') +
+        '</button>';
+    }).join('');
+    overlay.innerHTML =
+      '<div class="qcm-fiche-overlay-inner">' +
+        '<div class="qcm-fiche-modal">' +
+          '<div class="qcm-fiche-head">' +
+            '<p class="qcm-fiche-rubric"><i class="fa-solid fa-circle-question"></i> Plusieurs sujets possibles</p>' +
+            '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
+          '</div>' +
+          '<p class="qcm-generate-confirm-text">Plusieurs sujets correspondent à « ' + escapeHtml(topic) + ' ». Lequel souhaites-tu apprendre ?</p>' +
+          (reason ? '<p class="qcm-generate-confirm-hint">' + escapeHtml(reason) + '</p>' : '') +
+          '<div class="qcm-topic-disambig-list">' + optionsHtml + '</div>' +
+          '<div class="qcm-generate-confirm-actions">' +
+            '<button type="button" class="qcm-generate-confirm-cancel">Annuler</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    positionFicheClose(overlay);
+    try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: true }, '*'); } catch (e) {}
+
+    function close() {
+      overlay.remove();
+      document.removeEventListener('keydown', onKeydown);
+      try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
+    }
+    function onKeydown(e) { if (e.key === 'Escape') close(); }
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay || e.target.classList.contains('qcm-fiche-overlay-inner')) close();
+    });
+    document.addEventListener('keydown', onKeydown);
+    overlay.querySelector('.qcm-fiche-close').addEventListener('click', close);
+    overlay.querySelector('.qcm-generate-confirm-cancel').addEventListener('click', close);
+    Array.prototype.forEach.call(overlay.querySelectorAll('.qcm-topic-disambig-option'), function (btn) {
+      btn.addEventListener('click', function () {
+        var candidate = candidates[Number(btn.getAttribute('data-index'))];
+        close();
+        if (candidate && candidate.label) onPick(candidate.label);
+      });
+    });
+  }
+
   // Fenêtre "prêt" (demande du 30/08/2026) : prévient une fois le QCM
   // généré, avec son nom et son nombre de questions — appelée juste après
   // loadSlot dans startCustomTopicGeneration, par-dessus le QCM déjà ouvert
@@ -5978,7 +6075,13 @@
       KNOWLEDGE_REJECTED: 'Aucune connaissance suffisamment fiable et importante n’a été trouvée sur ce sujet.',
       QCM_UNUSABLE: 'La fiche a été créée, mais ses questions n’ont pas pu être validées. Réessaie ou précise le sujet.',
       GENERATION_INTERRUPTED: 'La génération a été interrompue par un redémarrage du serveur. Tu peux la relancer.',
-      STORAGE_TEMPORARY: 'L’apprentissage n’a pas pu être enregistré pour le moment. Réessaie dans quelques instants.'
+      STORAGE_TEMPORARY: 'L’apprentissage n’a pas pu être enregistré pour le moment. Réessaie dans quelques instants.',
+      // Repli textuel uniquement (demande du 06/09/2026, "Baudouin de
+      // Hainaut") : en pratique ce code s'accompagne toujours de `candidates`
+      // et ouvre showTopicDisambiguationModal plutôt que ce message — ne sert
+      // que si candidates est absent/vide (réponse IA malformée, cf.
+      // lib/topic-identity-validation.js, conservateur par construction).
+      TOPIC_AMBIGUOUS: 'Plusieurs sujets distincts correspondent à cette recherche. Précise lequel tu veux apprendre.'
     };
     return messages[code] || fallback || 'Une erreur inattendue a interrompu la génération. Réessaie dans quelques instants.';
   }
@@ -6001,7 +6104,14 @@
     return reasons.length ? ' Référence diagnostic : ' + reasons.join(', ') + '.' : '';
   }
 
-  function startCustomTopicGeneration(topic, onCreated) {
+  // `presetLevel` (demande du 06/09/2026, "Baudouin de Hainaut") : fourni
+  // uniquement lorsqu'on relance la génération avec un sujet désambiguïsé
+  // choisi par l'utilisateur (cf. showTopicDisambiguationModal) — le niveau a
+  // déjà été choisi une première fois pour le sujet ambigu d'origine, inutile
+  // de le redemander. La fenêtre de confirmation reste affichée (dernière
+  // vérification avant une génération de plusieurs minutes), seul le
+  // sélecteur de niveau est sauté.
+  function startCustomTopicGeneration(topic, onCreated, presetLevel) {
     if (!voterKey) {
       setCustomSearchStatus('Identifiant introuvable, recharge la page et réessaie.', true);
       return;
@@ -6010,7 +6120,7 @@
       setCustomSearchStatus('Génération impossible pour le moment, réessaie.', true);
       return;
     }
-    showNotionQuizLevelPicker(function (level) {
+    var withLevel = function (level) {
       showGenerateConfirmModal(topic, level, async function () {
         var pendingCustomSlot = await getCustomTopicPendingSlot(topic, level);
         // Garde anti-double-soumission (correctif UX du 01/09/2026, incident
@@ -6105,6 +6215,18 @@
               if (result.data.diagnostics) {
                 console.warn('[qcm-generation-diagnostics]', result.data.code, result.data.diagnostics);
               }
+              // Sujet ambigu (demande du 06/09/2026, "Baudouin de Hainaut") :
+              // au lieu du message d'erreur générique, propose les référents
+              // distincts identifiés dans les sources et relance la même
+              // génération avec celui choisi, au même niveau (presetLevel) —
+              // jamais un deuxième chemin de génération.
+              if (result.data.code === 'TOPIC_AMBIGUOUS' && Array.isArray(result.data.candidates) && result.data.candidates.length) {
+                setCustomSearchStatus('', false);
+                showTopicDisambiguationModal(topic, result.data.error, result.data.candidates, function (candidateLabel) {
+                  startCustomTopicGeneration(candidateLabel, onCreated, level);
+                });
+                return;
+              }
               setCustomSearchStatus(
                 customGenerationErrorMessage(result.data.code, result.data.error) + customGenerationDiagnosticMessage(result.data.diagnostics),
                 true
@@ -6144,7 +6266,12 @@
             }
           });
       });
-    });
+    };
+    if (presetLevel) {
+      withLevel(presetLevel);
+    } else {
+      showNotionQuizLevelPicker(withLevel);
+    }
   }
   function submitCustomTopic(e) {
     e.preventDefault();

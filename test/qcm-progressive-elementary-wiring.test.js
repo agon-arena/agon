@@ -53,7 +53,20 @@ function extractFunctionBody(source, signaturePattern) {
 test("resolveProgressiveCurriculum construit le prompt curriculum puis parse via parseCurriculumItems (jamais un parsing maison)", () => {
   assert.match(
     SERVER_SOURCE,
-    /async function resolveProgressiveCurriculum\(apiKey, subject, contextHint, id, grounding\) \{[\s\S]{0,1200}?buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)[\s\S]{0,300}?pool = parseCurriculumItems\(JSON\.parse\(content\)\?\.curriculum\);/
+    /async function resolveProgressiveCurriculum\(apiKey, subject, contextHint, id, grounding\) \{[\s\S]{0,1200}?buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)[\s\S]{0,300}?const rawParsed = JSON\.parse\(content\);[\s\S]{0,300}?pool = parseCurriculumItems\(rawParsed\?\.curriculum\);/
+  );
+});
+
+// topicValidation (demande du 06/09/2026, incident "Baudouin de Hainaut") :
+// vérifié à partir de la MÊME réponse curriculum_generation, AVANT tout
+// découpage/gate — cf. test/topic-identity-validation-wiring.test.js pour le
+// détail complet (retour TOPIC_AMBIGUOUS, logs, etc.), ce test-ci ne
+// verrouille que l'ordre relatif par rapport au parsing du curriculum
+// ci-dessus (jamais de découpage engagé sur un sujet ambigu).
+test("resolveProgressiveCurriculum vérifie topicValidation depuis la même réponse, avant tout découpage du curriculum", () => {
+  assert.match(
+    SERVER_SOURCE,
+    /const rawParsed = JSON\.parse\(content\);[\s\S]{0,300}?topicValidation = parseTopicValidationField\(rawParsed\?\.topicValidation\);[\s\S]{0,300}?pool = parseCurriculumItems\(rawParsed\?\.curriculum\);[\s\S]{0,2000}?if \(topicValidation\.status === "ambiguous"\) \{[\s\S]{0,500}?return generationFailure\("TOPIC_AMBIGUOUS", "topic_validation"/
   );
 });
 
