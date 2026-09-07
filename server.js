@@ -133,6 +133,16 @@ const {
 // commentaire de tête pour le détail complet du point d'intégration.
 const { parseTopicValidationField } = require("./lib/topic-identity-validation");
 const { findEquivalentCustomTopic, parseCustomTopicSlotLevel } = require("./lib/topic-dedup");
+// Notions à approfondir/mémoriser des arènes — chantier "catalogue-first"
+// (demande du 07/09/2026, suite au diagnostic lecture seule du même jour) :
+// cf. lib/debate-topic-notions.js pour le détail complet de la cascade
+// (réutilisation d'arène identique -> catalogue Mnoria -> IA en dernier
+// recours, jamais plus d'un appel IA) et sa justification.
+const {
+  MAX_DEBATE_TOPIC_NOTIONS,
+  pickDuplicateArenaNotions,
+  selectDebateTopicNotions
+} = require("./lib/debate-topic-notions");
 const { searchKnowledgeImage } = require("./lib/knowledge-image-search");
 const {
   buildBraveSearchUrl,
@@ -8578,7 +8588,8 @@ app.post("/api/debates", rateLimit("debates", 5), async (req, res) => {
         content: normalizedContent,
         optionA: option_a,
         optionB: option_b,
-        category
+        category,
+        sourceUrl: normalizedSourceUrl
       });
       try {
         // Certamen (pipeline bot veille) publie ses arènes communauté via cet endpoint
@@ -12256,7 +12267,8 @@ app.post("/api/admin/veille/publish", requireAdmin, rateLimit("veille-publish", 
       content: resolvedContent,
       optionA: debateType === "open" ? "" : normalizedPositionA,
       optionB: debateType === "open" ? "" : normalizedPositionB,
-      category: theme || ""
+      category: theme || "",
+      sourceUrl
     });
 
 
@@ -16508,11 +16520,12 @@ const DEBATE_TOPIC_NOTIONS_MODEL = process.env.OPENAI_DEBATE_NOTIONS_MODEL || "g
 // comme un appel mort (crash serveur, timeout réseau) plutôt que toujours en
 // cours — reprise possible par la requête suivante.
 const DEBATE_TOPIC_NOTIONS_STALE_MS = 3 * 60 * 1000;
-// La pertinence prime sur le nombre (demande du 01/09/2026, refonte
-// pédagogique) : 1 seule notion vraiment solide est préférable à un quota
-// forcé — jamais de notion médiocre ajoutée juste pour atteindre MIN.
-const DEBATE_TOPIC_NOTIONS_MIN = 1;
-const DEBATE_TOPIC_NOTIONS_MAX = 5;
+// Catalogue "Mes apprentissages" (notion:custom:*) réutilisé comme niveau 2
+// de la cascade catalogue-first (chantier du 07/09/2026) : rafraîchi au plus
+// une fois par TTL, jamais une lecture Supabase par arène créée (même
+// principe déjà appliqué ailleurs, cf. [[project_egress_priority]]).
+const DEBATE_TOPIC_NOTIONS_CATALOG_TTL_MS = 10 * 60 * 1000;
+let _debateTopicNotionsCatalogCache = { loadedAt: 0, entries: [] };
 
 // Refonte du 01/09/2026 : l'ancien prompt invitait explicitement à extraire
 // des "mots-clés" et n'imposait aucun critère de granularité/durabilité — il
@@ -16529,27 +16542,34 @@ function buildDebateTopicNotionsPrompt(question, content, optionA, optionB, cate
   return [
     "Tu sélectionnes les notions à approfondir et à mémoriser pour quelqu'un qui découvre le sujet ci-dessous : des concepts, mécanismes, institutions, théories, phénomènes ou événements historiques structurants — jamais de simples mots-clés extraits du texte, jamais un fait divers ou un détail circonstanciel isolé.",
     "",
-    "Pour CHAQUE notion candidate, vérifie mentalement ces deux questions et rejette-la si l'une des deux réponses est non :",
+    "Pour CHAQUE notion candidate, vérifie mentalement ces trois questions et rejette-la si l'une des réponses est non :",
     "1. Cette notion aide-t-elle réellement à comprendre ce contenu précis (son sujet, son contexte, ses mécanismes ou ses enjeux) ?",
     "2. Cette notion serait-elle encore un sujet d'apprentissage pertinent dans plusieurs années, indépendamment de cette actualité précise ?",
+    "3. Est-ce qu'un utilisateur pourrait rechercher cette notion dans Mnoria plusieurs mois ou plusieurs années après cette arène, sans lien avec elle ? Si non, la notion est trop circonstancielle.",
     "",
     "Règles strictes :",
     "- Base-toi uniquement sur le texte fourni, n'invente aucun fait.",
-    `- Entre ${DEBATE_TOPIC_NOTIONS_MIN} et ${DEBATE_TOPIC_NOTIONS_MAX} notions distinctes, jamais de doublon ni de synonymes proches. La pertinence prime toujours sur le nombre : n'ajoute JAMAIS une notion médiocre ou tirée par les cheveux pour atteindre un quota — une seule notion vraiment solide vaut mieux que plusieurs approximatives.`,
+    `- 0 à ${MAX_DEBATE_TOPIC_NOTIONS} notions distinctes maximum — ${MAX_DEBATE_TOPIC_NOTIONS} est un PLAFOND, jamais un objectif à atteindre : une seule notion vraiment solide (voire aucune, si rien ne mérite réellement d'être retenu) est un résultat parfaitement valide. Jamais de doublon ni de synonymes proches. La pertinence prime toujours sur le nombre : n'ajoute JAMAIS une notion médiocre ou tirée par les cheveux pour remplir des places.`,
     "- Vise un niveau de granularité intermédiaire, entre ces deux excès à éviter absolument : (a) un mot-clé ou un détail anecdotique/circonstanciel du contenu (nom de lieu précis, nom propre secondaire, \"l'événement du [date]\") — trop étroit pour constituer un objet d'apprentissage ; (b) une catégorie généraliste qui engloberait n'importe quel contenu du même domaine (\"Histoire\", \"Politique\", \"Science\", \"International\", \"Économie\") — trop vague pour être précise ou pour qu'un apprentissage ciblé puisse être construit dessus. En cas d'hésitation entre deux formulations valides, préfère toujours la plus large des deux — les notions trop pointues valent pire que les notions un peu larges.",
-    "- Chaque nom doit correspondre à un sujet encyclopédique autonome qui pourrait naturellement être le titre d'un chapitre, d'un cours ou d'un article de référence. Préfère la notion-mère reconnue à une combinaison descriptive fabriquée spécialement pour ce contenu.",
+    "- Préfère toujours une notion générale et durable à une formulation liée à l'événement précis qui l'illustre ici — la notion doit survivre à l'oubli de cette actualité précise, jamais l'inverse.",
+    "- Une personne ou un lieu peut parfaitement être une bonne notion (\"Donald Trump\", \"Aubervilliers\") : ce sont des entités stables, qui existent indépendamment de l'actualité qui les mentionne ici. En revanche, ne propose JAMAIS une notion qui décrit un état de tension ou une situation en cours, par nature amenée à évoluer ou se résoudre (\"Tensions au Moyen-Orient\", \"Escalade militaire\", \"Crise migratoire\") : ce n'est pas un sujet durable, seulement la photographie d'un instant. Dans ce cas, préfère nommer l'entité stable concernée (le pays, l'institution, le conflit historique établi s'il en existe un) plutôt que l'état passager lui-même.",
+    "- Chaque nom doit correspondre à un sujet encyclopédique autonome qui pourrait naturellement être le titre d'un chapitre, d'un cours ou d'un article de référence — le titre naturel d'un apprentissage Mnoria autonome, que quelqu'un pourrait rechercher et retrouver utile plusieurs mois ou plusieurs années après cette arène précise, indépendamment d'elle. Si ce n'est pas le cas, c'est que la formulation est trop circonstancielle : reformule-la en un sujet plus durable, ou écarte-la. Préfère la notion-mère reconnue à une combinaison descriptive fabriquée spécialement pour ce contenu.",
     "- Évite les intitulés qui assemblent plusieurs angles avec « et », ainsi que les formulations du type « X dans le contexte de Y », « enjeux de X pour Y » ou « conséquences de X sur Y ». Sélectionne plutôt le concept structurant commun, plus court et plus durable.",
     "- Ne produis jamais plusieurs micro-variantes d'une même famille conceptuelle. Si trois candidats tournent autour de la même idée, conserve uniquement le plus structurant et utilise les autres places pour des notions réellement distinctes.",
     "- Chaque notion doit avoir un lien réel et explicite avec le sujet principal du contenu — jamais une notion seulement adjacente, évoquée en passant, ou reliée par une simple proximité thématique sans rapport direct avec l'enjeu central.",
     "- Écarte les notions triviales ou déjà évidentes pour un lecteur de la presse générale — ne retiens que celles qui apportent un vrai éclairage.",
     "- Vérifie que chaque notion et son explication sont exactes et vérifiables avant de les retenir — en cas de doute sur un fait, écarte-le plutôt que de risquer une explication fausse ou approximative.",
-    "- Pour chaque notion : un nom court et correctement capitalisé (1 à 4 mots, jamais une phrase ni une question, jamais une simple date ou un nom propre isolé), et une explication neutre de 1 à 3 phrases qui définit la notion et précise son lien avec ce contenu précis.",
+    "- Pour chaque notion : un nom court et correctement capitalisé (1 à 4 mots, jamais une phrase ni une question, jamais une simple date isolée) — un nom propre de personne ou de lieu est autorisé (cf. règle ci-dessus), et une explication neutre de 1 à 3 phrases qui définit la notion et précise son lien avec ce contenu précis.",
     "- Français neutre, sans jugement de valeur, sans reprendre le camp \"pour\" ou \"contre\" si le contenu est un débat.",
-    "- Si le contenu fourni est trop pauvre, trop anecdotique ou trop circonstanciel pour en tirer au moins une notion sérieuse qui réponde aux deux questions-tests ci-dessus, réponds avec une liste vide plutôt que d'inventer ou de forcer une catégorie trop large.",
+    "- Si le contenu fourni est trop pauvre, trop anecdotique ou trop circonstanciel pour en tirer au moins une notion sérieuse qui réponde aux trois questions-tests ci-dessus, réponds avec une liste vide plutôt que d'inventer ou de forcer une catégorie trop large.",
     "",
     "Exemple — actualité \"nouvelle offensive russe en Ukraine\" :",
     "Mauvais : \"Russie\" (catégorie trop large), \"Politique internationale\" (catégorie trop large), \"Offensive du 30 août\" (circonstanciel, pas durable).",
     "Bon (seulement celles réellement abordées dans le contenu) : \"Guerre russo-ukrainienne\", \"OTAN\", \"Sanctions économiques internationales\", \"Dissuasion nucléaire\", \"Zones d'influence en Europe de l'Est\".",
+    "",
+    "Exemple — actualité \"frappes américaines contre des cibles iraniennes, tensions croissantes\" :",
+    "Mauvais : \"Tensions au Moyen-Orient\", \"Escalade militaire\" (décrivent un état du moment, appelé à évoluer ou se résoudre — pas un sujet stable).",
+    "Bon : \"Iran\", \"Détroit d'Ormuz\", \"Dissuasion nucléaire\" (une personne, un lieu ou une notion établie restent de bonnes notions même issus d'une actualité tendue).",
     "",
     "Exemple — actualité \"épisode de canicule exceptionnel en Espagne\" :",
     "Bon (selon ce qui est effectivement abordé) : \"Vagues de chaleur\", \"Changement climatique\", \"Climat méditerranéen\", \"Îlot de chaleur urbain\".",
@@ -16567,21 +16587,14 @@ function buildDebateTopicNotionsPrompt(question, content, optionA, optionB, cate
   ].filter(Boolean).join("\n");
 }
 
-// Slug stable dérivé du nom (pour sourceDebateId/slot du QCM de notion,
-// jamais recalculé côté client) — pas de dépendance à un id fourni par l'IA.
-function slugifyDebateNotionName(name) {
-  return String(name || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-}
-
-// Best-effort, jamais bloquant pour l'affichage de l'arène : une erreur ou
-// une réponse vide renvoie simplement [] (cf. appelants ci-dessous), jamais
-// une exception qui casserait la page ou la création du débat.
+// Best-effort, jamais bloquant : une erreur réseau/parsing renvoie simplement
+// [] (cf. selectDebateTopicNotions, qui traite ça comme "l'IA n'a rien
+// proposé", jamais une exception qui casserait la génération). Sert
+// désormais UNIQUEMENT de `callAi` au dernier niveau de la cascade
+// catalogue-first (cf. lib/debate-topic-notions.js) — n'applique plus
+// elle-même ni plafond ni minimum : le filtrage déterministe commun
+// (finalizeDebateTopicNotions) s'en charge pour les 3 sources (réutilisation
+// d'arène, catalogue, IA) de façon strictement identique.
 async function extractDebateTopicNotions(question, content, optionA, optionB, category) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
@@ -16593,47 +16606,150 @@ async function extractDebateTopicNotions(question, content, optionA, optionB, ca
       feature: "knowledge_related_notions"
     });
     const parsed = JSON.parse(raw);
-    const seen = new Set();
-    const notions = [];
-    for (const entry of Array.isArray(parsed?.notions) ? parsed.notions : []) {
-      const name = capitalizeFirstLetter(String(entry?.name || "").trim()).slice(0, 60);
-      const explanation = String(entry?.explanation || "").trim().slice(0, 500);
-      const slug = slugifyDebateNotionName(name);
-      if (!name || !explanation || !slug || seen.has(slug)) continue;
-      seen.add(slug);
-      notions.push({ slug, name, explanation });
-      if (notions.length >= DEBATE_TOPIC_NOTIONS_MAX) break;
-    }
-    return notions.length >= DEBATE_TOPIC_NOTIONS_MIN ? notions : [];
+    return (Array.isArray(parsed?.notions) ? parsed.notions : []).map((entry) => ({
+      name: capitalizeFirstLetter(String(entry?.name || "").trim()),
+      explanation: String(entry?.explanation || "").trim()
+    }));
   } catch (error) {
     console.error("[debate-notions] extraction IA :", error.message);
     return [];
   }
 }
 
+// Catalogue "Mes apprentissages" (niveau 2 de la cascade, cf. lib/debate-topic-
+// notions.js selectCatalogMatches) — même sélection que GET /api/users/notion-
+// quizzes/explore (slots notion:custom:%), réduite au strict nécessaire
+// (nom + slot) et mise en cache mémoire avec TTL : lue potentiellement à
+// CHAQUE création d'arène (bien plus fréquent que l'ouverture du modal
+// "Explorer"), jamais une lecture Supabase par arène (cf. [[project_egress_priority]]).
+async function getCachedCustomTopicCatalog() {
+  const now = Date.now();
+  if (now - _debateTopicNotionsCatalogCache.loadedAt < DEBATE_TOPIC_NOTIONS_CATALOG_TTL_MS) {
+    return _debateTopicNotionsCatalogCache.entries;
+  }
+  try {
+    const { data, error } = await supabase
+      .from("daily_quiz")
+      .select("slot, first:questions->0")
+      .like("slot", "notion:custom:%")
+      .limit(500);
+    if (error) throw new Error(error.message);
+    const byBaseSlot = new Map();
+    for (const row of data || []) {
+      const name = row?.first?.sourceName;
+      if (!name) continue;
+      // Un même sujet peut exister sous plusieurs slots suffixés par niveau
+      // (:elementaire/:avance/:expert) — une seule entrée catalogue par sujet,
+      // le slot NU (sans suffixe) sert de clé de réutilisation.
+      const baseSlot = String(row.slot || "").replace(/:(elementaire|avance|expert)$/, "");
+      if (!byBaseSlot.has(baseSlot)) byBaseSlot.set(baseSlot, { name: String(name), key: baseSlot });
+    }
+    _debateTopicNotionsCatalogCache = { loadedAt: now, entries: Array.from(byBaseSlot.values()) };
+  } catch (error) {
+    console.error("[debate-notions] chargement catalogue custom :", error.message);
+    // Best-effort : une erreur de lecture catalogue ne doit jamais empêcher
+    // la cascade de continuer (repli sur l'IA comme si le catalogue était
+    // vide) — le cache précédent (même expiré) reste préférable à rien.
+    if (!_debateTopicNotionsCatalogCache.entries.length) return [];
+  }
+  return _debateTopicNotionsCatalogCache.entries;
+}
+
+// Deux requêtes ciblées et minimales (jamais un scan de table) pour le
+// niveau 1 de la cascade (réutilisation d'une arène quasi-identique déjà
+// prête) : source_url exacte d'abord (sans ambiguïté possible), question
+// exacte ensuite en repli — cf. pickDuplicateArenaNotions (lib/debate-topic-
+// notions.js) pour la décision pure à partir de ces lignes.
+async function findDuplicateArenaCandidateRows(debateId, question, sourceUrl) {
+  const rows = [];
+  if (sourceUrl) {
+    const { data } = await supabase
+      .from("debates")
+      .select("id, question, source_url, category, topic_notions")
+      .eq("source_url", sourceUrl)
+      .eq("topic_notions_status", "ready")
+      .neq("id", debateId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data?.length) rows.push(...data);
+  }
+  if (!rows.length && question) {
+    const { data } = await supabase
+      .from("debates")
+      .select("id, question, source_url, category, topic_notions")
+      .eq("question", question)
+      .eq("topic_notions_status", "ready")
+      .neq("id", debateId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (data?.length) rows.push(...data);
+  }
+  return rows;
+}
+
 // Génère (si besoin) et persiste les notions d'un débat — partagé entre
 // GET /api/debates/:id/notions (repli au premier affichage, cf. plus bas) et
 // la génération à la création (cf. POST /api/debates et /api/admin/veille/publish,
 // demande du 01/09/2026 : générer dès la création plutôt qu'à la première
-// visite, pour que les cartes Actualités/Communauté affichent une notion dès
-// leur apparition dans les carrousels, pas seulement après qu'un visiteur ait
-// ouvert la page de l'arène — 88% des arènes n'étaient jamais visitées
-// individuellement, cf. audit). Toujours "generating" -> "ready"/"failed",
-// jamais d'état intermédiaire visible ailleurs que via ces deux colonnes.
-async function generateAndCacheDebateTopicNotions(debateId, { question, content, optionA, optionB, category }) {
+// visite). Toujours "generating" -> "ready"/"failed", jamais d'état
+// intermédiaire visible ailleurs que via ces deux colonnes.
+//
+// Chantier "catalogue-first" (07/09/2026) : orchestre désormais la cascade
+// (réutilisation d'arène identique -> catalogue Mnoria -> IA en dernier
+// recours, cf. lib/debate-topic-notions.js selectDebateTopicNotions) au lieu
+// d'appeler systématiquement l'IA. `sourceUrl` (nouveau paramètre, optionnel)
+// permet le niveau 1 — absent (aucun appelant ne le fournirait), la cascade
+// retombe simplement sur le niveau 2 (catalogue) puis 3 (IA), comportement
+// strictement conservateur.
+async function generateAndCacheDebateTopicNotions(debateId, { question, content, optionA, optionB, category, sourceUrl }) {
   await supabase.from("debates").update({
     topic_notions_status: "generating",
     topic_notions_generated_at: new Date().toISOString()
   }).eq("id", debateId);
 
-  const notions = await extractDebateTopicNotions(question, content, optionA, optionB, category);
+  const [duplicateRows, catalogEntries] = await Promise.all([
+    findDuplicateArenaCandidateRows(debateId, question, sourceUrl),
+    getCachedCustomTopicCatalog()
+  ]);
+  const duplicateMatch = pickDuplicateArenaNotions(
+    { sourceUrl, question, category },
+    duplicateRows
+  );
+  const haystackText = [question, content, optionA, optionB, category].filter(Boolean).join(" — ");
+
+  const result = await selectDebateTopicNotions({
+    duplicateArenaNotions: duplicateMatch?.notions || null,
+    catalogEntries,
+    haystackText,
+    subject: question,
+    contentText: content,
+    optionA,
+    optionB,
+    category,
+    callAi: (subj, contentText, optA, optB, cat) => extractDebateTopicNotions(subj, contentText, optA, optB, cat)
+  });
+
   await supabase.from("debates").update({
-    topic_notions: notions,
-    topic_notions_status: notions.length ? "ready" : "failed",
+    topic_notions: result.notions,
+    topic_notions_status: result.notions.length ? "ready" : "failed",
     topic_notions_generated_at: new Date().toISOString()
   }).eq("id", debateId);
 
-  return notions;
+  // Instrumentation coût (demande du 07/09/2026) : une ligne simple, aucune
+  // infrastructure dédiée — permet de mesurer après coup combien d'appels IA
+  // "knowledge_related_notions" ont réellement été évités par les niveaux 1/2.
+  console.info("[debate-notions]", JSON.stringify({
+    debateId,
+    resolutionSource: result.resolutionSource,
+    duplicateReuseCount: result.duplicateReuseCount,
+    catalogCandidates: result.catalogCandidates,
+    catalogSelected: result.catalogSelected,
+    aiCalled: result.aiCalled,
+    aiReturned: result.aiReturned,
+    finalCount: result.notions.length
+  }));
+
+  return result.notions;
 }
 
 // Lecture publique des notions d'une arène — génère et met en cache
@@ -16648,7 +16764,7 @@ app.get("/api/debates/:id/notions", rateLimit("debate-notions-read", 240), async
   try {
     const { data: debate, error } = await supabase
       .from("debates")
-      .select("id, question, content, option_a, option_b, category, topic_notions, topic_notions_status, topic_notions_generated_at")
+      .select("id, question, content, option_a, option_b, category, source_url, topic_notions, topic_notions_status, topic_notions_generated_at")
       .eq("id", canonicalId)
       .single();
     if (error || !debate) return res.status(404).json({ ok: false, error: "Débat introuvable." });
@@ -16673,7 +16789,8 @@ app.get("/api/debates/:id/notions", rateLimit("debate-notions-read", 240), async
       content: debate.content,
       optionA: debate.option_a,
       optionB: debate.option_b,
-      category: debate.category
+      category: debate.category,
+      sourceUrl: debate.source_url
     });
 
     return res.json({ ok: true, status: notions.length ? "ready" : "failed", notions });
@@ -18341,11 +18458,7 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
   const cacheKey = `${quizDate}:${slot}:${effectiveRequestedLevel || ""}`;
   const cached = _dailyQuizQuestionsCache.get(cacheKey);
   if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) {
-    // memorizationEnabled est une préférence PAR UTILISATEUR, jamais mise en
-    // cache avec le contenu partagé (chantier "Mémoriser/Non mémorisée",
-    // 06/09/2026) : recalculée à chaque appel même sur un cache-hit contenu,
-    // cf. attachMemorizationPreferenceToQuestions.
-    return attachMemorizationPreferenceToQuestions(cached.questions, voterKey);
+    return cached.questions;
   }
   const { data, error } = await supabase
     .from("daily_quiz")
@@ -18384,18 +18497,28 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
       return knowledgeTargetId && knowledgeTargetId !== q.knowledgeTargetId ? { ...q, knowledgeTargetId } : q;
     });
   _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
-  return attachMemorizationPreferenceToQuestions(baseQuestions, voterKey);
+  return baseQuestions;
 }
 
 // Enrichissement PAR UTILISATEUR du choix de mémorisation (chantier
-// "Mémoriser/Non mémorisée", 06/09/2026) : appliqué APRÈS lecture/écriture
-// du cache de contenu ci-dessus, jamais dedans — memorizationEnabled dépend
-// du visiteur, le cache est partagé entre tous. Une seule lecture batch des
-// désactivations de CET utilisateur (jamais une requête par question, cf.
-// section 24 du diagnostic) ; no-op immédiat si aucune question de ce QCM
-// n'a de knowledgeTargetId résolu (rien à enrichir). Retourne toujours un
-// NOUVEAU tableau — ne mute jamais les objets potentiellement partagés avec
-// le cache mémoire commun à tous les visiteurs.
+// "Mémoriser/Non mémorisée", 06/09/2026 ; sorti de getDailyQuizQuestions le
+// 07/09/2026 — "le résultat du QCM doit apparaître plus vite après avoir
+// validé une réponse") : getDailyQuizQuestions() reste PUR CONTENU, jamais
+// enrichi de préférence utilisateur — POST /answer et POST /practice-answer
+// n'en ont d'ailleurs jamais eu besoin (ils ne font que retrouver/noter la
+// question), et l'appelaient pourtant à chaque réponse soumise, ajoutant
+// deux allers-retours Supabase évitables (users + préférences) sur le
+// chemin critique de LA VALIDATION D'UNE RÉPONSE — jamais celui de
+// l'affichage, ralenti à tort pour tout le monde alors que la fonctionnalité
+// n'est utilisée que par une minorité. Appelée désormais UNIQUEMENT par les
+// routes qui affichent réellement des questions au visiteur (GET
+// /api/daily-quiz/today), jamais par celles qui gradent une réponse déjà
+// soumise. Une seule lecture batch des désactivations de CET utilisateur
+// (jamais une requête par question, cf. section 24 du diagnostic) ; no-op
+// immédiat si aucune question de ce QCM n'a de knowledgeTargetId résolu
+// (rien à enrichir). Retourne toujours un NOUVEAU tableau — ne mute jamais
+// les objets potentiellement partagés avec le cache mémoire commun à tous
+// les visiteurs.
 async function attachMemorizationPreferenceToQuestions(questions, voterKey) {
   const key = String(voterKey || "").trim();
   const subjectType = questions[0]?.sourceType;
@@ -18585,7 +18708,16 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     // — absent, comportement V4.0 inchangé.
     const requestedLevel = resolveNotionQuizLevel(req.query.level).level;
     const questions = await getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel);
-    res.json({ date: quizDate, slot, label: getDailyQuizSlotLabel(slot), questions: questions.map(stripQuestionForClient) });
+    // memorizationEnabled (chantier "Mémoriser/Non mémorisée") : uniquement
+    // pour "mesqcm" — "renforcement" l'a déjà (fetchCultureGeneraleReviewInjectionForToday
+    // enrichit ses propres items), "comprendre" n'a jamais de knowledgeTargetId
+    // (no-op garanti, mais autant ne pas refaire l'appel pour rien). Appelée
+    // ICI uniquement (jamais dans getDailyQuizQuestions, cf. son commentaire)
+    // pour ne jamais ralentir POST /answer, qui n'affiche rien.
+    const enrichedQuestions = (slot === DAILY_QUIZ_REINFORCEMENT_SLOT || slot === DAILY_QUIZ_COMPREHENSION_SLOT)
+      ? questions
+      : await attachMemorizationPreferenceToQuestions(questions, voterKey);
+    res.json({ date: quizDate, slot, label: getDailyQuizSlotLabel(slot), questions: enrichedQuestions.map(stripQuestionForClient) });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
   }
@@ -20554,6 +20686,82 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
   }
 });
 
+// Statut de progression léger pour l'écran de fin de QCM (demande du
+// 07/09/2026, "il devrait me dire que la suite est en cours de création") :
+// le frontend n'a par construction aucune idée, au moment d'afficher le
+// score final, de l'état du master ni de son propre targetLevel (ces deux
+// informations ne transitent jamais par /today ni /results) — cette route
+// lecture-seule comble ce manque, appelée UNIQUEMENT une fois le bloc
+// courant terminé (jamais sur le chemin critique de chargement/réponse
+// d'une question). N'applique JAMAIS de promotion elle-même (la promotion
+// réelle reste appliquée par maybeAdvanceProgressiveLevelAfterAnswer et,
+// en rattrapage, par GET .../notion-quizzes) : `resolveUserProgressiveLevel`
+// n'est appelée ici que pour REFLÉTER ce que ces deux mécanismes
+// appliqueraient, sans jamais écrire en base.
+app.get("/api/users/notion-quizzes/level-status", rateLimit("users", 60), async (req, res) => {
+  try {
+    const slot = String(req.query.slot || "").trim();
+    const quizDate = String(req.query.quizDate || "").trim();
+    const validation = validateLegacyKey(req.query.legacyKey);
+    // Toute condition non remplie (clé invalide, slot hors périmètre
+    // progressif, date malformée, visiteur inconnu, master non progressif,
+    // aucune adoption connue) répond `progressive:false` plutôt qu'une
+    // erreur : ce statut est un simple enrichissement d'affichage, jamais un
+    // prérequis pour terminer un QCM normalement.
+    if (validation.error || !slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
+      return res.json({ ok: true, progressive: false });
+    }
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    if (!user) return res.json({ ok: true, progressive: false });
+
+    const [{ data: quizRow }, { data: linkRow }] = await Promise.all([
+      supabase.from("daily_quiz").select("progressive_status").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle(),
+      supabase.from("user_notion_quizzes").select("requested_level, target_level").eq("user_id", user.id).eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()
+    ]);
+    if (!quizRow?.progressive_status || !linkRow) {
+      return res.json({ ok: true, progressive: false });
+    }
+
+    const currentLevel = resolveNotionQuizLevel(linkRow.requested_level).level || "elementaire";
+    const targetLevel = resolveNotionQuizLevel(linkRow.target_level).level || "expert";
+    const currentRank = progressiveLevelRank(currentLevel);
+    const targetRank = progressiveLevelRank(targetLevel);
+    // nextLevel : le palier que CET utilisateur vise encore, indépendamment
+    // de sa disponibilité actuelle dans le master — jamais calculé via
+    // computeNextUnlockedProgressiveLevel (qui répond null tant que le
+    // master n'a pas rattrapé, ce qui est précisément le cas qu'on veut
+    // pouvoir signaler ici : "vise Approfondi, pas encore prêt").
+    const nextLevel = currentRank < targetRank ? PROGRESSIVE_LEVEL_ORDER[currentRank + 1] : null;
+    if (!nextLevel) {
+      return res.json({ ok: true, progressive: true, currentLevel, targetLevel, nextLevel: null });
+    }
+
+    const resolved = resolveUserProgressiveLevel({
+      persistedLevel: currentLevel,
+      targetLevel,
+      progressiveStatus: quizRow.progressive_status,
+      // true : cette route n'est appelée par le frontend qu'une fois le
+      // bloc courant réellement terminé (cf. renderFinalScore) — la
+      // promotion RÉELLE (écriture en base) reste de la responsabilité
+      // exclusive de maybeAdvanceProgressiveLevelAfterAnswer/GET
+      // .../notion-quizzes, jamais de cette route en lecture seule.
+      isCurrentBlockComplete: true
+    });
+    res.json({
+      ok: true,
+      progressive: true,
+      currentLevel,
+      targetLevel,
+      nextLevel,
+      nextLevelLabel: NOTION_QUIZ_LEVELS[nextLevel]?.label || null,
+      nextLevelReady: resolved.level !== currentLevel
+    });
+  } catch (error) {
+    console.error("[notion-quizzes:level-status] :", error.message);
+    res.json({ ok: true, progressive: false });
+  }
+});
+
 // Bouton "Explorer les apprentissages disponibles" (demande du 13/08/2026) :
 // liste les sujets libres déjà générés par d'autres visiteurs (slot
 // "notion:custom:*" uniquement — les QCM Éclairages/Ce jour dans l'Histoire
@@ -21079,10 +21287,16 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // NULL), comportement V4.0 strictement inchangé dans ce cas.
       const persistedLevel = resolveNotionQuizLevel(link.requested_level).level;
       const effectiveLevel = persistedLevel || rawQuestions[0]?.level || null;
+      const progressiveStatus = progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`);
+      // targetLevel (chantier "rétablir un vrai choix utilisateur", 07/09/2026)
+      // : target_level absent (ligne antérieure à cette colonne) => repli
+      // "expert", même justification que resolveUserProgressiveLevel — pas de
+      // plafond a posteriori sur un parcours déjà en cours.
+      const targetLevel = resolveNotionQuizLevel(link.target_level).level || "expert";
       // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : no-op strict
       // pour toute ligne legacy (progressive_status NULL) — cf.
       // lib/question-formats.js pour le détail complet.
-      const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveLevel, progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`));
+      const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveLevel, progressiveStatus);
       const questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
       let creditSum = 0;
       let answeredCount = 0;
@@ -21138,7 +21352,17 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // 17/08/2026) : un QCM commencé puis abandonné en route doit rester
       // visible et repris depuis "Mes apprentissages en cours" (Découvrir),
       // pas disparaître prématurément dans "Mes acquis".
-      const realized = answeredCount >= questions.length;
+      const blockFullyAnswered = answeredCount >= questions.length;
+      // targetReached (demande du 07/09/2026, "même si je fais les questions
+      // élémentaires, on doit laisser ce qcm dans... 'en cours' si j'avais
+      // choisi approfondi ou expert") : un bloc entièrement répondu ne suffit
+      // plus à lui seul à "réaliser" un QCM progressif — il faut aussi avoir
+      // atteint son propre targetLevel, jamais seulement le bloc COURANT.
+      // No-op strict pour tout master non progressif (progressiveStatus
+      // falsy) : comportement historique inchangé, aucun concept de
+      // targetLevel n'existe pour lui.
+      const targetReached = !progressiveStatus || effectiveLevel === targetLevel;
+      const realized = blockFullyAnswered && targetReached;
       quizzes.push({
         slot: link.slot,
         quizDate: link.quiz_date,
@@ -21155,7 +21379,11 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         answeredCount,
         trueAnsweredCount,
         realized,
-        inProgress: answeredCount > 0 && answeredCount < questions.length,
+        // Bloc courant fini mais targetLevel pas encore atteint : reste "en
+        // cours" (jamais "réalisé") — même demande du 07/09/2026 que
+        // ci-dessus. `answeredCount > 0` inchangé : un QCM jamais commencé
+        // continue de tomber dans "En attente de réalisation", pas ici.
+        inProgress: answeredCount > 0 && (!blockFullyAnswered || !targetReached),
         progressPct,
         // Ne jamais confondre « je peux probablement m'en souvenir maintenant »
         // (progressPct) avec « cette notion a été consolidée dans le temps ».
@@ -21174,11 +21402,13 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // liste, cf. rapport final.
       const progressionResolution = resolveUserProgressiveLevel({
         persistedLevel,
-        // target_level absent (ligne antérieure à cette colonne) => repli
-        // "expert", même justification que resolveUserProgressiveLevel.
-        targetLevel: resolveNotionQuizLevel(link.target_level).level || "expert",
-        progressiveStatus: progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`),
-        isCurrentBlockComplete: realized
+        targetLevel,
+        progressiveStatus,
+        // blockFullyAnswered (jamais `realized`, qui exige désormais AUSSI
+        // targetReached) : la promotion doit pouvoir s'appliquer dès que le
+        // bloc COURANT est fini, précisément pour faire progresser un QCM
+        // qui reste "en cours" faute d'avoir atteint son targetLevel.
+        isCurrentBlockComplete: blockFullyAnswered
       });
       if (progressionResolution.promotion) {
         supabase

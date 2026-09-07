@@ -9185,24 +9185,7 @@ function syncIndexBubbleTrendBadges(root = document) {
 function syncIndexCardNotionsMemorizedState(root = document) {
   const scope = root?.querySelectorAll ? root : document;
   const buttons = Array.from(scope.querySelectorAll('.index-card-notions-section .debate-notion-action-btn[data-memorized="false"]'));
-  if (!buttons.length) return;
-  const voterKey = typeof getKey === "function" ? getKey() : null;
-  if (!voterKey) return;
-
-  fetchJSON(`${API}/users/notion-quizzes?legacyKey=${encodeURIComponent(voterKey)}`, { cache: "no-store" })
-    .then((data) => {
-      const quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
-      buttons.forEach((btn) => {
-        const debateId = btn.getAttribute("data-debate-id");
-        const slug = btn.getAttribute("data-notion-slug");
-        if (!debateId || !slug) return;
-        const slotPrefix = `notion:debat-notion:${debateId}-${slug}`;
-        if (!quizzes.some((q) => q.slot === slotPrefix || q.slot.startsWith(`${slotPrefix}:`))) return;
-        btn.setAttribute("data-memorized", "true");
-        btn.classList.add("is-active");
-      });
-    })
-    .catch(() => {});
+  markNotionButtonsMemorized(buttons);
 }
 
 function buildIndexLikeDebateCardHtml(debate, options = {}) {
@@ -26394,67 +26377,113 @@ function activateIndexCardNotion(btn) {
   activateDebateNotion(btn, voterKey, debateId, quizDate);
 }
 
+// Clé catalogue partagée d'un sujet (demande du 07/09/2026, "catalogue
+// commun" : une notion d'arène doit réutiliser EXACTEMENT le même
+// apprentissage qu'une recherche libre du même nom, jamais un master propre
+// à l'arène) — identique caractère pour caractère à normalizeCustomTopicKey
+// (server.js) et à getCustomTopicPendingSlot (views/qcm-du-jour.html) :
+// jamais une troisième normalisation à maintenir en synchronisation.
+function computeCustomTopicKey(topic) {
+  const normalized = String(topic || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!window.crypto || !window.crypto.subtle || typeof TextEncoder !== "function") {
+    return Promise.resolve("");
+  }
+  return window.crypto.subtle.digest("SHA-1", new TextEncoder().encode(normalized))
+    .then((digest) => Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 16))
+    .catch(() => "");
+}
+
+// Marque "déjà mémorisé" (data-memorized) les boutons de notion dont le
+// sujet (data-notion-name) a déjà un apprentissage adopté par cet
+// utilisateur — un seul fetch /api/users/notion-quizzes pour tous les
+// boutons fournis, jamais un par bouton. Partagé entre renderDebateNotions
+// (page débat) et syncIndexCardNotionsMemorizedState (cartes accueil).
+function markNotionButtonsMemorized(buttons) {
+  const btnList = Array.from(buttons || []);
+  const voterKey = typeof getKey === "function" ? getKey() : null;
+  if (!btnList.length || !voterKey) return;
+  fetchJSON(`${API}/users/notion-quizzes?legacyKey=${encodeURIComponent(voterKey)}`, { cache: "no-store" })
+    .then((data) => {
+      const quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
+      return Promise.all(btnList.map((btn) => {
+        const name = btn.getAttribute("data-notion-name");
+        if (!name) return null;
+        return computeCustomTopicKey(name).then((key) => {
+          if (!key) return;
+          const slotPrefix = `notion:custom:${key}`;
+          if (!quizzes.some((q) => q.slot === slotPrefix || q.slot.startsWith(`${slotPrefix}:`))) return;
+          btn.setAttribute("data-memorized", "true");
+          btn.classList.add("is-active");
+        });
+      }));
+    })
+    .catch(() => {});
+}
+
+// Chantier "catalogue commun" (demande du 07/09/2026) : une notion d'arène
+// n'est plus qu'une ENTRÉE dans le même catalogue partagé que la recherche
+// libre "Mes apprentissages" — cliquer dessus revient exactement à taper son
+// nom dans cette barre de recherche (même route, même dédoublonnage par
+// normalizeCustomTopicKey, même mutualisation inter-niveaux). Une notion déjà
+// apprise ailleurs (une autre arène, ou une recherche libre) réutilise donc
+// directement l'apprentissage existant — jamais un nouveau master propre à
+// CETTE arène (ancien comportement, sourceType "debat-notion", abandonné ici
+// : ${debateId}-${slug} empêchait structurellement toute réutilisation
+// inter-arènes). Bénéfice gratuit : le sujet apparaît désormais aussi dans
+// "Explorer les apprentissages disponibles", qui liste déjà tous les
+// notion:custom:*.
 function activateDebateNotion(btn, voterKey, debateId, quizDate) {
-  const notionName = btn.getAttribute("data-notion-name") || "cette notion";
+  const notionName = btn.getAttribute("data-notion-name") || "";
   if (btn.getAttribute("data-memorized") === "true") {
-    showDebateNotionMemorizeExplainer(notionName, false);
+    showDebateNotionMemorizeExplainer(notionName || "cette notion", false);
     return;
   }
-  if (!voterKey) return;
-  const slug = btn.getAttribute("data-notion-slug");
-  const explanation = btn.getAttribute("data-notion-explanation") || "";
-  const debateQuestion = btn.getAttribute("data-debate-question") || "";
-  if (!slug) return;
+  if (!voterKey || !notionName) return;
 
   showNotionQuizLevelPicker((level) => {
-    const pendingSlot = `notion:debat-notion:${debateId}-${slug}:${level}`;
-    btn.setAttribute("data-memorized", "true");
-    btn.classList.add("is-active");
-    startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
-    const explainer = showDebateNotionMemorizeExplainer(notionName, true);
+    computeCustomTopicKey(notionName).then((key) => {
+      const pendingSlot = key ? `notion:custom:${key}:${level}` : "";
+      btn.setAttribute("data-memorized", "true");
+      btn.classList.add("is-active");
+      if (pendingSlot) startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
+      const explainer = showDebateNotionMemorizeExplainer(notionName, true);
 
-    fetchJSON(`${API}/users/notion-quizzes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      keepalive: true,
-      body: JSON.stringify({
-        legacyKey: voterKey,
-        sourceType: "debat-notion",
-        sourceDebateId: `${debateId}-${slug}`,
-        quizDate,
-        level,
-        item: {
-          current_topic_id: `${debateId}-${slug}`,
-          current_topic_title: debateQuestion,
-          notion_name: notionName,
-          notion_explanation: explanation
-        }
+      fetchJSON(`${API}/users/notion-quizzes/custom/progressive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({ legacyKey: voterKey, topic: notionName, level })
       })
-    })
-      .then(() => {
-        finishPendingNotionQuizGeneration(pendingSlot);
-        explainer.ready();
-      })
-      .catch((error) => {
-        // Distingue un échec réellement confirmé par le backend (réponse HTTP non-2xx
-        // avec un vrai corps JSON de notre serveur, cf. fetchJSON plus haut : error.status
-        // ET error.code sont alors renseignés) d'un cas ambigu — AbortError (fetchJSON
-        // applique par défaut un timeout client de 12s, bien plus court qu'une génération
-        // IA de plusieurs minutes), coupure réseau, ou une réponse non-JSON d'un
-        // intermédiaire externe (proxy) où error.status est défini mais error.code ne
-        // l'est pas. Même principe que startCustomTopicGeneration (views/qcm-du-jour.html,
-        // correctifs UX "Marxisme" 01/09/2026 et "Maoïsme" 02/09/2026) : un cas ambigu ne
-        // prouve jamais que la génération a échoué — le marqueur persistant et le bouton
-        // restent en l'état, le sondage global déjà existant (checkPendingNotionQuizzesReadiness,
-        // plus haut dans ce fichier) reste seul en charge jusqu'à ready (ou, si un jour
-        // ajouté côté serveur pour cette route, failed).
-        const confirmedFailure = !!error && typeof error.status === "number" && !!error.code;
-        if (!confirmedFailure) return;
-        finishPendingNotionQuizGeneration(pendingSlot);
-        explainer.failed();
-        btn.setAttribute("data-memorized", "false");
-        btn.classList.remove("is-active");
-      });
+        .then(() => {
+          if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
+          explainer.ready();
+        })
+        .catch((error) => {
+          // Distingue un échec réellement confirmé par le backend (réponse HTTP non-2xx
+          // avec un vrai corps JSON de notre serveur, cf. fetchJSON plus haut : error.status
+          // ET error.code sont alors renseignés) d'un cas ambigu — AbortError (fetchJSON
+          // applique par défaut un timeout client de 12s, bien plus court qu'une génération
+          // IA de plusieurs minutes), coupure réseau, ou une réponse non-JSON d'un
+          // intermédiaire externe (proxy) où error.status est défini mais error.code ne
+          // l'est pas. Même principe que startCustomTopicGeneration (views/qcm-du-jour.html,
+          // correctifs UX "Marxisme" 01/09/2026 et "Maoïsme" 02/09/2026) : un cas ambigu ne
+          // prouve jamais que la génération a échoué — le marqueur persistant et le bouton
+          // restent en l'état, le sondage global déjà existant (checkPendingNotionQuizzesReadiness,
+          // plus haut dans ce fichier) reste seul en charge jusqu'à ready (ou, si un jour
+          // ajouté côté serveur pour cette route, failed).
+          const confirmedFailure = !!error && typeof error.status === "number" && !!error.code;
+          if (!confirmedFailure) return;
+          if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
+          explainer.failed();
+          btn.setAttribute("data-memorized", "false");
+          btn.classList.remove("is-active");
+        });
+    });
   });
 }
 
@@ -26494,24 +26523,7 @@ function renderDebateNotions(debateId, debateQuestion, notions) {
 
   const voterKey = typeof getKey === "function" ? getKey() : null;
   const buttons = container.querySelectorAll(".debate-notion-action-btn");
-  if (voterKey) {
-    fetchJSON(`${API}/users/notion-quizzes?legacyKey=${encodeURIComponent(voterKey)}`, { cache: "no-store" })
-      .then((data) => {
-        const quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
-        buttons.forEach((btn) => {
-          // Le slot porte désormais un suffixe de niveau (cf.
-          // server.js NOTION_QUIZ_LEVELS, ":elementaire|avance|expert") : on
-          // matche sur le préfixe plutôt que sur une égalité stricte, sinon
-          // une notion déjà mémorisée redeviendrait "non mémorisée" au
-          // rechargement de la page.
-          const slotPrefix = `notion:debat-notion:${debateId}-${btn.getAttribute("data-notion-slug")}`;
-          if (!quizzes.some((q) => q.slot === slotPrefix || q.slot.startsWith(`${slotPrefix}:`))) return;
-          btn.setAttribute("data-memorized", "true");
-          btn.classList.add("is-active");
-        });
-      })
-      .catch(() => {});
-  }
+  markNotionButtonsMemorized(buttons);
 
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => activateDebateNotion(btn, voterKey, debateId, currentDebateNotionsQuizDate));

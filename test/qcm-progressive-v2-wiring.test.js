@@ -225,6 +225,32 @@ test("le frontend qcm-du-jour.html route TOUJOURS vers /custom/progressive, quel
   assert.match(QCM_FRONTEND_SOURCE, /var creationEndpoint = '\/api\/users\/notion-quizzes\/custom\/progressive';/);
 });
 
+// ── GET /api/users/notion-quizzes (liste) : "réalisé" exige aussi d'avoir
+// atteint targetLevel, jamais seulement le bloc courant (demande du
+// 07/09/2026, "même si je fais les questions élémentaires, on doit laisser
+// ce qcm dans... 'en cours' si j'avais choisi approfondi ou expert") ──
+
+test("GET /notion-quizzes : realized exige blockFullyAnswered ET targetReached (jamais le bloc courant seul) ; inProgress reste vrai tant que targetLevel n'est pas atteint", () => {
+  const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
+  assert.ok(routeIndex > 0);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 20500);
+  assert.match(routeBody, /const targetReached = !progressiveStatus \|\| effectiveLevel === targetLevel;/);
+  assert.match(routeBody, /const realized = blockFullyAnswered && targetReached;/);
+  assert.match(routeBody, /inProgress: answeredCount > 0 && \(!blockFullyAnswered \|\| !targetReached\)/);
+  // isCurrentBlockComplete (promotion à la lecture) doit rester basé sur le
+  // bloc COURANT (blockFullyAnswered), jamais sur `realized` (qui exige
+  // désormais AUSSI targetReached) — sinon un QCM bloqué en "en cours" ne
+  // serait plus jamais promu.
+  assert.match(routeBody, /isCurrentBlockComplete: blockFullyAnswered/);
+  assert.doesNotMatch(routeBody, /isCurrentBlockComplete: realized/);
+});
+
+test("GET /notion-quizzes : targetReached se replie sur !progressiveStatus (legacy) — comportement historique inchangé pour tout master non progressif", () => {
+  const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 20500);
+  assert.match(routeBody, /const targetReached = !progressiveStatus \|\|/, "sans progressive_status, targetReached doit être vrai inconditionnellement (court-circuit)");
+});
+
 // ── qualityControlRawQuestions : surcharge par appel, sans régression legacy ──
 
 test("qualityControlRawQuestions accepte semanticReviewEnabled/maxRetries en paramètres optionnels, par défaut EXACTEMENT les constantes globales (comportement legacy inchangé)", () => {

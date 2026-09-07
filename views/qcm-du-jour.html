@@ -5306,6 +5306,40 @@
     return '<button type="button" class="qcm-final-score-hint-link" onclick="qcmBottomNavOpen(\'/contributions\')">Scores et contributions</button>';
   }
 
+  // Chantier "rétablir un vrai choix utilisateur" (07/09/2026, retour
+  // utilisateur : "si la partie approfondie n'est pas finie, il devrait me
+  // dire... que la suite est en cours de création") : appelée UNIQUEMENT
+  // depuis renderFinalScore, jamais sur le chemin critique de chargement
+  // d'une question — enrichit l'écran de score déjà affiché une fois la
+  // réponse serveur revenue, sans jamais retarder son affichage initial.
+  // Silencieuse (rien affiché) pour tout QCM non "mesqcm"/non progressif,
+  // sans voterKey, ou dont le targetLevel personnel est déjà atteint
+  // (comportement historique inchangé dans tous ces cas).
+  function maybeShowProgressiveNextLevelHint() {
+    var hintEl = document.getElementById('qcm-progressive-next-hint');
+    if (!hintEl || !voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) return;
+    fetch(
+      '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(currentSlot) +
+      '&quizDate=' + encodeURIComponent(currentQuizDate) +
+      '&legacyKey=' + encodeURIComponent(voterKey),
+      { cache: 'no-store' }
+    )
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        // hintEl.isConnected : l'écran de score peut déjà avoir été quitté
+        // (bouton "Terminé", nouvelle question chargée...) avant que cette
+        // réponse n'arrive — ne jamais réinjecter du texte dans un nœud
+        // orphelin. Générique par construction (currentLevel/targetLevel
+        // viennent de la route, jamais codés en dur ici) : s'applique aussi
+        // bien à la fin d'Élémentaire qu'à la fin d'Approfondi, confirmé le
+        // 07/09/2026.
+        if (!hintEl.isConnected || !data || !data.progressive || !data.nextLevel || data.nextLevelReady) return;
+        hintEl.textContent = 'La suite (' + (data.nextLevelLabel || data.nextLevel) + ') est en cours de création — reviens dans quelques instants.';
+        hintEl.hidden = false;
+      })
+      .catch(function () {});
+  }
+
   function renderFinalScore() {
     signalIframeReady();
     // Écran de score final : plus une question précise à l'image dédiée,
@@ -5381,9 +5415,15 @@
       '<div class="qcm-final-score-label">bonnes réponses aujourd’hui</div>' +
       '</div>' +
       (scoreHint ? '<p class="qcm-final-score-hint">' + scoreHint + '</p>' : '') +
+      // Rempli de façon asynchrone par maybeShowProgressiveNextLevelHint ci-dessous
+      // (demande du 07/09/2026, "il devrait me dire que la suite est en cours de
+      // création") : vide/hidden par défaut, jamais de délai sur l'affichage du
+      // score le temps de cet appel réseau.
+      '<p class="qcm-final-score-hint" id="qcm-progressive-next-hint" hidden></p>' +
       '<div class="qcm-final-actions">' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-finish-btn">Terminé</button>' +
       '</div>';
+    maybeShowProgressiveNextLevelHint();
 
     document.getElementById('qcm-finish-btn').onclick = function () {
       practiceMode = false;
@@ -5698,7 +5738,7 @@
     var pending = getVisiblePendingNotionQuizGenerations();
     if (!pending.length) return '';
     return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating">' +
-      '<h2 class="qcm-mesqcm-group-title">Parcours d’apprentissage en cours de création</h2>' +
+      '<h2 class="qcm-mesqcm-group-title">En cours de création</h2>' +
       '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
       '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th><th>Niveau</th></tr></thead><tbody>' +
       pending.map(function (item) {

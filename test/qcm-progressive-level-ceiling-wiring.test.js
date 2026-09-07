@@ -115,9 +115,15 @@ test("Site 5/6 — GET /api/users/notion-quizzes sélectionne progressive_status
   assert.ok(selectIndex > routeIndex, "progressive_status doit être sélectionné dans quizRowsPromise, questions remplacé par le résumé calculé");
   const mapIndex = SERVER_SOURCE.indexOf("const progressiveStatusByKey = new Map((quizRows || []).map((row) => [`${row.quiz_date}:${row.slot}`, row.progressive_status || null]));", routeIndex);
   assert.ok(mapIndex > selectIndex, "une map par clé quiz_date:slot doit indexer progressive_status, même principe que questionsByKey");
-  const ceilingIndex = SERVER_SOURCE.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveLevel, progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`));", routeIndex);
+  // progressiveStatus (variable locale, chantier "rétablir un vrai choix
+  // utilisateur", 07/09/2026) : extrait une seule fois par lien, réutilisé
+  // aussi pour targetReached (realized/inProgress) — remplace l'accès
+  // répété à progressiveStatusByKey.get(...) inline dans l'appel de plafond.
+  const progressiveStatusVarIndex = SERVER_SOURCE.indexOf("const progressiveStatus = progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`);", routeIndex);
+  assert.ok(progressiveStatusVarIndex > mapIndex, "progressiveStatus doit être extrait dans une variable locale, après la map globale");
+  const ceilingIndex = SERVER_SOURCE.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveLevel, progressiveStatus);", routeIndex);
   const selectQuestionsIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);
-  assert.ok(ceilingIndex > mapIndex && selectQuestionsIndex > ceilingIndex, "le plafond doit précéder immédiatement le tranchage par rang+compte, dans la boucle par lien");
+  assert.ok(ceilingIndex > progressiveStatusVarIndex && selectQuestionsIndex > ceilingIndex, "le plafond doit précéder immédiatement le tranchage par rang+compte, dans la boucle par lien");
 });
 
 // ── Site 6/6 : GET /api/users/notion-quizzes/fiche ─────────────────────────
