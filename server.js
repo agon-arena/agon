@@ -64,6 +64,7 @@ const {
   gradeQuizSubmissionOptionIndex,
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
+  resolveLegacyQuestionKnowledgeTargetId,
   selectQuestionsForRequestedLevel,
   restrictQuestionsToProgressiveLevelCeiling,
   isMasterEligibleQuiz,
@@ -123,6 +124,7 @@ const {
   buildCurriculumRepairPrompt,
   parseCurriculumRepairAdditions,
   mergeCurriculumAdditions,
+  assignSequentialCurriculumIds,
   selectCurriculumLevel
 } = require("./lib/notion-quiz-curriculum");
 // topicValidation (demande du 06/09/2026, incident "Baudouin de Hainaut") :
@@ -16926,19 +16928,31 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
   if (userError) { console.warn("[fsrs due] lecture user échouée :", userError.message); return []; }
   if (!userRow) return [];
 
-  const [{ data: dueStates, error: dueError }, excludedIds] = await Promise.all([
+  const [{ data: dueStates, error: dueError }, excludedIds, disabledKnowledgeTargetKeys] = await Promise.all([
     supabase.from("memory_item_fsrs_states")
       // state/stability : ajoutés pour la gradation de l'aide (cf.
       // lib/spaced-repetition/help-level.js, deriveHelpLevel) — lus ici en
       // même temps que reps (déjà utilisé pour la rotation de variante),
       // jamais réécrits, jamais transmis tels quels au client (seul le
       // helpLevel dérivé l'est, cf. plus bas et stripQuestionForClient).
-      .select("reps, state, stability, memory_items(slot, quiz_date, question_id)")
+      // subject_type/subject_source_id (chantier "Mémoriser/Non mémorisée",
+      // 06/09/2026) : identité du Subject portée directement par memory_items
+      // (memory_items_subject_idx), jamais redérivée du contenu de la
+      // question — sert au filtre par knowledgeTargetId ci-dessous.
+      .select("reps, state, stability, memory_items(slot, quiz_date, question_id, subject_type, subject_source_id)")
       .eq("user_id", userRow.id)
       .lte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true })
       .limit(DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY),
-    fetchExcludedQuestionIds(key)
+    fetchExcludedQuestionIds(key),
+    // Désactivations personnelles par knowledgeTarget (nouveau mécanisme,
+    // remplace user_question_exclusions pour tout nouveau choix) — une seule
+    // lecture batch pour TOUT l'utilisateur, jamais une requête par carte due
+    // (section 24 du diagnostic). Les deux filtres s'appliquent en OU logique
+    // (legacy question_id OU nouvelle désactivation par knowledgeTarget),
+    // jamais l'un à la place de l'autre : cf. commentaire de tête sur
+    // fetchExcludedQuestionIds, comportement historique préservé à l'identique.
+    fetchDisabledKnowledgeTargetKeys(userRow.id)
   ]);
   if (dueError) { console.warn("[fsrs due] lecture memory_item_fsrs_states échouée :", dueError.message); return []; }
   if (!dueStates || !dueStates.length) return [];
@@ -16949,17 +16963,22 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
   if (!dueItems.length) return [];
 
   // Regroupe par ligne daily_quiz d'origine pour ne la relire qu'une fois,
-  // même si plusieurs de ses questions sont dues en même temps.
+  // même si plusieurs de ses questions sont dues en même temps. `curriculum`
+  // (chantier "Mémoriser/Non mémorisée") : lu dans la même passe, seulement
+  // utilisé en fallback pour les questions d'un ancien master antérieur au
+  // champ question.knowledgeTargetId (cf. resolveLegacyQuestionKnowledgeTargetId).
   const bySlotDate = new Map();
   for (const { memoryItem } of dueItems) {
     const k = `${memoryItem.quiz_date}:${memoryItem.slot}`;
     if (!bySlotDate.has(k)) bySlotDate.set(k, { quizDate: memoryItem.quiz_date, slot: memoryItem.slot });
   }
   const quizRowResults = await Promise.all([...bySlotDate.values()].map(({ quizDate, slot }) =>
-    supabase.from("daily_quiz").select("quiz_date, slot, questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
+    supabase.from("daily_quiz").select("quiz_date, slot, questions, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
   const questionByDateSlotId = new Map();
+  const curriculumBySlotDate = new Map();
   for (const { data } of quizRowResults) {
     if (!data) continue;
+    curriculumBySlotDate.set(`${data.quiz_date}:${data.slot}`, data.curriculum || null);
     for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
   }
 
@@ -16967,13 +16986,31 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
   for (const { reps, helpLevel, memoryItem } of dueItems) {
     const question = questionByDateSlotId.get(`${memoryItem.quiz_date}:${memoryItem.slot}:${memoryItem.question_id}`);
     if (!question) continue; // contenu hors fenêtre de rétention (cas des anciens slots hors "notion:%", jamais backfillés)
+    // Filtre par knowledgeTarget désactivé (chantier "Mémoriser/Non
+    // mémorisée") : résolution AVANT tout, y compris pour un ancien master
+    // sans question.knowledgeTargetId (fallback texte réservé à la lecture,
+    // jamais persisté ici). subject_type/subject_source_id viennent de
+    // memory_items (identité stable du Subject), pas de la question.
+    const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${memoryItem.quiz_date}:${memoryItem.slot}`));
+    if (knowledgeTargetId && memoryItem.subject_type && memoryItem.subject_source_id
+        && disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(memoryItem.subject_type, memoryItem.subject_source_id, knowledgeTargetId))) {
+      continue;
+    }
     due.push({
       ...resolveActiveQuestionVariant(question, reps),
       id: buildCultureGeneraleReviewQuestionId(memoryItem.question_id, reps),
       // helpLevel : distinct de resolveActiveQuestionVariant (variant =
       // quelle formulation, helpLevel = combien d'aide) — jamais fusionné
       // dans son calcul, jamais lu par selectVariantIndex.
-      helpLevel
+      helpLevel,
+      // knowledgeTargetId/memorizationEnabled (chantier "Mémoriser/Non
+      // mémorisée") : memorizationEnabled vaut toujours true ici PAR
+      // CONSTRUCTION — un item désactivé vient d'être exclu ci-dessus,
+      // jamais poussé dans `due`. knowledgeTargetId reste absent (undefined)
+      // quand ni le champ direct ni le fallback texte n'ont rien résolu
+      // (ancien master ambigu/sans curriculum) : le frontend n'affiche alors
+      // aucun contrôle plutôt que d'en brancher un sur un id inventé.
+      ...(knowledgeTargetId ? { knowledgeTargetId, memorizationEnabled: true } : {})
     });
   }
   return due;
@@ -16998,6 +17035,23 @@ async function fetchLearningLoadGaugeForUser(voterKey) {
   if (userError) { console.warn("[learning-load] lecture user échouée :", userError.message); return null; }
   if (!userRow) return { level: "calm", ratio: 0, peakDayIndex: -1, peakLoad: 0, dueCountsByDay: [] };
 
+  // Désactivations personnelles par knowledgeTarget (chantier "Mémoriser/Non
+  // mémorisée", 06/09/2026) : une connaissance désactivée ne doit plus
+  // compter dans la charge future (cohérence avec Ancrer, cf.
+  // fetchCultureGeneraleReviewInjectionForToday). Note de cohérence
+  // (vérifiée avant modification, demande explicite du diagnostic) : cette
+  // jauge n'a JAMAIS filtré user_question_exclusions (l'ancien mécanisme par
+  // question_id) — son unique requête ne lisait que due_at, sans aucune
+  // jointure vers memory_items/question_id. Rien à préserver de ce côté :
+  // seul le nouveau filtre par knowledgeTarget est ajouté ici, aucun
+  // comportement legacy n'existait à respecter pour cette jauge précise.
+  const disabledKnowledgeTargetKeys = await fetchDisabledKnowledgeTargetKeys(userRow.id);
+  // Chemin rapide inchangé (aucune désactivation) : même requête, même coût
+  // qu'avant ce chantier — le join memory_items (nécessaire pour résoudre
+  // knowledgeTargetId) n'est demandé QUE si au moins une désactivation
+  // existe pour cet utilisateur, jamais pour le cas commun.
+  const needsKnowledgeTargetFilter = disabledKnowledgeTargetKeys.size > 0;
+
   const now = new Date();
   // Borne haute unique (fin du dernier jour de la fenêtre) : une seule
   // requête plutôt que DEFAULT_PROJECTION_DAYS requêtes séparées, le
@@ -17006,10 +17060,46 @@ async function fetchLearningLoadGaugeForUser(voterKey) {
   const windowEndIso = parisStartOfDayIso(new Date(now.getTime() + DEFAULT_PROJECTION_DAYS * 24 * 60 * 60 * 1000));
   const { data: dueRows, error: dueError } = await supabase
     .from("memory_item_fsrs_states")
-    .select("due_at")
+    .select(needsKnowledgeTargetFilter
+      ? "due_at, memory_items(slot, quiz_date, question_id, subject_type, subject_source_id)"
+      : "due_at")
     .eq("user_id", userRow.id)
     .lt("due_at", windowEndIso);
   if (dueError) { console.warn("[learning-load] lecture memory_item_fsrs_states échouée :", dueError.message); return null; }
+
+  // Résolution knowledgeTargetId bornée à la fenêtre de projection déjà
+  // chargée ci-dessus (jamais un ensemble plus large) : regroupe par ligne
+  // daily_quiz d'origine pour ne la relire qu'une fois, même principe que
+  // fetchCultureGeneraleReviewInjectionForToday.
+  let excludedRows = new Set();
+  if (needsKnowledgeTargetFilter) {
+    const bySlotDate = new Map();
+    for (const row of dueRows || []) {
+      const mi = row.memory_items;
+      if (!mi) continue;
+      const k = `${mi.quiz_date}:${mi.slot}`;
+      if (!bySlotDate.has(k)) bySlotDate.set(k, { quizDate: mi.quiz_date, slot: mi.slot });
+    }
+    const quizRowResults = await Promise.all([...bySlotDate.values()].map(({ quizDate, slot }) =>
+      supabase.from("daily_quiz").select("quiz_date, slot, questions, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
+    const questionByDateSlotId = new Map();
+    const curriculumBySlotDate = new Map();
+    for (const { data } of quizRowResults) {
+      if (!data) continue;
+      curriculumBySlotDate.set(`${data.quiz_date}:${data.slot}`, data.curriculum || null);
+      for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
+    }
+    for (const row of dueRows || []) {
+      const mi = row.memory_items;
+      if (!mi || !mi.subject_type || !mi.subject_source_id) continue;
+      const question = questionByDateSlotId.get(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`);
+      if (!question) continue;
+      const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${mi.quiz_date}:${mi.slot}`));
+      if (knowledgeTargetId && disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(mi.subject_type, mi.subject_source_id, knowledgeTargetId))) {
+        excludedRows.add(row);
+      }
+    }
+  }
 
   // dayBoundaries[i] = minuit Paris du jour i (0 = aujourd'hui) ; le jour 0
   // regroupe tout ce qui est dû AVANT la fin du jour 0, retard déjà
@@ -17021,6 +17111,7 @@ async function fetchLearningLoadGaugeForUser(voterKey) {
   }
   const dueCountsByDay = new Array(DEFAULT_PROJECTION_DAYS).fill(0);
   for (const row of dueRows || []) {
+    if (excludedRows.has(row)) continue;
     const dueMs = new Date(row.due_at).getTime();
     if (!Number.isFinite(dueMs)) continue;
     let dayIndex = dayBoundaries.findIndex((boundary, i) => dueMs < dayBoundaries[i + 1]);
@@ -18250,11 +18341,15 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
   const cacheKey = `${quizDate}:${slot}:${effectiveRequestedLevel || ""}`;
   const cached = _dailyQuizQuestionsCache.get(cacheKey);
   if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) {
-    return cached.questions;
+    // memorizationEnabled est une préférence PAR UTILISATEUR, jamais mise en
+    // cache avec le contenu partagé (chantier "Mémoriser/Non mémorisée",
+    // 06/09/2026) : recalculée à chaque appel même sur un cache-hit contenu,
+    // cf. attachMemorizationPreferenceToQuestions.
+    return attachMemorizationPreferenceToQuestions(cached.questions, voterKey);
   }
   const { data, error } = await supabase
     .from("daily_quiz")
-    .select("questions, progressive_status")
+    .select("questions, progressive_status, curriculum")
     .eq("quiz_date", quizDate)
     .eq("slot", slot)
     .maybeSingle();
@@ -18278,9 +18373,45 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
   // niveau STOCKÉ sur les questions — nécessaire dès qu'un même master
   // partagé est consulté par des visiteurs à des niveaux différents ; repli
   // sur `rawQuestions[0]?.level` sinon, comportement V4.0 inchangé.
-  const baseQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveServingLevel]?.target);
+  // knowledgeTargetId (chantier "Mémoriser/Non mémorisée") : résolu ICI,
+  // avant la mise en cache — content-only (fallback texte contre
+  // data.curriculum réservé aux masters antérieurs à ce champ, cf.
+  // resolveLegacyQuestionKnowledgeTargetId), donc valide pour tout visiteur,
+  // jamais recalculé à chaque requête suivante sur ce même cache-hit.
+  const baseQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveServingLevel]?.target)
+    .map((q) => {
+      const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(q, data?.curriculum);
+      return knowledgeTargetId && knowledgeTargetId !== q.knowledgeTargetId ? { ...q, knowledgeTargetId } : q;
+    });
   _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions: baseQuestions });
-  return baseQuestions;
+  return attachMemorizationPreferenceToQuestions(baseQuestions, voterKey);
+}
+
+// Enrichissement PAR UTILISATEUR du choix de mémorisation (chantier
+// "Mémoriser/Non mémorisée", 06/09/2026) : appliqué APRÈS lecture/écriture
+// du cache de contenu ci-dessus, jamais dedans — memorizationEnabled dépend
+// du visiteur, le cache est partagé entre tous. Une seule lecture batch des
+// désactivations de CET utilisateur (jamais une requête par question, cf.
+// section 24 du diagnostic) ; no-op immédiat si aucune question de ce QCM
+// n'a de knowledgeTargetId résolu (rien à enrichir). Retourne toujours un
+// NOUVEAU tableau — ne mute jamais les objets potentiellement partagés avec
+// le cache mémoire commun à tous les visiteurs.
+async function attachMemorizationPreferenceToQuestions(questions, voterKey) {
+  const key = String(voterKey || "").trim();
+  const subjectType = questions[0]?.sourceType;
+  const subjectSourceId = questions[0]?.sourceDebateId;
+  if (!key || !subjectType || subjectSourceId == null || !questions.some((q) => q.knowledgeTargetId)) {
+    return questions;
+  }
+  const { data: userRow, error: userError } = await supabase.from("users").select("id").eq("legacy_key", key).maybeSingle();
+  if (userError) { console.warn("[knowledge-memorization] lecture user échouée :", userError.message); return questions; }
+  if (!userRow) return questions;
+  const disabledKeys = await fetchDisabledKnowledgeTargetKeys(userRow.id);
+  return questions.map((q) => {
+    if (!q.knowledgeTargetId) return q;
+    const enabled = !disabledKeys.has(knowledgeTargetPreferenceKey(subjectType, String(subjectSourceId), q.knowledgeTargetId));
+    return { ...q, memorizationEnabled: enabled };
+  });
 }
 
 const _dailyQuizStatsCache = new Map();
@@ -18368,7 +18499,25 @@ function stripQuestionForClient(q) {
   // updateQuestionSourceNameHeader côté client) — sessions qui mélangent des
   // questions de plusieurs connaissances différentes, contrairement à
   // Découvrir où le titre est déjà ce nom (cf. loadSlot(label)).
-  const originFields = { origin, ...(q.sourceType ? { sourceType: q.sourceType } : {}), ...(q.sourceName ? { sourceName: q.sourceName } : {}), ...(image ? { image } : {}) };
+  // sourceDebateId/knowledgeTargetId/memorizationEnabled (chantier
+  // "Mémoriser/Non mémorisée", 06/09/2026) : sourceDebateId n'était jusqu'ici
+  // JAMAIS exposé au client (seul sourceType l'était) — nécessaire désormais
+  // pour que le contrôle de mémorisation du frontend puisse adresser le bon
+  // (subjectType, subjectSourceId) sans jamais avoir à le deviner.
+  // knowledgeTargetId/memorizationEnabled sont déjà posés sur `q` par
+  // l'appelant quand ils sont connus (fetchCultureGeneraleReviewInjectionForToday
+  // pour Ancrer ; enrichissement batch dans getDailyQuizQuestions pour
+  // Découvrir) — absents (undefined) pour toute question sans knowledgeTarget
+  // résoluble (ancien master ambigu, QCM actu hors FSRS...), jamais une
+  // valeur inventée ici.
+  const originFields = {
+    origin,
+    ...(q.sourceType ? { sourceType: q.sourceType } : {}),
+    ...(q.sourceDebateId != null ? { sourceDebateId: q.sourceDebateId } : {}),
+    ...(q.sourceName ? { sourceName: q.sourceName } : {}),
+    ...(image ? { image } : {}),
+    ...(q.knowledgeTargetId ? { knowledgeTargetId: q.knowledgeTargetId, memorizationEnabled: q.memorizationEnabled !== false } : {})
+  };
   if (type === "association") {
     const pairs = Array.isArray(q.pairs) ? q.pairs : [];
     return {
@@ -18693,8 +18842,23 @@ async function evidenceGateAndRepairCurriculumSubset({
       );
       // Spread de `a` (jamais une reconstruction champ par champ) : préserve
       // source_id/evidence_text tels que fournis par le modèle.
-      const additions = parseCurriculumRepairAdditions(JSON.parse(repairContent)?.additions, neededCount)
-        .map((a, index) => ({ ...a, id: `repair-${startOrder + index + 1}`, order: startOrder + index + 1 }));
+      // id (chantier "Mémoriser/Non mémorisée", 06/09/2026, cf.
+      // assignSequentialCurriculumIds) : `k${startOrder+n}`, JAMAIS un préfixe
+      // distinct ("repair-N") — startOrder est déjà calculé au-delà du VRAI
+      // max global (globalMaxOrder, fourni explicitement par
+      // continueProgressiveGeneration pour Deepening/Expert), donc cet id ne
+      // collisionne jamais avec un id "kN" déjà attribué ailleurs dans le
+      // curriculum, y compris à un niveau déjà servi/déjà lié à des
+      // MemoryItems réels — jamais une renumérotation des ids existants,
+      // seuls les NOUVEAUX ajouts en reçoivent un ici. Pour le bloc Elementary
+      // initial (globalMaxOrder absent), ce id est de toute façon
+      // immédiatement réécrit par normalizeCurriculumOrder juste après (aucun
+      // MemoryItem n'existe encore à ce stade) — même format "kN" dans les
+      // deux cas, jamais deux conventions différentes selon le chemin.
+      const additions = assignSequentialCurriculumIds(
+        parseCurriculumRepairAdditions(JSON.parse(repairContent)?.additions, neededCount),
+        startOrder
+      );
       // Même gate déterministe que le pool initial (jamais un nouveau
       // mécanisme, jamais un second appel IA de vérification) : un ajout de
       // réparation sans preuve réelle n'est jamais accepté artificiellement.
@@ -19271,8 +19435,11 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
     // lui fournir un "rankedKnowledge" dérivé du curriculum (plutôt que de
     // rankAdmittedKnowledge, jamais appelée ici) suffit, l'appariement se
     // fait par knowledgeTarget/fact normalisé, exactement comme pour le
-    // master legacy.
-    const rankedCurriculum = curriculum.map((k) => ({ fact: k.knowledgeTarget, pedagogicalRank: k.order }));
+    // master legacy. `id` (chantier "Mémoriser/Non mémorisée", 06/09/2026) :
+    // propage k.id (curriculum.id, ex. "k3") sur la question sous
+    // question.knowledgeTargetId — attachPedagogicalRanks fait les deux au
+    // même appariement, jamais un second passage.
+    const rankedCurriculum = curriculum.map((k) => ({ fact: k.knowledgeTarget, pedagogicalRank: k.order, id: k.id }));
     const rankedQuestions = attachPedagogicalRanks(validated, rankedCurriculum);
 
     // curriculum_size/elementary_target_count/deepening_count/expert_count
@@ -19456,11 +19623,83 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
 const _notionQuizContinuationPromises = new Map();
 const PROGRESSIVE_LEVEL_ORDER = ["elementaire", "avance", "expert"];
 const CURRICULUM_LEVEL_FOR_QUIZ_LEVEL = { elementaire: "elementary", avance: "deepening", expert: "expert" };
+// Inverse de CURRICULUM_LEVEL_FOR_QUIZ_LEVEL (chantier "Mémoriser/Non
+// mémorisée", 06/09/2026) : un curriculum.level ("elementary"/"deepening"/
+// "expert") n'est PAS directement comparable à PROGRESSIVE_LEVEL_ORDER
+// (vocabulaire "elementaire"/"avance"/"expert" des niveaux SERVIS) — cette
+// table convertit dans l'autre sens, pour filtrer les knowledgeTargets
+// visibles à un niveau donné (GET .../fiche) avec la même cumulativité que
+// sourceDetail.sections (progressiveLevelRank).
+const QUIZ_LEVEL_FOR_CURRICULUM_LEVEL = { elementary: "elementaire", deepening: "avance", expert: "expert" };
 const PROGRESSIVE_STATUS_FOR_QUIZ_LEVEL = { elementaire: "elementary_ready", avance: "deepening_ready", expert: "ready" };
 const PROGRESSIVE_STATUS_RANK = { elementary_ready: 0, deepening_ready: 1, ready: 2 };
 
 function progressiveLevelRank(level) {
   return PROGRESSIVE_LEVEL_ORDER.indexOf(level);
+}
+
+// ── Progression individuelle (chantier "démarrage toujours Élémentaire +
+// avancement automatique", 06/09/2026 ; complété 07/09/2026, "rétablir un
+// vrai choix utilisateur" — targetLevel) ── À distinguer de deux autres
+// concepts : progressive_status (état du CONTENU mutualisé, ci-dessus) et le
+// `targetLevel` passé à continueProgressiveGeneration (toujours "expert",
+// jusqu'où le MASTER doit être généré — jamais changé par ce chantier).
+// Ici, `targetLevel` désigne autre chose : le plafond PERSONNEL choisi par
+// CET utilisateur dans le picker (elementaire/avance/expert, persisté dans
+// user_notion_quizzes.target_level) — jamais confondu avec `currentLevel`
+// (le niveau qu'il a RÉELLEMENT atteint, persisté dans .requested_level, nom
+// de colonne historique conservé tel quel pour éviter une migration).
+// Un seul palier à la fois (jamais un saut direct Élémentaire -> Expert,
+// même si le master est déjà `ready`) — l'utilisateur doit effectivement
+// traverser Approfondi — ET jamais au-delà de son propre targetLevel, même
+// si le master est plus avancé.
+function computeNextUnlockedProgressiveLevel(currentLevel, targetLevel, progressiveStatus) {
+  const nextLevel = currentLevel === "elementaire" && (progressiveStatus === "deepening_ready" || progressiveStatus === "ready")
+    ? "avance"
+    : currentLevel === "avance" && progressiveStatus === "ready"
+      ? "expert"
+      : null;
+  if (!nextLevel) return null;
+  if (PROGRESSIVE_LEVEL_ORDER.indexOf(nextLevel) > PROGRESSIVE_LEVEL_ORDER.indexOf(targetLevel)) return null;
+  return nextLevel;
+}
+
+// resolveUserProgressiveLevel : fonction centrale UNIQUE décidant si CET
+// utilisateur doit être promu au niveau suivant — jamais dupliquée dans les
+// différents appelants (GET /api/users/notion-quizzes,
+// maybeAdvanceProgressiveLevelAfterAnswer), qui ne font que lui fournir
+// `isCurrentBlockComplete` (déjà calculé localement, sans second aller-retour
+// Supabase). Reste un pur calcul, aucun accès base ici : `progressiveStatus`
+// falsy (master legacy, jamais scindé par niveau) => no-op strict, même
+// garde-fou que restrictQuestionsToProgressiveLevelCeiling — ne JAMAIS
+// perturber un apprentissage legacy déjà en cours. `targetLevel` absent/null
+// (ligne user_notion_quizzes antérieure à la colonne target_level) => repli
+// "expert" : ces lignes n'avaient historiquement AUCUN plafond, leur
+// introduire un plafond a posteriori serait une régression pour un
+// utilisateur déjà avancé (cf. rapport final, section "Legacy").
+function resolveUserProgressiveLevel({ persistedLevel, targetLevel, progressiveStatus, isCurrentBlockComplete }) {
+  if (!progressiveStatus) return { level: persistedLevel, promotion: null };
+  const currentLevel = persistedLevel || "elementaire";
+  const effectiveTargetLevel = targetLevel || "expert";
+  if (!isCurrentBlockComplete) return { level: currentLevel, promotion: null };
+  const nextLevel = computeNextUnlockedProgressiveLevel(currentLevel, effectiveTargetLevel, progressiveStatus);
+  if (!nextLevel) return { level: currentLevel, promotion: null };
+  return { level: nextLevel, promotion: { from: currentLevel, to: nextLevel } };
+}
+
+// resolveTargetLevelOnRequest : fonction pure décidant du targetLevel à
+// persister quand CET utilisateur (re)soumet le picker pour un masterSlot
+// qu'il a peut-être déjà commencé (ex. retape le même sujet dans la
+// recherche libre — jamais le cas normal de reprise, qui rouvre directement
+// via loadSlot sans repasser par ce POST, cf. rapport final). Monotone
+// croissant UNIQUEMENT : un choix supérieur relève le plafond, un choix
+// inférieur ou égal ne le baisse jamais silencieusement (aucune UX explicite
+// ne demande de rétrogradation ici) — `existingTargetLevel` absent (aucun
+// lien préexistant, vrai nouveau parcours) renvoie directement le niveau
+// cliqué.
+function resolveTargetLevelOnRequest(existingTargetLevel, pickedLevel) {
+  if (!existingTargetLevel) return pickedLevel;
+  return PROGRESSIVE_LEVEL_ORDER.indexOf(pickedLevel) > PROGRESSIVE_LEVEL_ORDER.indexOf(existingTargetLevel) ? pickedLevel : existingTargetLevel;
 }
 
 async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel) {
@@ -19593,7 +19832,11 @@ async function continueProgressiveGeneration(masterSlot, topic, id, userId, targ
         break;
       }
 
-      const rankedCurriculum = currentCurriculum.map((k) => ({ fact: k.knowledgeTarget, pedagogicalRank: k.order }));
+      // `id` (chantier "Mémoriser/Non mémorisée", 06/09/2026) : cf. commentaire
+      // jumeau dans resolveProgressiveCurriculum — même propagation vers
+      // question.knowledgeTargetId, même appariement texte, ici pour les
+      // blocs Deepening/Expert générés par continuation.
+      const rankedCurriculum = currentCurriculum.map((k) => ({ fact: k.knowledgeTarget, pedagogicalRank: k.order, id: k.id }));
       const rankedNewQuestions = attachPedagogicalRanks(blockResult.validated, rankedCurriculum);
       const mergedSections = [
         ...(currentQuestions[0]?.sourceDetail?.sections || []),
@@ -20100,20 +20343,28 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
   }
 });
 
-// ── Génération progressive — PHASE 1+2 (02-03/09/2026) ─────────────────────
+// ── Génération progressive — PHASE 1+2+3 (02-06/09/2026) ───────────────────
 // Route distincte de POST .../custom ci-dessus, qui reste intégralement
 // inchangée : le legacy continue de servir les imports, Éclairages/Histoire,
 // et sert de filet pour tout appelant qui n'utiliserait pas encore cette
-// route. Sert désormais les 3 niveaux (Élémentaire/Avancé/Expert, cf.
-// `level` dans le corps de la requête, défaut "elementaire") : le backend
-// prépare TOUJOURS Élémentaire en premier (chemin critique inchangé, 3
-// appels IA nominaux, cf. rapport), puis, si le niveau demandé va plus loin,
-// attend (dans CETTE requête, comme le fait déjà .../custom pour le master
-// legacy — même tolérance frontend aux requêtes longues) la continuation
-// jusqu'à ce niveau via continueProgressiveGeneration. Quel que soit le
-// niveau demandé, le parcours complet continue ensuite en arrière-plan
-// jusqu'à Expert (section 1 de la demande, non négociable), sans jamais
-// bloquer cette réponse HTTP au-delà du niveau réellement demandé.
+// route. Le backend prépare TOUJOURS Élémentaire en premier (chemin
+// critique inchangé, 3 appels IA nominaux, cf. rapport), puis répond
+// IMMÉDIATEMENT dès ce niveau disponible — jamais une attente
+// supplémentaire dans cette requête, quel que soit `req.body.level`.
+//
+// Phase 3 (06/09/2026, "le niveau choisi ne doit plus déterminer le niveau
+// servi") : `req.body.level` (le picker Élémentaire/Avancé/Expert) n'est
+// PLUS utilisé pour décider du niveau servi — il n'a d'ailleurs plus aucun
+// effet observable sur cette route (cf. rapport final, section "picker").
+// Le niveau réellement servi (`userLevel` ci-dessous) dépend UNIQUEMENT de
+// la progression individuelle déjà connue pour CET utilisateur sur CE
+// master : "elementaire" pour tout nouveau parcours (jamais le niveau
+// cliqué, même si le master est déjà `ready`), ou le niveau qu'il avait
+// déjà atteint lors d'une adoption précédente (reprise, cf.
+// resolveUserProgressiveLevel/GET /notion-quizzes pour la promotion
+// automatique au fil de sa progression réelle). Le parcours complet
+// continue ensuite TOUJOURS en arrière-plan jusqu'à Expert (section 1 de la
+// demande, non négociable), via une SEULE continuation logique.
 app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30), async (req, res) => {
   let masterSlotForFailureTracking = null;
   try {
@@ -20124,11 +20375,6 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
     if (topic.length < 3 || topic.length > 150) {
       return res.status(400).json({ ok: false, error: "Sujet invalide (3 à 150 caractères)." });
     }
-    // Niveau réellement demandé (défaut "elementaire", comportement Phase 1
-    // inchangé si absent) — resolveNotionQuizLevel retombe sur `level:null`
-    // pour toute valeur inconnue, jamais interprété comme "elementaire" par
-    // erreur silencieuse.
-    const requestedLevel = resolveNotionQuizLevel(req.body?.level).level || "elementaire";
 
     const id = normalizeCustomTopicKey(topic);
     const masterSlot = buildCustomTopicMasterSlot(id);
@@ -20136,23 +20382,68 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
 
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
 
-    // Réutilisation : une ligne déjà éligible (progressive OU legacy
+    // Réutilisation du CONTENU mutualisé (existingRow, indépendant de
+    // l'utilisateur) : une ligne déjà éligible (progressive OU legacy
     // complète) pour ce même sujet existe déjà — jamais une nouvelle
     // génération pour la même chose. `isMasterEligibleQuiz` avec le contexte
     // progressif accepte aussi bien un master legacy complet
     // (progressive_status NULL, >= MIN_MASTER_QUESTIONS) qu'un bloc
     // progressif déjà valide à son propre niveau — cf. lib/question-formats.js.
-    // Ne dit RIEN, en revanche, sur le niveau demandé ICI : c'est la
-    // continuation ci-dessous qui, le cas échéant, complète jusqu'au niveau
-    // réellement demandé.
-    const { data: existingRows, error: existingError } = await supabase
-      .from("daily_quiz")
-      .select("quiz_date, questions, curriculum, progressive_status")
-      .eq("slot", masterSlot)
-      .order("quiz_date", { ascending: false })
-      .limit(1);
+    //
+    // existingUserLinkRows (Phase 3, distinct du contenu ci-dessus) : la
+    // progression DÉJÀ CONNUE de CET utilisateur sur ce même masterSlot,
+    // tous niveaux/quiz_date confondus — absente pour un nouveau parcours
+    // (jamais de ligne), présente pour une reprise. Lue en parallèle,
+    // strictement indépendante de l'état du master.
+    const [{ data: existingRows, error: existingError }, { data: existingUserLinkRows, error: existingUserLinkError }] = await Promise.all([
+      supabase
+        .from("daily_quiz")
+        .select("quiz_date, questions, curriculum, progressive_status")
+        .eq("slot", masterSlot)
+        .order("quiz_date", { ascending: false })
+        .limit(1),
+      supabase
+        .from("user_notion_quizzes")
+        .select("requested_level, target_level")
+        .eq("user_id", user.id)
+        .eq("slot", masterSlot)
+        .order("added_at", { ascending: false })
+        .limit(1)
+    ]);
     if (existingError) throw new Error(existingError.message);
+    if (existingUserLinkError) throw new Error(existingUserLinkError.message);
     const existingRow = existingRows?.[0] || null;
+    const existingUserLink = existingUserLinkRows?.[0] || null;
+    // userLevel (= currentLevel) : niveau RÉELLEMENT servi à CET utilisateur
+    // maintenant — jamais le niveau cliqué dans le picker. "elementaire" pour
+    // tout nouveau parcours (section 2.A du chantier, non négociable, y
+    // compris si le master est déjà `ready`) ; sinon le niveau qu'il avait
+    // déjà atteint (reprise, section 7) — cette valeur peut elle-même être
+    // promue au niveau suivant ailleurs (GET /notion-quizzes, réponse à une
+    // question), jamais ici à la création/réouverture.
+    const existingUserLevel = existingUserLink
+      ? resolveNotionQuizLevel(existingUserLink.requested_level).level
+      : null;
+    const userLevel = existingUserLevel || "elementaire";
+
+    // targetLevel (chantier "rétablir un vrai choix utilisateur", 07/09/2026)
+    // : plafond de PROGRESSION PERSONNELLE choisi par cet utilisateur — ne
+    // détermine JAMAIS le niveau servi immédiatement (userLevel ci-dessus,
+    // inchangé), seulement jusqu'où sa promotion automatique pourra aller
+    // (cf. computeNextUnlockedProgressiveLevel). `resolveNotionQuizLevel`
+    // fait déjà toute la validation nécessaire (whitelist elementaire/avance/
+    // expert) — aucune autre valeur cliente n'est jamais faite confiance.
+    // Nouveau parcours (existingUserLink absent) : targetLevel = niveau
+    // cliqué. Reprise (retape le même sujet) : monotone croissant seulement,
+    // cf. resolveTargetLevelOnRequest.
+    const pickedLevel = resolveNotionQuizLevel(req.body?.level).level || "elementaire";
+    const existingTargetLevel = existingUserLink
+      // target_level absent sur une ligne déjà existante (créée avant cette
+      // colonne) => repli "expert" : pas de plafond a posteriori sur un
+      // parcours déjà en cours (cf. rapport final, section "Legacy").
+      ? (resolveNotionQuizLevel(existingUserLink.target_level).level || "expert")
+      : null;
+    const targetLevel = resolveTargetLevelOnRequest(existingTargetLevel, pickedLevel);
 
     let questions;
     let quizDate;
@@ -20188,44 +20479,39 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
       progressiveStatus = result.progressiveStatus || null;
     }
 
-    // Continuation SYNCHRONE jusqu'au niveau réellement demandé (section 15
-    // de la demande : "l'utilisateur choisit Avancé/Expert → le frontend
-    // attend ce niveau"). No-op immédiat si `progressiveStatus` est déjà
-    // NULL (master legacy complet, reused ci-dessus) ou couvre déjà ce
-    // niveau — cf. continueProgressiveGeneration.
-    if (progressiveStatus && progressiveLevelRank(requestedLevel) > (PROGRESSIVE_STATUS_RANK[progressiveStatus] ?? -1)) {
-      const continued = await continueProgressiveGeneration(masterSlot, topic, id, user.id, requestedLevel);
-      if (continued) {
-        questions = continued.questions;
-        quizDate = continued.quizDate;
-        curriculum = continued.curriculum;
-        progressiveStatus = continued.progressiveStatus;
-      }
-    }
-
+    // Plus de continuation SYNCHRONE ici (Phase 3, 06/09/2026 — "ne jamais
+    // attendre Approfondi/Expert avant d'ouvrir le premier QCM") : la
+    // réponse HTTP part dès que `userLevel` (Élémentaire pour un nouveau
+    // parcours, ou le niveau déjà atteint pour une reprise) est disponible
+    // — ce qui est TOUJOURS déjà le cas ici, puisque `userLevel` ne dépasse
+    // jamais `progressiveStatus` déjà atteint par construction (une reprise
+    // ne peut être persistée à un niveau que la continuation a déjà servi
+    // par le passé). La seule continuation de cette route est celle vers
+    // "expert", en arrière-plan, plus bas.
     const { error: linkError } = await supabase
       .from("user_notion_quizzes")
       .upsert(
-        { user_id: user.id, quiz_date: quizDate, slot: masterSlot, requested_level: requestedLevel },
+        { user_id: user.id, quiz_date: quizDate, slot: masterSlot, requested_level: userLevel, target_level: targetLevel },
         { onConflict: "user_id,quiz_date,slot" }
       );
     if (linkError) throw new Error(linkError.message);
 
     // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : la continuation
-    // ci-dessus peut avoir déjà avancé jusqu'à Avancé/Expert (prep en
-    // arrière-plan) alors que `requestedLevel` reste Élémentaire — sans ce
-    // filtre, selectQuestionsForRequestedLevel comblerait le quota
-    // Élémentaire avec des questions de niveau supérieur dès que le nombre
-    // de questions élémentaires validées est < NOTION_QUIZ_LEVELS.elementaire.target
-    // (cas normal, cf. MIN_ELEMENTARY_READY_QUESTIONS). Cf.
-    // lib/question-formats.js pour le détail complet.
-    const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, requestedLevel, progressiveStatus);
+    // en arrière-plan (déclenchée plus bas) peut avoir déjà avancé jusqu'à
+    // Avancé/Expert alors que `userLevel` reste Élémentaire pour CET
+    // utilisateur — sans ce filtre, selectQuestionsForRequestedLevel
+    // comblerait le quota Élémentaire avec des questions de niveau
+    // supérieur dès que le nombre de questions élémentaires validées est
+    // < NOTION_QUIZ_LEVELS.elementaire.target (cas normal, cf.
+    // MIN_ELEMENTARY_READY_QUESTIONS). Cf. lib/question-formats.js pour le
+    // détail complet.
+    const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, userLevel, progressiveStatus);
     // Sous-ensemble réellement servi pour ce niveau (même mécanisme que le
     // master legacy, cf. POST .../custom) : `questions` en base porte
     // toujours le corpus complet atteint jusqu'ici, jamais tronqué.
-    const servedQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[requestedLevel]?.target);
+    const servedQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[userLevel]?.target);
     const achievedRank = progressiveStatus ? (PROGRESSIVE_STATUS_RANK[progressiveStatus] ?? -1) : Infinity; // NULL = master legacy complet
-    const levelFullyAchieved = achievedRank === Infinity || achievedRank >= progressiveLevelRank(requestedLevel);
+    const levelFullyAchieved = achievedRank === Infinity || achievedRank >= progressiveLevelRank(userLevel);
 
     res.json({
       ok: true,
@@ -20235,12 +20521,16 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
       questionCount: servedQuestions.length,
       curriculumCount: Array.isArray(curriculum) ? curriculum.length : 0,
       progressiveStatus,
-      level: requestedLevel,
-      // levelFullyAchieved (section 14 de la demande, fallback gracieux) :
-      // false si la continuation vers `requestedLevel` a échoué en cours de
-      // route (0 connaissance vérifiée, échec de génération...) — le client
-      // reçoit alors quand même le meilleur niveau atteint plutôt qu'une
-      // erreur, cf. continueProgressiveGeneration.
+      level: userLevel,
+      // targetLevel (chantier "rétablir un vrai choix utilisateur", 07/09/2026)
+      // : plafond personnel persisté pour cet utilisateur — jamais utilisé
+      // pour déterminer `level`/`questionCount` ci-dessus, seulement exposé
+      // pour que le frontend puisse refléter le choix réellement enregistré.
+      targetLevel,
+      // levelFullyAchieved (section 14 de la demande d'origine, fallback
+      // gracieux) : reste calculé pour compatibilité de contrat, mais ne
+      // peut plus jamais être `false` depuis Phase 3 — `userLevel` n'est
+      // plus jamais un niveau qu'il resterait à générer dans cette requête.
       levelFullyAchieved,
       reused
     });
@@ -20607,7 +20897,7 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // son usage plus bas, priorité sur le niveau stocké sur les questions.
     const { data: links, error: linksError } = await supabase
       .from("user_notion_quizzes")
-      .select("quiz_date, slot, added_at, requested_level")
+      .select("quiz_date, slot, added_at, requested_level, target_level")
       .eq("user_id", userRow.id)
       .order("added_at", { ascending: false });
     if (linksError) throw new Error(linksError.message);
@@ -20842,6 +21132,13 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       const memoryKnowledgeKey = `${quizMeta.sourceType || ""}:${quizMeta.sourceDebateId || ""}`;
       const primaryTheme = memoryGalaxyByKnowledgeKey.get(memoryKnowledgeKey)
         || getPrimaryNotionQuizTheme({ sourcePlacement: { category: quizMeta.sourcePlacementCategory }, sourceThemes: quizMeta.sourceThemes });
+      // "Réalisé" seulement une fois TOUTES les questions répondues au moins
+      // une fois (juste ou fausse) OU passées (cf. answeredCount ci-dessus,
+      // demande du 30/08/2026) — pas dès la première réponse (demande du
+      // 17/08/2026) : un QCM commencé puis abandonné en route doit rester
+      // visible et repris depuis "Mes apprentissages en cours" (Découvrir),
+      // pas disparaître prématurément dans "Mes acquis".
+      const realized = answeredCount >= questions.length;
       quizzes.push({
         slot: link.slot,
         quizDate: link.quiz_date,
@@ -20857,19 +21154,41 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         questionCount: questions.length,
         answeredCount,
         trueAnsweredCount,
-        // "Réalisé" seulement une fois TOUTES les questions répondues au moins
-        // une fois (juste ou fausse) OU passées (cf. answeredCount ci-dessus,
-        // demande du 30/08/2026) — pas dès la première réponse (demande du
-        // 17/08/2026) : un QCM commencé puis abandonné en route doit rester
-        // visible et repris depuis "Mes apprentissages en cours" (Découvrir),
-        // pas disparaître prématurément dans "Mes acquis".
-        realized: answeredCount >= questions.length,
+        realized,
         inProgress: answeredCount > 0 && answeredCount < questions.length,
         progressPct,
         // Ne jamais confondre « je peux probablement m'en souvenir maintenant »
         // (progressPct) avec « cette notion a été consolidée dans le temps ».
         validated: durableAcquisState?.validated === true
       });
+      // Résolution de progression À LA LECTURE (chantier "démarrage toujours
+      // Élémentaire + avancement automatique", 06/09/2026, section 6 : "le
+      // niveau suivant n'était pas encore prêt au moment de la dernière
+      // réponse") : ce chemin de lecture rattrape la promotion que
+      // maybeAdvanceProgressiveLevelAfterAnswer (POST /api/daily-quiz/answer)
+      // n'a pas pu appliquer immédiatement (master pas encore assez avancé à
+      // l'instant de la réponse). Best-effort, jamais awaité, jamais
+      // ré-affiché dans CETTE même réponse (la ligne ci-dessus reste correcte
+      // telle quelle : "réalisé" au niveau qui vient d'être terminé) — le
+      // niveau promu ne devient visible qu'au prochain chargement de cette
+      // liste, cf. rapport final.
+      const progressionResolution = resolveUserProgressiveLevel({
+        persistedLevel,
+        // target_level absent (ligne antérieure à cette colonne) => repli
+        // "expert", même justification que resolveUserProgressiveLevel.
+        targetLevel: resolveNotionQuizLevel(link.target_level).level || "expert",
+        progressiveStatus: progressiveStatusByKey.get(`${link.quiz_date}:${link.slot}`),
+        isCurrentBlockComplete: realized
+      });
+      if (progressionResolution.promotion) {
+        supabase
+          .from("user_notion_quizzes")
+          .update({ requested_level: progressionResolution.promotion.to })
+          .eq("user_id", userRow.id).eq("quiz_date", link.quiz_date).eq("slot", link.slot)
+          .then(({ error }) => {
+            if (error) console.warn(`[qcm-progressive-promotion] liste ${link.slot} :`, error.message);
+          });
+      }
     }
     res.json({ quizzes });
   } catch (error) {
@@ -20910,6 +21229,12 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // ou génération sans source web trouvée), comportement inchangé.
     let groundingSources = [];
     let progressiveStatus = null;
+    // curriculum (chantier "Mémoriser/Non mémorisée", 06/09/2026) : source de
+    // vérité EXHAUSTIVE des knowledgeTargets de ce master, jamais dérivée des
+    // highlights Phase 2.4 (partiels par construction, cf. leur commentaire
+    // de tête) — null pour tout master legacy sans curriculum (V4.0
+    // rankAdmittedKnowledge, ou import), knowledgeTargets sera alors [].
+    let curriculum = null;
     if (linkType && linkSourceId) {
       // Phase 1 (léger, audit egress du 03/09/2026) : le matching ne regarde
       // jamais que questions[0] (sourceType/sourceDebateId partagés par tout
@@ -20935,7 +21260,7 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       // Phase 2 : le tableau complet + grounding_sources ne sont relus que
       // pour la SEULE ligne trouvée, jamais pour tout l'historique candidat.
       const { data: fullRow, error: fullError } = await supabase
-        .from("daily_quiz").select("questions, grounding_sources, progressive_status")
+        .from("daily_quiz").select("questions, grounding_sources, progressive_status, curriculum")
         .eq("slot", match.slot).eq("quiz_date", match.quiz_date).maybeSingle();
       if (fullError) throw new Error(fullError.message);
       questions = fullRow?.questions || [];
@@ -20943,16 +21268,18 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       resolvedQuizDate = match.quiz_date;
       groundingSources = fullRow?.grounding_sources || [];
       progressiveStatus = fullRow?.progressive_status || null;
+      curriculum = fullRow?.curriculum || null;
     } else {
       if (!slot.startsWith("notion:") || !/^\d{4}-\d{2}-\d{2}$/.test(quizDate)) {
         return res.status(400).json({ error: "Requête invalide." });
       }
       const { data, error } = await supabase
-        .from("daily_quiz").select("questions, grounding_sources, progressive_status").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+        .from("daily_quiz").select("questions, grounding_sources, progressive_status, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
       if (error) throw new Error(error.message);
       questions = data?.questions || [];
       groundingSources = data?.grounding_sources || [];
       progressiveStatus = data?.progressive_status || null;
+      curriculum = data?.curriculum || null;
     }
     if (!questions.length) return res.status(404).json({ error: "QCM introuvable." });
 
@@ -21042,6 +21369,58 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
         ? fullSourceDetail.sections
         : (fullSourceDetail.sections || []).filter((s) => !s.level || progressiveLevelRank(s.level) <= effectiveLevelRank)
     } : null;
+
+    // knowledgeTargets (chantier "Mémoriser/Non mémorisée", 06/09/2026,
+    // étendu le 07/09/2026) : source de réactivation depuis la fiche — liste
+    // EXHAUSTIVE des knowledgeTargets visibles au niveau couramment servi,
+    // avec la MÊME cumulativité que sourceDetail.sections ci-dessus
+    // (Élémentaire ne révèle jamais Approfondi/Expert).
+    //
+    // Deux origines (audit du 07/09/2026, "92% du contenu réel n'a pas de
+    // curriculum, le contrôle n'apparaissait presque jamais") :
+    // - curriculum PRÉSENT (pipeline progressif "sujet libre") : source de
+    //   vérité, jamais les highlights Phase 2.4 (partiels par construction).
+    // - curriculum ABSENT (master V4.0/legacy — Éclairages, Histoire,
+    //   imports, débats-notion, anciens sujets libres) : liste dérivée
+    //   directement de `questions` (déjà résolu au bon niveau/plafond
+    //   ci-dessus), un id stable par connaissance via
+    //   resolveLegacyQuestionKnowledgeTargetId (texte de la connaissance si
+    //   posé, sinon texte de la question elle-même) — jamais un id inventé
+    //   au hasard, un hash déterministe.
+    const hasCurriculum = Array.isArray(curriculum) && curriculum.length > 0;
+    const visibleCurriculum = hasCurriculum
+      ? curriculum.filter((k) => {
+          if (effectiveLevelRank < 0) return true;
+          const servingLevel = QUIZ_LEVEL_FOR_CURRICULUM_LEVEL[k?.level] || k?.level;
+          const rank = progressiveLevelRank(servingLevel);
+          return rank < 0 || rank <= effectiveLevelRank;
+        })
+      : [];
+    const legacyKnowledgeTargetsSeen = new Set();
+    const legacyKnowledgeTargets = hasCurriculum ? [] : questions.reduce((acc, q) => {
+      // resolveLegacyQuestionKnowledgeTargetId (jamais deriveLegacyKnowledgeTargetId
+      // seule) : couvre aussi le contenu très ancien sans champ
+      // question.knowledgeTarget du tout (repli sur question.question), cf.
+      // son commentaire de tête — même résolution que POST
+      // /api/users/knowledge-memorization, jamais deux logiques distinctes.
+      const id = resolveLegacyQuestionKnowledgeTargetId(q, null);
+      if (!id || legacyKnowledgeTargetsSeen.has(id)) return acc;
+      legacyKnowledgeTargetsSeen.add(id);
+      acc.push({ id, knowledgeTarget: q.knowledgeTarget || q.question, level: null });
+      return acc;
+    }, []);
+    const rawKnowledgeTargets = hasCurriculum ? visibleCurriculum : legacyKnowledgeTargets;
+    let disabledKnowledgeTargetKeys = new Set();
+    if (linkOwnerUserId && first.sourceType && first.sourceDebateId != null && rawKnowledgeTargets.length) {
+      disabledKnowledgeTargetKeys = await fetchDisabledKnowledgeTargetKeys(linkOwnerUserId);
+    }
+    const knowledgeTargets = rawKnowledgeTargets.map((k) => ({
+      id: k.id,
+      knowledgeTarget: k.knowledgeTarget,
+      level: k.level || null,
+      memorizationEnabled: !disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(first.sourceType, String(first.sourceDebateId), k.id))
+    }));
+
     res.json({
       slot: resolvedSlot,
       quizDate: resolvedQuizDate,
@@ -21052,6 +21431,12 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
         ? first.sourceDetail.documentTitle
         : (first.sourceName || null),
       sourceType: first.sourceType || null,
+      // subjectSourceId (chantier "Mémoriser/Non mémorisée", 06/09/2026) :
+      // avec sourceType ci-dessus, identifie le Subject/master pour l'API
+      // POST /api/users/knowledge-memorization appelée depuis la fiche —
+      // jamais exposé avant ce chantier.
+      subjectSourceId: first.sourceDebateId != null ? String(first.sourceDebateId) : null,
+      knowledgeTargets,
       // Niveau réellement servi (elementaire/avance/expert, cf.
       // NOTION_QUIZ_LEVELS) — `requestedLevel` (V4.1) quand fourni, sinon le
       // niveau stocké sur les questions (comportement V4.0 inchangé) ; absent
@@ -23999,6 +24384,86 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
 // /practice-answer) vit désormais dans lib/question-formats.js — mêmes
 // règles de correction, cf. import en haut du fichier.
 
+// ── Promotion événementielle (chantier "démarrage toujours Élémentaire +
+// avancement automatique", 06/09/2026) ── Déclencheur exact d'un passage
+// Élémentaire -> Approfondi ou Approfondi -> Expert : la toute PREMIÈRE
+// fois où la dernière question réellement manquante du bloc courant vient
+// d'être enregistrée dans daily_quiz_answers par POST /answer ci-dessous
+// (jamais /practice-answer, cf. son propre commentaire "sans jamais écrire
+// dans daily_quiz_answers" — une session d'entraînement ne fait jamais
+// progresser personne). Fire-and-forget, appelé uniquement sur une réponse
+// RÉELLEMENT nouvelle (même garde qu'applyFsrsReviewForDailyQuizAnswer) —
+// jamais sur le chemin critique de la réponse HTTP. No-op silencieux et
+// immédiat dès que l'une des conditions suivantes n'est pas remplie : slot
+// hors périmètre "notion:", master non progressif (progressive_status
+// NULL, cf. resolveUserProgressiveLevel), pas de lien utilisateur, bloc
+// courant pas encore complet, ou niveau suivant pas encore débloqué par le
+// master — dans TOUS ces cas, le filet de rattrapage de GET
+// /api/users/notion-quizzes (résolution à la lecture, section 6 de la
+// demande) reste seul responsable d'appliquer la promotion dès qu'elle
+// devient possible.
+async function maybeAdvanceProgressiveLevelAfterAnswer({ voterKey, quizDate, slot }) {
+  if (!slot.startsWith("notion:")) return;
+  try {
+    const { data: quizRow, error: quizRowError } = await supabase
+      .from("daily_quiz")
+      .select("progressive_status")
+      .eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+    if (quizRowError || !quizRow?.progressive_status) return; // legacy/non progressif : jamais touché ici
+
+    const { user } = await resolveLegacyUser(supabase, voterKey);
+    if (!user) return;
+
+    const { data: linkRow, error: linkError } = await supabase
+      .from("user_notion_quizzes")
+      .select("requested_level, target_level")
+      .eq("user_id", user.id).eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+    if (linkError || !linkRow) return;
+    const currentLevel = resolveNotionQuizLevel(linkRow.requested_level).level || "elementaire";
+    // target_level absent (ligne antérieure à cette colonne) => repli "expert",
+    // même justification que resolveUserProgressiveLevel (pas de régression
+    // d'un utilisateur legacy déjà avancé).
+    const targetLevel = resolveNotionQuizLevel(linkRow.target_level).level || "expert";
+
+    // Filtre bon marché AVANT toute lecture supplémentaire : inutile de
+    // recompter les réponses si le master n'a de toute façon pas encore
+    // débloqué de niveau suivant pour ce `currentLevel`, ou si ce niveau
+    // dépasserait le targetLevel personnel de cet utilisateur.
+    if (!computeNextUnlockedProgressiveLevel(currentLevel, targetLevel, quizRow.progressive_status)) return;
+
+    const [questionsAtCurrentLevel, excludedQuestionIds] = await Promise.all([
+      getDailyQuizQuestions(quizDate, slot, voterKey, currentLevel),
+      fetchExcludedQuestionIds(voterKey)
+    ]);
+    if (!questionsAtCurrentLevel.length) return;
+
+    const { data: answerRows, error: answerRowsError } = await supabase
+      .from("daily_quiz_answers")
+      .select("question_id")
+      .eq("quiz_date", quizDate).eq("voter_key", voterKey)
+      .in("question_id", questionsAtCurrentLevel.map((q) => q.id));
+    if (answerRowsError) return;
+    const answeredIds = new Set((answerRows || []).map((r) => r.question_id));
+    const isCurrentBlockComplete = questionsAtCurrentLevel.every((q) => answeredIds.has(q.id) || excludedQuestionIds.has(q.id));
+
+    const resolved = resolveUserProgressiveLevel({
+      persistedLevel: currentLevel,
+      targetLevel,
+      progressiveStatus: quizRow.progressive_status,
+      isCurrentBlockComplete
+    });
+    if (!resolved.promotion) return;
+
+    const { error: promoteError } = await supabase
+      .from("user_notion_quizzes")
+      .update({ requested_level: resolved.promotion.to })
+      .eq("user_id", user.id).eq("quiz_date", quizDate).eq("slot", slot);
+    if (promoteError) console.warn(`[qcm-progressive-promotion] ${slot} :`, promoteError.message);
+  } catch (error) {
+    console.warn(`[qcm-progressive-promotion] ${slot} :`, error.message);
+  }
+}
+
 app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (req, res) => {
   try {
     const voterKey = String(req.body?.voterKey || "").trim();
@@ -24109,6 +24574,14 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate: todayKey, questionId, isCorrect: correct, difficulty })
         .then(() => invalidateIntellectualUniverseCache(voterKey))
         .catch((error) => console.warn("[fsrs review] failed :", error.message));
+      // Promotion Élémentaire -> Approfondi -> Expert (chantier "démarrage
+      // toujours Élémentaire + avancement automatique", 06/09/2026) :
+      // conséquence secondaire, jamais sur le chemin critique — la réponse
+      // HTTP est déjà partie. Indépendante de la promesse FSRS ci-dessus
+      // (jamais chaînée dessus) : lit daily_quiz_answers, déjà écrite plus
+      // haut dans CETTE même requête, jamais l'état FSRS.
+      maybeAdvanceProgressiveLevelAfterAnswer({ voterKey, quizDate: todayKey, slot })
+        .catch((error) => console.warn("[qcm-progressive-promotion] déclenchement :", error.message));
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -24370,6 +24843,130 @@ app.post("/api/daily-quiz/exclude-question", rateLimit("users", 30), async (req,
     res.status(500).json({ ok: false, error: error.message });
   }
 });
+
+// Chantier "Mémoriser/Non mémorisée" (06/09/2026, remplace la distinction
+// "Passer"/"Ne plus me poser cette question" — cf. diagnostic du même jour) :
+// ROUTE UNIQUE remplaçant, côté écriture, POST /api/daily-quiz/exclude-question
+// ci-dessus pour tout nouveau clic frontend (views/qcm-du-jour.html
+// wireExcludeButton) — l'ancienne route et son filtre de lecture
+// (fetchExcludedQuestionIds) restent INTACTS pour les exclusions déjà
+// enregistrées par le passé (comportement legacy respecté, jamais migré
+// automatiquement, cf. resolveLegacyQuestionKnowledgeTargetId — aucune
+// correspondance fiable question_id -> knowledgeTargetId n'a jamais été
+// persistée pour ces anciennes lignes).
+//
+// Porte sur UNE connaissance précise du curriculum (knowledgeTargetId, ex.
+// "k3"), JAMAIS sur une question ni sur tout le Subject : décocher "Mémoriser"
+// depuis n'importe laquelle des questions qui testent k3 exclut k3 pour cet
+// utilisateur, jamais k1/k2/k4 du même master. Sémantique SET explicite
+// (`enabled: true|false`), jamais un toggle relatif — deux appels
+// `enabled:false` consécutifs aboutissent au même état, upsert idempotent.
+app.post("/api/users/knowledge-memorization", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.body?.legacyKey);
+    if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
+    const subjectType = String(req.body?.subjectType || "").trim();
+    const subjectSourceId = String(req.body?.subjectSourceId || "").trim();
+    const knowledgeTargetId = String(req.body?.knowledgeTargetId || "").trim();
+    const enabled = req.body?.enabled;
+    if (!subjectType || !subjectSourceId || subjectSourceId.length > 200
+        || !knowledgeTargetId || knowledgeTargetId.length > 20
+        || typeof enabled !== "boolean") {
+      return res.status(400).json({ ok: false, error: "Requête invalide." });
+    }
+
+    // Anti-hallucination (demande explicite du diagnostic) : knowledgeTargetId
+    // doit réellement correspondre à une connaissance d'un master existant
+    // pour ce (subjectType, subjectSourceId) — jamais une préférence acceptée
+    // à l'aveugle sur un id inventé ou appartenant à un AUTRE master. Même
+    // liste de slots candidats que findExistingQuizMaster (slot nu V4.1 +
+    // chacun des slots historiques suffixés par niveau) : une correspondance
+    // dans N'IMPORTE LEQUEL de ces masters suffit, ils partagent tous le
+    // même contenu d'origine.
+    //
+    // Deux origines possibles pour knowledgeTargetId (audit du 07/09/2026,
+    // "le contrôle n'apparaissait presque jamais en usage réel" — 92% du
+    // contenu réel n'a pas de curriculum) :
+    // - un id de curriculum ("k3") : vérifié contre daily_quiz.curriculum ;
+    // - un id dérivé du texte ("f...") pour un master SANS curriculum (V4.0
+    //   legacy) : vérifié en recalculant resolveLegacyQuestionKnowledgeTargetId
+    //   sur CHAQUE question du master et en comparant — jamais accepté à
+    //   l'aveugle juste parce que le format "f..." est reconnu.
+    // `questions` n'est lu que pour les lignes SANS curriculum (jamais pour
+    // un master progressif, où seul `curriculum` suffit) — limite le poids
+    // de cette vérification au cas legacy qui en a réellement besoin.
+    const masterSlot = buildNotionMasterSlot(subjectType, subjectSourceId);
+    const candidateSlots = [masterSlot, ...Object.keys(NOTION_QUIZ_LEVELS).map((lvl) => `${masterSlot}:${lvl}`)];
+    const { data: masterRows, error: masterError } = await supabase
+      .from("daily_quiz")
+      .select("curriculum")
+      .in("slot", candidateSlots)
+      .order("quiz_date", { ascending: false });
+    if (masterError) throw new Error(masterError.message);
+    let knownEverywhere = (masterRows || []).some((row) =>
+      Array.isArray(row.curriculum) && row.curriculum.some((k) => k && k.id === knowledgeTargetId));
+    if (!knownEverywhere && knowledgeTargetId.startsWith("f") && (masterRows || []).some((row) => !row.curriculum)) {
+      const { data: legacyRows, error: legacyError } = await supabase
+        .from("daily_quiz")
+        .select("questions, curriculum")
+        .in("slot", candidateSlots)
+        .is("curriculum", null);
+      if (legacyError) throw new Error(legacyError.message);
+      // resolveLegacyQuestionKnowledgeTargetId (jamais deriveLegacyKnowledgeTargetId
+      // seule) : reproduit EXACTEMENT la même chaîne de repli que l'affichage
+      // (knowledgeTarget si présent, sinon question.question — cf. son
+      // commentaire de tête) — un contenu très ancien sans knowledgeTarget
+      // ("Ce jour dans l'Histoire" d'avant le 17/08/2026) dérive son id
+      // depuis `question.question`, jamais depuis `question.knowledgeTarget`
+      // seul, qui n'existe pas pour lui.
+      knownEverywhere = (legacyRows || []).some((row) =>
+        (row.questions || []).some((q) => resolveLegacyQuestionKnowledgeTargetId(q, null) === knowledgeTargetId));
+    }
+    if (!knownEverywhere) {
+      return res.status(400).json({ ok: false, error: "Connaissance introuvable pour ce parcours." });
+    }
+
+    const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    const { error } = await supabase.from("user_knowledge_target_memorization_preferences").upsert({
+      user_id: user.id,
+      subject_type: subjectType,
+      subject_source_id: subjectSourceId,
+      knowledge_target_id: knowledgeTargetId,
+      memorization_enabled: enabled,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id,subject_type,subject_source_id,knowledge_target_id" });
+    if (error) throw new Error(error.message);
+    res.json({ ok: true, enabled });
+  } catch (error) {
+    console.error("[knowledge-memorization] :", error.message);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Lecture batch des désactivations d'UN utilisateur (aucun filtre par sujet
+// à l'avance : le volume par utilisateur reste faible, cf. l'index
+// (user_id, memorization_enabled) de la migration) — réutilisée par
+// fetchCultureGeneraleReviewInjectionForToday, fetchLearningLoadGaugeForUser
+// et GET /api/users/notion-quizzes/fiche, jamais une requête par
+// knowledgeTarget (section 24 du diagnostic, "pas de N+1"). Clé de
+// regroupement = knowledgeTargetPreferenceKey ci-dessous, jamais
+// knowledgeTargetId seul (pas globalement unique, scopé par master).
+function knowledgeTargetPreferenceKey(subjectType, subjectSourceId, knowledgeTargetId) {
+  return `${subjectType}::${subjectSourceId}::${knowledgeTargetId}`;
+}
+async function fetchDisabledKnowledgeTargetKeys(userId) {
+  if (!userId) return new Set();
+  const { data, error } = await supabase
+    .from("user_knowledge_target_memorization_preferences")
+    .select("subject_type, subject_source_id, knowledge_target_id")
+    .eq("user_id", userId)
+    .eq("memorization_enabled", false);
+  if (error) {
+    console.warn("[knowledge-memorization] lecture préférences échouée :", error.message);
+    return new Set();
+  }
+  return new Set((data || []).map((r) => knowledgeTargetPreferenceKey(r.subject_type, r.subject_source_id, r.knowledge_target_id)));
+}
 
 app.get("/apprentissage", (req, res) => {
   // Cette page évolue souvent et embarque directement son interface/sa logique.

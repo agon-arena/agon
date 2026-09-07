@@ -203,16 +203,20 @@ test("la route progressive n'appelle ni triggerAutomaticNoesVideo ni createNotif
   assert.doesNotMatch(routeSource, /createNotification/);
 });
 
-// Réécrit (Phase 2.1) : requested_level est désormais DYNAMIQUE (le niveau
-// réellement demandé), jamais la chaîne fixe "elementaire" de la Phase 1 —
-// cf. aussi test/qcm-progressive-v2-wiring.test.js pour le verrou complet
-// sur `requestedLevel`.
-test("la route progressive relie l'utilisateur au QCM via user_notion_quizzes avec requested_level DYNAMIQUE (jamais la chaîne fixe 'elementaire')", () => {
+// Réécrit (Phase 3, 06/09/2026, "démarrage toujours Élémentaire" ; complété
+// 07/09/2026, "rétablir un vrai choix utilisateur" — target_level) :
+// requested_level est désormais `userLevel` — le niveau RÉELLEMENT servi à
+// cet utilisateur (dérivé de sa progression déjà connue, jamais du niveau
+// cliqué dans le picker), littéralement "elementaire" pour tout nouveau
+// parcours ; target_level (colonne distincte) porte le plafond personnel
+// dérivé du clic — cf. test/qcm-progressive-v2-wiring.test.js pour le verrou
+// complet sur `userLevel`/`targetLevel`.
+test("la route progressive relie l'utilisateur au QCM via user_notion_quizzes avec requested_level = userLevel (niveau réellement servi, jamais le niveau cliqué)", () => {
   assert.match(
     SERVER_SOURCE,
-    /\.upsert\(\s*\n\s*\{ user_id: user\.id, quiz_date: quizDate, slot: masterSlot, requested_level: requestedLevel \}/
+    /\.upsert\(\s*\n\s*\{ user_id: user\.id, quiz_date: quizDate, slot: masterSlot, requested_level: userLevel, target_level: targetLevel \}/
   );
-  assert.doesNotMatch(SERVER_SOURCE, /requested_level: "elementaire" \}/);
+  assert.match(SERVER_SOURCE, /const userLevel = existingUserLevel \|\| "elementaire";/);
 });
 
 test("la route progressive sélectionne aussi curriculum (pas seulement questions/progressive_status) pour juger l'éligibilité d'une ligne existante", () => {

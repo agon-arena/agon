@@ -121,7 +121,7 @@ test("POST /custom : l'upsert (écriture requested_level) intervient après la r
 test("GET /api/users/notion-quizzes sélectionne requested_level et l'utilise en priorité (repli sur rawQuestions[0]?.level)", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
   assert.ok(routeIndex > 0);
-  const selectIndex = SERVER_SOURCE.indexOf('.select("quiz_date, slot, added_at, requested_level")', routeIndex);
+  const selectIndex = SERVER_SOURCE.indexOf('.select("quiz_date, slot, added_at, requested_level, target_level")', routeIndex);
   const persistedIndex = SERVER_SOURCE.indexOf("const persistedLevel = resolveNotionQuizLevel(link.requested_level).level;", routeIndex);
   const effectiveIndex = SERVER_SOURCE.indexOf("const effectiveLevel = persistedLevel || rawQuestions[0]?.level || null;", routeIndex);
   const selectQuestionsIndex = SERVER_SOURCE.indexOf("const questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", routeIndex);

@@ -6395,13 +6395,16 @@ function ensureDebateIframeModal() {
       display: none;
       position: fixed;
       left: 16px;
-      bottom: 80px;
+      /* Position/taille alignées sur .tribunes-mobile-back-button d'autres-
+         sources (demande du 06/09/2026, "trop haut... comme sur page autres
+         sources") : le bouton était bien plus haut (80px/59px) que son
+         équivalent tribunes (60px+safe/37px). */
+      bottom: calc(60px + env(safe-area-inset-bottom, 0px));
       z-index: 10002;
-      /* Taille réduite (demande du 06/09/2026, "un peu moins grosses") */
-      width: 38px;
-      height: 38px;
-      min-width: 38px;
-      min-height: 38px;
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      min-height: 40px;
       padding: 0;
       align-items: center;
       justify-content: center;
@@ -6415,7 +6418,7 @@ function ensureDebateIframeModal() {
       -webkit-backdrop-filter: blur(8px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.22);
       cursor: pointer;
-      font-size: 18px;
+      font-size: 16px;
       line-height: 1;
     }
     #debate-iframe-modal.open.qcm-frame-open.learning-frame-ready #learning-iframe-modal-close {
@@ -6437,7 +6440,7 @@ function ensureDebateIframeModal() {
     @media (max-width: 768px) {
       #learning-iframe-modal-close {
         left: calc(20% - 13px);
-        bottom: 59px;
+        bottom: 37px;
         width: 38px;
         height: 38px;
         min-width: 38px;

@@ -164,30 +164,61 @@ test("un échec de vérification/génération d'un niveau interrompt proprement 
   assert.ok(breakCount >= 2, "au moins un point de sortie propre par cause d'échec (curriculum vide, 0 vérifié, génération échouée, persistance échouée)");
 });
 
-// ── Route HTTP : niveau demandé, continuation synchrone + arrière-plan ────
+// ── Route HTTP : Phase 3 (06/09/2026, "le niveau choisi ne doit plus
+// déterminer le niveau servi") — `req.body.level` (picker) n'a plus d'effet
+// sur le niveau SERVI (userLevel dérive uniquement de la progression déjà
+// connue pour CET utilisateur, existingUserLinkRows, jamais du clic). Les
+// tests Phase 1/2 qui verrouillaient l'ancien contrat (`requestedLevel`
+// clique -> continuation synchrone -> requested_level) sont ici SUPERSÉDÉS,
+// pas régressés — cf. rapport final du chantier "démarrage toujours
+// Élémentaire". Chantier "rétablir un vrai choix utilisateur" (07/09/2026) :
+// `req.body.level` est de nouveau lu, mais uniquement pour calculer
+// `targetLevel` (plafond de progression personnelle, jamais le niveau
+// servi) — cf. tests dédiés ci-dessous.
 
-test("POST /custom/progressive lit `level` dans le corps de la requête (jamais ignoré, contrairement à la Phase 1)", () => {
+test("POST /custom/progressive dérive userLevel de la progression DÉJÀ CONNUE de l'utilisateur, jamais du niveau cliqué — 'elementaire' par défaut pour un nouveau parcours", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
   assert.ok(routeIndex > 0);
-  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 6000);
-  assert.match(routeBody, /const requestedLevel = resolveNotionQuizLevel\(req\.body\?\.level\)\.level \|\| "elementaire";/);
-  assert.match(routeBody, /continueProgressiveGeneration\(masterSlot, topic, id, user\.id, requestedLevel\)/);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 10500);
+  assert.match(routeBody, /const existingUserLevel = existingUserLink\s*\n\s*\? resolveNotionQuizLevel\(existingUserLink\.requested_level\)\.level\s*\n\s*: null;/);
+  assert.match(routeBody, /const userLevel = existingUserLevel \|\| "elementaire";/);
 });
 
-test("POST /custom/progressive déclenche la continuation vers 'expert' en ARRIÈRE-PLAN après avoir répondu (jamais avant, jamais awaité)", () => {
+test("POST /custom/progressive lit désormais req.body.level via resolveNotionQuizLevel (validation stricte) pour calculer targetLevel — jamais pour userLevel", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
-  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 8000);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 10500);
+  assert.match(routeBody, /const pickedLevel = resolveNotionQuizLevel\(req\.body\?\.level\)\.level \|\| "elementaire";/, "le niveau cliqué doit être validé via la même whitelist que le reste du pipeline (elementaire/avance/expert), jamais une valeur cliente brute");
+  assert.match(routeBody, /const targetLevel = resolveTargetLevelOnRequest\(existingTargetLevel, pickedLevel\);/);
+  assert.doesNotMatch(routeBody, /const userLevel = .*pickedLevel/, "pickedLevel ne doit jamais déterminer userLevel (niveau servi)");
+});
+
+test("POST /custom/progressive ne contient plus aucune continuation SYNCHRONE avant la réponse initiale (jamais un await continueProgressiveGeneration avant res.json)", () => {
+  const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
+  assert.ok(routeIndex > 0);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 10500);
+  const resIndex = routeBody.indexOf("res.json({");
+  assert.ok(resIndex > 0);
+  const beforeResponse = routeBody.slice(0, resIndex);
+  assert.doesNotMatch(beforeResponse, /await continueProgressiveGeneration/, "aucune continuation ne doit être attendue avant l'ouverture du premier QCM, quel que soit userLevel ou targetLevel");
+});
+
+test("POST /custom/progressive déclenche la continuation vers 'expert' en ARRIÈRE-PLAN après avoir répondu (jamais avant, jamais awaité) — une SEULE continuation logique, toujours vers \"expert\" quel que soit targetLevel", () => {
+  const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 11000);
   const resIndex = routeBody.indexOf("res.json({");
   const bgIndex = routeBody.indexOf('continueProgressiveGeneration(masterSlot, topic, id, user.id, "expert")');
   assert.ok(resIndex > 0 && bgIndex > 0);
   assert.ok(bgIndex > resIndex, "la continuation vers expert doit être déclenchée APRÈS res.json (arrière-plan)");
   assert.match(routeBody.slice(bgIndex, bgIndex + 200), /\.catch\(/, "fire-and-forget : jamais awaité par la route");
+  const otherContinuationCalls = [...routeBody.matchAll(/continueProgressiveGeneration\(masterSlot, topic, id, user\.id,/g)];
+  assert.equal(otherContinuationCalls.length, 1, "une seule continuation logique doit rester dans cette route (vers \"expert\"), jamais une seconde vers userLevel ou targetLevel — le master vise toujours Expert quel que soit le plafond personnel de l'utilisateur");
 });
 
-test("POST /custom/progressive enregistre requested_level dynamique (jamais la chaîne fixe 'elementaire' de la Phase 1)", () => {
+test("POST /custom/progressive enregistre requested_level = userLevel ET target_level = targetLevel (deux concepts distincts, jamais le niveau cliqué dans requested_level)", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
-  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 6000);
-  assert.match(routeBody, /requested_level:\s*requestedLevel/);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 10500);
+  assert.match(routeBody, /requested_level:\s*userLevel,\s*target_level:\s*targetLevel/);
+  assert.doesNotMatch(routeBody, /requested_level:\s*(pickedLevel|targetLevel)\b/, "requested_level (currentLevel) ne doit jamais recevoir le niveau cliqué ni le targetLevel");
 });
 
 test("le frontend qcm-du-jour.html route TOUJOURS vers /custom/progressive, quel que soit le niveau choisi (plus de bascule vers /custom legacy)", () => {

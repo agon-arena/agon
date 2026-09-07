@@ -153,16 +153,19 @@ test("buildElementaryFichePrompt n'est pas modifié par ce correctif de câblage
   assert.match(knowledgeAdmissionSource, /function buildElementaryFichePrompt\(subject, contextHint, elementaryKnowledge, levelConfig, groundingText = null\) \{/);
 });
 
-// ── 7. La route lit désormais `level` (Phase 2.1) — voir plus bas ────────
-
-// Inversé (Phase 2.1, section 1 de la demande utilisateur du 04/09/2026) :
-// la route lit désormais `level` explicitement — c'est elle qui pilote la
-// continuation synchrone (Avancé/Expert) et l'arrière-plan (jusqu'à Expert).
-test("la route progressive lit `level` explicitement et enregistre requested_level DYNAMIQUE (jamais la chaîne fixe 'elementaire')", () => {
+// ── 7. Phase 3 (06/09/2026, "le niveau choisi ne doit plus déterminer le
+// niveau servi") — `req.body.level` n'est plus lu pour décider du niveau
+// servi : `userLevel` dérive uniquement de la progression déjà connue de
+// l'utilisateur (existingUserLinkRows), "elementaire" pour tout nouveau
+// parcours. Le contrat Phase 2.1 verrouillé ici (`level` cliqué pilotant
+// directement une continuation synchrone) est intentionnellement supersédé
+// — cf. rapport final du chantier "démarrage toujours Élémentaire".
+test("la route progressive ne lit plus `req.body.level` pour décider du niveau servi — requested_level = userLevel, dérivé de la progression déjà connue, jamais du clic", () => {
   const progressiveRouteStart = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
   const progressiveRouteEnd = SERVER_SOURCE.indexOf("\n});", SERVER_SOURCE.indexOf("res.json({", progressiveRouteStart)) + 4;
   const progressiveRouteSource = SERVER_SOURCE.slice(progressiveRouteStart, progressiveRouteEnd);
-  assert.match(progressiveRouteSource, /const requestedLevel = resolveNotionQuizLevel\(req\.body\?\.level\)\.level \|\| "elementaire";/);
-  assert.match(progressiveRouteSource, /requested_level: requestedLevel/);
-  assert.doesNotMatch(progressiveRouteSource, /requested_level: "elementaire" \}/);
+  assert.doesNotMatch(progressiveRouteSource, /const requestedLevel = resolveNotionQuizLevel\(req\.body\?\.level\)/, "le niveau cliqué ne doit plus être lu comme niveau à servir");
+  assert.match(progressiveRouteSource, /const userLevel = existingUserLevel \|\| "elementaire";/);
+  assert.match(progressiveRouteSource, /requested_level: userLevel/);
+  assert.doesNotMatch(progressiveRouteSource, /requested_level: "elementaire" \}/, "la valeur littérale reste toujours dérivée d'une variable, jamais figée en dur");
 });

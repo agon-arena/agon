@@ -87,11 +87,17 @@ test("findExistingQuizMaster et findEquivalentGeneratedCustomTopic renvoient pro
 
 // ── Site 4/6 : POST /api/users/notion-quizzes/custom/progressive ──────────
 
-test("Site 4/6 — POST /api/users/notion-quizzes/custom/progressive plafonne au requestedLevel AVANT de construire servedQuestions (couvre le cas exact du bug : continuation déjà avancée à Avancé/Expert, requestedLevel resté Élémentaire)", () => {
+// Réécrit (Phase 3, 06/09/2026, "démarrage toujours Élémentaire") : le
+// plafond porte désormais sur `userLevel` (niveau réellement servi à
+// l'utilisateur, dérivé de sa progression), plus sur `requestedLevel` (le
+// niveau cliqué, qui n'existe plus dans cette route) — même bug visé
+// (continuation arrière-plan déjà avancée alors que le niveau servi reste
+// en retard), même garde-fou.
+test("Site 4/6 — POST /api/users/notion-quizzes/custom/progressive plafonne au userLevel AVANT de construire servedQuestions (couvre le cas exact du bug : continuation déjà avancée à Avancé/Expert, userLevel resté Élémentaire)", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
   assert.ok(routeIndex > 0);
-  const ceilingIndex = SERVER_SOURCE.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, requestedLevel, progressiveStatus);", routeIndex);
-  const servedIndex = SERVER_SOURCE.indexOf("const servedQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[requestedLevel]?.target);", routeIndex);
+  const ceilingIndex = SERVER_SOURCE.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, userLevel, progressiveStatus);", routeIndex);
+  const servedIndex = SERVER_SOURCE.indexOf("const servedQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[userLevel]?.target);", routeIndex);
   assert.ok(ceilingIndex > routeIndex, "le plafond doit être calculé dans cette route");
   assert.ok(servedIndex > ceilingIndex, "servedQuestions doit consommer levelCeiledQuestions, jamais questions directement");
 });

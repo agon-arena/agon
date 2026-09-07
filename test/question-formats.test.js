@@ -20,6 +20,8 @@ const {
   extractGroundingFields,
   rankAdmittedKnowledge,
   attachPedagogicalRanks,
+  resolveLegacyQuestionKnowledgeTargetId,
+  deriveLegacyKnowledgeTargetId,
   selectQuestionsForRequestedLevel,
   restrictQuestionsToProgressiveLevelCeiling,
   isMasterEligibleQuiz,
@@ -935,6 +937,122 @@ test("attachPedagogicalRanks : n'altère aucun autre champ de la question", () =
 test("attachPedagogicalRanks : entrée vide/non-tableau renvoie [] sans planter", () => {
   assert.deepEqual(attachPedagogicalRanks([], []), []);
   assert.deepEqual(attachPedagogicalRanks(null, []), []);
+});
+
+// ── attachPedagogicalRanks : knowledgeTargetId (chantier "Mémoriser/Non
+// mémorisée", 06/09/2026) ────────────────────────────────────────────────
+
+test("attachPedagogicalRanks : copie k.id sur question.knowledgeTargetId quand le rankedKnowledge le porte (pipeline progressif)", () => {
+  const ranked = [
+    { fact: "Justinien règne de 527 à 565.", pedagogicalRank: 1, id: "k1" },
+    { fact: "La révolte de Nika éclate en 532.", pedagogicalRank: 2, id: "k2" }
+  ];
+  const questions = [
+    { knowledgeTarget: "La révolte de Nika éclate en 532.", type: "qcm" },
+    { knowledgeTarget: "Justinien règne de 527 à 565.", type: "qcm" }
+  ];
+  const result = attachPedagogicalRanks(questions, ranked);
+  assert.equal(result[0].knowledgeTargetId, "k2");
+  assert.equal(result[1].knowledgeTargetId, "k1");
+});
+
+test("attachPedagogicalRanks : n'ajoute jamais knowledgeTargetId quand rankedKnowledge n'a pas de champ id (master V4.0/rankAdmittedKnowledge legacy)", () => {
+  const ranked = rankAdmittedKnowledge([knowledgeItem("Fait", "high")]);
+  const questions = [{ knowledgeTarget: "Fait", type: "qcm" }];
+  const result = attachPedagogicalRanks(questions, ranked);
+  assert.equal("knowledgeTargetId" in result[0], false);
+});
+
+test("attachPedagogicalRanks : une question régénérée pour la même connaissance récupère aussi le même knowledgeTargetId (même appariement que pedagogicalRank)", () => {
+  const ranked = [{ fact: "Fait remplacé", pedagogicalRank: 1, id: "k1" }];
+  const questions = [{ knowledgeTarget: "Fait remplacé", type: "qcm", id: "regenerated-replacement" }];
+  const result = attachPedagogicalRanks(questions, ranked);
+  assert.equal(result[0].knowledgeTargetId, "k1");
+});
+
+// ── resolveLegacyQuestionKnowledgeTargetId (fallback lecture seule pour un
+// master antérieur au champ question.knowledgeTargetId) ─────────────────
+
+test("resolveLegacyQuestionKnowledgeTargetId : renvoie question.knowledgeTargetId directement quand déjà présent, sans même consulter le curriculum", () => {
+  const question = { knowledgeTarget: "Peu importe", knowledgeTargetId: "k9" };
+  assert.equal(resolveLegacyQuestionKnowledgeTargetId(question, null), "k9");
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : exactement une correspondance texte normalisé -> son id", () => {
+  const curriculum = [
+    { id: "k1", knowledgeTarget: "Justinien règne de 527 à 565." },
+    { id: "k2", knowledgeTarget: "  La révolte de Nika   éclate en 532.  " }
+  ];
+  const question = { knowledgeTarget: "la révolte de nika éclate en 532." };
+  assert.equal(resolveLegacyQuestionKnowledgeTargetId(question, curriculum), "k2");
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : aucune correspondance -> null, jamais inventé", () => {
+  const curriculum = [{ id: "k1", knowledgeTarget: "Autre chose." }];
+  const question = { knowledgeTarget: "Fait totalement différent, jamais dans ce curriculum." };
+  assert.equal(resolveLegacyQuestionKnowledgeTargetId(question, curriculum), null);
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : correspondance ambiguë (plusieurs entrées identiques après normalisation) -> null, jamais un choix arbitraire", () => {
+  const curriculum = [
+    { id: "k1", knowledgeTarget: "Un fait dupliqué par erreur de réparation." },
+    { id: "k4", knowledgeTarget: "un fait dupliqué par erreur de réparation." }
+  ];
+  const question = { knowledgeTarget: "Un fait dupliqué par erreur de réparation." };
+  assert.equal(resolveLegacyQuestionKnowledgeTargetId(question, curriculum), null);
+});
+
+// ── deriveLegacyKnowledgeTargetId + fallback sans curriculum du tout
+// (audit du 07/09/2026 : 92% du contenu réel n'a pas de curriculum — Éclairages,
+// Histoire, imports, débats-notion, anciens sujets libres) ─────────────────
+
+test("deriveLegacyKnowledgeTargetId : déterministe et stable pour le même texte", () => {
+  const a = deriveLegacyKnowledgeTargetId("Le mur de Berlin tombe en 1989.");
+  const b = deriveLegacyKnowledgeTargetId("le mur de berlin   tombe en 1989.");
+  assert.equal(a, b, "insensible à la casse/aux espaces, comme normalizeFactText partout ailleurs");
+  assert.match(a, /^f[0-9a-f]{12}$/, "préfixe \"f\" (jamais \"k\", réservé au curriculum), 12 hex chars");
+});
+
+test("deriveLegacyKnowledgeTargetId : deux textes différents produisent des ids différents", () => {
+  const a = deriveLegacyKnowledgeTargetId("Fait A");
+  const b = deriveLegacyKnowledgeTargetId("Fait B");
+  assert.notEqual(a, b);
+});
+
+test("deriveLegacyKnowledgeTargetId : texte vide/absent -> null", () => {
+  assert.equal(deriveLegacyKnowledgeTargetId(""), null);
+  assert.equal(deriveLegacyKnowledgeTargetId(undefined), null);
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : curriculum ABSENT (master V4.0 legacy) -> id dérivé du texte, jamais null", () => {
+  const question = { knowledgeTarget: "Les Ottomans prennent Constantinople en 1453." };
+  const id = resolveLegacyQuestionKnowledgeTargetId(question, null);
+  assert.equal(id, deriveLegacyKnowledgeTargetId(question.knowledgeTarget));
+  assert.notEqual(id, null, "le contrôle de mémorisation doit rester disponible même sans curriculum");
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : curriculum vide ([]) traité comme absent -> id dérivé, pas null", () => {
+  const question = { knowledgeTarget: "Fait sans curriculum réel" };
+  assert.equal(resolveLegacyQuestionKnowledgeTargetId(question, []), deriveLegacyKnowledgeTargetId(question.knowledgeTarget));
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : curriculum PRÉSENT reste prioritaire sur la dérivation (jamais les deux mélangés)", () => {
+  const curriculum = [{ id: "k1", knowledgeTarget: "Fait connu du curriculum" }];
+  const question = { knowledgeTarget: "Fait connu du curriculum" };
+  assert.equal(resolveLegacyQuestionKnowledgeTargetId(question, curriculum), "k1");
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : ni curriculum ni question.knowledgeTarget (contenu très ancien, ex. 'Ce jour dans l'Histoire' d'avant le 17/08/2026) -> dérive depuis question.question, jamais null", () => {
+  const question = { question: "Quelle opération militaire marque le début du débarquement en Provence en 1944 ?" };
+  const id = resolveLegacyQuestionKnowledgeTargetId(question, null);
+  assert.equal(id, deriveLegacyKnowledgeTargetId(question.question));
+  assert.notEqual(id, null, "même sans knowledgeTarget, le contrôle doit rester disponible sur ce contenu");
+});
+
+test("resolveLegacyQuestionKnowledgeTargetId : curriculum PRÉSENT mais question.knowledgeTarget absent -> null (jamais de choix arbitraire contre un curriculum réel)", () => {
+  const curriculum = [{ id: "k1", knowledgeTarget: "Autre chose" }];
+  const question = { question: "Une question sans knowledgeTarget posé" };
+  assert.equal(resolveLegacyQuestionKnowledgeTargetId(question, curriculum), null);
 });
 
 // ── selectQuestionsForRequestedLevel — cas A à F de la demande V4.0 ───────

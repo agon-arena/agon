@@ -1,0 +1,14 @@
+-- Migration corrective (06/09/2026) : supprime la table créée par
+-- data/migration-user-subject-memorization-preferences.sql.
+--
+-- Cette table avait la mauvaise granularité (Subject/parcours entier) pour
+-- représenter le choix de mémorisation FSRS — la granularité correcte est le
+-- knowledgeTarget (cf. data/migration-user-knowledge-target-memorization-
+-- preferences.sql). Vérifié avant suppression (06/09/2026) :
+--   - existence : oui, créée le jour même via le SQL editor Supabase ;
+--   - lignes : 0 (SELECT count(*) exécuté juste avant cette migration) ;
+--   - usages code : aucun (aucune route, aucun frontend, aucun test ne la
+--     référence — seul son fichier de migration la mentionnait).
+-- Suppression sûre : table vide, exclusivement issue de ce chantier, jamais
+-- utilisée. Aucune donnée à migrer vers la nouvelle table.
+DROP TABLE IF EXISTS user_subject_memorization_preferences;

@@ -25,6 +25,7 @@ const {
   buildCurriculumRepairPrompt,
   parseCurriculumRepairAdditions,
   mergeCurriculumAdditions,
+  assignSequentialCurriculumIds,
   selectCurriculumLevel
 } = require("../lib/notion-quiz-curriculum");
 
@@ -429,6 +430,50 @@ test("mergeCurriculumAdditions : concatène sans jamais perdre une connaissance 
 test("mergeCurriculumAdditions : entrées manquantes/non-tableau traitées comme vides, jamais une exception", () => {
   assert.deepEqual(mergeCurriculumAdditions(null, null), []);
   assert.deepEqual(mergeCurriculumAdditions([{ id: "k1" }], undefined), [{ id: "k1" }]);
+});
+
+// ── assignSequentialCurriculumIds (chantier "Mémoriser/Non mémorisée",
+// 06/09/2026 — toute entrée du curriculum doit avoir un id unique et
+// stable ; une réparation ajoute des ids sans jamais renuméroter ceux qui
+// existent déjà) ──────────────────────────────────────────────────────────
+
+test("assignSequentialCurriculumIds : un ajout simple reçoit k{startOrder+1}", () => {
+  const result = assignSequentialCurriculumIds([{ knowledgeTarget: "Nouvelle connaissance" }], 7);
+  assert.deepEqual(result, [{ knowledgeTarget: "Nouvelle connaissance", id: "k8", order: 8 }]);
+});
+
+test("assignSequentialCurriculumIds : plusieurs ajouts reçoivent des ids séquentiels sans trou", () => {
+  const additions = [{ knowledgeTarget: "A" }, { knowledgeTarget: "B" }, { knowledgeTarget: "C" }];
+  const result = assignSequentialCurriculumIds(additions, 7);
+  assert.deepEqual(result.map((a) => a.id), ["k8", "k9", "k10"]);
+  assert.deepEqual(result.map((a) => a.order), [8, 9, 10]);
+});
+
+test("assignSequentialCurriculumIds : jamais de collision avec un id existant du curriculum courant", () => {
+  const existingCurriculum = Array.from({ length: 7 }, (_, i) => ({ id: `k${i + 1}`, order: i + 1 }));
+  const globalMaxOrder = existingCurriculum.reduce((max, k) => Math.max(max, k.order), 0);
+  const additions = assignSequentialCurriculumIds([{ knowledgeTarget: "Nouvelle 1" }, { knowledgeTarget: "Nouvelle 2" }], globalMaxOrder);
+  const existingIds = new Set(existingCurriculum.map((k) => k.id));
+  additions.forEach((a) => assert.equal(existingIds.has(a.id), false, `${a.id} ne doit jamais collisionner avec un id existant`));
+  assert.deepEqual(additions.map((a) => a.id), ["k8", "k9"]);
+});
+
+test("assignSequentialCurriculumIds : ne modifie jamais les ids déjà attribués (ne reçoit et ne renvoie que les nouveaux ajouts)", () => {
+  const existingCurriculum = [{ id: "k1", order: 1 }, { id: "k2", order: 2 }];
+  const snapshot = JSON.parse(JSON.stringify(existingCurriculum));
+  assignSequentialCurriculumIds([{ knowledgeTarget: "Nouvelle" }], 2);
+  assert.deepEqual(existingCurriculum, snapshot, "assignSequentialCurriculumIds ne doit jamais toucher un curriculum existant, qu'elle ne reçoit même pas en argument");
+});
+
+test("assignSequentialCurriculumIds : préserve les autres champs (source_id/evidence_text) de chaque ajout", () => {
+  const result = assignSequentialCurriculumIds([{ knowledgeTarget: "X", source_id: "SOURCE_1", evidence_text: "..." }], 0);
+  assert.equal(result[0].source_id, "SOURCE_1");
+  assert.equal(result[0].evidence_text, "...");
+});
+
+test("assignSequentialCurriculumIds : entrée non-tableau -> [] sans planter", () => {
+  assert.deepEqual(assignSequentialCurriculumIds(null, 5), []);
+  assert.deepEqual(assignSequentialCurriculumIds(undefined, 5), []);
 });
 
 // ── selectCurriculumLevel ─────────────────────────────────────────────────

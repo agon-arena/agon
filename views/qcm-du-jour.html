@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260906-back-btn-compact">
+  <link rel="stylesheet" href="/style.min.css?v=20260906-back-btn-align">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -3003,6 +3003,38 @@
       text-decoration: underline;
       text-decoration-color: #d1d5db;
     }
+    /* "Connaissances à mémoriser" (chantier "Mémoriser/Non mémorisée",
+       06/09/2026, cf. buildKnowledgeMemorizationSectionHtml) : liste discrète,
+       même esprit visuel que .qcm-exclude-btn (jamais une action
+       destructive) — chaque connaissance reste lisible même désactivée. */
+    .qcm-fiche-memorization-list {
+      margin: 6px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .qcm-fiche-memorization-item {
+      margin: 4px 0;
+    }
+    .qcm-fiche-memorization-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #e2e6e9;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #384852;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .qcm-fiche-memorization-toggle.is-memorized i {
+      color: #2f9e5c;
+    }
+    .qcm-fiche-memorization-toggle.is-unmemorized {
+      color: #9aa5ac;
+    }
     .qcm-fiche-bottom-close {
       display: block;
       width: 100%;
@@ -3090,12 +3122,13 @@
     .qcm-difficulty-btn-moyen:hover:not(:disabled) {
       background: #384852;
     }
-    /* Bouton "Ne plus me la demander" (cf. wireExcludeButton) : discret,
-       en bas de carte sous "Valider ma réponse"/les propositions (jamais en
-       haut, cf. demande du 13/08/2026 — pour ne pas laisser deviner qu'une
-       question est "à écarter" avant même de l'avoir lue) — exclut la
-       question courante des futures repasses ("Renforcement"), jamais de la
-       session en cours. */
+    /* Contrôle "Mémoriser"/"Non mémorisée" (cf. wireExcludeButton, chantier
+       du 06/09/2026) : discret, en bas de carte sous "Valider ma réponse"/les
+       propositions (jamais en haut, cf. demande du 13/08/2026 — pour ne pas
+       laisser deviner qu'une connaissance est "à écarter" avant même d'avoir
+       lu la question) — exclut la CONNAISSANCE des futures repasses
+       ("Ancrer"), jamais la session en cours ni la réponse à la question
+       affichée (deux actions totalement indépendantes). */
     .qcm-exclude-btn {
       display: block;
       margin: 10px auto 0;
@@ -3108,6 +3141,12 @@
       font-weight: 700;
       letter-spacing: 0.02em;
       cursor: pointer;
+    }
+    .qcm-exclude-btn.is-memorized i {
+      color: #2f9e5c;
+    }
+    .qcm-exclude-btn.is-unmemorized {
+      color: #9aa5ac;
     }
     .qcm-exclude-btn:hover {
       border-color: #b8c2ca;
@@ -3591,13 +3630,15 @@
       display: none;
       position: fixed;
       left: 16px;
-      bottom: 80px;
+      /* Position/taille alignées sur .tribunes-mobile-back-button d'autres-
+         sources (demande du 06/09/2026, "trop haut... comme sur page autres
+         sources"). */
+      bottom: calc(60px + env(safe-area-inset-bottom, 0px));
       z-index: 10002;
-      /* Taille réduite (demande du 06/09/2026, "un peu moins grosses") */
-      width: 38px;
-      height: 38px;
-      min-width: 38px;
-      min-height: 38px;
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      min-height: 40px;
       padding: 0;
       align-items: center;
       justify-content: center;
@@ -3627,12 +3668,12 @@
     @media (max-width: 768px) {
       body.page-qcm-du-jour .mobile-back-button {
         left: calc(20% - 13px);
-        bottom: 59px;
-        width: 34px;
-        height: 34px;
-        min-width: 34px;
-        min-height: 34px;
-        font-size: 14px;
+        bottom: 37px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+        font-size: 16px;
       }
     }
   </style>
@@ -3780,7 +3821,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260906-back-btn-compact" defer></script>
+<script src="/script.min.js?v=20260906-back-btn-align" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -3921,11 +3962,6 @@
   var originalQuestions = [];
   var answeredByQuestionId = {};
   var currentIndex = 0;
-  // "Passer" sur Découvrir (demande du 30/08/2026) : la confirmation
-  // ("Es-tu sûr ? ... ne seront pas mémorisées") n'est posée qu'une fois par
-  // série de questions — remis à false à chaque nouveau loadSlot (cf.
-  // confirmSkipQuestion/wireExcludeButton plus bas).
-  var skipQuestionConfirmed = false;
   var currentSlot = null;
   var currentQuizDate = null;
   var currentCategory = null;
@@ -4478,24 +4514,28 @@
     return label ? '<span class="qcm-type-badge">' + escapeHtml(label) + '</span>' : '';
   }
 
-  // Retirer une question de ses futures repasses ("Renforcement") — l'utilisateur
-  // la connaît déjà ou n'est plus intéressé (demande du 12/08/2026). N'affecte
-  // jamais la session en cours (chaque question n'apparaît qu'une fois par
-  // session de toute façon, cf. questions[currentIndex]) : seul le choix des
-  // futures repasses en tient compte côté serveur (cf. server.js
-  // fetchCultureGeneraleReviewInjectionForToday, filtré sur cette table).
-  function renderExcludeButtonHtml() {
-    if (currentCategory === 'comprendre') return '';
-    // Première exposition ("Découvrir", currentCategory === 'mesqcm') : la question n'a encore
-    // aucun historique de repasse (cf. applyFsrsReviewForDailyQuizAnswer côté serveur, qui ne
-    // crée le memory_item qu'à la réponse) — "Ne plus me la demander" n'a alors aucun sens
-    // (rien à exclure de futures repasses qui n'existent pas encore). "Passer" reprend le même
-    // visuel (.qcm-exclude-btn) mais avance juste à la question suivante, sans exclusion
-    // définitive ni confirmation (demande du 17/08/2026).
-    if (currentCategory === 'mesqcm') {
-      return '<button type="button" class="qcm-exclude-btn" id="qcm-exclude-btn" title="Passer cette question">Passer</button>';
-    }
-    return '<button type="button" class="qcm-exclude-btn" id="qcm-exclude-btn" title="Ne plus jamais me reposer cette question">Ne plus me poser cette question</button>';
+  // Contrôle unique "Mémoriser"/"Non mémorisée" (chantier du 06/09/2026,
+  // remplace les anciens "Passer" (Découvrir) et "Ne plus me poser cette
+  // question" (Ancrer), qui pointaient tous deux vers le même mécanisme
+  // irréversible par question, POST /api/daily-quiz/exclude-question — cf.
+  // git history pour cet ancien comportement). Porte désormais sur la
+  // CONNAISSANCE (question.knowledgeTargetId, un id de curriculum du
+  // parcours, ex. "k3"), jamais sur la question ni sur tout le parcours :
+  // décocher depuis n'importe laquelle des questions qui testent la même
+  // connaissance l'exclut partout, jamais les autres connaissances du même
+  // parcours. RÉVERSIBLE (POST .../knowledge-memorization, sémantique SET
+  // enabled:true/false, jamais un toggle) — jamais de modale de confirmation,
+  // ce n'est plus une action destructive. Absent (masqué) quand
+  // question.knowledgeTargetId n'a pas pu être résolu côté serveur (ancien
+  // master sans id stable, ou correspondance ambiguë) : jamais de contrôle
+  // branché sur un id inventé, cf. resolveLegacyQuestionKnowledgeTargetId.
+  function renderExcludeButtonHtml(question) {
+    if (currentCategory === 'comprendre' || !question || !question.knowledgeTargetId) return '';
+    var enabled = question.memorizationEnabled !== false;
+    return '<button type="button" class="qcm-exclude-btn qcm-memorize-btn' + (enabled ? ' is-memorized' : ' is-unmemorized') + '" id="qcm-exclude-btn" aria-pressed="' + (enabled ? 'true' : 'false') + '" title="' + (enabled ? 'Cliquer pour ne plus mémoriser cette connaissance' : 'Cliquer pour mémoriser à nouveau cette connaissance') + '">' +
+      '<i class="fa-solid ' + (enabled ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i> ' +
+      (enabled ? 'Mémoriser' : 'Non mémorisée') +
+      '</button>';
   }
   // Laisser réfléchir avant d'afficher les propositions (demande du
   // 12/08/2026) — seulement pour les formats où il y a vraiment une réponse
@@ -4596,115 +4636,66 @@
     };
   }
 
-  // Confirmation avant de passer une question sur Découvrir (demande du
-  // 30/08/2026) : seulement la première fois qu'on passe une question de la
-  // série en cours (skipQuestionConfirmed, remis à false à chaque nouveau
-  // loadSlot ci-dessus) — jamais reproposée ensuite pour les "Passer"
-  // suivants de la même série. Réutilise les mêmes classes CSS que
-  // showIdeaPublishConfirmModal (script.js, .custom-modal-*) plutôt qu'un
-  // nouveau style, mais avec un texte/bouton propres à ce cas — jamais
-  // "Supprimer" comme showDeleteConfirmModal, ce n'est pas une action
-  // destructive.
-  function confirmSkipQuestion(onConfirm) {
-    if (skipQuestionConfirmed) { onConfirm(); return; }
-    var existing = document.getElementById('qcm-skip-confirm-modal');
-    if (existing) existing.remove();
-    var overlay = document.createElement('div');
-    overlay.id = 'qcm-skip-confirm-modal';
-    overlay.className = 'custom-modal-overlay';
-    overlay.innerHTML =
-      '<div class="custom-modal-box">' +
-        '<div class="custom-modal-title">Passer cette question ?</div>' +
-        '<div class="custom-modal-text">Es-tu sûr ? En passant les questions, celles-ci ne seront pas mémorisées.</div>' +
-        '<div class="custom-modal-actions">' +
-          '<button type="button" class="button button-secondary" id="qcm-skip-cancel-btn">Annuler</button>' +
-          '<button type="button" class="button" id="qcm-skip-confirm-btn">Passer quand même</button>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(overlay);
-    overlay.addEventListener('click', function (event) {
-      if (event.target === overlay) overlay.remove();
-    });
-    document.getElementById('qcm-skip-cancel-btn').onclick = function () { overlay.remove(); };
-    document.getElementById('qcm-skip-confirm-btn').onclick = function () {
-      overlay.remove();
-      skipQuestionConfirmed = true;
-      onConfirm();
-    };
+  // Appel API partagé par le QCM (wireExcludeButton) et la fiche
+  // (wireKnowledgeMemorizationToggles) — sémantique SET explicite
+  // (enabled:true/false), jamais un toggle relatif : idempotent face à un
+  // double clic/des requêtes en désordre (deux appels enabled:false
+  // consécutifs aboutissent au même état côté serveur). `onDone(ok)` reçoit
+  // toujours un booléen, jamais l'erreur brute — l'appelant décide seul de
+  // l'affichage en cas d'échec.
+  function setKnowledgeMemorization(subjectType, subjectSourceId, knowledgeTargetId, enabled, onDone) {
+    if (!voterKey) { onDone(false); return; }
+    fetch('/api/users/knowledge-memorization', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legacyKey: voterKey, subjectType: subjectType, subjectSourceId: subjectSourceId, knowledgeTargetId: knowledgeTargetId, enabled: enabled }),
+      keepalive: true
+    })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) { onDone(!!(result.ok && result.data && result.data.ok)); })
+      .catch(function () { onDone(false); });
   }
 
+  // "Mémoriser"/"Non mémorisée" (cf. renderExcludeButtonHtml) : RÈGLE
+  // PRODUIT NON NÉGOCIABLE (chantier du 06/09/2026) — ce clic est
+  // TOTALEMENT INDÉPENDANT de la réponse à la question courante. Il ne doit
+  // JAMAIS : avancer à la question suivante (goToNextQuestion), simuler une
+  // réponse, ni être enregistré comme skipped/incorrect/lapse. La question
+  // reste affichée, l'utilisateur répond ensuite normalement, sa réponse est
+  // évaluée et comptée comme n'importe quelle autre (cf. server.js
+  // applyFsrsReviewForDailyQuizAnswer, jamais informé de ce choix). Seul
+  // effet réel : la connaissance ne sera plus sélectionnée par les futures
+  // repasses ("Ancrer", cf. fetchCultureGeneraleReviewInjectionForToday).
+  // Optimistic UI simple (bascule visuelle immédiate au clic, comme le
+  // "Mémoriser" historique d'Éclairages) : un `requestToken` local par
+  // bouton ignore une réponse réseau devenue obsolète (clic suivant déjà
+  // parti) plutôt que de risquer qu'elle écrase visuellement un choix plus
+  // récent — jamais de modale de confirmation, ce n'est plus une action
+  // destructive.
   function wireExcludeButton(question) {
     var btn = document.getElementById('qcm-exclude-btn');
-    if (!btn) return;
-    // "Passer" (Découvrir, cf. renderExcludeButtonHtml) : confirmation la première fois par série
-    // (cf. confirmSkipQuestion), puis même appel que l'exclusion définitive ci-dessous
-    // (/api/daily-quiz/exclude-question, réutilisé tel quel — demande du 30/08/2026, "si je passe
-    // des questions, celles-ci ne doivent plus être posées dans ancrage") : une question jamais
-    // répondue n'a de toute façon jamais de memory_item (cf. plus haut), donc ne serait jamais
-    // reprogrammée en repasse — mais sans cette exclusion persistée, "Continuer le QCM"
-    // (GET /api/daily-quiz/results, cf. loadSlot) la reproposerait indéfiniment au lieu de la
-    // considérer traitée. Compte aussi côté serveur pour "réalisé"/"en cours" (cf.
-    // GET /api/users/notion-quizzes, answeredCount inclut désormais les questions exclues).
-    // L'avancement local ne dépend jamais du réseau (même logique que l'exclusion définitive).
-    if (currentCategory === 'mesqcm') {
-      btn.onclick = function () {
-        confirmSkipQuestion(function () {
-          if (voterKey) {
-            fetch('/api/daily-quiz/exclude-question', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ legacyKey: voterKey, questionId: question.id }),
-              keepalive: true
-            }).catch(function (error) {
-              console.warn('[apprentissage] question passée non enregistrée :', error);
-            });
-          }
-          goToNextQuestion();
-        });
-      };
-      return;
+    if (!btn || !question || !question.knowledgeTargetId || !question.sourceType || question.sourceDebateId == null) return;
+    var requestToken = 0;
+    function renderState(enabled) {
+      btn.classList.toggle('is-memorized', enabled);
+      btn.classList.toggle('is-unmemorized', !enabled);
+      btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+      btn.title = enabled ? 'Cliquer pour ne plus mémoriser cette connaissance' : 'Cliquer pour mémoriser à nouveau cette connaissance';
+      btn.innerHTML = '<i class="fa-solid ' + (enabled ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i> ' + (enabled ? 'Mémoriser' : 'Non mémorisée');
     }
-    if (!voterKey) return;
     btn.onclick = function () {
-      // Confirmation avant retrait (demande du 13/08/2026) : contrairement au clic
-      // "Mémoriser" ailleurs sur le site (optimiste, réversible), exclure une question
-      // arrête définitivement de la reposer — même modale de confirmation que les
-      // suppressions définitives du site (showDeleteConfirmModal, cf.
-      // removeMesQcmItems plus bas, déjà chargée via script.min.js sur cette page).
-      showDeleteConfirmModal({
-        title: 'Ne plus jamais te reposer cette question ?',
-        text: 'Elle ne te sera plus jamais reposée. Utile si elle te semble trop facile ou non pertinente.',
-        onConfirm: function () {
-          btn.disabled = true;
-          btn.textContent = 'Retirée';
-
-          // L'avancement ne doit jamais dépendre du temps de réponse réseau.
-          // C'était particulièrement visible en Renforcement dans la PWA : si
-          // l'upsert Supabase restait quelques secondes en attente, le bouton
-          // affichait bien « Retirée » mais l'utilisateur restait bloqué sur la
-          // question. On démarre donc l'enregistrement (avec keepalive pour
-          // qu'il survive aussi à une fermeture de l'iframe), puis on affiche
-          // immédiatement la question suivante, comme dans le QCM classique.
-          var exclusionRequest = fetch('/api/daily-quiz/exclude-question', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ legacyKey: voterKey, questionId: question.id }),
-            keepalive: true
-          })
-            .then(function (res) {
-              if (!res.ok) throw new Error('HTTP ' + res.status);
-              return res.json();
-            })
-            .then(function (data) {
-              if (!data || data.ok !== true) throw new Error((data && data.error) || 'Réponse invalide');
-            })
-            .catch(function (error) {
-              // L'échec éventuel est journalisé sans ramener l'utilisateur à
-              // la question qu'il vient précisément de retirer.
-              console.warn('[apprentissage] retrait de la question non enregistré :', error);
-            });
-
-          goToNextQuestion();
+      var nextEnabled = btn.getAttribute('aria-pressed') !== 'true';
+      var myToken = ++requestToken;
+      renderState(nextEnabled);
+      question.memorizationEnabled = nextEnabled;
+      setKnowledgeMemorization(question.sourceType, String(question.sourceDebateId), question.knowledgeTargetId, nextEnabled, function (ok) {
+        if (myToken !== requestToken) return; // un clic plus récent a déjà pris le dessus, jamais écrasé par cette réponse tardive
+        if (!ok) {
+          // Échec réseau : restaure l'état serveur connu (celui d'avant ce
+          // clic précis), jamais un état inventé.
+          renderState(!nextEnabled);
+          question.memorizationEnabled = !nextEnabled;
+          console.warn('[apprentissage] préférence de mémorisation non enregistrée.');
         }
       });
     };
@@ -4880,7 +4871,7 @@
     if (gated) html += renderRevealGateHtml(question.helpLevel);
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
     html += renderDifficultyButtonsHtml('qcm-choice', gated);
-    html += renderExcludeButtonHtml();
+    html += renderExcludeButtonHtml(question);
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
@@ -4977,7 +4968,7 @@
     html += '<div id="qcm-assoc-rows"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += renderDifficultyButtonsHtml('qcm-assoc', false);
-    html += renderExcludeButtonHtml();
+    html += renderExcludeButtonHtml(question);
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
     wireExcludeButton(question);
@@ -5111,7 +5102,7 @@
     html += '<div class="qcm-options" id="qcm-options"' + (gated ? ' hidden' : '') + '></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += renderDifficultyButtonsHtml('qcm-multi', gated);
-    html += renderExcludeButtonHtml();
+    html += renderExcludeButtonHtml(question);
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
     wireExcludeButton(question);
@@ -5206,7 +5197,7 @@
     html += '<div class="qcm-order-pool" id="qcm-order-pool"></div>';
     html += '<div class="qcm-feedback" id="qcm-feedback"></div>';
     html += renderDifficultyButtonsHtml('qcm-order', false);
-    html += renderExcludeButtonHtml();
+    html += renderExcludeButtonHtml(question);
     html += '<button type="button" class="qcm-next-btn" id="qcm-next-btn"></button>';
     body.innerHTML = html;
     wireExcludeButton(question);
@@ -6155,14 +6146,16 @@
         closeAiGenerateModal();
         if (currentCategory === 'mesqcm' && !currentSlot) renderMesQcmList(currentMesQcmQuizzes);
 
-        // Câblage Phase 2 (03/09/2026, "terminer le pipeline progressif") :
-        // .../custom/progressive sait désormais produire les 3 niveaux — le
-        // backend sert toujours Élémentaire en premier (chemin critique
-        // court), puis attend, DANS cette même requête, jusqu'au niveau
-        // réellement choisi si "Avancé"/"Expert" (même tolérance aux
-        // requêtes longues que l'ancien flux .../custom ci-dessous, cf.
-        // commentaires du .catch() plus bas). Le parcours complet continue
-        // ensuite en arrière-plan jusqu'à Expert quel que soit le choix.
+        // Câblage Phase 3 (06/09/2026, "démarrage toujours Élémentaire") puis
+        // chantier "rétablir un vrai choix utilisateur" (07/09/2026) :
+        // quel que soit le niveau cible choisi ici, Élémentaire est servi dès
+        // qu'il est prêt (jamais d'attente synchrone sur Avancé/Expert dans
+        // cette requête, corrigeant le commentaire précédent qui décrivait un
+        // comportement Phase 2 périmé). Le master continue jusqu'à Expert en
+        // arrière-plan dans tous les cas. Le niveau choisi ici détermine
+        // uniquement jusqu'où CET utilisateur pourra progresser
+        // automatiquement (targetLevel, server.js) — jamais le niveau ouvert
+        // immédiatement.
         var creationEndpoint = '/api/users/notion-quizzes/custom/progressive';
 
         fetch(creationEndpoint, {
@@ -8414,6 +8407,66 @@
     try { window.parent.postMessage({ type: 'mnoria:qcm-fiche-visibility', open: false }, '*'); } catch (e) {}
     mesQcmFicheLoadingOverlay = null;
   }
+
+  // "Connaissances à mémoriser" (chantier "Mémoriser/Non mémorisée",
+  // 06/09/2026) : seul endroit permettant de RÉACTIVER une connaissance
+  // passée en "Non mémorisée" depuis le QCM (elle ne revient alors plus
+  // naturellement dans Ancrer). Source EXHAUSTIVE = data.knowledgeTargets
+  // (curriculum du niveau visible, cf. server.js GET .../fiche), jamais les
+  // highlights Phase 2.4 (partiels par construction) — une connaissance sans
+  // highlight apparaît quand même ici. [] pour tout master sans curriculum
+  // (legacy/import) : rien à afficher, comportement legacy inchangé.
+  function buildKnowledgeMemorizationSectionHtml(data) {
+    var targets = Array.isArray(data.knowledgeTargets) ? data.knowledgeTargets : [];
+    if (!targets.length || !data.sourceType || !data.subjectSourceId) return '';
+    return '<div class="qcm-fiche-memorization-section" id="qcm-fiche-memorization-section">' +
+      '<h3 class="qcm-fiche-section-label">Connaissances à mémoriser</h3>' +
+      '<ul class="qcm-fiche-memorization-list">' +
+      targets.map(function (k) {
+        var enabled = k.memorizationEnabled !== false;
+        return '<li class="qcm-fiche-memorization-item">' +
+          '<button type="button" class="qcm-fiche-memorization-toggle' + (enabled ? ' is-memorized' : ' is-unmemorized') + '" data-knowledge-target-id="' + escapeHtml(k.id) + '" aria-pressed="' + (enabled ? 'true' : 'false') + '">' +
+          '<i class="fa-solid ' + (enabled ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i>' +
+          '<span>' + escapeHtml(k.knowledgeTarget) + '</span>' +
+          '</button>' +
+          '</li>';
+      }).join('') +
+      '</ul>' +
+      '</div>';
+  }
+  // Même API que le contrôle du QCM (setKnowledgeMemorization) et même
+  // principe d'optimistic UI/requestToken par bouton (cf. wireExcludeButton) :
+  // une réactivation ici rend la connaissance immédiatement de nouveau
+  // éligible à Ancrer, sans jamais toucher à son historique FSRS (le
+  // backend ne fait qu'un upsert de préférence, cf. POST
+  // /api/users/knowledge-memorization).
+  function wireKnowledgeMemorizationToggles(overlay, data) {
+    var section = overlay.querySelector('#qcm-fiche-memorization-section');
+    if (!section) return;
+    section.querySelectorAll('.qcm-fiche-memorization-toggle').forEach(function (btn) {
+      var knowledgeTargetId = btn.getAttribute('data-knowledge-target-id');
+      var requestToken = 0;
+      function renderState(enabled) {
+        btn.classList.toggle('is-memorized', enabled);
+        btn.classList.toggle('is-unmemorized', !enabled);
+        btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        var icon = btn.querySelector('i');
+        if (icon) icon.className = 'fa-solid ' + (enabled ? 'fa-square-check' : 'fa-square');
+      }
+      btn.addEventListener('click', function () {
+        var nextEnabled = btn.getAttribute('aria-pressed') !== 'true';
+        var myToken = ++requestToken;
+        renderState(nextEnabled);
+        setKnowledgeMemorization(data.sourceType, data.subjectSourceId, knowledgeTargetId, nextEnabled, function (ok) {
+          if (myToken !== requestToken) return;
+          if (!ok) {
+            renderState(!nextEnabled);
+            console.warn('[apprentissage] préférence de mémorisation non enregistrée.');
+          }
+        });
+      });
+    });
+  }
   function openMesQcmFicheFromUrl(url, fallbackLabel, onClose, editable) {
     var myToken = ++mesQcmFicheToken;
     closeMesQcmFicheLoadingOverlay();
@@ -8452,7 +8505,12 @@
         // Enveloppée dans #qcm-fiche-questions-section (demande du 02/09/2026) :
         // point d'ancrage stable pour basculer lecture/édition sans reconstruire
         // toute la fiche (cf. enterFicheQuestionsEditMode/wireFicheQuestionsEditToggle).
-        var corrigeHtml = '<div class="qcm-fiche-questions-section" id="qcm-fiche-questions-section">' +
+        // Liste "Connaissances à mémoriser" (chantier du 06/09/2026, source de
+        // réactivation d'une connaissance passée en "Non mémorisée" depuis le
+        // QCM) : juste avant le corrigé, jamais après — c'est la fiche de
+        // CONTENU, le corrigé des questions vient en second.
+        var corrigeHtml = buildKnowledgeMemorizationSectionHtml(data) +
+          '<div class="qcm-fiche-questions-section" id="qcm-fiche-questions-section">' +
           buildFicheQuestionsSectionInnerHtml(data, !!editable) + '</div>';
         var name = data.label || fallbackLabel || meta.label;
         // Plus de Noès ici (demande du 30/08/2026, "supprime vidéo noes du
@@ -8463,6 +8521,7 @@
         var questionCount = (data.questions || []).length;
         var ficheOverlay = openFicheOverlay(buildFicheModalHtml(meta.icon, meta.label, name, detail, corrigeHtml, data.themes, data.links, data.level, questionCount, data.groundingSources), onClose);
         if (editable) wireFicheQuestionsEditToggle(ficheOverlay, data);
+        wireKnowledgeMemorizationToggles(ficheOverlay, data);
       })
       .catch(function () {
         if (myToken !== mesQcmFicheToken) return;
@@ -8511,7 +8570,6 @@
     questions = [];
     answeredByQuestionId = {};
     qcmCorrectStreakCount = 0;
-    skipQuestionConfirmed = false;
     // Nouveau QCM chargé : jamais en mode "Refaire" hérité d'une session
     // précédente, sinon de vraies réponses cesseraient à tort d'être
     // enregistrées (cf. quizAnswerEndpoint).
