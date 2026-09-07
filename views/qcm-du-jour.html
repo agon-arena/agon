@@ -1283,6 +1283,34 @@
         font-size: 13px;
       }
     }
+    /* Bouton discret "Fiche" pendant le passage du QCM (demande du
+       07/09/2026, cf. renderFicheOpenButtonHtml) — même largeur max/centrage
+       que la barre de progression juste en dessous, aligné à droite. */
+    .qcm-fiche-open-row {
+      max-width: 680px;
+      margin: 0 auto 6px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .qcm-fiche-open-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 26px;
+      padding: 4px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      background: transparent;
+      color: #8a949c;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .qcm-fiche-open-btn:hover, .qcm-fiche-open-btn:focus-visible {
+      background: rgba(36, 48, 56, 0.07);
+      color: #243038;
+    }
     /* Barre de progression Découvrir/Ancrer/Relier (demande du 17/08/2026,
        étendue à Découvrir et élargie/embellie le 27/08/2026, cf.
        renderProgressIndicatorHtml) — centrée au-dessus de la question, sur
@@ -3821,7 +3849,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260907-fondchargement-cleanup-launch-speed" defer></script>
+<script src="/script.min.js?v=20260907-notion-quiz-generation-reliability" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -3964,6 +3992,7 @@
   var currentIndex = 0;
   var currentSlot = null;
   var currentQuizDate = null;
+  var currentQuizLabel = null;
   var currentCategory = null;
   var qcmSessionReady = false;
   // "Refaire" (demande du 13/08/2026) : rejoue le même QCM depuis le début
@@ -4379,6 +4408,25 @@
     return div.innerHTML;
   }
 
+  // Figure image + légende d'une fiche (extrait le 07/09/2026 des 3 sites
+  // qui construisaient chacun ce même balisage — fiche complète,
+  // buildFicheWithNoesModalHtml, et le repli image de Noès indisponible
+  // ci-dessous) : la vraie légende Wikipedia (img.caption, cf.
+  // lib/knowledge-image-search.js) prime quand elle existe, suivie de
+  // l'attribution ; sinon repli sur l'attribution seule ("Image : Wikipedia"
+  // etc.), jamais de légende inventée.
+  function buildFicheImageFigureHtml(img, altText) {
+    if (!img || !img.url) return '';
+    var attributionLabel = img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia'));
+    var captionText = img.caption ? (img.caption + ' — ' + attributionLabel) : ('Image : ' + attributionLabel);
+    return '<figure class="qcm-fiche-image">' +
+      '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(altText || '') + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
+      (img.pageUrl
+        ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
+        : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+      '</figure>';
+  }
+
   // Mise en évidence des knowledgeTargets dans une section de fiche (Phase
   // 2.4, 04/09/2026) — `highlights` : [{start, end, knowledgeTargetId}]
   // déjà résolus et validés côté serveur (cf. lib/fiche-highlights.js). Ne
@@ -4485,6 +4533,29 @@
   };
   var FILL_BLANK_MARKER = '___';
 
+  // Bouton discret "Fiche" pendant le passage du QCM (demande du 07/09/2026) :
+  // jusqu'ici la fiche (détail de la notion + corrigé complet) n'était
+  // accessible que depuis la liste "Mes apprentissages", après coup — jamais
+  // pendant qu'on répond aux questions. Limité aux vrais slots de notion
+  // (`notion:...`) : GET /api/users/notion-quizzes/fiche rejette Renforcement/
+  // Comprendre (slots `renforcement`/`comprendre`, cf. server.js), qui n'ont
+  // d'ailleurs pas de fiche de notion à afficher.
+  function renderFicheOpenButtonHtml() {
+    if (!currentSlot || currentSlot.indexOf('notion:') !== 0) return '';
+    return '<div class="qcm-fiche-open-row"><button type="button" class="qcm-fiche-open-btn" id="qcm-fiche-open-btn" title="Voir la fiche de cette notion">' +
+      '<i class="fa-solid fa-file-lines" aria-hidden="true"></i><span>Fiche</span></button></div>';
+  }
+  function wireFicheOpenButton() {
+    var btn = document.getElementById('qcm-fiche-open-btn');
+    if (!btn) return;
+    // Pas d'onClose (comme Éclairages/"Les liens", cf. openFicheOverlay) :
+    // la question en cours reste intacte sous l'overlay, fermer la fiche
+    // suffit à la retrouver telle quelle.
+    btn.onclick = function () {
+      openMesQcmFiche({ slot: currentSlot, quizDate: currentQuizDate, label: currentQuizLabel });
+    };
+  }
+
   // Indicateur de progression, en haut de chaque question (demande du
   // 17/08/2026, étendue à Découvrir le 27/08/2026) : une barre qui se remplit
   // progressivement, sur les 3 catégories (Découvrir/Ancrer/Relier) — remplace
@@ -4497,7 +4568,8 @@
     // aucun QCM commencé), elle doit rester vide (demande du 30/08/2026,
     // "la barre n'apparaît pas vide même quand je n'ai pas commencé").
     var pct = questions.length ? Math.round((currentIndex / questions.length) * 100) : 0;
-    return '<div class="qcm-progress-bar" role="progressbar" aria-valuenow="' + currentIndex + '" aria-valuemin="0" aria-valuemax="' + questions.length + '" aria-label="Progression du QCM">' +
+    return renderFicheOpenButtonHtml() +
+      '<div class="qcm-progress-bar" role="progressbar" aria-valuenow="' + currentIndex + '" aria-valuemin="0" aria-valuemax="' + questions.length + '" aria-label="Progression du QCM">' +
       '<div class="qcm-progress-bar-fill" style="width:' + pct + '%"></div>' +
       '<span class="qcm-progress-bar-smoke" style="left:' + pct + '%" aria-hidden="true">' +
         '<span class="qcm-progress-bar-smoke-puff"></span>' +
@@ -4799,6 +4871,7 @@
     } else {
       renderChoiceQuestion(question, answer);
     }
+    wireFicheOpenButton();
   }
 
   // Partagé avec wireExcludeButton ci-dessus : après confirmation de "Ne plus
@@ -4818,7 +4891,7 @@
     // un scroll instantané une fois la nouvelle question déjà rendue, pour
     // que ça arrive systématiquement en haut quel que soit le cas.
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (currentIndex === questions.length - 1) renderFinalScore();
+    if (currentIndex === questions.length - 1) finishCurrentBlockOrContinue();
     else { currentIndex += 1; renderQuestion(); }
     window.scrollTo(0, 0);
     requestAnimationFrame(function () { window.scrollTo(0, 0); });
@@ -4828,6 +4901,86 @@
     nextBtn.textContent = isLast ? 'Voir mes résultats' : 'Question suivante';
     nextBtn.className = 'qcm-next-btn visible';
     nextBtn.onclick = goToNextQuestion;
+  }
+
+  // Enchaînement automatique Élémentaire → Approfondi → Expert (demande du
+  // 07/09/2026, "si les questions sont déjà prêtes, il faut les servir
+  // directement à la fin, sinon on prévient que la suite est en cours de
+  // création") : à la dernière question du bloc actuellement chargé, on
+  // vérifie D'ABORD si un niveau supérieur est déjà prêt côté serveur (auto-
+  // promotion déjà appliquée en base par maybeAdvanceProgressiveLevelAfterAnswer
+  // pendant qu'on répondait) avant de basculer sur l'écran de score final —
+  // jamais l'inverse, pour ne jamais arrêter un utilisateur qui pourrait
+  // continuer tout de suite. Un seul appel à level-status ici : son résultat
+  // est transmis à renderFinalScore quand on ne continue pas, pour éviter un
+  // second aller-retour réseau redondant avec maybeShowProgressiveNextLevelHint.
+  // practiceMode ("Refaire") exclu : ne compte jamais pour la progression
+  // réelle, cf. POST /api/daily-quiz/practice-answer.
+  function finishCurrentBlockOrContinue() {
+    if (practiceMode || !voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) {
+      renderFinalScore();
+      return;
+    }
+    var slotAtCall = currentSlot;
+    var dateAtCall = currentQuizDate;
+    fetch(
+      '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(slotAtCall) +
+      '&quizDate=' + encodeURIComponent(dateAtCall) +
+      '&legacyKey=' + encodeURIComponent(voterKey),
+      { cache: 'no-store' }
+    )
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        // Session déjà quittée pendant l'appel (Retourner aux apprentissages,
+        // nouveau slot chargé...) : ne jamais réinjecter un écran obsolète.
+        if (currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) return;
+        if (data && data.progressive && data.nextLevel && data.nextLevelReady) {
+          continueToNextProgressiveLevel(slotAtCall, dateAtCall);
+        } else {
+          renderFinalScore(data);
+        }
+      })
+      .catch(function () { renderFinalScore(); });
+  }
+
+  // Le corpus renvoyé par /api/daily-quiz/today est déjà cumulatif (trié par
+  // pedagogicalRank puis tronqué au niveau PERSISTÉ EN BASE, cf.
+  // selectQuestionsForRequestedLevel côté serveur) : il contient donc déjà
+  // Élémentaire + le(s) niveau(x) tout juste promus — À CONDITION que cette
+  // promotion ait déjà été écrite. Or POST /api/daily-quiz/answer déclenche
+  // maybeAdvanceProgressiveLevelAfterAnswer en tâche de fond, JAMAIS avant sa
+  // réponse HTTP (délibéré, "jamais sur le chemin critique") : au moment où
+  // finishCurrentBlockOrContinue vient d'apprendre que le niveau suivant est
+  // prêt (dernière réponse tout juste envoyée), cette écriture peut donc ne
+  // pas encore être arrivée en base — testé le 07/09/2026, questions
+  // encore identiques au premier essai dans ce cas. D'où quelques tentatives
+  // rapprochées ici avant d'abandonner sur l'écran de score (jamais un délai
+  // fixe avant le premier essai : la promotion est déjà là la plupart du
+  // temps, inutile de ralentir ce cas courant).
+  function continueToNextProgressiveLevel(slotAtCall, dateAtCall, attempt) {
+    attempt = attempt || 0;
+    renderMessage('Chargement de la suite…');
+    fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotAtCall) + '&date=' + encodeURIComponent(dateAtCall) + '&voterKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) return;
+        var nextQuestions = Array.isArray(data.questions) ? data.questions : [];
+        var nextIndex = nextQuestions.findIndex(function (q) { return !answeredByQuestionId[q.id]; });
+        if (nextQuestions.length && nextIndex !== -1) {
+          questions = nextQuestions;
+          originalQuestions = questions.slice();
+          preloadQuestionImages(questions);
+          currentIndex = nextIndex;
+          renderQuestion();
+          return;
+        }
+        if (attempt < 3) {
+          setTimeout(function () { continueToNextProgressiveLevel(slotAtCall, dateAtCall, attempt + 1); }, 400 * (attempt + 1));
+        } else {
+          renderFinalScore();
+        }
+      })
+      .catch(function () { renderFinalScore(); });
   }
   // Défilement automatique jusqu'au bouton "Retourner aux apprentissages" une
   // fois une réponse VALIDÉE pour la première fois (demande du 31/08/2026) —
@@ -5315,9 +5468,22 @@
   // Silencieuse (rien affiché) pour tout QCM non "mesqcm"/non progressif,
   // sans voterKey, ou dont le targetLevel personnel est déjà atteint
   // (comportement historique inchangé dans tous ces cas).
-  function maybeShowProgressiveNextLevelHint() {
+  //
+  // precomputedData (demande du 07/09/2026, "sablier camembert tournant, le
+  // même que sur la page apprentissage") : quand finishCurrentBlockOrContinue
+  // a DÉJÀ interrogé level-status juste avant (pour décider d'enchaîner ou
+  // pas sur le niveau suivant), son résultat est transmis ici directement —
+  // jamais un second appel réseau redondant pour la même information.
+  // undefined (jamais appelé avec précompute) : comportement historique,
+  // fetch normal ci-dessous.
+  function maybeShowProgressiveNextLevelHint(precomputedData) {
     var hintEl = document.getElementById('qcm-progressive-next-hint');
-    if (!hintEl || !voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) return;
+    if (!hintEl) return;
+    if (precomputedData !== undefined) {
+      applyProgressiveNextLevelHint(hintEl, precomputedData);
+      return;
+    }
+    if (!voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) return;
     fetch(
       '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(currentSlot) +
       '&quizDate=' + encodeURIComponent(currentQuizDate) +
@@ -5333,14 +5499,64 @@
         // viennent de la route, jamais codés en dur ici) : s'applique aussi
         // bien à la fin d'Élémentaire qu'à la fin d'Approfondi, confirmé le
         // 07/09/2026.
-        if (!hintEl.isConnected || !data || !data.progressive || !data.nextLevel || data.nextLevelReady) return;
-        hintEl.textContent = 'La suite (' + (data.nextLevelLabel || data.nextLevel) + ') est en cours de création — reviens dans quelques instants.';
-        hintEl.hidden = false;
+        if (!hintEl.isConnected) return;
+        applyProgressiveNextLevelHint(hintEl, data);
       })
       .catch(function () {});
   }
+  // Même sablier tournant que "En cours de création" dans Mes apprentissages
+  // (cf. renderCreatingNotionQuizzesHtml, classe .qcm-loading-hourglass +
+  // /sablier-96.png) plutôt qu'un second composant visuel pour la même idée.
+  function applyProgressiveNextLevelHint(hintEl, data) {
+    if (!data || !data.progressive || !data.nextLevel || data.nextLevelReady) return;
+    hintEl.innerHTML = '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">' +
+      'La suite (' + escapeHtml(data.nextLevelLabel || data.nextLevel) + ') est en cours de création — reviens dans quelques instants.';
+    hintEl.hidden = false;
+    // Bascule automatique dès que prêt (demande du 07/09/2026, "dès que
+    // c'est prêt, le sablier arrête d'être visible et la question apparaît ?")
+    // : sans ce polling, un utilisateur qui reste sur cet écran de score
+    // n'aurait jamais su que la suite était devenue disponible sans quitter
+    // puis rouvrir le sujet — même cadence (8s) que
+    // checkPendingNotionQuizzesReadiness (script.js), qui fait déjà ça pour
+    // "Mes apprentissages en cours de création" ailleurs sur le site.
+    startProgressiveNextLevelPoll(hintEl, currentSlot, currentQuizDate);
+  }
+  var progressiveNextLevelPollTimer = null;
+  function stopProgressiveNextLevelPoll() {
+    if (progressiveNextLevelPollTimer) { clearInterval(progressiveNextLevelPollTimer); progressiveNextLevelPollTimer = null; }
+  }
+  function startProgressiveNextLevelPoll(hintEl, slotAtCall, dateAtCall) {
+    stopProgressiveNextLevelPoll();
+    progressiveNextLevelPollTimer = setInterval(function () {
+      // hintEl.isConnected : l'écran de score a pu être quitté ("Terminé",
+      // "Retourner aux apprentissages"...) sans que ce timer ait été arrêté
+      // explicitement — repli silencieux plutôt qu'un timer fantôme qui
+      // continuerait à interroger le serveur indéfiniment.
+      if (!hintEl.isConnected || currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) { stopProgressiveNextLevelPoll(); return; }
+      fetch(
+        '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(slotAtCall) +
+        '&quizDate=' + encodeURIComponent(dateAtCall) +
+        '&legacyKey=' + encodeURIComponent(voterKey),
+        { cache: 'no-store' }
+      )
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!hintEl.isConnected || currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) { stopProgressiveNextLevelPoll(); return; }
+          if (data && data.progressive && data.nextLevel && data.nextLevelReady) {
+            stopProgressiveNextLevelPoll();
+            continueToNextProgressiveLevel(slotAtCall, dateAtCall);
+          }
+        })
+        .catch(function () {});
+    }, 8000);
+  }
 
-  function renderFinalScore() {
+  // precomputedLevelStatus (demande du 07/09/2026) : résultat déjà connu de
+  // GET level-status quand on vient de finishCurrentBlockOrContinue (qui
+  // l'a interrogé pour décider de ne PAS enchaîner) — undefined dans tous
+  // les autres appels (ex. reprise d'un QCM déjà entièrement répondu au
+  // rechargement de page, cf. loadSlot), comportement inchangé.
+  function renderFinalScore(precomputedLevelStatus) {
     signalIframeReady();
     // Écran de score final : plus une question précise à l'image dédiée,
     // retour au fond uni (demande du 18/08/2026, même esprit que
@@ -5423,7 +5639,7 @@
       '<div class="qcm-final-actions">' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-finish-btn">Terminé</button>' +
       '</div>';
-    maybeShowProgressiveNextLevelHint();
+    maybeShowProgressiveNextLevelHint(precomputedLevelStatus);
 
     document.getElementById('qcm-finish-btn').onclick = function () {
       practiceMode = false;
@@ -5483,14 +5699,7 @@
       html += '<p class="qcm-fiche-meta">Chaîne : ' + escapeHtml(detail.sourceAuthor) + (detail.durationSeconds ? ' · ' + Math.ceil(Number(detail.durationSeconds) / 60) + ' min' : '') + '</p>';
     }
     if (detail.image && detail.image.url) {
-      var img = detail.image;
-      var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia')));
-      html += '<figure class="qcm-fiche-image">' +
-        '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(name) + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
-        (img.pageUrl
-          ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
-          : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
-        '</figure>';
+      html += buildFicheImageFigureHtml(detail.image, name);
     }
     (detail.sections || []).forEach(function (section) {
       if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
@@ -6197,13 +6406,23 @@
         // automatiquement (targetLevel, server.js) — jamais le niveau ouvert
         // immédiatement.
         var creationEndpoint = '/api/users/notion-quizzes/custom/progressive';
+        var creationPayload = { legacyKey: voterKey, topic: topic, level: level };
+        // Filet de secours (correctif du 07/09/2026, "violences d'extrême
+        // droite" jamais parti) : keepalive seul n'est pas fiable si l'app
+        // est quittée/masquée dans les toutes premières secondes, cf.
+        // armNotionQuizGenerationBeaconFallback dans script.min.js.
+        var disarmBeaconFallback = typeof window.mnoriaArmNotionQuizGenerationBeaconFallback === 'function'
+          ? window.mnoriaArmNotionQuizGenerationBeaconFallback(creationEndpoint, creationPayload)
+          : function () {};
 
         fetch(creationEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ legacyKey: voterKey, topic: topic, level: level })
+          keepalive: true,
+          body: JSON.stringify(creationPayload)
         })
           .then(function (res) {
+            disarmBeaconFallback();
             return res.text().then(function (body) {
               var data = null;
               try { data = body ? JSON.parse(body) : null; } catch (_) {}
@@ -6410,11 +6629,41 @@
     }
     listEl.addEventListener('scroll', updateExploreFadeHint, { passive: true });
 
-    function renderExploreList(items) {
+    // Un seul gabarit de bouton, réutilisé pour "Derniers apprentissages
+    // créés" ET pour la liste par thématique ci-dessous (demande du
+    // 07/09/2026) — jamais deux implémentations divergentes du même rendu.
+    function renderExploreItemHtml(item) {
+      var already = !!ownedSlots[item.slot];
+      var metaText = already ? 'Déjà dans ta liste' : (item.userCount + ' visiteur' + (item.userCount > 1 ? 's' : ''));
+      var count = Number(item.questionCount) || 0;
+      var countText = count + ' question' + (count > 1 ? 's' : '');
+      var queryHtml = item.searchTopic ? '<span class="qcm-explore-item-query">' + escapeHtml(item.searchTopic) + '</span>' : '';
+      return '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '"' + (already ? ' disabled' : '') + '>' +
+        '<span class="qcm-explore-item-label">' + escapeHtml(item.label) + '<span class="qcm-explore-item-count">' + escapeHtml(countText) + '</span>' + queryHtml + '</span>' +
+        '<span class="qcm-explore-item-meta">' + escapeHtml(metaText) + '</span>' +
+      '</button>';
+    }
+
+    function renderExploreList(items, latest, popular) {
       if (!items.length) {
         listEl.innerHTML = '<p class="qcm-state-message">Aucun sujet trouvé pour le moment.</p>';
         updateExploreFadeHint();
         return;
+      }
+      // "Derniers apprentissages créés" puis "Apprentissages populaires"
+      // (demande du 07/09/2026) : deux top 10 déjà calculés côté serveur (cf.
+      // GET .../explore), toujours EN PLUS de la liste par thématique
+      // ci-dessous, jamais à sa place — un même sujet peut donc apparaître
+      // jusqu'à trois fois (ici, dans les populaires, et dans son groupe
+      // thématique).
+      var html = '';
+      if (latest && latest.length) {
+        html += '<p class="qcm-explore-theme-heading">Derniers apprentissages créés</p>' +
+          latest.map(renderExploreItemHtml).join('');
+      }
+      if (popular && popular.length) {
+        html += '<p class="qcm-explore-theme-heading">Apprentissages populaires</p>' +
+          popular.map(renderExploreItemHtml).join('');
       }
       // Classés par thématique (demande du 30/08/2026, "la même que Ma
       // mémoire") : items déjà groupés par item.theme côté serveur (cf. GET
@@ -6422,24 +6671,16 @@
       // changement de thématique, jamais de logique de tri ici.
       var lastTheme;
       var hasSeenTheme = false;
-      listEl.innerHTML = items.map(function (item) {
+      html += items.map(function (item) {
         var themeHeadingHtml = '';
         if (!hasSeenTheme || item.theme !== lastTheme) {
           themeHeadingHtml = '<p class="qcm-explore-theme-heading">' + escapeHtml(item.theme || 'Autres sujets') + '</p>';
           lastTheme = item.theme;
           hasSeenTheme = true;
         }
-        var already = !!ownedSlots[item.slot];
-        var metaText = already ? 'Déjà dans ta liste' : (item.userCount + ' visiteur' + (item.userCount > 1 ? 's' : ''));
-        var count = Number(item.questionCount) || 0;
-        var countText = count + ' question' + (count > 1 ? 's' : '');
-        var queryHtml = item.searchTopic ? '<span class="qcm-explore-item-query">' + escapeHtml(item.searchTopic) + '</span>' : '';
-        return themeHeadingHtml +
-          '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '"' + (already ? ' disabled' : '') + '>' +
-          '<span class="qcm-explore-item-label">' + escapeHtml(item.label) + '<span class="qcm-explore-item-count">' + escapeHtml(countText) + '</span>' + queryHtml + '</span>' +
-          '<span class="qcm-explore-item-meta">' + escapeHtml(metaText) + '</span>' +
-        '</button>';
+        return themeHeadingHtml + renderExploreItemHtml(item);
       }).join('');
+      listEl.innerHTML = html;
       listEl.querySelectorAll('.qcm-explore-item:not(:disabled)').forEach(function (itemBtn) {
         itemBtn.addEventListener('click', function () {
           adoptExploreItem(itemBtn.getAttribute('data-slot'), itemBtn.getAttribute('data-quiz-date'), itemBtn);
@@ -6453,7 +6694,7 @@
       updateExploreFadeHint();
       fetch('/api/users/notion-quizzes/explore' + (search ? '?search=' + encodeURIComponent(search) : ''))
         .then(function (res) { return res.json(); })
-        .then(function (data) { renderExploreList(Array.isArray(data.items) ? data.items : []); })
+        .then(function (data) { renderExploreList(Array.isArray(data.items) ? data.items : [], Array.isArray(data.latest) ? data.latest : [], Array.isArray(data.popular) ? data.popular : []); })
         .catch(function () {
           listEl.innerHTML = '<p class="qcm-state-message">Impossible de charger la liste pour le moment.</p>';
           updateExploreFadeHint();
@@ -8286,14 +8527,25 @@
         '<p class="qcm-noes-frame"><i class="fa-solid fa-spinner fa-spin"></i> Noès prépare cette séance…</p>' +
       '</div>';
       buildAndShowModal(noesMediaHtml);
-      requestNoesVideo({ slot: q.slot, quizDate: q.quizDate }, document.getElementById(noesBodyId));
+      requestNoesVideo({ slot: q.slot, quizDate: q.quizDate, label: q.label || meta.label }, document.getElementById(noesBodyId));
       return;
     }
 
     // Image de la notion : préchargée (new Image(), pas juste sa donnée
     // JSON) avant d'ouvrir la fenêtre, quasi instantanée contrairement à
     // Noès — elle doit apparaître déjà là dès le premier rendu.
-    fetch('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(q.slot) + '&date=' + encodeURIComponent(q.quizDate) + '&legacyKey=' + encodeURIComponent(voterKey || ''), { cache: 'no-store' })
+    fetchFicheImageForNoesFallback(q).then(function (img) {
+      buildAndShowModal(img ? buildFicheImageFigureHtml(img, q.label || meta.label) : '');
+    });
+  }
+
+  // Image de la fiche (q = {slot, quizDate, ...}) : préchargée (new Image(),
+  // pas juste sa donnée JSON) pour n'afficher qu'une fois prête, jamais un
+  // <img> cassé le temps du chargement. Partagée entre le chemin normal
+  // "notion sans Noès" (openMesQcmActionMenu) et le repli "Noès
+  // indisponible" ci-dessous (demande du 07/09/2026).
+  function fetchFicheImageForNoesFallback(q) {
+    return fetch('/api/users/notion-quizzes/fiche?slot=' + encodeURIComponent(q.slot) + '&date=' + encodeURIComponent(q.quizDate) + '&legacyKey=' + encodeURIComponent(voterKey || ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         var img = data && data.sourceDetail && data.sourceDetail.image;
@@ -8305,20 +8557,7 @@
           preload.src = img.url;
         });
       })
-      .catch(function () { return null; })
-      .then(function (img) {
-        var imageHtml = '';
-        if (img) {
-          var captionText = 'Image : ' + (img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia')));
-          imageHtml = '<figure class="qcm-fiche-image">' +
-            '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(q.label || meta.label) + '" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
-            (img.pageUrl
-              ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
-              : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
-            '</figure>';
-        }
-        buildAndShowModal(imageHtml);
-      });
+      .catch(function () { return null; });
   }
 
   // Noès (intégration du 26/08/2026 ; fusionné dans la fiche complète le
@@ -8378,10 +8617,21 @@
       }, { once: true });
     }
   }
-  function showNoesError(bodyEl, message) {
+  // Repli image (demande du 07/09/2026, "remplace l'écran de Noès par
+  // l'image du QCM quand Noès n'est pas active") : toute indisponibilité de
+  // Noès (configuration absente, échec de génération, timeout, erreur
+  // réseau...) affiche désormais l'image de la notion — avec sa vraie
+  // légende Wikipedia quand elle existe, cf. buildFicheImageFigureHtml —
+  // plutôt qu'un texte d'erreur. `message` ne sert plus qu'en tout dernier
+  // recours, si la fiche elle-même n'a aucune image disponible.
+  function showNoesUnavailable(bodyEl, q, message) {
     if (!bodyEl || !document.body.contains(bodyEl)) return;
-    bodyEl.innerHTML = '<p class="qcm-noes-frame qcm-noes-status-error"><i class="fa-solid fa-triangle-exclamation"></i> ' +
-      escapeHtml(message || "Noès n'est pas disponible pour le moment.") + '</p>';
+    fetchFicheImageForNoesFallback(q).then(function (img) {
+      if (!bodyEl || !document.body.contains(bodyEl)) return;
+      if (img) { bodyEl.innerHTML = buildFicheImageFigureHtml(img, q.label || ''); return; }
+      bodyEl.innerHTML = '<p class="qcm-noes-frame qcm-noes-status-error"><i class="fa-solid fa-triangle-exclamation"></i> ' +
+        escapeHtml(message || "Noès n'est pas disponible pour le moment.") + '</p>';
+    });
   }
   function noesFailureMessage(errorStage, configurationIssue) {
     var messages = {
@@ -8396,7 +8646,7 @@
     }
     return messages[errorStage] || "Noès n'est pas disponible pour le moment.";
   }
-  function pollNoesVideoStatus(videoId, bodyEl) {
+  function pollNoesVideoStatus(videoId, bodyEl, q) {
     // bodyEl retiré du DOM = modale fermée entre-temps : on arrête le
     // polling au lieu de continuer à interroger le serveur pour rien (cf.
     // rapport d'audit section 9, "le client ferme la page" — le job RunPod
@@ -8406,13 +8656,13 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (!bodyEl || !document.body.contains(bodyEl)) return;
-        if (!data.ok) { showNoesError(bodyEl, data.error); return; }
+        if (!data.ok) { showNoesUnavailable(bodyEl, q, data.error); return; }
         if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl, data.subtitleCues); return; }
-        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
-        setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl); }, NOES_POLL_INTERVAL_MS);
+        if (data.status === 'failed') { showNoesUnavailable(bodyEl, q, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
+        setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl, q); }, NOES_POLL_INTERVAL_MS);
       })
       .catch(function () {
-        if (bodyEl && document.body.contains(bodyEl)) setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl); }, NOES_POLL_INTERVAL_MS);
+        if (bodyEl && document.body.contains(bodyEl)) setTimeout(function () { pollNoesVideoStatus(videoId, bodyEl, q); }, NOES_POLL_INTERVAL_MS);
       });
   }
   function requestNoesVideo(q, bodyEl) {
@@ -8424,13 +8674,13 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (!bodyEl || !document.body.contains(bodyEl)) return;
-        if (!data.ok) { showNoesError(bodyEl, data.error); return; }
+        if (!data.ok) { showNoesUnavailable(bodyEl, q, data.error); return; }
         if (data.status === 'ready') { showNoesVideo(bodyEl, data.outputUrl, data.subtitleCues); return; }
-        if (data.status === 'failed') { showNoesError(bodyEl, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
-        pollNoesVideoStatus(data.videoId, bodyEl);
+        if (data.status === 'failed') { showNoesUnavailable(bodyEl, q, noesFailureMessage(data.errorStage, data.configurationIssue)); return; }
+        pollNoesVideoStatus(data.videoId, bodyEl, q);
       })
       .catch(function () {
-        if (bodyEl && document.body.contains(bodyEl)) showNoesError(bodyEl, 'Erreur réseau.');
+        if (bodyEl && document.body.contains(bodyEl)) showNoesUnavailable(bodyEl, q, 'Erreur réseau.');
       });
   }
 
@@ -8588,6 +8838,11 @@
   // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
   // la place de "Connaissances" générique.
   function loadSlot(slotKey, quizDate, label) {
+    // Un nouveau QCM chargé rend obsolète tout polling "suite en cours de
+    // création" du précédent (cf. startProgressiveNextLevelPoll) — jamais
+    // laissé tourner jusqu'à sa propre détection isConnected/slot (jusqu'à
+    // 8s), autant l'arrêter tout de suite.
+    stopProgressiveNextLevelPoll();
     document.body.classList.remove('qcm-discover-overview');
     // Efface tout de suite l'image du QCM précédent (demande du 18/08/2026) :
     // sinon elle resterait affichée en fond le temps du fetch ci-dessous,
@@ -8603,6 +8858,7 @@
     var myToken = ++loadToken;
     currentSlot = slotKey;
     currentQuizDate = quizDate || null;
+    currentQuizLabel = label || null;
     currentCategory = slotKey === 'renforcement'
       ? 'renforcement'
       : (slotKey === 'comprendre' ? 'comprendre' : 'mesqcm');

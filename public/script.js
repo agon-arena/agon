@@ -966,7 +966,24 @@ function lsRemove(key) { try { localStorage.removeItem(key); } catch {} }
 // `slot` est connu avant l'appel (même convention que server.js) et permet à la page cible de
 // reconnaître le QCM dès qu'il apparaît dans GET /api/users/notion-quizzes.
 const MNORIA_PENDING_NOTION_QUIZZES_KEY = "mnoria_pending_notion_quizzes_v1";
+// Seuil "on abandonne et on prévient" (utilisé uniquement par
+// checkPendingNotionQuizzesReadiness, cf. plus bas) — largement au-dessus du
+// filet anti-orphelin serveur (15 min, cf. server.js NOTION_QUIZ_STALE_AFTER_MS)
+// pour lui laisser le temps de trancher lui-même si la génération a bien
+// démarré côté serveur.
 const MNORIA_PENDING_NOTION_QUIZ_MAX_AGE_MS = 30 * 60 * 1000;
+// Purge de pure hygiène (stockage uniquement, jamais un verdict) : correctif
+// du 07/09/2026 ("violences d'extrême droite" n'a jamais abouti ET jamais
+// prévenu) — avant, cette fonction supprimait silencieusement de
+// localStorage tout marqueur dépassant MNORIA_PENDING_NOTION_QUIZ_MAX_AGE_MS
+// SANS jamais reposer la question au serveur, ce qui pouvait faire
+// disparaître un marqueur "en création" sans le moindre message si
+// l'utilisateur revenait après ce délai (fetch jamais parti faute de
+// keepalive fiable sur mobile/PWA, cf. armNotionQuizGenerationBeaconFallback
+// plus bas). Le verdict "on abandonne" est désormais rendu UNIQUEMENT par
+// checkPendingNotionQuizzesReadiness, après une dernière tentative de
+// sondage — jamais ici, à la simple lecture.
+const MNORIA_PENDING_NOTION_QUIZ_HYGIENE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function readPendingNotionQuizGenerations() {
   let rows = [];
@@ -977,7 +994,7 @@ function readPendingNotionQuizGenerations() {
   const now = Date.now();
   const fresh = rows.filter((row) => row && row.slot && row.label
     && Number.isFinite(Number(row.startedAt))
-    && now - Number(row.startedAt) <= MNORIA_PENDING_NOTION_QUIZ_MAX_AGE_MS);
+    && now - Number(row.startedAt) <= MNORIA_PENDING_NOTION_QUIZ_HYGIENE_MAX_AGE_MS);
   if (fresh.length !== rows.length) lsSet(MNORIA_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(fresh));
   return fresh;
 }
@@ -1002,6 +1019,42 @@ function finishPendingNotionQuizGeneration(slot) {
 window.mnoriaGetPendingNotionQuizGenerations = readPendingNotionQuizGenerations;
 window.mnoriaStartPendingNotionQuizGeneration = startPendingNotionQuizGeneration;
 window.mnoriaFinishPendingNotionQuizGeneration = finishPendingNotionQuizGeneration;
+
+// Filet de secours à l'émission (correctif du 07/09/2026, "violences
+// d'extrême droite" jamais parti) : fetch({keepalive:true}) n'est PAS fiable
+// pour garantir l'envoi complet d'une requête si l'app est quittée/mise en
+// arrière-plan dans les toutes premières secondes, en particulier sur
+// mobile/PWA (iOS Safari/WKWebView). navigator.sendBeacon est l'API prévue
+// par les navigateurs précisément pour ce cas (tentative d'envoi garantie
+// même page en train d'être déchargée/masquée) — utilisée ici UNIQUEMENT en
+// filet de secours si la page se cache avant d'avoir reçu de réponse au
+// fetch normal, jamais à sa place : le fetch normal reste seul responsable
+// du chemin rapide (sujet déjà généré, réponse immédiate) et des erreurs
+// confirmées. Sans risque de double génération : le serveur dédoublonne déjà
+// les générations en cours par masterSlot
+// (_notionQuizMasterGenerationPromises, cf. server.js).
+// Retourne une fonction "désarmer" à appeler dès que le fetch normal se
+// termine (succès ou échec), pour ne jamais envoyer le beacon après coup.
+function armNotionQuizGenerationBeaconFallback(endpoint, payload) {
+  if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return () => {};
+  let armed = true;
+  const send = () => {
+    if (!armed) return;
+    armed = false;
+    try {
+      navigator.sendBeacon(endpoint, new Blob([JSON.stringify(payload)], { type: "application/json" }));
+    } catch {}
+  };
+  const onVisibilityChange = () => { if (document.visibilityState === "hidden") send(); };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("pagehide", send);
+  return () => {
+    armed = false;
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("pagehide", send);
+  };
+}
+window.mnoriaArmNotionQuizGenerationBeaconFallback = armNotionQuizGenerationBeaconFallback;
 
 // Prévient automatiquement, où que soit l'utilisateur sur le site, une fois
 // qu'un parcours d'apprentissage lancé en arrière-plan (Éclairages, un débat,
@@ -1110,12 +1163,25 @@ function checkPendingNotionQuizzesReadiness() {
       // déjà traité ce même slot pendant cet appel réseau — ne jamais
       // notifier deux fois le même parcours prêt, ni le même échec.
       const stillPending = readPendingNotionQuizGenerations();
+      const now = Date.now();
       pending.forEach((item) => {
         if (!stillPending.some((row) => row.slot === item.slot)) return;
         if (readySlots.has(item.slot)) {
           finishPendingNotionQuizGeneration(item.slot);
           showNotionQuizReadyAnnouncement(item.label, readyBySlot.get(item.slot) || {});
         } else if (failedSlots.has(item.slot)) {
+          finishPendingNotionQuizGeneration(item.slot);
+          showNotionQuizFailedAnnouncement(item.label);
+        } else if (now - (Number(item.startedAt) || 0) > MNORIA_PENDING_NOTION_QUIZ_MAX_AGE_MS) {
+          // Abandon actif (correctif du 07/09/2026, "violences d'extrême
+          // droite" jamais confirmée) : ni prêt ni échoué même après un
+          // sondage serveur qui a eu largement le temps de voir le filet
+          // anti-orphelin serveur (15 min) trancher si la génération avait
+          // seulement démarré. Ce silence prolongé ne peut venir que d'une
+          // requête jamais parvenue au serveur — on le traite donc comme un
+          // échec CONFIRMÉ ici (jamais dans readPendingNotionQuizGenerations,
+          // qui ne fait plus que de l'hygiène de stockage) pour ne plus
+          // jamais faire disparaître un marqueur sans un mot.
           finishPendingNotionQuizGeneration(item.slot);
           showNotionQuizFailedAnnouncement(item.label);
         }
@@ -26488,17 +26554,22 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
       if (pendingSlot) startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
       const explainer = showDebateNotionMemorizeExplainer(notionName, true);
 
-      fetchJSON(`${API}/users/notion-quizzes/custom/progressive`, {
+      const progressiveEndpoint = `${API}/users/notion-quizzes/custom/progressive`;
+      const progressivePayload = { legacyKey: voterKey, topic: notionName, level };
+      const disarmBeaconFallback = armNotionQuizGenerationBeaconFallback(progressiveEndpoint, progressivePayload);
+      fetchJSON(progressiveEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         keepalive: true,
-        body: JSON.stringify({ legacyKey: voterKey, topic: notionName, level })
+        body: JSON.stringify(progressivePayload)
       })
         .then(() => {
+          disarmBeaconFallback();
           if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
           explainer.ready();
         })
         .catch((error) => {
+          disarmBeaconFallback();
           // Distingue un échec réellement confirmé par le backend (réponse HTTP non-2xx
           // avec un vrai corps JSON de notre serveur, cf. fetchJSON plus haut : error.status
           // ET error.code sont alors renseignés) d'un cas ambigu — AbortError (fetchJSON

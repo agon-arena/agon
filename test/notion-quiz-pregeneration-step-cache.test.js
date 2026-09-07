@@ -10,6 +10,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const stepCache = require("../lib/notion-quiz-pregeneration-step-cache");
+const { makeFakeSupabase: makeMultiTableFakeSupabase } = require("./helpers/fake-supabase");
 
 function makeFakeSupabase(initialRows = []) {
   let rows = initialRows.map((r) => ({ ...r }));
@@ -210,4 +211,57 @@ test("resetFailedCallsForRetry : réinitialise à pending uniquement les appels 
   assert.equal(rows.find((r) => r.id === 1).batch_id, null);
   assert.equal(rows.find((r) => r.id === 2).status, "completed", "un appel déjà completed ne doit jamais être touché");
   assert.equal(rows.find((r) => r.id === 3).status, "failed", "un autre sujet (queue_id différent) ne doit jamais être affecté");
+});
+
+// ── Instrumentation coût Batch (demande explicite du 07/09/2026, "calculer
+// précisément le coût des QCM en batch et non-batch") : applyBatchResults
+// doit enregistrer chaque résultat dans ai_usage_log, isBatch:true, avec les
+// mêmes tokens réels que la réponse Batch — le fake multi-tables (contrairement
+// au fake mono-table utilisé par les tests ci-dessus) permet de vérifier
+// cette table séparément, `.insert()` y étant réellement supporté. ───────────
+
+test("applyBatchResults enregistre un succès dans ai_usage_log avec isBatch:true, le bon batch_id, et les tokens réels de la réponse Batch", async () => {
+  const supabase = makeMultiTableFakeSupabase({
+    notion_quiz_pregeneration_calls: [
+      { id: 1, queue_id: 42, call_key: "curriculum_generation", custom_id: "42:curriculum_generation:1", status: "batch_submitted", batch_id: "batch-1", request_payload: { model: "gpt-5.6-luna" } }
+    ]
+  });
+  const resultsByCustomId = new Map([
+    ["42:curriculum_generation:1", { ok: true, content: "{}", usage: { prompt_tokens: 500, completion_tokens: 200, prompt_tokens_details: { cached_tokens: 0 } } }]
+  ]);
+  await stepCache.applyBatchResults({ supabase, batchId: "batch-1", resultsByCustomId });
+  // recordAiUsage est fire-and-forget (jamais awaité par applyBatchResults,
+  // comme partout ailleurs dans le projet) : laisser le microtask s'exécuter.
+  await new Promise((resolve) => setImmediate(resolve));
+  const usageRows = supabase.rows("ai_usage_log");
+  assert.equal(usageRows.length, 1);
+  assert.equal(usageRows[0].feature, "curriculum_generation");
+  assert.equal(usageRows[0].model, "gpt-5.6-luna");
+  assert.equal(usageRows[0].input_tokens, 500);
+  assert.equal(usageRows[0].output_tokens, 200);
+  assert.equal(usageRows[0].is_batch, true);
+  assert.equal(usageRows[0].batch_id, "batch-1");
+  assert.equal(usageRows[0].generation_id, "42");
+  assert.equal(usageRows[0].success, true);
+  // Coût réel = tarif standard gpt-5.6-luna (0.20/1.20 par million) x remise
+  // Batch officielle -50%, jamais un chiffre différent inventé pour l'occasion.
+  assert.equal(usageRows[0].estimated_cost_usd, Math.round((500 / 1e6 * 0.20 + 200 / 1e6 * 1.20) * 0.5 * 1e8) / 1e8);
+});
+
+test("applyBatchResults enregistre un échec dans ai_usage_log (success:false, sans tokens) pour une requête Batch individuellement échouée", async () => {
+  const supabase = makeMultiTableFakeSupabase({
+    notion_quiz_pregeneration_calls: [
+      { id: 1, queue_id: 7, call_key: "elementary_fiche_generation", custom_id: "7:elementary_fiche_generation:1", status: "batch_submitted", batch_id: "batch-2", request_payload: { model: "gpt-5.6-luna" } }
+    ]
+  });
+  const resultsByCustomId = new Map([
+    ["7:elementary_fiche_generation:1", { ok: false, error: "Unsupported value: 'temperature'..." }]
+  ]);
+  await stepCache.applyBatchResults({ supabase, batchId: "batch-2", resultsByCustomId });
+  await new Promise((resolve) => setImmediate(resolve));
+  const usageRows = supabase.rows("ai_usage_log");
+  assert.equal(usageRows.length, 1);
+  assert.equal(usageRows[0].success, false);
+  assert.equal(usageRows[0].error, "Unsupported value: 'temperature'...");
+  assert.equal(usageRows[0].estimated_cost_usd, null, "aucun token connu pour une requête échouée -> coût inconnu, jamais 0");
 });

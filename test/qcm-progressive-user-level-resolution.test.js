@@ -30,7 +30,7 @@ const vm = require("vm");
 const SERVER_SOURCE = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
 
 const startMarker = 'const PROGRESSIVE_LEVEL_ORDER = ["elementaire", "avance", "expert"];';
-const endMarker = "async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel) {";
+const endMarker = "async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel, initialGrounding = null) {";
 const startIndex = SERVER_SOURCE.indexOf(startMarker);
 const endIndex = SERVER_SOURCE.indexOf(endMarker);
 if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {

@@ -153,7 +153,7 @@ test("buildGroundingText/buildIdentifiedSources utilisent selectRepresentativeEx
 // ── CHANTIER B — déduplication inter-niveaux ─────────────────────────────
 
 test("continueProgressiveGeneration : otherLevelsKnowledge est calculé à partir de LEVEL_RANK (rang STRICTEMENT inférieur), jamais un simple \"niveau différent\"", () => {
-  const fnIndex = SERVER_SOURCE.indexOf("async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel) {");
+  const fnIndex = SERVER_SOURCE.indexOf("async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel, initialGrounding = null) {");
   assert.ok(fnIndex > 0);
   const nextFnIndex = SERVER_SOURCE.indexOf("\nasync function ", fnIndex + 10);
   const fnBody = SERVER_SOURCE.slice(fnIndex, nextFnIndex > 0 ? nextFnIndex : fnIndex + 8000);
@@ -213,4 +213,42 @@ test("C. l'anti-distracteur mécanique et la diversification des sources restent
 test("C. topicValidation et l'evidence gate restent en place, jamais contournés par ce chantier", () => {
   assert.match(SERVER_SOURCE, /parseTopicValidationField/);
   assert.match(SERVER_SOURCE, /validateKnowledgeEvidence/);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// Réutilisation du grounding Élémentaire en continuation (07/09/2026,
+// "limiter le nombre de requêtes Brave" — 2 requêtes Brave par parcours
+// complet Élémentaire→Expert avant ce correctif, une par appel à
+// resolveWebSearchGrounding). Réduit à 1 dans le cas nominal (route HTTP
+// utilisateur, continuation déclenchée dans le même cycle que l'Élémentaire)
+// — comportement STRICTEMENT inchangé (résolution fraîche) pour tout appel
+// où le grounding initial n'est pas disponible (master déjà réutilisé,
+// driver de pré-génération sur un tick où l'Élémentaire a déjà été généré
+// précédemment).
+// ══════════════════════════════════════════════════════════════════════
+
+test("continueProgressiveGeneration accepte initialGrounding (optionnel, défaut null) et l'utilise à la place d'une résolution fraîche quand il est fourni", () => {
+  assert.match(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel, initialGrounding = null\) \{/);
+  const fnIndex = SERVER_SOURCE.indexOf("async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel, initialGrounding = null) {");
+  const nextFnIndex = SERVER_SOURCE.indexOf("\nasync function ", fnIndex + 10);
+  const fnBody = SERVER_SOURCE.slice(fnIndex, nextFnIndex > 0 ? nextFnIndex : fnIndex + 8000);
+  assert.match(fnBody, /const grounding = initialGrounding \|\| await resolveWebSearchGrounding\(apiKey, topic, id\);/);
+});
+
+test("ensureProgressiveElementaryGenerated renvoie le grounding résolu (chemin succès ET chemin course/conflit d'insertion), jamais persisté en base", () => {
+  const fnIndex = SERVER_SOURCE.indexOf("async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userId) {");
+  assert.ok(fnIndex > 0);
+  const nextFnIndex = SERVER_SOURCE.indexOf("\n// ── Continuation Phase 2", fnIndex);
+  const fnBody = SERVER_SOURCE.slice(fnIndex, nextFnIndex > 0 ? nextFnIndex : fnIndex + 12000);
+  assert.match(fnBody, /if \(!insertError\) return \{ questions, quizDate, slot: masterSlot, curriculum, progressiveStatus: "elementary_ready", degraded, grounding \};/);
+  assert.match(fnBody, /return \{ \.\.\.\(await resolveMasterInsertConflict\(masterSlot, questions, quizDate, \{ curriculum, progressiveStatus: "elementary_ready" \}\)\), grounding \};/);
+});
+
+test("POST /custom/progressive : elementaryGrounding reste null pour un master réutilisé (reused), et vaut result.grounding pour une génération fraîche — transmis à la continuation en arrière-plan", () => {
+  const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
+  assert.ok(routeIndex > 0);
+  const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 11000);
+  assert.match(routeBody, /let elementaryGrounding = null;/);
+  assert.match(routeBody, /elementaryGrounding = result\.grounding \|\| null;/);
+  assert.match(routeBody, /continueProgressiveGeneration\(masterSlot, topic, id, user\.id, "expert", elementaryGrounding\)/);
 });

@@ -115,7 +115,7 @@ test("la fiche de continuation (Deepening/Expert) reçoit le texte déjà écrit
 
 test("continueProgressiveGeneration existe, utilise son PROPRE verrou en mémoire (jamais le même Map que la génération initiale), et ne dépasse jamais targetLevel", () => {
   assert.match(SERVER_SOURCE, /const _notionQuizContinuationPromises = new Map\(\);/);
-  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
+  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel, initialGrounding = null\) \{/);
   // lockMap (07/09/2026, chantier "pré-génération en avance") : résout entre
   // _notionQuizContinuationPromises (chemin réel) et
   // _notionQuizPregenContinuationPromises (pré-génération) — jamais
@@ -141,7 +141,7 @@ test("continueProgressiveGeneration persiste progressive_status='deepening_ready
 // est toujours la concaténation de tous les blocs — seul le SUPPORT de
 // stockage change, jamais le contenu servi.
 test("continueProgressiveGeneration ne réécrit la fiche complète (mergedSourceDetail) QUE sur la question d'indice 0 — les autres gardent une version allégée (image uniquement)", () => {
-  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
+  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel, initialGrounding = null\) \{/);
   assert.match(body, /currentQuestions\.map\(\(q, index\) => \(\{\s*\n\s*\.\.\.q,\s*\n\s*sourceDetail: index === 0 \? mergedSourceDetail : slimSourceDetailForDuplicateQuestion\(mergedSourceDetail\)\s*\n\s*\}\)\)/);
   assert.match(body, /sourceDetail: slimSourceDetailForDuplicateQuestion\(mergedSourceDetail\)/);
   assert.doesNotMatch(body, /currentQuestions\.map\(\(q\) => \(\{ \.\.\.q, sourceDetail: mergedSourceDetail \}\)\)/);
@@ -165,7 +165,7 @@ test("GET .../fiche retrouve la fiche complète via findCanonicalSourceDetail su
 });
 
 test("un échec de vérification/génération d'un niveau interrompt proprement la continuation (break), jamais une boucle ou un retry supplémentaire", () => {
-  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
+  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel, initialGrounding = null\) \{/);
   const breakCount = (body.match(/\bbreak;/g) || []).length;
   assert.ok(breakCount >= 2, "au moins un point de sortie propre par cause d'échec (curriculum vide, 0 vérifié, génération échouée, persistance échouée)");
 });
@@ -212,7 +212,7 @@ test("POST /custom/progressive déclenche la continuation vers 'expert' en ARRI�
   const routeIndex = SERVER_SOURCE.indexOf('app.post("/api/users/notion-quizzes/custom/progressive"');
   const routeBody = SERVER_SOURCE.slice(routeIndex, routeIndex + 11000);
   const resIndex = routeBody.indexOf("res.json({");
-  const bgIndex = routeBody.indexOf('continueProgressiveGeneration(masterSlot, topic, id, user.id, "expert")');
+  const bgIndex = routeBody.indexOf('continueProgressiveGeneration(masterSlot, topic, id, user.id, "expert", elementaryGrounding)');
   assert.ok(resIndex > 0 && bgIndex > 0);
   assert.ok(bgIndex > resIndex, "la continuation vers expert doit être déclenchée APRÈS res.json (arrière-plan)");
   assert.match(routeBody.slice(bgIndex, bgIndex + 200), /\.catch\(/, "fire-and-forget : jamais awaité par la route");

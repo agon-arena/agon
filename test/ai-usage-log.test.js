@@ -235,3 +235,42 @@ test("G — tokens absents/partiels avec generation_id présent : coût null (ja
   assert.equal(row.estimated_cost_usd, null);
   assert.equal(row.input_tokens, null);
 });
+
+// ── Instrumentation coût Batch (demande explicite du 07/09/2026, "calculer
+// précisément le coût des QCM en batch et non-batch") ──────────────────────
+
+test("estimateCostUsd — isBatch applique exactement -50% (remise Batch officielle OpenAI), jamais un second barème de prix", () => {
+  const inputTokens = 10_000, outputTokens = 5_000;
+  const syncCost = estimateCostUsd("gpt-5.6-luna", { inputTokens, outputTokens });
+  const batchCost = estimateCostUsd("gpt-5.6-luna", { inputTokens, outputTokens, isBatch: true });
+  assert.equal(batchCost, Math.round(syncCost * 0.5 * 1e8) / 1e8);
+});
+
+test("estimateCostUsd — isBatch absent ou false : coût strictement identique au calcul synchrone existant (rétrocompatible)", () => {
+  const withoutFlag = estimateCostUsd("gpt-4o-mini", { inputTokens: 1000, outputTokens: 500 });
+  const withFalseFlag = estimateCostUsd("gpt-4o-mini", { inputTokens: 1000, outputTokens: 500, isBatch: false });
+  assert.equal(withoutFlag, withFalseFlag);
+});
+
+test("recordAiUsage — isBatch:true persiste is_batch=true, batch_id, et un coût réduit de moitié par rapport au même appel non-batch", async () => {
+  const supabaseSync = createFakeSupabase();
+  const supabaseBatch = createFakeSupabase();
+  const params = { feature: "curriculum_generation", model: "gpt-5.6-luna", inputTokens: 5396, outputTokens: 2348, cachedTokens: 0, success: true };
+  await recordAiUsage(supabaseSync, params);
+  await recordAiUsage(supabaseBatch, { ...params, isBatch: true, batchId: "batch_abc123" });
+  const syncRow = supabaseSync.inserted[0].row;
+  const batchRow = supabaseBatch.inserted[0].row;
+  assert.equal(syncRow.is_batch, false);
+  assert.equal(syncRow.batch_id, null);
+  assert.equal(batchRow.is_batch, true);
+  assert.equal(batchRow.batch_id, "batch_abc123");
+  assert.equal(batchRow.estimated_cost_usd, Math.round(syncRow.estimated_cost_usd * 0.5 * 1e8) / 1e8, "même tokens, même modèle -> coût Batch = exactement moitié du coût synchrone");
+});
+
+test("recordAiUsage — isBatch omis par défaut à false (rétrocompatible avec tous les appelants existants, jamais de migration de code nécessaire)", async () => {
+  const supabase = createFakeSupabase();
+  await recordAiUsage(supabase, { feature: "veille_deduplication", model: "gpt-4o-mini", inputTokens: 10, outputTokens: 10, success: true });
+  const row = supabase.inserted[0].row;
+  assert.equal(row.is_batch, false);
+  assert.equal(row.batch_id, null);
+});

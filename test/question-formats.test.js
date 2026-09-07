@@ -1349,10 +1349,20 @@ test("isMasterEligibleQuiz : progressiveStatus='deepening_ready' exige (elementa
   assert.equal(isMasterEligibleQuiz(Array.from({ length: 7 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "deepening_ready", curriculum }), false);
 });
 
-test("isMasterEligibleQuiz : progressiveStatus='ready' retombe sur le même seuil que le master legacy (MIN_MASTER_QUESTIONS=15), indépendamment du curriculum", () => {
+// Bug constaté lors du canari de pré-génération Batch du 07/09/2026 (sujet
+// réel "La photosynthèse", 14 questions cumulées, progressive_status="ready"
+// refusé comme non éligible) : exiger encore MIN_MASTER_QUESTIONS=15 pour un
+// master DÉJÀ "ready" empêchait toute réutilisation alors que chaque niveau
+// a déjà sa propre validation de suffisance avant d'atteindre "ready". Confirmé
+// pas spécifique au Batch (un master "ready" synchrone à 11 questions
+// cumulées avait le même défaut) — corrigé pour ne plus dépendre d'un compte
+// total, seulement de la validation par niveau déjà faite en amont.
+test("isMasterEligibleQuiz : progressiveStatus='ready' est TOUJOURS éligible dès qu'il a au moins une question valide, quel que soit le nombre total cumulé (plus de seuil MIN_MASTER_QUESTIONS=15 pour un master progressif)", () => {
   const curriculum = curriculumWithLevelCounts({ elementary: 4, deepening: 4, expert: 7 }); // ne doit jamais être utilisé pour "ready"
   assert.equal(isMasterEligibleQuiz(Array.from({ length: 15 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "ready", curriculum }), true);
-  assert.equal(isMasterEligibleQuiz(Array.from({ length: 14 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "ready", curriculum }), false);
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 14 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "ready", curriculum }), true, "cas réel \"La photosynthèse\" (4+3+7=14) doit désormais être éligible");
+  assert.equal(isMasterEligibleQuiz(Array.from({ length: 1 }, (_, i) => ({ pedagogicalRank: i + 1 })), { progressiveStatus: "ready", curriculum }), true, "même une seule question suffit pour un master déjà ready");
+  assert.equal(isMasterEligibleQuiz([], { progressiveStatus: "ready", curriculum }), false, "une liste vide reste inéligible (garde générale, jamais contournée)");
 });
 
 test("isMasterEligibleQuiz : curriculum absent/vide avec progressiveStatus='elementary_ready' retombe sur le repli défensif MIN_ELEMENTARY_READY_QUESTIONS (4) — cas censé ne jamais se produire en pratique", () => {

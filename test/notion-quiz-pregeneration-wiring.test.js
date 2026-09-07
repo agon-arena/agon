@@ -65,7 +65,7 @@ test("ensureProgressiveElementaryGenerated utilise un verrou SÉPARÉ (_notionQu
 });
 
 test("continueProgressiveGeneration utilise un verrou SÉPARÉ (_notionQuizPregenContinuationPromises) en contexte de pré-génération", () => {
-  const idx = SERVER_SOURCE.indexOf("async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel) {");
+  const idx = SERVER_SOURCE.indexOf("async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel, initialGrounding = null) {");
   assert.ok(idx > 0);
   const body = SERVER_SOURCE.slice(idx, idx + 700);
   assert.match(body, /const lockMap = pregenStore \? _notionQuizPregenContinuationPromises : _notionQuizContinuationPromises;/);

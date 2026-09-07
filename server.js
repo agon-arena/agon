@@ -16273,12 +16273,23 @@ async function findExistingQuizMaster(candidateSlots) {
   for (const row of rows || []) {
     const { data: fullRow, error: fullError } = await supabase
       .from("daily_quiz")
-      .select("questions, progressive_status")
+      .select("questions, progressive_status, curriculum")
       .eq("slot", row.slot)
       .eq("quiz_date", row.quiz_date)
       .maybeSingle();
     if (fullError) throw new Error(fullError.message);
-    if (isMasterEligibleQuiz(fullRow?.questions)) {
+    // Bug constaté lors du canari de pré-génération Batch du 07/09/2026 :
+    // cet appel n'a JAMAIS transmis le contexte progressif (progressiveStatus/
+    // curriculum) à isMasterEligibleQuiz, contrairement à la route utilisateur
+    // réelle (server.js, /custom/progressive) — un master progressif
+    // elementary_ready/deepening_ready/ready retombait donc systématiquement
+    // sur le seuil legacy MIN_MASTER_QUESTIONS (15), bien plus strict que le
+    // seuil réellement applicable à son propre statut. Résultat concret :
+    // findExistingQuizMaster (utilisé par l'enqueue de pré-génération ET la
+    // Course 4 du scheduler) pouvait juger "absent du catalogue" un sujet
+    // pourtant déjà généré et servable — jamais cohérent avec ce que la route
+    // utilisateur elle-même déciderait pour LE MÊME master.
+    if (isMasterEligibleQuiz(fullRow?.questions, { progressiveStatus: fullRow?.progressive_status, curriculum: fullRow?.curriculum })) {
       return { slot: row.slot, quizDate: row.quiz_date, questions: fullRow.questions, progressiveStatus: fullRow.progressive_status };
     }
   }
@@ -19949,11 +19960,25 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       hasIndependentSource: !!grounding?.identifiedSources?.length,
       reviewFeature: "elementary_semantic_review_shadow"
     });
-    if (!insertError) return { questions, quizDate, slot: masterSlot, curriculum, progressiveStatus: "elementary_ready", degraded };
+    // grounding (audit qualité éditoriale du 07/09/2026, "limiter le nombre
+    // de requêtes Brave" — cf. commentaire "grounding_full envisagée puis
+    // ABANDONNÉE" plus haut, qui identifiait déjà cette économie comme
+    // valide mais non prioritaire au moment de sa rédaction) : renvoyé ici
+    // en PLUS des champs existants, jamais persisté (aucune colonne, aucune
+    // migration — un simple passage en mémoire, valable UNIQUEMENT tant que
+    // l'appelant enchaîne lui-même sur continueProgressiveGeneration dans le
+    // même cycle, cf. son paramètre `initialGrounding`). Sûr par construction
+    // : depuis que resolveProgressiveCurriculum evidence-gate tous les
+    // niveaux immédiatement et que continueProgressiveGeneration ne re-gate
+    // jamais un item déjà `verified` (paramètre `preAccepted`), réutiliser CE
+    // grounding plutôt qu'une résolution fraîche est même PLUS cohérent
+    // (mêmes sources, au caractère près, jamais un mélange possible entre
+    // deux résolutions indépendantes de la même requête).
+    if (!insertError) return { questions, quizDate, slot: masterSlot, curriculum, progressiveStatus: "elementary_ready", degraded, grounding };
     if (insertError.code !== "23505") throw new Error(insertError.message);
     // Course avec un autre worker (legacy OU progressif) ayant démarré une
     // génération sur le même sujet entre-temps.
-    return resolveMasterInsertConflict(masterSlot, questions, quizDate, { curriculum, progressiveStatus: "elementary_ready" });
+    return { ...(await resolveMasterInsertConflict(masterSlot, questions, quizDate, { curriculum, progressiveStatus: "elementary_ready" })), grounding };
   })();
   lockMap.set(masterSlot, generation);
   try {
@@ -20064,7 +20089,15 @@ function resolveTargetLevelOnRequest(existingTargetLevel, pickedLevel) {
   return PROGRESSIVE_LEVEL_ORDER.indexOf(pickedLevel) > PROGRESSIVE_LEVEL_ORDER.indexOf(existingTargetLevel) ? pickedLevel : existingTargetLevel;
 }
 
-async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel) {
+// initialGrounding (audit qualité éditoriale du 07/09/2026, "limiter le
+// nombre de requêtes Brave") : optionnel, le grounding DÉJÀ résolu par
+// ensureProgressiveElementaryGenerated pour ce même sujet, quand l'appelant
+// enchaîne directement dessus (route HTTP, driver de pré-génération — cf.
+// leurs commentaires respectifs). Absent (comportement de tout appelant
+// historique, et de tout appel où l'Élémentaire n'a pas été généré dans ce
+// même cycle, ex. master déjà existant repris tel quel) : résolution
+// FRAÎCHE inchangée au caractère près, jamais un comportement différent.
+async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel, initialGrounding = null) {
   const targetRank = progressiveLevelRank(targetLevel);
   if (targetRank <= 0) return null; // "elementaire" seul : rien à continuer ici.
 
@@ -20110,10 +20143,19 @@ async function continueProgressiveGeneration(masterSlot, topic, id, userId, targ
     // groundingText pour la rédaction de la fiche de continuation et (b),
     // le cas échéant, gater les ÉVENTUELS ajouts de réparation, contre
     // LEURS PROPRES sources fraîches (toujours cohérent avec lui-même,
-    // jamais un mélange). Coût accepté car cette continuation tourne en
-    // arrière-plan, jamais sur le chemin critique Élémentaire.
+    // jamais un mélange).
+    // initialGrounding, quand fourni (07/09/2026) : réutilisé TEL QUEL au
+    // lieu d'une résolution fraîche — économise une requête Brave complète
+    // (recherche + éventuelle relance d'autorité) sans jamais rien changer
+    // à la correction (mêmes deux usages (a)/(b) ci-dessus, servis tout
+    // aussi correctement par le grounding d'origine — voire plus cohérent,
+    // puisqu'il s'agit alors littéralement du même objet, jamais de deux
+    // résolutions indépendantes de la même requête qui pourraient diverger
+    // légèrement). Coût accepté SANS réutilisation (repli sur une résolution
+    // fraîche) car cette continuation tourne en arrière-plan, jamais sur le
+    // chemin critique Élémentaire.
     const groundingStartedAt = Date.now();
-    const grounding = await resolveWebSearchGrounding(apiKey, topic, id);
+    const grounding = initialGrounding || await resolveWebSearchGrounding(apiKey, topic, id);
     const groundingMs = Date.now() - groundingStartedAt;
 
     let priorSectionsText = flattenFicheSectionsText(currentQuestions[0]?.sourceDetail?.sections);
@@ -20830,6 +20872,11 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
     let curriculum = null;
     let progressiveStatus = null;
     let reused = false;
+    // elementaryGrounding (07/09/2026, "limiter le nombre de requêtes
+    // Brave") : reste `null` pour un master réutilisé (`reused`, aucune
+    // génération Élémentaire dans ce cycle — comportement inchangé, la
+    // continuation ci-dessous résoudra son propre grounding comme avant).
+    let elementaryGrounding = null;
     if (existingRow && isMasterEligibleQuiz(existingRow.questions, { progressiveStatus: existingRow.progressive_status, curriculum: existingRow.curriculum })) {
       questions = existingRow.questions || [];
       quizDate = existingRow.quiz_date;
@@ -20857,6 +20904,7 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
       quizDate = result.quizDate;
       curriculum = result.curriculum || null;
       progressiveStatus = result.progressiveStatus || null;
+      elementaryGrounding = result.grounding || null;
     }
 
     // Plus de continuation SYNCHRONE ici (Phase 3, 06/09/2026 — "ne jamais
@@ -20920,9 +20968,27 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
     // réponse ci-dessus. No-op immédiat si Expert est déjà atteint (cf.
     // continueProgressiveGeneration, `targetRank<=currentRank`).
     if (progressiveStatus && progressiveStatus !== "ready") {
-      continueProgressiveGeneration(masterSlot, topic, id, user.id, "expert").catch((error) => {
+      continueProgressiveGeneration(masterSlot, topic, id, user.id, "expert", elementaryGrounding).catch((error) => {
         console.error(`[notion-quizzes:progressive-continuation:${id}] échec arrière-plan :`, error.message);
       });
+    }
+
+    // Notification push (demande du 07/09/2026, "envoyer un message quand
+    // c'est prêt, comme quand on lance une génération IA") : même mécanisme
+    // que POST .../custom ci-dessus (cf. server.js:20738), jusqu'ici absent
+    // de cette route progressive alors qu'elle est celle réellement utilisée
+    // par "Approfondir/Mémoriser" sur une arène — uniquement pour une
+    // génération fraîche (jamais `reused`, où la réponse est déjà instantanée
+    // et l'utilisateur reste sur place). createNotification gère déjà
+    // l'insert in-app ET l'envoi Web Push réel (cf. server.js:4376).
+    if (!reused) {
+      const readyLabel = servedQuestions[0]?.sourceName || questions[0]?.sourceName || topic;
+      const readyCount = servedQuestions.length;
+      createNotification({
+        user_key: validation.legacyKey,
+        type: "notion_quiz_ready",
+        message: `« ${readyLabel} » est prêt, ${readyCount} question${readyCount > 1 ? "s" : ""} à mémoriser.`
+      }).catch((error) => console.error(`[notion-quizzes:progressive:${id}] notification push :`, error.message));
     }
   } catch (error) {
     const publicError = publicGenerationError("STORAGE_TEMPORARY");
@@ -21107,6 +21173,27 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
       userCount: userCountBySlot.get(item.slot) || 0
     }));
 
+    // "Derniers apprentissages créés" (demande du 07/09/2026, section
+    // affichée EN PLUS de la liste par thématique ci-dessous, jamais à sa
+    // place) : les 10 sujets les plus récemment créés (quizDate, copie
+    // AVANT le tri par thématique ci-dessous qui mute `items` en place),
+    // puis reclassés entre eux par popularité (userCount) — jamais par date
+    // une fois la sélection des 10 faite. Départage par slot en cas de
+    // quizDate strictement égale (déterministe, jamais un ordre qui varie
+    // d'un appel à l'autre).
+    const latest = [...items]
+      .sort((a, b) => (a.quizDate < b.quizDate ? 1 : a.quizDate > b.quizDate ? -1 : a.slot.localeCompare(b.slot)))
+      .slice(0, 10)
+      .sort((a, b) => b.userCount - a.userCount || a.label.localeCompare(b.label));
+
+    // "Apprentissages populaires" (demande du 07/09/2026, même principe que
+    // "Derniers apprentissages créés" ci-dessus) : les 10 sujets ayant le
+    // plus de visiteurs (userCount), tous thèmes confondus — copie
+    // indépendante, jamais affectée par le tri par thématique ci-dessous.
+    const popular = [...items]
+      .sort((a, b) => b.userCount - a.userCount || a.label.localeCompare(b.label))
+      .slice(0, 10);
+
     // Groupées par thématique (sujets sans thématique en dernier), puis même
     // ordre qu'avant (popularité, puis alphabétique) au sein d'un groupe.
     items.sort((a, b) => {
@@ -21118,7 +21205,7 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
       return b.userCount - a.userCount || a.label.localeCompare(b.label);
     });
 
-    res.json({ ok: true, items });
+    res.json({ ok: true, items, latest, popular });
   } catch (error) {
     console.error("[notion-quizzes] exploration :", error.message);
     res.status(500).json({ ok: false, items: [], error: error.message });

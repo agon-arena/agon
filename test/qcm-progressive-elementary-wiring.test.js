@@ -188,7 +188,7 @@ test("ensureProgressiveElementaryGenerated réutilise _notionQuizMasterGeneratio
 
 test("continueProgressiveGeneration utilise son PROPRE verrou en mémoire, distinct de celui de la génération initiale — jamais le même Map, y compris en pré-génération", () => {
   assert.match(SERVER_SOURCE, /const _notionQuizContinuationPromises = new Map\(\);/);
-  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
+  const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel, initialGrounding = null\) \{/);
   assert.match(body, /const lockMap = pregenStore \? _notionQuizPregenContinuationPromises : _notionQuizContinuationPromises;/);
   assert.match(body, /const pending = lockMap\.get\(masterSlot\);/);
   assert.doesNotMatch(body, /_notionQuizMasterGenerationPromises/);
@@ -264,9 +264,16 @@ test("MIN_MASTER_QUESTIONS n'est jamais réassigné ni redéfini dans server.js 
   assert.equal(assignments.length, 0, "MIN_MASTER_QUESTIONS ne doit jamais être réassigné — seul progressiveEligibilityMinimum introduit un seuil progressif dérivé du curriculum, dans lib/question-formats.js");
 });
 
-test("progressiveEligibilityMinimum (lib/question-formats.js) n'écrase jamais MIN_MASTER_QUESTIONS : 'ready' pointe explicitement dessus", () => {
+// Corrigé le 07/09/2026 (canari de pré-génération Batch, sujet réel "La
+// photosynthèse" à 14 questions cumulées refusé comme non éligible) : un
+// master progressif "ready" n'exige plus MIN_MASTER_QUESTIONS=15 — chaque
+// niveau a déjà sa propre validation de suffisance avant d'atteindre
+// "ready" ; ce seuil ne s'applique plus qu'au master legacy (progressiveStatus
+// absent), jamais réassigné lui-même (cf. test précédent).
+test("progressiveEligibilityMinimum (lib/question-formats.js) : 'ready' n'exige plus MIN_MASTER_QUESTIONS (toujours éligible dès qu'il a au moins une question valide)", () => {
   const questionFormatsSource = fs.readFileSync(path.join(__dirname, "../lib/question-formats.js"), "utf8");
-  assert.match(questionFormatsSource, /if \(progressiveStatus === "ready"\) return MIN_MASTER_QUESTIONS;/);
+  assert.match(questionFormatsSource, /if \(progressiveStatus === "ready"\) return 1;/);
+  assert.doesNotMatch(questionFormatsSource, /if \(progressiveStatus === "ready"\) return MIN_MASTER_QUESTIONS;/);
 });
 
 // ── generateNotionLevelQuiz / buildCustomTopicQuiz / ensureCustomTopicMasterGenerated : non touchés ──

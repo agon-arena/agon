@@ -74,8 +74,8 @@ test("Site 3/6 — POST /api/users/notion-quizzes/custom propage progressiveStat
 test("findExistingQuizMaster et findEquivalentGeneratedCustomTopic renvoient progressiveStatus (colonne progressive_status sélectionnée)", () => {
   const findMasterIndex = SERVER_SOURCE.indexOf("async function findExistingQuizMaster(candidateSlots) {");
   assert.ok(findMasterIndex > 0);
-  const findMasterBody = SERVER_SOURCE.slice(findMasterIndex, findMasterIndex + 1200);
-  assert.match(findMasterBody, /\.select\("questions, progressive_status"\)/);
+  const findMasterBody = SERVER_SOURCE.slice(findMasterIndex, findMasterIndex + 2200);
+  assert.match(findMasterBody, /\.select\("questions, progressive_status, curriculum"\)/);
   assert.match(findMasterBody, /progressiveStatus: fullRow\.progressive_status/);
 
   const findEquivIndex = SERVER_SOURCE.indexOf("async function findEquivalentGeneratedCustomTopic(topic, level) {");

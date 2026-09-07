@@ -30,3 +30,15 @@ ALTER TABLE ai_usage_log ADD COLUMN IF NOT EXISTS generation_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_log_generation_id
   ON ai_usage_log (generation_id) WHERE generation_id IS NOT NULL;
+
+-- Instrumentation coût Batch (chantier pré-génération, 07/09/2026) : distingue
+-- un appel facturé au tarif Batch officiel OpenAI (-50%, cf.
+-- lib/ai-usage-log.js OPENAI_BATCH_DISCOUNT) d'un appel synchrone classique,
+-- pour calculer précisément le coût réel batch vs non-batch (même feature,
+-- même modèle) sans recalcul manuel après coup. batch_id permet de retrouver
+-- le Batch OpenAI d'origine pour un audit précis d'une ligne donnée.
+ALTER TABLE ai_usage_log ADD COLUMN IF NOT EXISTS is_batch BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE ai_usage_log ADD COLUMN IF NOT EXISTS batch_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_log_is_batch
+  ON ai_usage_log (feature, is_batch, created_at DESC);

@@ -56,7 +56,7 @@ test("les 3 blocs progressifs (elementaire/avance/expert) sont bien générés v
 });
 
 test("la fusion cumulative (continueProgressiveGeneration) concatène les sections déjà tronquées par phrase sans jamais les re-découper (aucun .slice sur .text dans la fusion)", () => {
-  const fnIndex = SERVER_SOURCE.indexOf("async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel) {");
+  const fnIndex = SERVER_SOURCE.indexOf("async function continueProgressiveGeneration(masterSlot, topic, id, userId, targetLevel, initialGrounding = null) {");
   assert.ok(fnIndex > 0);
   const nextFnIndex = SERVER_SOURCE.indexOf("\nasync function ", fnIndex + 10);
   const fnBody = SERVER_SOURCE.slice(fnIndex, nextFnIndex > 0 ? nextFnIndex : fnIndex + 6000);

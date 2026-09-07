@@ -39,13 +39,15 @@ test("buildNotionMasterSlot construit un slot nu (notion:{sourceType}:{sourceDeb
 test("findExistingQuizMaster filtre les candidats par isMasterEligibleQuiz (jamais un simple exact-match aveugle)", () => {
   const fnIndex = SERVER_SOURCE.indexOf("async function findExistingQuizMaster(candidateSlots) {");
   assert.ok(fnIndex > 0);
-  const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 800);
+  const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 1800);
   assert.match(fnBody, /\.in\("slot", candidateSlots\)/, "doit chercher parmi TOUS les slots candidats (nu + legacy suffixés), pas un seul");
   // Lecture en 2 temps depuis l'audit egress du 01/09/2026 (cf.
   // test/daily-quiz-egress-v1.test.js) : `questions` n'est plus dans le
   // select initial, l'éligibilité est vérifiée sur la relecture ciblée
   // (fullRow) — même garde-fou qu'avant, jamais un simple exact-match aveugle.
-  assert.match(fnBody, /if \(isMasterEligibleQuiz\(fullRow\?\.questions\)\)/, "un candidat trouvé ne doit être retenu comme master que s'il porte pedagogicalRank");
+  // Contexte progressif (progressiveStatus/curriculum) transmis depuis le
+  // 07/09/2026 (canari de pré-génération Batch), cf. test/daily-quiz-egress-v1.test.js.
+  assert.match(fnBody, /if \(isMasterEligibleQuiz\(fullRow\?\.questions, \{ progressiveStatus: fullRow\?\.progressive_status, curriculum: fullRow\?\.curriculum \}\)\)/, "un candidat trouvé ne doit être retenu comme master que s'il porte pedagogicalRank ET respecte le seuil de son propre statut progressif");
 });
 
 test("POST /api/users/notion-quizzes/custom interroge findExistingQuizMaster avec le slot nu ET les 3 slots legacy suffixés, avant toute autre réutilisation", () => {
