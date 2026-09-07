@@ -51,9 +51,11 @@ const CUSTOM_TOPIC_SOURCE = extract(
 
 // Bloc 3 : activateDebateNotion (public/script.js) — chemin analogue "Mémoriser" sur une notion
 // de débat, qui utilise fetchJSON (timeout client par défaut 12s) au lieu du fetch brut ci-dessus.
+// Démarre à computeCustomTopicKey (chantier "catalogue commun" du 07/09/2026) : activateDebateNotion
+// en dépend directement pour dériver la même clé que normalizeCustomTopicKey (server.js).
 const ACTIVATE_DEBATE_NOTION_SOURCE = extract(
   SCRIPT_SOURCE,
-  "function activateDebateNotion(btn, voterKey, debateId, quizDate) {",
+  "function computeCustomTopicKey(topic) {",
   "\nfunction renderDebateNotions("
 );
 
@@ -302,7 +304,12 @@ test("polling generation-status : failed QCM_UNUSABLE → message rouge affiché
 function makeActivateDebateNotionSandbox() {
   const calls = { start: [], finish: [], ready: [], failed: [] };
   const btn = makeFakeElement();
-  btn.setAttribute("data-notion-slug", "notion-slug");
+  // data-notion-name (chantier "catalogue commun" du 07/09/2026) : identité
+  // désormais portée par le NOM de la notion, jamais plus par son slug —
+  // computeCustomTopicKey en dérive la même clé que normalizeCustomTopicKey
+  // (server.js), condition sine qua non pour que activateDebateNotion ne
+  // sorte pas tôt (garde `if (!voterKey || !notionName) return;`).
+  btn.setAttribute("data-notion-name", "Donald Trump");
 
   const sandbox = {
     console,
@@ -316,8 +323,16 @@ function makeActivateDebateNotionSandbox() {
         failed: () => calls.failed.push(true)
       };
     },
+    // window.crypto/TextEncoder (computeCustomTopicKey) : absents par défaut
+    // d'un contexte vm isolé (contrairement à un vrai navigateur) — fournis
+    // ici via l'implémentation Node réelle plutôt qu'un mock, pour exercer
+    // le VRAI calcul de hash, comme le fait déjà getCustomTopicPendingSlot
+    // (views/qcm-du-jour.html) dans son propre test.
+    crypto: require("node:crypto").webcrypto,
+    TextEncoder,
     fetchJSON: undefined // fourni par chaque test
   };
+  sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(ACTIVATE_DEBATE_NOTION_SOURCE, sandbox);
   return { sandbox, calls, btn };
@@ -328,8 +343,10 @@ test("activateDebateNotion — succès : marqueur retiré, explainer.ready()", a
   sandbox.fetchJSON = async () => ({ ok: true });
 
   sandbox.activateDebateNotion(btn, "voter-key", "debate-1", "2026-09-02");
-  await new Promise((r) => setImmediate(r));
-  await new Promise((r) => setImmediate(r));
+  // computeCustomTopicKey (digest crypto réel, cf. sandbox ci-dessus) ajoute
+  // un aller-retour asynchrone supplémentaire avant même l'appel fetchJSON —
+  // marge de ticks plus large que l'ancien flux synchrone.
+  for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r));
 
   assert.equal(calls.finish.length, 1);
   assert.deepEqual(calls.ready, [true]);
@@ -343,8 +360,10 @@ test("activateDebateNotion — coupure réseau/timeout (pas de error.status) : j
   sandbox.fetchJSON = async () => { throw abortError; };
 
   sandbox.activateDebateNotion(btn, "voter-key", "debate-1", "2026-09-02");
-  await new Promise((r) => setImmediate(r));
-  await new Promise((r) => setImmediate(r));
+  // computeCustomTopicKey (digest crypto réel, cf. sandbox ci-dessus) ajoute
+  // un aller-retour asynchrone supplémentaire avant même l'appel fetchJSON —
+  // marge de ticks plus large que l'ancien flux synchrone.
+  for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r));
 
   assert.equal(calls.finish.length, 0, "le marqueur en cours ne doit pas être retiré sur un état inconnu");
   assert.equal(calls.failed.length, 0, "explainer.failed() ne doit pas être appelé sur un état inconnu");
@@ -362,8 +381,10 @@ test("activateDebateNotion — échec confirmé par une vraie réponse HTTP d'er
   sandbox.fetchJSON = async () => { throw httpError; };
 
   sandbox.activateDebateNotion(btn, "voter-key", "debate-1", "2026-09-02");
-  await new Promise((r) => setImmediate(r));
-  await new Promise((r) => setImmediate(r));
+  // computeCustomTopicKey (digest crypto réel, cf. sandbox ci-dessus) ajoute
+  // un aller-retour asynchrone supplémentaire avant même l'appel fetchJSON —
+  // marge de ticks plus large que l'ancien flux synchrone.
+  for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r));
 
   assert.equal(calls.finish.length, 1, "un échec confirmé par une vraie réponse HTTP doit retirer le marqueur");
   assert.deepEqual(calls.failed, [true]);

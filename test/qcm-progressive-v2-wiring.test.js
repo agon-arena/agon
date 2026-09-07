@@ -116,7 +116,13 @@ test("la fiche de continuation (Deepening/Expert) reçoit le texte déjà écrit
 test("continueProgressiveGeneration existe, utilise son PROPRE verrou en mémoire (jamais le même Map que la génération initiale), et ne dépasse jamais targetLevel", () => {
   assert.match(SERVER_SOURCE, /const _notionQuizContinuationPromises = new Map\(\);/);
   const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
-  assert.match(body, /_notionQuizContinuationPromises\.get\(masterSlot\)/);
+  // lockMap (07/09/2026, chantier "pré-génération en avance") : résout entre
+  // _notionQuizContinuationPromises (chemin réel) et
+  // _notionQuizPregenContinuationPromises (pré-génération) — jamais
+  // _notionQuizMasterGenerationPromises, cf. test dédié dans
+  // qcm-progressive-elementary-wiring.test.js.
+  assert.match(body, /const lockMap = pregenStore \? _notionQuizPregenContinuationPromises : _notionQuizContinuationPromises;/);
+  assert.match(body, /const pending = lockMap\.get\(masterSlot\);/);
   assert.match(body, /if \(currentRank >= targetRank\)/);
 });
 

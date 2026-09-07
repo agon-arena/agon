@@ -492,6 +492,11 @@ document.addEventListener("visibilitychange", () => {
   }, HEARTBEAT_INTERVAL_MS);
 })();
 
+// Horodatage de ce chargement de script, au plus près du vrai début d'affichage
+// de la page — sert uniquement à borner la fenêtre de rechargement automatique
+// ci-dessous (mnoria:page-stale), jamais à autre chose.
+const MNORIA_SCRIPT_LOADED_AT = Date.now();
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
 
@@ -501,14 +506,27 @@ function registerServiceWorker() {
       .catch(() => {});
   });
 
-  // Le service worker sert le HTML en cache instantanément au lancement standalone,
-  // puis revalide en arrière-plan. Une ancienne version rechargeait immédiatement
-  // le document dès que cette revalidation détectait un HTML plus récent. Pendant
-  // l'ouverture/fermeture d'une iframe (notamment /apprentissage), ce refresh
-  // intempestif interrompait le geste, puis la restauration iOS pouvait reprendre
-  // l'URL de l'iframe comme document principal. La réponse fraîche est déjà rangée
-  // dans le cache par le service worker : on la laisse donc simplement servir au
-  // prochain chargement volontaire, sans interrompre la session en cours.
+  // "/" est redevenue cache-first instantanée au lancement (correctif du
+  // 07/09/2026, cf. service-worker.js SW_VERSION) : le service worker sert
+  // donc potentiellement une version un peu ancienne le temps que sa
+  // revalidation arrière-plan la compare au serveur. Avant ce correctif, une
+  // ancienne version de CE fichier rechargeait immédiatement le document dès
+  // que cette revalidation détectait un HTML plus récent, quel que soit le
+  // moment — pendant l'ouverture/fermeture d'une iframe (notamment
+  // /apprentissage), ce refresh intempestif interrompait le geste, puis la
+  // restauration iOS pouvait reprendre l'URL de l'iframe comme document
+  // principal. Corrigé en bornant ce rechargement automatique à une fenêtre
+  // très courte après le chargement de la page (MNORIA_PAGE_STALE_AUTO_RELOAD_MS)
+  // — largement suffisante pour laisser la revalidation arrière-plan répondre
+  // (elle démarre dès la navigation), bien trop courte pour intersecter un
+  // geste utilisateur réel (le loader de démarrage lui-même reste affiché au
+  // moins 2,2 s, cf. MNORIA_STARTUP_MIN_DISPLAY_MS). Passé cette fenêtre, on
+  // revient au comportement prudent existant (simple marqueur, jamais lu pour
+  // l'instant, plutôt que d'interrompre une session déjà en cours). `window.self
+  // === window.top` : jamais dans un contexte iframe (/apprentissage, "Ma
+  // mémoire" plein écran...), pour la même raison que l'incident ci-dessus —
+  // seul le document principal peut légitimement se recharger ainsi.
+  const MNORIA_PAGE_STALE_AUTO_RELOAD_MS = 4000;
   navigator.serviceWorker.addEventListener("message", (event) => {
     // Aucun son personnalisé possible sur la notification système elle-même (limitation
     // des navigateurs) : le service worker prévient ici l'onglet/PWA déjà ouvert(e) pour
@@ -520,6 +538,9 @@ function registerServiceWorker() {
     if (event.data?.type !== "mnoria:page-stale" || window.__mnoriaStalePageRefreshed) return;
     window.__mnoriaStalePageRefreshed = true;
     window.__mnoriaPageUpdateAvailable = true;
+    if (window.self === window.top && Date.now() - MNORIA_SCRIPT_LOADED_AT < MNORIA_PAGE_STALE_AUTO_RELOAD_MS) {
+      location.reload();
+    }
   });
 }
 
@@ -3365,7 +3386,21 @@ function initPageArrivalLoadingOverlay() {
   // son propre indicateur ("Chargement de ton univers…", cf.
   // #universe-status), ce voile générique est donc coupé dans tous les cas.
   const skipForFullscreenMemoryPage = location.pathname === "/mon-univers";
-  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && !skipForFullscreenMemoryPage && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
+  // Premier vrai lancement sur "/" (demande du 07/09/2026, "j'aperçois très
+  // furtivement une page de chargement avant l'animation, je n'en veux pas") :
+  // ce voile générique ("Chargement de l'accueil en cours", sablier) et
+  // l'animation de démarrage brandée (#mnoria-startup-loader, logo + "Cultive
+  // ton esprit", cf. initMnoriaStartupLoader) attendent tous les deux le MÊME
+  // signal réel de contenu prêt (mnoria:feed-ready) — le voile générique
+  // n'ajoutait donc qu'un flash redondant avant que l'animation brandée ne
+  // prenne le relais, jamais un temps de chargement réel en plus. `html.
+  // mnoria-startup-active` est posée de façon synchrone dans le <head>
+  // d'index.html, avant tout script différé : sa présence ici signifie que
+  // l'animation brandée va réellement s'afficher pour CETTE navigation
+  // (absente si shouldSkipStartup a déjà choisi de la sauter, auquel cas ce
+  // voile générique reste le seul indicateur et doit continuer à s'afficher).
+  const skipForBrandedStartupOnHome = location.pathname === "/" && document.documentElement.classList.contains("mnoria-startup-active");
+  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && !skipForFullscreenMemoryPage && !skipForBrandedStartupOnHome && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
     // Le texte "/" et "/notifications" est forcé plus loin
@@ -8872,7 +8907,7 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.onerror=null; this.src='/fondchargement-256.png';"
+            onerror="this.onerror=null; this.src='/logovisuelchargement.png';"
           >
         </div>
       ` : ""}
@@ -9935,8 +9970,8 @@ function renderIndexOpenGraphImageShell(shell) {
 
     img.onerror = null;
     img.onload = finish;
-    if (img.getAttribute('src') !== '/fondchargement-256.png') {
-      img.src = '/fondchargement-256.png';
+    if (img.getAttribute('src') !== '/logovisuelchargement.png') {
+      img.src = '/logovisuelchargement.png';
     } else {
       finish();
     }
@@ -10170,7 +10205,7 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null, debateId = "
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.onerror=null; this.src='/fondchargement-256.png';"
+            onerror="this.onerror=null; this.src='/logovisuelchargement.png';"
           >
         </div>
       ` : ""}

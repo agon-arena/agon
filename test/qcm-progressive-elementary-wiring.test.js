@@ -174,18 +174,25 @@ test("le bloc élémentaire est extrait du curriculum via selectCurriculumLevel(
 
 // ── Verrou en mémoire partagé (dédup legacy/progressif sur le même sujet) ─
 
-test("ensureProgressiveElementaryGenerated réutilise _notionQuizMasterGenerationPromises avec la même clé masterSlot que le chemin legacy (empêche une course legacy/progressif)", () => {
-  assert.match(
-    SERVER_SOURCE,
-    /async function ensureProgressiveElementaryGenerated\(masterSlot, topic, id, userId\) \{\s*\n\s*const pending = _notionQuizMasterGenerationPromises\.get\(masterSlot\);/
-  );
+// Réécrit (07/09/2026, chantier "pré-génération en avance") : la clé de
+// verrouillage reste bien _notionQuizMasterGenerationPromises pour le chemin
+// utilisateur réel (empêche toujours une course legacy/progressif), mais
+// passe désormais par un `lockMap` résolu selon le contexte de
+// pré-génération — cf. _notionQuizPregenMasterGenerationPromises, verrou
+// SÉPARÉ, jamais partagé avec celui-ci (Course 1 du chantier).
+test("ensureProgressiveElementaryGenerated réutilise _notionQuizMasterGenerationPromises avec la même clé masterSlot que le chemin legacy (empêche une course legacy/progressif), via un lockMap résolu selon le contexte de pré-génération", () => {
+  const body = extractFunctionBody(SERVER_SOURCE, /async function ensureProgressiveElementaryGenerated\(masterSlot, topic, id, userId\) \{/);
+  assert.match(body, /const lockMap = pregenStore \? _notionQuizPregenMasterGenerationPromises : _notionQuizMasterGenerationPromises;/);
+  assert.match(body, /const pending = lockMap\.get\(masterSlot\);/);
 });
 
-test("continueProgressiveGeneration utilise son PROPRE verrou en mémoire, distinct de celui de la génération initiale — jamais le même Map", () => {
+test("continueProgressiveGeneration utilise son PROPRE verrou en mémoire, distinct de celui de la génération initiale — jamais le même Map, y compris en pré-génération", () => {
   assert.match(SERVER_SOURCE, /const _notionQuizContinuationPromises = new Map\(\);/);
   const body = extractFunctionBody(SERVER_SOURCE, /async function continueProgressiveGeneration\(masterSlot, topic, id, userId, targetLevel\) \{/);
-  assert.match(body, /_notionQuizContinuationPromises\.get\(masterSlot\)/);
+  assert.match(body, /const lockMap = pregenStore \? _notionQuizPregenContinuationPromises : _notionQuizContinuationPromises;/);
+  assert.match(body, /const pending = lockMap\.get\(masterSlot\);/);
   assert.doesNotMatch(body, /_notionQuizMasterGenerationPromises/);
+  assert.doesNotMatch(body, /_notionQuizPregenMasterGenerationPromises/);
 });
 
 // ── Route : dédoublonnage, réutilisation, niveau ──────────────────────────
@@ -312,7 +319,13 @@ test("le gate evidence (applyEvidenceGate) est appliqué au pool initial ET aux 
 
 test("buildCurriculumPrompt/buildCurriculumRepairPrompt reçoivent identifiedSourcesBlock UNIQUEMENT quand evidenceModeActive, jamais groundingText en plus dans ce cas", () => {
   assert.match(SERVER_SOURCE, /buildCurriculumPrompt\(subject, contextHint, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
-  assert.match(SERVER_SOURCE, /buildCurriculumRepairPrompt\(subject, contextHint, neededCount, accepted, grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
+  // Réécrit (déduplication inter-niveaux, 07/09/2026, section B3) : la liste
+  // "déjà validées" transmise à la réparation inclut désormais
+  // otherLevelsKnowledge (connaissances d'autres niveaux déjà commis) EN
+  // PLUS de `accepted` — [] pour l'appel Elementary (aucun autre niveau
+  // n'existe encore), donc comportement strictement inchangé pour ce seul
+  // appelant.
+  assert.match(SERVER_SOURCE, /buildCurriculumRepairPrompt\(subject, contextHint, neededCount, \[\.\.\.otherLevelsKnowledge, \.\.\.accepted\], grounding\?\.groundingText \|\| null, evidenceModeActive \? grounding\.identifiedSourcesBlock : null\)/);
 });
 
 test("qcm-progressive-timing journalise elementary_evidence_candidates/valid/rejected/rejection_reasons ET deferred_evidence_* — jamais le texte des sources ni des extraits", () => {

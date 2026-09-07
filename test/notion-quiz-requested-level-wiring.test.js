@@ -205,5 +205,8 @@ test("GET /api/users/notion-quizzes/fiche résout persistedLevel via linkOwnerUs
 test("findExistingQuizMaster, le verrou de génération et isMasterEligibleQuiz restent inchangés (V4.1.1 ne touche que la persistance du niveau)", () => {
   assert.match(SERVER_SOURCE, /async function findExistingQuizMaster\(candidateSlots\) \{/);
   assert.match(SERVER_SOURCE, /const _notionQuizMasterGenerationPromises = new Map\(\);/);
-  assert.match(SERVER_SOURCE, /function buildCustomTopicMasterSlot\(id\) \{/);
+  // buildCustomTopicMasterSlot : extraite dans lib/custom-topic-identity.js
+  // (07/09/2026, chantier "pré-génération en avance") — importée ici, plus
+  // jamais définie localement.
+  assert.match(SERVER_SOURCE, /const \{ normalizeCustomTopicKey, buildCustomTopicMasterSlot \} = require\("\.\/lib\/custom-topic-identity"\);/);
 });

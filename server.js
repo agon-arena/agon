@@ -11,6 +11,11 @@ const { Worker } = require("worker_threads");
 const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 const { recordAiUsage, extractUsage } = require("./lib/ai-usage-log");
+const { normalizeCustomTopicKey, buildCustomTopicMasterSlot } = require("./lib/custom-topic-identity");
+const { pregenerationContext, runInPregenerationContext, nextOccurrence } = require("./lib/notion-quiz-pregeneration-context");
+const pregenStepCache = require("./lib/notion-quiz-pregeneration-step-cache");
+const pregenQueue = require("./lib/notion-quiz-pregeneration-queue");
+const openaiBatchClient = require("./lib/openai-batch-client");
 const { recordNotionQuizGenerationFailure, fetchRecentNotionQuizFailures } = require("./lib/notion-quiz-generation-failures");
 const {
   NOTION_QUIZ_STALE_AFTER_MS,
@@ -118,6 +123,8 @@ const {
   buildCurriculumPrompt,
   parseCurriculumItems,
   findNearDuplicates: findNearDuplicateCurriculumKnowledge,
+  evictCrossLevelDuplicates,
+  LEVEL_RANK: CURRICULUM_LEVEL_RANK,
   normalizeCurriculumOrder,
   assignCurriculumLevels,
   missingCurriculumCount,
@@ -153,10 +160,12 @@ const {
   parseSourceSelectionResponse,
   buildGroundingText,
   buildIdentifiedSources,
+  summarizeExtractedSourcesForTelemetry,
   formatIdentifiedSourcesBlock,
   appendIdentifiedSources,
   buildPublicGroundingSources,
-  WEB_SEARCH_RAW_RESULTS_COUNT
+  WEB_SEARCH_RAW_RESULTS_COUNT,
+  WEB_SEARCH_MAX_SELECTED_SOURCES
 } = require("./lib/web-search-grounding");
 const {
   buildTopicContext,
@@ -13181,6 +13190,20 @@ if (ANALYSIS_SCHEDULER_ENABLED) {
 const MODELS_WITHOUT_CUSTOM_TEMPERATURE = new Set(["gpt-5.6-luna"]);
 
 async function _callOpenAI(apiKey, messages, opts = {}) {
+  // Pré-génération en avance (chantier du 07/09/2026) : quand cet appel est
+  // atteint DEPUIS une tentative de pré-génération (contexte posé par
+  // runInPregenerationContext, cf. lib/notion-quiz-pregeneration-context.js),
+  // JAMAIS d'appel réseau synchrone ici — le résultat est servi depuis le
+  // cache d'étapes (déjà résolu par un Batch précédent) ou l'appel est
+  // simplement enregistré pour la prochaine soumission Batch, avec une
+  // erreur sentinelle levée pour signaler "ce sujet doit attendre" (cf.
+  // _callOpenAIViaPregenerationCache plus bas). Un appel HORS de ce contexte
+  // (tout le reste de l'application, y compris un utilisateur réel qui
+  // génère un sujet en direct) ignore totalement ce chemin — comportement
+  // synchrone strictement inchangé.
+  const pregenStore = pregenerationContext.getStore();
+  if (pregenStore) return _callOpenAIViaPregenerationCache(pregenStore, apiKey, messages, opts);
+
   const MAX_ATTEMPTS = 3;
   // Configurable (opts.timeoutMs) depuis le 16/08/2026 : la génération
   // "jusqu'à 3 variantes par question" produit une sortie sensiblement plus
@@ -13257,6 +13280,36 @@ async function _callOpenAI(apiKey, messages, opts = {}) {
     recordAiUsage(supabase, { feature, model, generationId, inputTokens, outputTokens, cachedTokens, latencyMs: Date.now() - startedAt, success: true });
     return data?.choices?.[0]?.message?.content || "";
   }
+}
+
+// Transport "pré-génération" de _callOpenAI (chantier du 07/09/2026) : même
+// contrat de retour (une chaîne `content`) que le chemin synchrone ci-dessus
+// — jamais un prompt ni des paramètres différents (`requestPayload` reprend
+// exactement model/messages/temperature/responseFormat tels que l'appelant
+// les a fournis à _callOpenAI). callKey = opts.feature, la même étiquette
+// déjà utilisée pour ai_usage_log — jamais une seconde taxonomie de "quel
+// appel est-ce". `occurrence` (nextOccurrence) distingue plusieurs appels au
+// même callKey pour un même sujet (ex. une régénération ciblée réutilise
+// "elementary_targeted_regeneration" à chaque cycle qualité) : sans elle, un
+// deuxième appel au même callKey réutiliserait à tort le résultat mis en
+// cache du premier.
+async function _callOpenAIViaPregenerationCache(pregenStore, apiKey, messages, opts) {
+  const callKey = opts.feature || "unnamed";
+  const occurrence = nextOccurrence(pregenStore, callKey);
+  const requestPayload = {
+    model: opts.model || "gpt-4o-mini",
+    messages,
+    ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+    ...(opts.responseFormat ? { responseFormat: opts.responseFormat } : {})
+  };
+  const result = await pregenStepCache.resolveStep({
+    supabase,
+    queueId: pregenStore.queueId,
+    callKey,
+    occurrence,
+    requestPayload
+  });
+  return result.content;
 }
 
 // Import de connaissances par photo (22/08/2026) : ANALYSE UNIQUEMENT. Cette
@@ -14017,6 +14070,15 @@ function buildQuestionFormatsPromptBlock(sourceIdField, questionCount, includeVa
     // n'est pas la plausibilité individuelle qui pêchait dans ce cas réel,
     // mais la construction en opposés de la bonne réponse.
     "Jamais de contraire caricatural : ne construis pas les distracteurs comme de simples opposés stylisés de la bonne réponse (ex. \"permanent\"/\"occasionnel\"/\"unique\" face à \"régulier et périodique\") — chacun doit rester un candidat sérieux dans le même espace de réponses (même nature, précision et plausibilité comparables), jamais une antithèse facile à écarter sans connaître le sujet. Avant de valider la question, vérifie silencieusement qu'une personne ignorant le fait ne pourrait pas la résoudre par élimination ou bon sens seul.",
+    // Distracteur mécanique (audit qualité éditoriale du 07/09/2026, cas réel
+    // "À quelle date Constantinople est-elle prise ?" avec les options 29 mai
+    // 1453 / 30 mai 1453 / 28 mai 1453 / 29 mai 1452 — un décalage de ±1
+    // jour/±1 année généré par simple arithmétique sur la bonne réponse,
+    // jamais une vraie confusion historique). Distinct de "Jamais de
+    // contraire caricatural" ci-dessus (qui vise l'opposition sémantique) :
+    // ici, le défaut est l'absence de toute justification autre que le
+    // décalage numérique lui-même.
+    "Jamais de distracteur purement mécanique : pour une date, un nombre ou une mesure, ne fabrique jamais les distracteurs par simple décalage arithmétique de la bonne réponse (ex. ±1 jour, ±1 an, ±1 unité) sans que ce décalage corresponde à une confusion réellement plausible (une autre date/un autre nombre associé au même sujet et qu'on pourrait sincèrement confondre avec la bonne réponse). Si aucune confusion numérique réellement plausible n'existe, préfère un distracteur d'une autre nature mais toujours homogène (un autre événement, un autre acteur, une autre unité) plutôt qu'une valeur arbitrairement décalée.",
     "Non devinable sans connaissance : la bonne réponse ne doit jamais se repérer par sa seule forme grammaticale, un écho lexical évident avec la question (ex. un mot de l'énoncé, comme \"saison\", repris uniquement dans la bonne option, comme \"saisonnière\"), une longueur ou une précision nettement différentes des autres options, ou par élimination immédiate des distracteurs.",
     "Options réellement distinctes : deux options ne doivent jamais exprimer essentiellement la même information avec seulement un ordre des mots, un ordre des éléments ou une reformulation superficielle différents.",
     "La question doit être claire et autonome sans relire la fiche. La difficulté doit venir du savoir testé, jamais d'une formulation confuse. Avant de répondre, vérifie silencieusement la cohérence entre correctIndex/correctIndexes, le texte de la ou des bonnes options et l'explication.",
@@ -14222,7 +14284,13 @@ const NOTION_QUIZ_LEVELS = {
   avance: {
     label: "Avancé",
     target: 10, max: 12, min: 1,
-    instruction: "Niveau avancé : couvre l'essentiel du sujet sous plusieurs angles différents (contexte, mécanisme, exemples ou chiffres clés, conséquences) pour vérifier une compréhension solide — jamais plusieurs questions qui reformulent le même angle.",
+    // Réécrit (audit qualité éditoriale du 07/09/2026, section 6/7 —
+    // "différenciation réelle des niveaux") : l'ancienne formulation
+    // ("chiffres clés") laissait autant de place à un chiffre isolé qu'à un
+    // mécanisme ou une relation causale, alors que la différence recherchée
+    // avec Élémentaire porte sur le TYPE d'exigence (comprendre pourquoi/
+    // comment/quel lien), jamais sur le seul degré de précision factuelle.
+    instruction: "Niveau avancé : couvre l'essentiel du sujet sous plusieurs angles différents, en donnant la priorité aux causes, conséquences, mécanismes, relations entre éléments du sujet et comparaisons simples — une question avancée doit vérifier une compréhension solide (pourquoi, comment, quel lien), jamais seulement une restitution plus précise d'un fait déjà testable au niveau élémentaire. Un chiffre ou un exemple précis reste utile en appui d'une explication, jamais comme unique ressort de la question. Jamais plusieurs questions qui reformulent le même angle.",
     sectionsRange: "2 à 4", maxSections: 4, sectionTextLimit: 1000,
     lengthHint: "peut développer chaque bloc en quelques phrases pour donner du contexte et de la nuance."
   },
@@ -14236,7 +14304,21 @@ const NOTION_QUIZ_LEVELS = {
     // du principe "20 est un plafond souhaitable, jamais un quota" à cette
     // instruction, qui s'applique désormais à TOUTE génération, pas
     // seulement à une requête "Expert" littérale.
-    instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet (origine, mécanismes précis, controverses ou nuances, chiffres et exemples précis, conséquences, comparaisons) pour vérifier une maîtrise fine et complète — chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée. Vise jusqu'à 20 connaissances RÉELLEMENT utiles et distinctes — un maximum souhaitable, jamais un quota obligatoire : moins de 20 reste parfaitement acceptable si le sujet n'offre pas plus de matière solide. Ne décompose JAMAIS artificiellement une même connaissance en plusieurs pour gonfler ce nombre, et n'ajoute jamais d'anecdote, de trivia ou de détail insignifiant dans ce seul but — chaque connaissance retenue doit mériter une mémorisation autonome et pouvoir produire, à elle seule, une question réellement utile et distincte.",
+    // Réécrit (audit qualité éditoriale du 07/09/2026, cas réel "Empire
+    // ottoman" — questions Expert très majoritairement des "Qui ?"/"Quelle
+    // date ?"/"Quelle ville ?" avec des distracteurs ±1 jour/±1 année,
+    // c'est-à-dire une simple restitution rendue plus dure à retrouver,
+    // jamais une exigence intellectuelle réellement supérieure) :
+    // "mécanismes précis"/"chiffres et exemples précis" cédait déjà, sans le
+    // dire explicitement, vers l'encyclopédisme — la reformulation nomme
+    // maintenant sans ambiguïté ce qui doit faire la difficulté Expert
+    // (causalité, relations, distinctions, fonctionnement, comparaison,
+    // interprétation, chronologie raisonnée) et ce qui ne doit PAS la faire
+    // (dates plus obscures, chiffres plus précis, noms plus secondaires).
+    // La répartition indicative est une orientation éditoriale pour le lot
+    // dans son ensemble, jamais un quota par question — aucune validation
+    // déterministe n'en dépend.
+    instruction: "Niveau expert : couvre un maximum de facettes distinctes et réellement importantes du sujet — mais la difficulté doit venir d'une exigence intellectuelle réellement supérieure (causalité, relations entre plusieurs connaissances déjà admises, distinctions fines entre notions proches, fonctionnement institutionnel, comparaison, interprétation fondée sur ce qui est enseigné, conséquences indirectes, chronologie raisonnée), JAMAIS de dates plus obscures, de chiffres plus précis ou de noms plus secondaires : une question experte n'est pas une question élémentaire simplement rendue plus dure à retrouver. Chaque question doit apporter un angle vraiment différent des autres, jamais une reformulation d'une question déjà posée. Vise jusqu'à 20 connaissances RÉELLEMENT utiles et distinctes — un maximum souhaitable, jamais un quota obligatoire : moins de 20 reste parfaitement acceptable si le sujet n'offre pas plus de matière solide. Ne décompose JAMAIS artificiellement une même connaissance en plusieurs pour gonfler ce nombre, et n'ajoute jamais d'anecdote, de trivia ou de détail insignifiant dans ce seul but — chaque connaissance retenue doit mériter une mémorisation autonome et pouvoir produire, à elle seule, une question réellement utile et distincte. Orientation éditoriale pour l'ensemble du lot (jamais un quota strict question par question) : environ 20 à 30 % de restitution précise, 35 à 45 % de compréhension/relations/causalité, 20 à 30 % de distinctions/comparaison/fonctionnement, et 5 à 15 % de chronologie ou de chiffres réellement importants — ne sacrifie jamais la qualité d'une question pour respecter mécaniquement ces proportions.",
     sectionsRange: "4 à 6", maxSections: 6, sectionTextLimit: 1600,
     lengthHint: "peut être longue et détaillée, avec plusieurs blocs développés (contexte, mécanisme, chiffres/exemples précis, controverses ou nuances, conséquences) pour couvrir le sujet en profondeur."
   }
@@ -15160,6 +15242,10 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
     });
     selected = parseSourceSelectionResponse(content, qualified);
   } catch (error) {
+    // Garde pré-génération (07/09/2026) : "ce sujet doit attendre" n'est
+    // JAMAIS une vraie erreur de sélection de sources — jamais transformé en
+    // diagnostic d'échec, jamais avalé ici.
+    if (error instanceof pregenStepCache.PregenerationPendingError || error instanceof pregenStepCache.PregenerationCallFailedError) throw error;
     console.warn(`[web-search-grounding:${id}] sélection IA des sources :`, error.message);
     return { diagnostic: { reason: "ai_selection_error", detail: error.message } };
   }
@@ -15180,7 +15266,11 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
   // sources déjà sélectionnées et récupérées en parallèle jouent déjà ce
   // rôle de repli.
   const topicTokens = topicContext.subjectTokens;
-  const settled = await Promise.allSettled(selected.map(async (source) => {
+  // extractAndValidateSource (audit qualité éditoriale du 07/09/2026, section
+  // A6) : extrait le corps commun à la récupération initiale ET au repli
+  // ci-dessous — jamais deux implémentations divergentes de la même logique
+  // fetch+extract+validate.
+  const extractAndValidateSource = async (source) => {
     const page = await fetchPublicHtml(source.url, { timeoutMs: WEB_SEARCH_PAGE_FETCH_TIMEOUT_MS });
     // enforceMaxLength:false (cf. lib/url-knowledge.js) : buildGroundingText
     // tronque de toute façon chaque source à WEB_SEARCH_EXCERPT_MAX_CHARS
@@ -15189,26 +15279,53 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
     const { sourceTitle, text } = extractReadableContent(page.html, page.finalUrl, { enforceMaxLength: false });
     const validation = validateExtractedSourceContent({ text, extractedTitle: sourceTitle, originalTitle: source.title, subjectTokens: topicTokens });
     return { ...source, url: page.finalUrl, title: sourceTitle || source.title, text, validation, sourceScore: source.score?.finalScore ?? null };
-  }));
+  };
+  const logExtractionOutcome = (domain, sourceScore, settledResult) => {
+    if (settledResult.status === "rejected") {
+      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=fetch_failed detail="${settledResult.reason?.message || ""}"`);
+    } else if (!settledResult.value.validation.ok) {
+      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=${settledResult.value.validation.reason} detail="${settledResult.value.validation.detail}"`);
+    } else {
+      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=accepted contentLength=${settledResult.value.validation.contentLength}`);
+    }
+  };
+
+  const settled = await Promise.allSettled(selected.map(extractAndValidateSource));
 
   // Observabilité (section 6) : distingue clairement mauvaise source
   // (jamais atteinte ici, déjà filtrée en amont), bonne source impossible à
   // extraire, et extraction réussie.
-  settled.forEach((r, i) => {
-    const domain = selected[i]?.domain || "?";
-    const sourceScore = selected[i]?.score?.finalScore ?? null;
-    if (r.status === "rejected") {
-      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=fetch_failed detail="${r.reason?.message || ""}"`);
-    } else if (!r.value.validation.ok) {
-      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=rejected extractionReason=${r.value.validation.reason} detail="${r.value.validation.detail}"`);
-    } else {
-      console.info(`[web-search-grounding:${id}] extraction domain=${domain} sourceScore=${sourceScore} extractionStatus=accepted contentLength=${r.value.validation.contentLength}`);
-    }
-  });
+  settled.forEach((r, i) => logExtractionOutcome(selected[i]?.domain || "?", selected[i]?.score?.finalScore ?? null, r));
 
-  const extracted = settled
+  let extracted = settled
     .filter((r) => r.status === "fulfilled" && r.value.validation.ok)
     .map((r) => r.value);
+
+  // Repli sur les candidats suivants déjà classés (audit qualité éditoriale
+  // du 07/09/2026, section A6 — cas réel "Empire ottoman" : Met Museum
+  // HTTP 429, Ohio State mur d'authentification, seule Wikipédia extraite).
+  // JAMAIS de nouvel appel Brave, JAMAIS de nouvel appel IA (section A6,
+  // contrainte explicite) : `qualified` porte déjà, dans l'ordre du
+  // classement déterministe, tous les candidats qui n'ont pas été retenus
+  // par l'IA de sélection — on en tente simplement quelques-uns de plus,
+  // dans l'ordre, en une SEULE vague supplémentaire bornée (jamais une
+  // boucle, jamais une tentative par échec) pour limiter strictement la
+  // latence ajoutée à celle d'UN seul aller-retour HTTP de plus.
+  const missingCount = WEB_SEARCH_MAX_SELECTED_SOURCES - extracted.length;
+  if (missingCount > 0) {
+    const selectedDomains = new Set(selected.map((s) => s.domain));
+    const fallbackCandidates = qualified.filter((c) => !selectedDomains.has(c.domain)).slice(0, missingCount);
+    if (fallbackCandidates.length) {
+      console.info(`[web-search-grounding:${id}] repli sources : ${extracted.length}/${selected.length} extraite(s), tentative sur ${fallbackCandidates.length} candidat(s) suivant(s) déjà classé(s) (${fallbackCandidates.map((c) => c.domain).join(", ")}).`);
+      const fallbackSettled = await Promise.allSettled(fallbackCandidates.map(extractAndValidateSource));
+      fallbackSettled.forEach((r, i) => logExtractionOutcome(fallbackCandidates[i]?.domain || "?", fallbackCandidates[i]?.score?.finalScore ?? null, r));
+      const fallbackExtracted = fallbackSettled
+        .filter((r) => r.status === "fulfilled" && r.value.validation.ok)
+        .map((r) => r.value);
+      extracted = [...extracted, ...fallbackExtracted];
+    }
+  }
+
   if (!extracted.length) {
     const detail = settled.map((r, i) => {
       const domain = selected[i]?.domain || "?";
@@ -15217,6 +15334,14 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
     }).join(", ");
     return { diagnostic: { reason: "extraction_failed", detail } };
   }
+
+  // Télémétrie légère (section A7, "diagnostiquer facilement un futur cas
+  // corpus = infobox") : une seule ligne compacte, jamais le texte des
+  // sources — cf. lib/web-search-grounding.js summarizeExtractedSourcesForTelemetry.
+  console.info(`[web-search-grounding:${id}] corpus final :`, JSON.stringify({
+    sourcesSelected: selected.length, sourcesExtracted: extracted.length,
+    excerpts: summarizeExtractedSourcesForTelemetry(extracted)
+  }));
 
   const groundingText = buildGroundingText(extracted);
   if (!groundingText) return { diagnostic: { reason: "empty_grounding_text" } };
@@ -16113,26 +16238,11 @@ async function buildNotionQuestions(sourceType, sourceId, rawItem, rawLevel, use
 // même sujet à la casse/aux accents/à la ponctuation près rejoignent ainsi le
 // même QCM déjà généré au lieu d'en régénérer un (même principe de partage
 // que buildNotionQuestions, cf. POST /api/users/notion-quizzes/custom).
-function normalizeCustomTopicKey(topic) {
-  const normalized = String(topic || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  return crypto.createHash("sha1").update(normalized).digest("hex").slice(0, 16);
-}
-
-// ── V4.1 (01/09/2026, "mutualisation inter-niveaux du master QCM") ─────────
-// Identité de MASTER : un slot nu (sans suffixe ":niveau"), indépendant du
-// niveau réellement demandé — un même sujet/une même notion partage
-// désormais UN SEUL corpus maître quel que soit le niveau (Élémentaire/
-// Avancé/Expert) qui l'a déclenché. Le niveau réellement demandé reste
-// entièrement porté par l'appelant (slot legacy ":niveau" pour la recherche
-// exacte historique, `level` pour le serving) — jamais encodé ici.
-function buildCustomTopicMasterSlot(id) {
-  return `notion:custom:${id}`;
-}
+// normalizeCustomTopicKey/buildCustomTopicMasterSlot : extraites dans
+// lib/custom-topic-identity.js (07/09/2026, chantier "pré-génération en
+// avance") — importées en tête de fichier, réutilisées telles quelles par la
+// pré-génération pour garantir la MÊME identité de master qu'ici, jamais une
+// copie divergente.
 function buildNotionMasterSlot(sourceType, sourceDebateId) {
   return `notion:${sourceType}:${sourceDebateId}`;
 }
@@ -18802,6 +18912,10 @@ const NOTION_QUIZ_SOURCE_TYPES = new Set(["histoire", "debat-notion", ...CULTURE
 // contrainte unique sur daily_quiz(quiz_date, slot) reste le dernier filet
 // inter-processus (plusieurs workers Node) — cf. le code 23505 ci-dessous.
 const _notionQuizMasterGenerationPromises = new Map();
+// Verrou SÉPARÉ pour les tentatives de pré-génération en avance (07/09/2026)
+// — jamais partagé avec _notionQuizMasterGenerationPromises ci-dessus, cf.
+// commentaire détaillé dans ensureProgressiveElementaryGenerated ("Course 1").
+const _notionQuizPregenMasterGenerationPromises = new Map();
 
 // Résout une collision d'insertion sans laisser un ancien petit corpus
 // bloquer toutes les générations futures. Un master complet créé par un
@@ -18895,7 +19009,22 @@ async function evidenceGateAndRepairCurriculumSubset({
   // (les nouveaux ajouts de réparation) est gaté contre `grounding` ici.
   // Absent (comportement du bloc Elementary) : `initialPool` reste gaté
   // normalement, comportement strictement inchangé.
-  preAccepted = null
+  preAccepted = null,
+  // otherLevelsKnowledge (déduplication inter-niveaux, audit qualité
+  // éditoriale du 07/09/2026, cas réel "Empire ottoman" — k15≈k4, k19≈k5,
+  // k21≈k8) : connaissances déjà VÉRIFIÉES d'AUTRES niveaux du même
+  // curriculum, déjà persistées/servies au moment de cet appel — jamais le
+  // sous-ensemble en cours de traitement lui-même. Optionnel, défaut [] :
+  // absent pour l'appel Elementary (premier niveau, aucun autre niveau
+  // n'existe encore — comportement strictement inchangé), fourni par
+  // continueProgressiveGeneration pour Deepening (= Elementary déjà commis)
+  // et Expert (= Elementary + Deepening déjà commis). Ces connaissances ne
+  // sont JAMAIS évincées ni modifiées ici (cf. evictCrossLevelDuplicates,
+  // lib/notion-quiz-curriculum.js : toujours de rang LEVEL_RANK inférieur ou
+  // égal à celui du sous-ensemble en cours, donc jamais la cible d'éviction) —
+  // elles servent uniquement à repérer un doublon côté `accepted` et à
+  // enrichir la liste "déjà validées" transmise à une éventuelle réparation.
+  otherLevelsKnowledge = []
 }) {
   const evidenceModeActive = !!grounding?.identifiedSources?.length;
   // Instrumentation minimale (section 11 de la demande initiale) : comptés
@@ -18944,18 +19073,49 @@ async function evidenceGateAndRepairCurriculumSubset({
   };
 
   let accepted = preAccepted != null ? preAccepted : evictNearDuplicates(applyEvidenceGate(initialPool));
+
+  // Déduplication INTER-NIVEAUX (07/09/2026, section B1) : appliquée ICI,
+  // AVANT le test de seuil ci-dessous — un doublon évincé crée naturellement
+  // un manque que le mécanisme de réparation déjà existant (section
+  // suivante) comble tel quel, SANS second appel IA dédié à la
+  // déduplication (section B3 : "n'ajoute pas un appel supplémentaire si le
+  // mécanisme existant peut traiter ces emplacements"). `otherLevelsKnowledge`
+  // n'est jamais modifié (cf. son commentaire) : seules les entrées de
+  // `accepted` peuvent disparaître ici.
+  let crossLevelDuplicatesEvicted = 0;
+  if (otherLevelsKnowledge.length) {
+    const combined = evictCrossLevelDuplicates([...otherLevelsKnowledge, ...accepted]).curriculum;
+    const otherIds = new Set(otherLevelsKnowledge.map((k) => k.id));
+    const beforeCount = accepted.length;
+    accepted = combined.filter((k) => !otherIds.has(k.id));
+    crossLevelDuplicatesEvicted = beforeCount - accepted.length;
+    if (crossLevelDuplicatesEvicted > 0) {
+      console.warn(`[notion-quiz-progressive:${id}] curriculum ${repairFeature} : ${crossLevelDuplicatesEvicted} quasi-doublon(s) inter-niveaux évincé(s) (déjà enseigné à un niveau inférieur).`);
+    }
+  }
+
   let repairAttempted = false;
 
   // Réparation : AU PLUS UNE tentative, jamais une boucle (section 3 de la
   // demande du 03/09/2026 — "initial → éventuellement repair 1 → STOP").
+  // Déclenchée aussi bien par un manque d'evidence-gate (comportement
+  // historique) que par l'éviction inter-niveaux ci-dessus (07/09/2026) —
+  // les deux cas partagent désormais EXACTEMENT le même unique cycle de
+  // réparation, jamais un second cycle dédié.
   if (accepted.length < targetSize) {
     repairAttempted = true;
     const neededCount = missingCurriculumCount(accepted.length, targetSize);
     console.warn(`[notion-quiz-progressive:${id}] curriculum ${repairFeature} incomplet (réparation unique) : ${accepted.length}/${targetSize}, ${neededCount} connaissance(s) à ajouter.`);
     try {
+      // existingKnowledge = otherLevelsKnowledge + accepted (07/09/2026,
+      // section B3) : la réparation ne doit jamais reproduire une
+      // connaissance déjà enseignée à un AUTRE niveau, pas seulement celles
+      // du sous-ensemble courant — otherLevelsKnowledge est [] pour
+      // Elementary (comportement strictement inchangé), donc cette
+      // concatenation reste un no-op au caractère près pour cet appelant.
       const repairContent = await _callOpenAI(apiKey, [{
         role: "user",
-        content: buildCurriculumRepairPrompt(subject, contextHint, neededCount, accepted, grounding?.groundingText || null, evidenceModeActive ? grounding.identifiedSourcesBlock : null)
+        content: buildCurriculumRepairPrompt(subject, contextHint, neededCount, [...otherLevelsKnowledge, ...accepted], grounding?.groundingText || null, evidenceModeActive ? grounding.identifiedSourcesBlock : null)
       }], {
         model: DAILY_QUIZ_CURRICULUM_MODEL,
         temperature: 0.4,
@@ -18996,12 +19156,25 @@ async function evidenceGateAndRepairCurriculumSubset({
       // réparation sans preuve réelle n'est jamais accepté artificiellement.
       const acceptedAdditions = applyEvidenceGate(additions);
       accepted = evictNearDuplicates(mergeCurriculumAdditions(accepted, acceptedAdditions));
+      // Filet de sécurité déterministe (07/09/2026) : au cas où la réparation
+      // aurait malgré tout reproduit une connaissance d'un AUTRE niveau
+      // (consigne du prompt ignorée) — jamais un second appel de réparation
+      // (section 3, "une seule tentative"), la connaissance en trop est
+      // simplement évincée en silence, un curriculum légèrement plus court
+      // restant préférable à un doublon inter-niveaux non détecté.
+      if (otherLevelsKnowledge.length) {
+        const otherIds = new Set(otherLevelsKnowledge.map((k) => k.id));
+        const rechecked = evictCrossLevelDuplicates([...otherLevelsKnowledge, ...accepted]).curriculum;
+        accepted = rechecked.filter((k) => !otherIds.has(k.id));
+      }
     } catch (error) {
+      // Garde pré-génération (07/09/2026) : cf. resolveWebSearchGrounding.
+      if (error instanceof pregenStepCache.PregenerationPendingError || error instanceof pregenStepCache.PregenerationCallFailedError) throw error;
       console.warn(`[notion-quiz-progressive:${id}] réparation curriculum ${repairFeature} :`, error.message);
     }
   }
 
-  return { accepted, repairAttempted, evidenceCandidates, evidenceValid, evidenceRejectionReasons };
+  return { accepted, repairAttempted, evidenceCandidates, evidenceValid, evidenceRejectionReasons, crossLevelDuplicatesEvicted };
 }
 
 // Construit le plan pédagogique de 15 à 20 connaissances en UN SEUL appel IA
@@ -19020,6 +19193,16 @@ async function evidenceGateAndRepairCurriculumSubset({
 async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, grounding) {
   const curriculumStartedAt = Date.now();
   const evidenceModeActive = !!grounding?.identifiedSources?.length;
+  // Traçabilité (audit qualité éditoriale du 07/09/2026, section 12 —
+  // "tracer clairement qu'un curriculum a été généré sans grounding") :
+  // best-effort, jamais bloquant — le sujet reste traité (cf. buildCurriculumPrompt,
+  // branche "Aucune source web n'a pu être vérifiée" ci-dessous, seule
+  // réponse de fond à ce cas). `grounding.diagnostic` porte déjà la raison
+  // exacte (no_brave_key/empty_subject/no_candidates/below_quality_threshold/...)
+  // quand elle existe, cf. resolveWebSearchGrounding.
+  if (!evidenceModeActive && !grounding?.groundingText) {
+    console.warn(`[notion-quiz-progressive:${id}] curriculum sans grounding web réel (raison=${grounding?.diagnostic?.reason || "inconnue"}) — prudence factuelle renforcée par le prompt, aucune vérification externe possible pour ce sujet.`);
+  }
 
   let pool;
   let topicValidation;
@@ -19039,6 +19222,8 @@ async function resolveProgressiveCurriculum(apiKey, subject, contextHint, id, gr
     topicValidation = parseTopicValidationField(rawParsed?.topicValidation);
     pool = parseCurriculumItems(rawParsed?.curriculum);
   } catch (error) {
+    // Garde pré-génération (07/09/2026) : cf. resolveWebSearchGrounding.
+    if (error instanceof pregenStepCache.PregenerationPendingError || error instanceof pregenStepCache.PregenerationCallFailedError) throw error;
     const code = classifyAiError(error);
     console.error(`[notion-quiz-progressive:${id}] stage=curriculum_generation code=${code} :`, error.message);
     return { error: "failed", code, stage: "curriculum_generation" };
@@ -19241,6 +19426,27 @@ async function generateProgressiveLevelBlock({
   const contentAttempts = 2;
   const timeoutMs = Math.min(120_000, 45_000 + levelKnowledge.length * 3_000);
   const blockReadyThreshold = Math.min(readyThreshold, levelKnowledge.length);
+  // earlyStopTarget (audit qualité éditoriale du 07/09/2026, cas réel
+  // "Empire ottoman" — niveau Expert annoncé mais seulement 11 ou 16
+  // questions finales) : `blockReadyThreshold` (readyThreshold=4 pour les
+  // trois niveaux, cf. generateElementaryBlock/generateDeepeningBlock/
+  // generateExpertBlock) reste le seuil MINIMUM viable pour servir le bloc
+  // (`degraded` ci-dessous, jamais un objectif de couverture) — mais il
+  // servait AUSSI, à tort, de cible d'arrêt anticipé de
+  // qualityControlRawQuestions. Pour Deepening/Expert, qui portent
+  // structurellement bien plus de 4 connaissances (jusqu'à ~10 pour Expert,
+  // cf. computeCurriculumSplit), ce seuil de 4 était atteint dès le premier
+  // lot dans la quasi-totalité des générations réelles — la seule
+  // régénération ciblée déjà budgétée (maxRetries:1) ne se déclenchait donc
+  // JAMAIS pour les connaissances restées non couvertes, quelle que soit la
+  // richesse réelle du sujet. Pour Elementary (curriculum volontairement
+  // "qualité > quantité", cf. MIN_ELEMENTARY_READY_QUESTIONS et son rapport
+  // dédié "Bouddhisme tibétain") ce comportement reste inchangé au
+  // caractère près : l'objectif y est déjà la couverture minimale, jamais la
+  // couverture totale. Aucun nouvel appel IA : seule la VALEUR transmise à
+  // earlyStopAtAccepted change, le même unique cycle de régénération déjà
+  // prévu est simplement laissé s'exécuter quand il est réellement utile.
+  const earlyStopTarget = levelKey === "elementaire" ? blockReadyThreshold : levelKnowledge.length;
   const initialCandidateCounts = computeElementaryCandidateDistribution(levelKnowledge.length, ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE);
   const totalInitialCandidates = initialCandidateCounts.reduce((sum, n) => sum + n, 0) || levelKnowledge.length;
 
@@ -19260,6 +19466,8 @@ async function generateProgressiveLevelBlock({
         generationId: id
       });
     } catch (error) {
+      // Garde pré-génération (07/09/2026) : cf. resolveWebSearchGrounding.
+      if (error instanceof pregenStepCache.PregenerationPendingError || error instanceof pregenStepCache.PregenerationCallFailedError) throw error;
       const code = classifyAiError(error);
       console.error(`[${logStage}:${id}] stage=${questionFeaturePrefix}_fiche_generation code=${code} :`, error.message);
       return generationFailure(code, `${questionFeaturePrefix}_fiche_generation`);
@@ -19343,7 +19551,7 @@ async function generateProgressiveLevelBlock({
       regenerationFeature,
       semanticReviewEnabled: false,
       maxRetries: 1,
-      earlyStopAtAccepted: blockReadyThreshold,
+      earlyStopAtAccepted: earlyStopTarget,
       earlyStopCountFn: (acceptedList) => selectOneQuestionPerKnowledgeTarget(acceptedList).length,
       filterRejectedForRegeneration: (rejected, acceptedList) => {
         const coveredTargets = new Set(selectOneQuestionPerKnowledgeTarget(acceptedList).map((q) => normalizeFactText(q?.knowledgeTarget)));
@@ -19366,6 +19574,11 @@ async function generateProgressiveLevelBlock({
     });
     validated = selectOneQuestionPerKnowledgeTarget(paragraphGrounded);
   } catch (error) {
+    // Garde pré-génération (07/09/2026) : cf. resolveWebSearchGrounding —
+    // ICI en particulier, sans cette garde le sentinel serait silencieusement
+    // avalé comme un simple "JSON invalide" (branche else ci-dessous), avec
+    // validated=[] et un échec QCM_UNUSABLE à tort.
+    if (error instanceof pregenStepCache.PregenerationPendingError || error instanceof pregenStepCache.PregenerationCallFailedError) throw error;
     if (error?.status) {
       const code = classifyAiError(error);
       console.error(`[${logStage}:${id}] stage=${questionFeaturePrefix}_question_generation code=${code} :`, error.message);
@@ -19529,7 +19742,21 @@ function runShadowSemanticReview({ apiKey, generationId, levelKey, questions, ha
 // progressive tournent en même temps sur le même sujet et se marchent
 // dessus à l'insertion.
 async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userId) {
-  const pending = _notionQuizMasterGenerationPromises.get(masterSlot);
+  // Verrou DÉDIÉ en pré-génération (07/09/2026, "Course 1" du chantier :
+  // Batch génère sujet A + utilisateur clique sujet A) : jamais le même Map
+  // que les appels utilisateur réels — sans cette séparation, un utilisateur
+  // qui "rejoindrait" une génération en cours déclenchée par le scheduler de
+  // pré-génération recevrait la même promesse, potentiellement rejetée avec
+  // PregenerationPendingError (une simple attente de Batch, jamais une vraie
+  // panne) au lieu d'un résultat réel. Le chemin utilisateur synchrone reste
+  // donc TOUJOURS sur son propre verrou, inchangé. Contrepartie acceptée :
+  // pré-génération et génération live peuvent, dans de rares cas, lancer un
+  // appel IA chacune de leur côté pour le même sujet — sans conséquence,
+  // resolveMasterInsertConflict (déjà en place) règle déjà ce type de course
+  // au niveau de l'écriture en base.
+  const pregenStore = pregenerationContext.getStore();
+  const lockMap = pregenStore ? _notionQuizPregenMasterGenerationPromises : _notionQuizMasterGenerationPromises;
+  const pending = lockMap.get(masterSlot);
   if (pending) return pending;
   const generation = (async () => {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -19728,12 +19955,12 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
     // génération sur le même sujet entre-temps.
     return resolveMasterInsertConflict(masterSlot, questions, quizDate, { curriculum, progressiveStatus: "elementary_ready" });
   })();
-  _notionQuizMasterGenerationPromises.set(masterSlot, generation);
+  lockMap.set(masterSlot, generation);
   try {
     return await generation;
   } finally {
-    if (_notionQuizMasterGenerationPromises.get(masterSlot) === generation) {
-      _notionQuizMasterGenerationPromises.delete(masterSlot);
+    if (lockMap.get(masterSlot) === generation) {
+      lockMap.delete(masterSlot);
     }
   }
 }
@@ -19753,6 +19980,9 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
 // même jusqu'à Expert derrière) et en attente explicite (niveau demandé =
 // Avancé/Expert, cf. POST .../custom/progressive).
 const _notionQuizContinuationPromises = new Map();
+// Verrou SÉPARÉ pour la pré-génération (07/09/2026) — même principe que
+// _notionQuizPregenMasterGenerationPromises ci-dessus.
+const _notionQuizPregenContinuationPromises = new Map();
 const PROGRESSIVE_LEVEL_ORDER = ["elementaire", "avance", "expert"];
 const CURRICULUM_LEVEL_FOR_QUIZ_LEVEL = { elementaire: "elementary", avance: "deepening", expert: "expert" };
 // Inverse de CURRICULUM_LEVEL_FOR_QUIZ_LEVEL (chantier "Mémoriser/Non
@@ -19838,7 +20068,11 @@ async function continueProgressiveGeneration(masterSlot, topic, id, userId, targ
   const targetRank = progressiveLevelRank(targetLevel);
   if (targetRank <= 0) return null; // "elementaire" seul : rien à continuer ici.
 
-  const pending = _notionQuizContinuationPromises.get(masterSlot);
+  // Verrou dédié en pré-génération : cf. commentaire détaillé dans
+  // ensureProgressiveElementaryGenerated ("Course 1").
+  const pregenStore = pregenerationContext.getStore();
+  const lockMap = pregenStore ? _notionQuizPregenContinuationPromises : _notionQuizContinuationPromises;
+  const pending = lockMap.get(masterSlot);
   if (pending) return pending;
 
   const continuation = (async () => {
@@ -19904,13 +20138,26 @@ async function continueProgressiveGeneration(masterSlot, topic, id, userId, targ
       // vérifiés) déclenche AU PLUS UNE réparation, gatée contre CE
       // grounding (cohérent avec lui-même, jamais un mélange).
       const alreadyVerified = rawSubset.filter((k) => k.verified);
-      const { accepted: verifiedSubset, repairAttempted, evidenceCandidates, evidenceValid, evidenceRejectionReasons } = await evidenceGateAndRepairCurriculumSubset({
+      // otherLevelsKnowledge (déduplication inter-niveaux, 07/09/2026,
+      // section B1/B2) : STRICTEMENT les niveaux de rang INFÉRIEUR à celui en
+      // cours de traitement (elementary < deepening < expert, cf. LEVEL_RANK)
+      // — jamais un rang égal ou supérieur, qui inverserait à tort la
+      // priorité de conservation (un item Expert déjà `verified:true` dès la
+      // génération initiale, mais pas encore "commis" par sa propre passe de
+      // continuation, ne doit jamais compter comme "niveau inférieur" lors du
+      // traitement de Deepening). `k.verified` : seules les connaissances
+      // réellement retenues des niveaux inférieurs comptent, jamais un item
+      // rejeté qui n'apparaîtra de toute façon jamais dans le curriculum
+      // final.
+      const otherLevelsKnowledge = currentCurriculum.filter((k) => k.verified && (CURRICULUM_LEVEL_RANK[k.level] ?? 99) < CURRICULUM_LEVEL_RANK[curriculumLevelKey]);
+      const { accepted: verifiedSubset, repairAttempted, evidenceCandidates, evidenceValid, evidenceRejectionReasons, crossLevelDuplicatesEvicted } = await evidenceGateAndRepairCurriculumSubset({
         apiKey, subject: topic, contextHint: null, id, grounding,
         initialPool: [],
         preAccepted: alreadyVerified,
         targetSize: rawSubset.length,
         repairFeature: `curriculum_repair_${featurePrefix}`,
-        globalMaxOrder
+        globalMaxOrder,
+        otherLevelsKnowledge
       });
 
       // Fallback minimal (section 14D de la demande) : aucune connaissance
@@ -20042,7 +20289,8 @@ async function continueProgressiveGeneration(masterSlot, topic, id, userId, targ
         fiche_ms: blockResult.ficheMs, validated_count: blockResult.validated.length,
         degraded: blockResult.degraded, regeneration_calls: blockResult.regenerationCalls,
         paragraph_grounding_rejected_count: blockResult.paragraphGroundingRejectedCount,
-        evidence_candidates: evidenceCandidates, evidence_valid: evidenceValid, evidence_rejection_reasons: evidenceRejectionReasons
+        evidence_candidates: evidenceCandidates, evidence_valid: evidenceValid, evidence_rejection_reasons: evidenceRejectionReasons,
+        cross_level_duplicates_evicted: crossLevelDuplicatesEvicted
       }));
 
       currentQuestions = allQuestions;
@@ -20053,12 +20301,12 @@ async function continueProgressiveGeneration(masterSlot, topic, id, userId, targ
     return { questions: currentQuestions, quizDate, slot: masterSlot, curriculum: currentCurriculum, progressiveStatus: currentStatus };
   })();
 
-  _notionQuizContinuationPromises.set(masterSlot, continuation);
+  lockMap.set(masterSlot, continuation);
   try {
     return await continuation;
   } finally {
-    if (_notionQuizContinuationPromises.get(masterSlot) === continuation) {
-      _notionQuizContinuationPromises.delete(masterSlot);
+    if (lockMap.get(masterSlot) === continuation) {
+      lockMap.delete(masterSlot);
     }
   }
 }
@@ -22121,6 +22369,20 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
     // inchangé), la troncature ne se fait qu'ici, jamais dans le prompt.
     resolved = learnNextAiFallback.excludeAlreadyPicked(resolved, v1Result.recommendations.map((r) => r.name));
     resolved = resolved.slice(0, neededCount);
+
+    // Pré-génération en avance (chantier du 07/09/2026, "un sujet
+    // conceptuellement identique = un master unique") : chaque proposition
+    // FINALEMENT retenue avec isNew:true devient un candidat pour le
+    // scheduler de pré-génération — fire-and-forget, jamais sur le chemin
+    // critique de cette réponse (le système de recommandations n'est pas
+    // modifié, cf. rapport final). enqueueProposedTopic revérifie lui-même
+    // le catalogue (findExistingQuizMaster) avant toute écriture, pour la
+    // course "isNew croyait vrai, un master a été créé entre-temps".
+    for (const p of resolved) {
+      if (!p.isNew) continue;
+      pregenQueue.enqueueProposedTopic({ supabase, title: p.title, findExistingMaster: findExistingQuizMaster })
+        .catch((error) => console.warn("[notion-quiz-pregeneration] enqueue :", error.message));
+    }
 
     const payload = resolved.map((p) => {
       if (p.isNew) {
@@ -25772,6 +26034,272 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// Pré-génération en avance des sujets IA proposés — scheduler (07/09/2026)
+// ══════════════════════════════════════════════════════════════════════════
+// Même convention que les autres schedulers du fichier (ex.
+// ANALYSIS_SCHEDULER_ENABLED plus haut) : réconciliation au démarrage PUIS
+// setInterval. Le pipeline progressif existant (ensureProgressiveElementaryGenerated/
+// continueProgressiveGeneration) n'est jamais réécrit — il est simplement
+// REJOUÉ pour chaque sujet, dans le contexte de pré-génération
+// (runInPregenerationContext), qui redirige chaque appel _callOpenAI vers le
+// cache d'étapes plutôt que vers un vrai appel réseau (cf.
+// lib/notion-quiz-pregeneration-context.js et
+// lib/notion-quiz-pregeneration-step-cache.js).
+//
+// Valeurs par défaut prudentes : désactivé par défaut
+// (PREGENERATION_SCHEDULER_ENABLED doit être explicitement mis à "on"/"true"
+// après exécution de la migration SQL, cf. rapport final) ; buffer cible 5 ;
+// poll 2 min ; jusqu'à 20 requêtes par Batch soumis.
+const PREGENERATION_SCHEDULER_ENABLED = /^(?:1|true|on|yes)$/i.test(String(process.env.PREGENERATION_SCHEDULER_ENABLED || "").trim());
+const PREGENERATION_BUFFER_TARGET = Math.max(1, parseInt(process.env.PREGENERATION_BUFFER_TARGET, 10) || 5);
+const PREGENERATION_POLL_INTERVAL_MS = Math.max(30_000, parseInt(process.env.PREGENERATION_POLL_INTERVAL_MS, 10) || 120_000);
+const PREGENERATION_BATCH_SIZE = Math.max(1, parseInt(process.env.PREGENERATION_BATCH_SIZE, 10) || 20);
+// Politique de retry (demande explicite) : au niveau du SUJET, jamais par
+// appel individuel — un sujet dont un appel échoue définitivement (Batch
+// failed/expired pour cette requête précise, ou contenu invalide) réessaie
+// l'ENSEMBLE de ses appels échoués jusqu'à ce plafond, puis passe `failed`
+// pour de bon (le scheduler ne boucle jamais indéfiniment sur un sujet mort).
+const PREGENERATION_MAX_ATTEMPTS = 3;
+
+// Bug constaté lors du canari du 07/09/2026 : un Batch "completed" dont TOUTE
+// requête a échoué (ex. paramètre non supporté par le modèle) a
+// output_file_id=null et SEULEMENT error_file_id renseigné — appeler
+// downloadFileContent(null) déclenchait un vrai 404 OpenAI, que le catch
+// englobant de _pregenReconcileActiveBatches interprétait à tort comme "batch
+// introuvable" (alors que le Batch existe bel et bien). error_file_id partage
+// exactement le même schéma de ligne que output_file_id (custom_id +
+// response.status_code >= 400) — donc parseBatchOutputJsonl s'applique
+// identiquement, jamais une deuxième logique de parsing. Les deux fichiers
+// peuvent coexister (succès partiel) : jamais un "else", toujours les deux si
+// présents.
+async function _pregenApplyCompletedBatch(apiKey, batchId, batchStatus) {
+  const resultsByCustomId = new Map();
+  if (batchStatus.output_file_id) {
+    const outputText = await openaiBatchClient.downloadFileContent(fetch, apiKey, batchStatus.output_file_id);
+    for (const [customId, result] of openaiBatchClient.parseBatchOutputJsonl(outputText)) resultsByCustomId.set(customId, result);
+  }
+  if (batchStatus.error_file_id) {
+    const errorText = await openaiBatchClient.downloadFileContent(fetch, apiKey, batchStatus.error_file_id);
+    for (const [customId, result] of openaiBatchClient.parseBatchOutputJsonl(errorText)) resultsByCustomId.set(customId, result);
+  }
+  await pregenStepCache.applyBatchResults({ supabase, batchId, resultsByCustomId });
+}
+
+// Réconciliation DB/OpenAI (demande explicite : "Ne fais PAS toutes les
+// lignes generating > 4h → pending sans regarder OpenAI") : chaque batch_id
+// encore "actif" côté DB est d'abord vérifié auprès d'OpenAI — complété
+// (résultats appliqués), en cours (laissé tel quel, jamais retenté), ou
+// définitivement mort (failed/expired/cancelled/introuvable → marqué failed,
+// la politique de retry au niveau sujet prend le relais au cycle suivant).
+async function _pregenReconcileActiveBatches() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
+  const activeBatchIds = await pregenStepCache.selectActiveBatchIds({ supabase });
+  for (const batchId of activeBatchIds) {
+    try {
+      const status = await openaiBatchClient.retrieveBatch(fetch, apiKey, batchId);
+      if (status.status === "completed") {
+        await _pregenApplyCompletedBatch(apiKey, batchId, status);
+      } else if (openaiBatchClient.TERMINAL_BATCH_STATUSES.has(status.status)) {
+        await pregenStepCache.markBatchFailed({ supabase, batchId, reason: `batch ${status.status}` });
+      }
+      // in_progress/validating/finalizing/cancelling : rien à faire, jamais resoumis.
+    } catch (error) {
+      // batch_id introuvable côté OpenAI (404) OU toute autre erreur réseau :
+      // ne répare QUE dans ce cas précis (jamais en présumant un statut).
+      if (error?.status === 404) {
+        await pregenStepCache.markBatchFailed({ supabase, batchId, reason: "batch introuvable côté OpenAI" });
+      } else {
+        console.warn(`[notion-quiz-pregeneration] réconciliation batch ${batchId} :`, error.message);
+      }
+    }
+  }
+}
+
+async function _pregenMarkTopicFailed(queueRow, reason) {
+  const attemptCount = (queueRow.attempt_count || 0) + 1;
+  const now = new Date().toISOString();
+  if (attemptCount < PREGENERATION_MAX_ATTEMPTS) {
+    await pregenStepCache.resetFailedCallsForRetry({ supabase, queueId: queueRow.id });
+    await supabase.from(pregenQueue.QUEUE_TABLE)
+      .update({ status: "pending", attempt_count: attemptCount, error_reason: reason, updated_at: now })
+      .eq("id", queueRow.id);
+  } else {
+    await supabase.from(pregenQueue.QUEUE_TABLE)
+      .update({ status: "failed", attempt_count: attemptCount, error_reason: reason, updated_at: now })
+      .eq("id", queueRow.id);
+  }
+}
+
+// Cœur du driver : rejoue le pipeline progressif EXISTANT (inchangé) pour un
+// sujet, dans le contexte de pré-génération. Ne reste JAMAIS bloqué en
+// attente d'un Batch — PregenerationPendingError (cf. les 5 points de garde)
+// rend systématiquement la main au scheduler en quelques millisecondes.
+async function _pregenAttemptTopicProgress(queueRow) {
+  const masterSlot = buildCustomTopicMasterSlot(queueRow.normalized_key);
+  const now = new Date().toISOString();
+  try {
+    await runInPregenerationContext(queueRow.id, async () => {
+      // Course 4 (demande explicite : "Batch encore en cours mais génération
+      // synchrone utilisateur termine avant") : un master déjà RÉELLEMENT prêt
+      // (généré par un utilisateur en direct entre-temps) ne doit jamais être
+      // régénéré ni écrasé — adopté tel quel, aucun appel supplémentaire.
+      const existingMaster = await findExistingQuizMaster([masterSlot]);
+      if (existingMaster?.progressiveStatus === "ready") {
+        await supabase.from(pregenQueue.QUEUE_TABLE).update({ status: "ready", master_slot: masterSlot, updated_at: now }).eq("id", queueRow.id);
+        return;
+      }
+
+      let progressiveStatus = existingMaster?.progressiveStatus || null;
+      if (!existingMaster) {
+        const result = await ensureProgressiveElementaryGenerated(masterSlot, queueRow.title, queueRow.normalized_key, null);
+        if (result.error) throw new Error(`Élémentaire : ${result.code || result.error} (${result.stage || "?"})`);
+        progressiveStatus = result.progressiveStatus;
+      }
+      if (progressiveStatus !== "ready") {
+        const continuationResult = await continueProgressiveGeneration(masterSlot, queueRow.title, queueRow.normalized_key, null, "expert");
+        progressiveStatus = continuationResult?.progressiveStatus || progressiveStatus;
+      }
+
+      if (progressiveStatus === "ready") {
+        await supabase.from(pregenQueue.QUEUE_TABLE).update({ status: "ready", master_slot: masterSlot, updated_at: now }).eq("id", queueRow.id);
+      } else {
+        // La continuation s'est arrêtée proprement (curriculum insuffisant
+        // pour Approfondi/Expert, jamais une boucle) SANS lever de sentinel :
+        // ce sujet ne pourra jamais atteindre "ready" par ce chemin — échec
+        // définitif du SUJET (jamais un nouvel essai infini), retry géré
+        // normalement par _pregenMarkTopicFailed.
+        throw new Error(`progression arrêtée à progressive_status=${progressiveStatus || "null"} (curriculum insuffisant pour un niveau)`);
+      }
+    });
+  } catch (error) {
+    if (error instanceof pregenStepCache.PregenerationPendingError) {
+      // Normal : ce sujet attend un résultat Batch — marqué "generating" (si
+      // ce n'est déjà fait) pour être re-tenté au prochain cycle, jamais une
+      // erreur.
+      await supabase.from(pregenQueue.QUEUE_TABLE)
+        .update({ status: "generating", master_slot: masterSlot, updated_at: now })
+        .eq("id", queueRow.id)
+        .in("status", ["pending", "generating"]);
+      return;
+    }
+    await _pregenMarkTopicFailed(queueRow, error.message);
+  }
+}
+
+async function _pregenSubmitPendingBatch() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
+  const pendingCalls = await pregenStepCache.selectPendingCalls({ supabase, limit: PREGENERATION_BATCH_SIZE });
+  if (!pendingCalls.length) return;
+  // Bug constaté lors du canari du 07/09/2026 : le chemin synchrone (_callOpenAI,
+  // ligne ~13246) omet déjà `temperature` pour MODELS_WITHOUT_CUSTOM_TEMPERATURE
+  // (gpt-5.6-luna : "Unsupported value: 'temperature' does not support 0.2 with
+  // this model") — mais cette garde vit UNIQUEMENT dans le corps de la requête
+  // fetch synchrone, jamais atteint par le chemin pré-génération (retour
+  // anticipé avant, cf. _callOpenAI). Sans reprendre EXACTEMENT la même garde
+  // ici, le Batch divergeait du synchrone (§4 de la demande) et chaque requête
+  // échouait systématiquement pour ce modèle.
+  const requestLines = pendingCalls.map((call) => openaiBatchClient.buildBatchRequestLine({
+    customId: call.custom_id,
+    model: call.request_payload.model,
+    messages: call.request_payload.messages,
+    temperature: MODELS_WITHOUT_CUSTOM_TEMPERATURE.has(call.request_payload.model) ? undefined : call.request_payload.temperature,
+    responseFormat: call.request_payload.responseFormat
+  }));
+  const { batchId } = await openaiBatchClient.submitBatch(fetch, apiKey, requestLines, { metadata: { purpose: "notion_quiz_pregeneration" } });
+  await pregenStepCache.markCallsBatchSubmitted({ supabase, callIds: pendingCalls.map((c) => c.id), batchId });
+  console.info(`[notion-quiz-pregeneration] Batch soumis batch_id=${batchId} requêtes=${pendingCalls.length}`);
+}
+
+// Anti-chevauchement (demande explicite) : un lock en mémoire simple — un
+// cycle qui dépasserait PREGENERATION_POLL_INTERVAL_MS (peu probable, chaque
+// appel IA étant remplacé par une simple lecture DB en mode Batch) ne peut
+// jamais en chevaucher un second.
+let _pregenerationCycleRunning = false;
+async function runPregenerationCycle() {
+  if (_pregenerationCycleRunning) return;
+  if (!process.env.OPENAI_API_KEY) return;
+  _pregenerationCycleRunning = true;
+  try {
+    // 1-2-3 : réconcilier/traiter les batches déjà soumis en premier — les
+    // résultats fraîchement appliqués permettent aux sujets concernés
+    // d'avancer dès CE cycle-ci (étape 4).
+    await _pregenReconcileActiveBatches();
+
+    // 4 : faire progresser chaque sujet déjà actif.
+    const { data: activeRows, error: activeError } = await supabase
+      .from(pregenQueue.QUEUE_TABLE).select("*").eq("status", "generating");
+    if (activeError) throw new Error(activeError.message);
+    for (const row of activeRows || []) await _pregenAttemptTopicProgress(row);
+
+    // 5-6 : stock réellement disponible, sélection de nouveaux pending si
+    // sous la cible (jamais "5 copies pour 5 utilisateurs" — cf.
+    // countUnclaimedReadyTopics, 5 sujets DISTINCTS du catalogue global).
+    const unclaimedReady = await pregenQueue.countUnclaimedReadyTopics({ supabase });
+    if (unclaimedReady < PREGENERATION_BUFFER_TARGET) {
+      const nextPending = await pregenQueue.selectNextPendingTopics({ supabase, limit: PREGENERATION_BUFFER_TARGET - unclaimedReady });
+      for (const row of nextPending) await _pregenAttemptTopicProgress(row);
+    }
+
+    // 7 : soumettre un nouveau Batch si des appels viennent d'être découverts
+    // (par les sujets traités aux étapes 4/5-6 ci-dessus) — TOUJOURS
+    // plusieurs sujets réunis dans le même Batch quand ils atteignent la
+    // même étape au même cycle, jamais un Batch par sujet.
+    await _pregenSubmitPendingBatch();
+  } catch (error) {
+    console.error("[notion-quiz-pregeneration] cycle scheduler :", error.message);
+  } finally {
+    _pregenerationCycleRunning = false;
+  }
+}
+
+// Canari manuel (demande explicite du 07/09/2026) : valider un cycle réel de
+// bout en bout AVANT d'activer PREGENERATION_SCHEDULER_ENABLED en continu.
+// Ne se déclenche jamais tout seul — protégé par requireAdmin, appelé
+// manuellement une fois. Réutilise l'enqueue et le cycle RÉELS (aucune
+// logique dupliquée) : avec zéro autre ligne pending/generating en base, ce
+// cycle ne traite que le sujet canari.
+app.post("/api/admin/pregeneration/run-canary", requireAdmin, express.json(), async (req, res) => {
+  try {
+    const title = String(req.body?.title || "").trim();
+    if (!title) return res.status(400).json({ error: "title requis." });
+    const enqueueResult = await pregenQueue.enqueueProposedTopic({
+      supabase, title, findExistingMaster: findExistingQuizMaster, source: "canary_manual"
+    });
+    await runPregenerationCycle();
+    const { data: queueRow } = await supabase
+      .from(pregenQueue.QUEUE_TABLE)
+      .select("*")
+      .eq("normalized_key", enqueueResult.normalizedKey)
+      .maybeSingle();
+    const { data: calls } = await supabase
+      .from("notion_quiz_pregeneration_calls")
+      .select("*")
+      .eq("queue_id", queueRow?.id || -1)
+      .order("id", { ascending: true });
+    res.json({ enqueueResult, queueRow, calls: calls || [] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+if (PREGENERATION_SCHEDULER_ENABLED) {
+  // Réconciliation au démarrage (reprise après crash/redeploy, demande
+  // explicite) : vérifie chaque batch_id encore actif auprès d'OpenAI AVANT
+  // le premier cycle normal — jamais une simple réinitialisation aveugle.
+  _pregenReconcileActiveBatches().catch((error) =>
+    console.error("[notion-quiz-pregeneration] réconciliation au démarrage :", error.message)
+  );
+  setInterval(() => {
+    runPregenerationCycle().catch((error) => console.error("[notion-quiz-pregeneration] cycle :", error.message));
+  }, PREGENERATION_POLL_INTERVAL_MS);
+  console.log(`[notion-quiz-pregeneration] scheduler activé (buffer=${PREGENERATION_BUFFER_TARGET}, poll=${PREGENERATION_POLL_INTERVAL_MS}ms, batchSize=${PREGENERATION_BATCH_SIZE}).`);
+} else {
+  console.log("[notion-quiz-pregeneration] scheduler désactivé (PREGENERATION_SCHEDULER_ENABLED non actif).");
+}
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Server running on port ${PORT}`);

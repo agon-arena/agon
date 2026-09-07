@@ -16,11 +16,18 @@ const fs = require("fs");
 const path = require("path");
 
 const SERVER_SOURCE = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
+const { buildCustomTopicMasterSlot } = require("../lib/custom-topic-identity");
 
 // ── Identité de master : slot nu, indépendant du niveau ────────────────────
 
+// Extraite dans lib/custom-topic-identity.js (07/09/2026, chantier
+// "pré-génération en avance" — réutilisée telle quelle par la nouvelle queue,
+// jamais une copie divergente) : le comportement est désormais vérifié en
+// EXÉCUTANT la vraie fonction, plus en inspectant le texte de server.js, qui
+// ne la définit plus lui-même.
 test("buildCustomTopicMasterSlot construit un slot nu (notion:custom:{id}), sans suffixe de niveau", () => {
-  assert.match(SERVER_SOURCE, /function buildCustomTopicMasterSlot\(id\) \{\s*\n\s*return `notion:custom:\$\{id\}`;\s*\n\}/);
+  assert.equal(buildCustomTopicMasterSlot("abc123"), "notion:custom:abc123");
+  assert.match(SERVER_SOURCE, /const \{ normalizeCustomTopicKey, buildCustomTopicMasterSlot \} = require\("\.\/lib\/custom-topic-identity"\);/);
 });
 
 test("buildNotionMasterSlot construit un slot nu (notion:{sourceType}:{sourceDebateId}), sans suffixe de niveau", () => {

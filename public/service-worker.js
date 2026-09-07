@@ -14,7 +14,30 @@
 // navigationNetworkFirst — plusieurs correctifs visuels successifs sur cette
 // page ("toujours gris très clair") semblaient ne jamais prendre alors qu'ils
 // étaient bien servis côté serveur, pour la même raison.
-const SW_VERSION = "20260904-autres-sources-network-first";
+//
+// Correctif du 07/09/2026 ("lancement standalone lent") : "/" est retirée de
+// navigationNetworkFirst ci-dessous — elle redevient cache-first instantané
+// (c'est le start_url du manifest, donc LA page ouverte à chaque tap sur
+// l'icône). La boucle laissée inachevée le 03/09 (mnoria:page-stale posait
+// window.__mnoriaPageUpdateAvailable sans que rien ne le lise, cf. ci-dessus)
+// est maintenant fermée côté script.js : un rechargement automatique unique
+// se déclenche si la page vient tout juste de s'afficher (cf. son
+// commentaire) — le vrai bug visuel du 03/09 reste donc corrigé, sans payer
+// l'attente réseau sur les lancements où rien n'a changé (l'écrasante
+// majorité). Les autres routes de cette liste (formulaires/pages profondes,
+// jamais le start_url) gardent le comportement network-first inchangé.
+//
+// Google Fonts (même correctif du 07/09/2026) : le CSS
+// (fonts.googleapis.com) et les fichiers de police (fonts.gstatic.com)
+// étaient jusqu'ici entièrement hors du périmètre de ce service worker (leur
+// URL ne matche pas isCacheableStaticAsset, qui ne regarde que l'extension
+// du chemin) — chaque lancement froid refaisait donc un aller-retour complet
+// vers un domaine tiers avant de pouvoir peindre le texte (display:block sur
+// la règle @font-face, cf. views/index.html). Mis en cache-first avec
+// revalidation arrière-plan ci-dessous, même stratégie que les assets
+// statiques immuables locaux (cf. isMutableStaticAsset plus bas) — une police
+// change assez rarement pour que ça ne soit jamais un problème de fraîcheur.
+const SW_VERSION = "20260907-standalone-launch-speed";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -34,6 +57,23 @@ function isMutableStaticAsset(url) {
   // peut pas réutiliser silencieusement une ancienne ressource.
   if (parsedUrl.searchParams.has("v")) return false;
   return /\.(?:css|js)(?:\?.*)?$/i.test(url);
+}
+
+// Google Fonts (correctif du 07/09/2026, "lancement standalone lent") : ni le
+// CSS (fonts.googleapis.com, sans extension .css dans son chemin) ni les
+// fichiers de police (fonts.gstatic.com) ne matchent isCacheableStaticAsset
+// ci-dessus — jamais interceptés avant ce correctif, donc jamais mis en
+// cache, malgré le commentaire (déjà faux) d'isCacheableStaticAsset qui
+// prétendait couvrir "les CSS externes de polices". Cf. le fetch handler
+// plus bas pour la stratégie (cache-first + revalidation arrière-plan, comme
+// isMutableStaticAsset===false ci-dessus).
+function isGoogleFontsHost(url) {
+  try {
+    const host = new URL(url).hostname;
+    return host === "fonts.googleapis.com" || host === "fonts.gstatic.com";
+  } catch (_) {
+    return false;
+  }
 }
 
 function buildRecoveryResponse(targetUrl) {
@@ -186,8 +226,12 @@ self.addEventListener("fetch", (event) => {
     // consulteront jamais.
     const requestUrl = new URL(request.url);
     const forcedFresh = requestUrl.searchParams.has("_swrefresh");
+    // "/" volontairement absente de cette liste (correctif du 07/09/2026,
+    // "lancement standalone lent") : c'est le start_url du manifest, donc LA
+    // page ouverte à chaque tap sur l'icône — elle redevient cache-first
+    // instantané, cf. le commentaire de tête sur SW_VERSION pour le détail
+    // complet (boucle de fraîcheur fermée côté script.js).
     const navigationNetworkFirst = [
-      "/",
       "/apprentissage",
       "/create",
       "/notifications",
@@ -255,6 +299,30 @@ self.addEventListener("fetch", (event) => {
           return cachedFallback || buildRecoveryResponse(request.url);
         });
       })
+    );
+    return;
+  }
+
+  // Google Fonts (correctif du 07/09/2026) : cache-first + revalidation
+  // arrière-plan, même stratégie que les assets statiques immuables
+  // ci-dessous — jamais interceptées avant ce correctif (cf. isGoogleFontsHost).
+  // `response.type === "opaque"` couvre le CSS (chargé via <link> sans
+  // `crossorigin`, donc en mode no-cors) ; les fichiers de police eux-mêmes
+  // (fonts.gstatic.com, chargés par le moteur de rendu pour @font-face) sont
+  // de vraies réponses CORS (response.ok exploitable).
+  if (request.method === "GET" && isGoogleFontsHost(request.url)) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then((cache) =>
+        cache.match(request).then((cached) => {
+          const networkFetch = fetch(request).then((response) => {
+            if (response && (response.ok || response.type === "opaque")) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          }).catch(() => cached);
+          return cached || networkFetch;
+        })
+      )
     );
     return;
   }

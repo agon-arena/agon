@@ -116,8 +116,13 @@ test("une génération réussie efface toujours le marqueur et affiche explainer
 // ── Le marqueur est écrit AVANT l'appel réseau (déjà correct, non touché) ──
 
 test("le marqueur persistant est déjà écrit avant l'appel réseau, condition nécessaire pour que le sondage global le retrouve même en cas de timeout", () => {
+  // Chantier "catalogue commun" (07/09/2026) : activateDebateNotion route
+  // désormais vers /custom/progressive (même pipeline que la recherche
+  // libre), jamais plus /api/users/notion-quizzes — cf. son commentaire de
+  // tête. Le principe testé ici (marqueur écrit AVANT l'appel réseau) reste
+  // inchangé au caractère près.
   const markerIndex = activateDebateNotion.indexOf("startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });");
-  const fetchIndex = activateDebateNotion.indexOf("fetchJSON(`${API}/users/notion-quizzes`");
+  const fetchIndex = activateDebateNotion.indexOf("fetchJSON(`${API}/users/notion-quizzes/custom/progressive`");
   assert.ok(markerIndex >= 0 && fetchIndex > markerIndex, "startPendingNotionQuizGeneration doit précéder l'appel fetchJSON");
 });
 

@@ -193,6 +193,31 @@ test("buildSourceSelectionPrompt : inclut le contexte quand fourni, l'omet sinon
   assert.doesNotMatch(withoutContext, /contexte additionnel/);
 });
 
+// Audit qualité éditoriale du 07/09/2026 (section 11 de la demande) : la
+// priorité Wikipédia reste utile mais ne doit jamais aboutir mécaniquement à
+// 3 sources redondantes de type encyclopédie/infobox généraliste — préférer
+// une combinaison complémentaire (une source encyclopédique générale + des
+// sources institutionnelles/académiques/spécialisées quand elles existent).
+// Prompt uniquement, aucune requête Brave supplémentaire.
+test("buildSourceSelectionPrompt : encourage une combinaison complémentaire plutôt que 3 sources redondantes de même type descriptif", () => {
+  const candidates = filterCandidateSources([candidate("https://lemonde.fr/article")]);
+  const prompt = buildSourceSelectionPrompt("Sujet", null, candidates);
+  assert.match(prompt, /préfère une COMBINAISON complémentaire/);
+  assert.match(prompt, /sources institutionnelles, académiques ou spécialisées qui apportent un angle différent/);
+});
+
+test("buildSourceSelectionPrompt : la consigne de diversité ne dispense jamais des trois critères de fiabilité/pertinence (pas d'exclusion forcée)", () => {
+  const candidates = filterCandidateSources([candidate("https://lemonde.fr/article")]);
+  const prompt = buildSourceSelectionPrompt("Sujet", null, candidates);
+  assert.match(prompt, /N'écarte cependant jamais une source par ailleurs pertinente et fiable simplement pour "faire varier" artificiellement les types/);
+});
+
+test("buildSourceSelectionPrompt : la priorité Wikipédia reste intacte malgré la nouvelle consigne de diversité", () => {
+  const candidates = filterCandidateSources([candidate("https://lemonde.fr/article")]);
+  const prompt = buildSourceSelectionPrompt("Sujet", null, candidates);
+  assert.match(prompt, /choisis-la en premier\/en priorité parmi tes sources retenues/);
+});
+
 // ---- parseSourceSelectionResponse ----
 
 test("parseSourceSelectionResponse : conserve les index valides dans l'ordre de la réponse", () => {

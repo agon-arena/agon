@@ -13,11 +13,16 @@ const {
   MIN_PROGRESSIVE_CURRICULUM,
   MAX_PROGRESSIVE_CURRICULUM,
   MIN_LEVEL_SIZE,
+  LEVEL_RANK,
   computeCurriculumSplit,
   levelForOrder,
   buildCurriculumPrompt,
   parseCurriculumItems,
   findNearDuplicates,
+  extractNumericAnchors,
+  isCrossLevelNearDuplicateKnowledge,
+  findCrossLevelNearDuplicates,
+  evictCrossLevelDuplicates,
   normalizeCurriculumOrder,
   assignCurriculumLevels,
   validateCurriculumComplete,
@@ -587,6 +592,69 @@ test("normalizeCurriculumOrder : préserve source_id/evidence_text quand présen
   assert.deepEqual(Object.keys(normalized[1]).sort(), ["id", "knowledgeTarget", "order"]);
 });
 
+// ── Qualité éditoriale et pédagogique du curriculum (audit du 07/09/2026,
+// cas réel "Empire ottoman" — le curriculum privilégiait langues
+// officielles/superficies/populations exactes/succession de capitales/dates
+// au jour près, et couvrait insuffisamment naissance/expansion, 1453,
+// Soliman le Magnifique, janissaires, organisation impériale, diversité
+// religieuse, rapports avec l'Europe, transformations du XIXe, causes de
+// l'effondrement). Prompt uniquement, aucun nouvel appel IA, aucun champ de
+// priorité ajouté au schéma — cf. rapport final pour le choix de ne pas
+// introduire de champ "priority" dédié. ──────────────────────────────────
+
+test("buildCurriculumPrompt : la sélection est guidée par la VALEUR PÉDAGOGIQUE, jamais la seule exactitude — statistiques/superficies/populations/dates précises explicitement minoritaires", () => {
+  const prompt = buildCurriculumPrompt("Empire ottoman", null, null);
+  assert.match(prompt, /VALEUR PÉDAGOGIQUE/);
+  assert.match(prompt, /n'est pas automatiquement une bonne connaissance à mémoriser/);
+  assert.match(prompt, /doivent rester MINORITAIRES/);
+  assert.match(prompt, /statistiques isolées, superficies, populations ou effectifs exacts/);
+  assert.match(prompt, /la population exacte d'un empire à une date donnée l'est rarement/);
+});
+
+test("buildCurriculumPrompt : liste la hiérarchie structurante (définition, origine, mécanismes, causes/conséquences...) sans l'imposer comme grille obligatoire", () => {
+  const prompt = buildCurriculumPrompt("Sujet", null, null);
+  assert.match(prompt, /définition\/identité du sujet/);
+  assert.match(prompt, /causes et conséquences/);
+  assert.match(prompt, /ne remplis JAMAIS artificiellement une catégorie/);
+});
+
+test("buildCurriculumPrompt : en cas de remplissage vers 20, préfère causes/conséquences/mécanismes à une statistique ou une date secondaire", () => {
+  const prompt = buildCurriculumPrompt("Sujet", null, null);
+  assert.match(prompt, /préfère toujours ajouter une cause, une conséquence, une distinction, un mécanisme ou une évolution/);
+});
+
+test("buildCurriculumPrompt : demande une couverture équilibrée des sous-thèmes sans imposer un plan artificiel", () => {
+  const prompt = buildCurriculumPrompt("Empire ottoman", null, null);
+  assert.match(prompt, /COUVERTURE ÉQUILIBRÉE DU SUJET/);
+  assert.match(prompt, /n'en occupe une part disproportionnée/);
+  assert.match(prompt, /N'impose cependant jamais une structure artificielle/);
+});
+
+test("buildCurriculumPrompt : impose une prudence historiographique — jamais une convention ou une interprétation présentée comme un fait absolu daté avec certitude", () => {
+  const prompt = buildCurriculumPrompt("Empire ottoman", null, null);
+  assert.match(prompt, /PRUDENCE FACTUELLE ET HISTORIOGRAPHIQUE/);
+  assert.match(prompt, /ne transforme jamais une convention, une attribution traditionnelle, une simplification ou une interprétation discutée en fait absolu/);
+});
+
+test("buildCurriculumPrompt : sans aucun grounding (ni groundingText ni identifiedSourcesBlock), avertit explicitement qu'aucune vérification externe n'est possible et demande des connaissances générales et robustes", () => {
+  const prompt = buildCurriculumPrompt("Sujet sans source", null, null, null);
+  assert.match(prompt, /Aucune source web n'a pu être vérifiée pour ce sujet/);
+  assert.match(prompt, /privilégie des connaissances générales, stables et incontestables/);
+});
+
+test("buildCurriculumPrompt : dès qu'un grounding (texte ou sources identifiées) est fourni, n'affiche jamais l'avertissement \"aucune source web\"", () => {
+  const withText = buildCurriculumPrompt("Sujet", null, "[Source 1] Contenu réel.");
+  assert.doesNotMatch(withText, /Aucune source web n'a pu être vérifiée/);
+  const withSources = buildCurriculumPrompt("Sujet", null, "ignoré", SOURCES_BLOCK);
+  assert.doesNotMatch(withSources, /Aucune source web n'a pu être vérifiée/);
+});
+
+test("buildCurriculumRepairPrompt : les ajouts de réparation suivent la même priorité éditoriale (cause/conséquence/mécanisme plutôt que statistique) et la même prudence historiographique", () => {
+  const prompt = buildCurriculumRepairPrompt("Sujet", null, 2, [{ knowledgeTarget: "Déjà validée 1" }], null);
+  assert.match(prompt, /une cause, une conséquence, un mécanisme, une distinction ou une évolution encore non couverte vaut mieux qu'une statistique isolée/);
+  assert.match(prompt, /Reste prudent sur toute information débattue ou conventionnelle/);
+});
+
 test("parseCurriculumRepairAdditions : capture source_id/evidence_text UNIQUEMENT quand les deux sont fournis ensemble", () => {
   const raw = [
     { knowledgeTarget: "Ajout avec preuve.", source_id: "SOURCE_2", evidence_text: "Un extrait réel suffisamment long." },
@@ -596,4 +664,104 @@ test("parseCurriculumRepairAdditions : capture source_id/evidence_text UNIQUEMEN
   assert.equal(additions[0].source_id, "SOURCE_2");
   assert.equal(additions[0].evidence_text, "Un extrait réel suffisamment long.");
   assert.deepEqual(Object.keys(additions[1]).sort(), ["knowledgeTarget"]);
+});
+
+// ── Déduplication INTER-NIVEAUX (audit qualité éditoriale du 07/09/2026,
+// cas réel "Empire ottoman" : k15≈k4, k19≈k5, k21≈k8, recoupements lexicaux
+// mesurés respectivement 0.500/0.364/0.750 — 2 des 3 cas sous
+// NEAR_DUPLICATE_THRESHOLD=0.75, d'où le signal d'ancre numérique
+// additionnel). Section B5 de la demande : "test inter-niveaux simple",
+// "test non-doublon", "test religion", "test global". ────────────────────
+
+test("extractNumericAnchors : capture les années/nombres significatifs (3-4 chiffres), jamais les numéros isolés à 1-2 chiffres", () => {
+  assert.deepEqual([...extractNumericAnchors("Le 29 mai 1453, puis en 1922.")].sort(), ["1453", "1922"]);
+  assert.deepEqual([...extractNumericAnchors("Chapitre 3, page 12.")], []);
+  assert.deepEqual([...extractNumericAnchors("")], []);
+});
+
+// Test inter-niveaux simple (section B5) : reformulation plus longue du
+// MÊME fait à un niveau supérieur -> doublon.
+test("isCrossLevelNearDuplicateKnowledge : \"Constantinople est conquise en 1453\" (Élémentaire) et \"La prise de Constantinople par Mehmed II a lieu en 1453\" (Expert) sont un doublon", () => {
+  const elementary = { level: "elementary", knowledgeTarget: "Constantinople est conquise en 1453." };
+  const expert = { level: "expert", knowledgeTarget: "La prise de Constantinople par Mehmed II a lieu en 1453." };
+  assert.equal(isCrossLevelNearDuplicateKnowledge(elementary, expert), true);
+});
+
+// Test non-doublon (section B5) : même événement, mais l'un teste le repère
+// et l'autre une CONSÉQUENCE — jamais fusionnés automatiquement.
+test("isCrossLevelNearDuplicateKnowledge : \"Constantinople est conquise en 1453\" et \"La conquête de Constantinople renforce le rôle de la ville comme centre politique ottoman\" ne sont PAS un doublon (contenu enseigné réellement différent)", () => {
+  const elementary = { level: "elementary", knowledgeTarget: "Constantinople est conquise en 1453." };
+  const expert = { level: "expert", knowledgeTarget: "La conquête de Constantinople renforce le rôle de la ville comme centre politique ottoman." };
+  assert.equal(isCrossLevelNearDuplicateKnowledge(elementary, expert), false);
+});
+
+// Test religion (section B5).
+test("isCrossLevelNearDuplicateKnowledge : \"L'islam sunnite est la religion officielle de l'Empire\" et \"L'Empire ottoman a pour religion d'État l'islam sunnite\" sont un doublon", () => {
+  const elementary = { level: "elementary", knowledgeTarget: "L'islam sunnite est la religion officielle de l'Empire." };
+  const expert = { level: "expert", knowledgeTarget: "L'Empire ottoman a pour religion d'État l'islam sunnite." };
+  assert.equal(isCrossLevelNearDuplicateKnowledge(elementary, expert), true);
+});
+
+test("isCrossLevelNearDuplicateKnowledge : un même niveau (jamais comparé, cf. findCrossLevelNearDuplicates) n'est pas concerné par le prédicat lui-même — deux connaissances au même niveau restent gérées par findNearDuplicates", () => {
+  // Le prédicat pur ne connaît pas les niveaux : c'est findCrossLevelNearDuplicates
+  // qui exclut les paires de même niveau, testé séparément ci-dessous.
+  const a = { level: "expert", knowledgeTarget: "Constantinople est conquise en 1453." };
+  const b = { level: "expert", knowledgeTarget: "La prise de Constantinople a lieu en 1453." };
+  assert.equal(isCrossLevelNearDuplicateKnowledge(a, b), true);
+});
+
+test("isCrossLevelNearDuplicateKnowledge : deux faits différents partageant seulement une année, sans autre mot commun, ne sont jamais confondus (garde-fou contre les faux positifs)", () => {
+  const a = { level: "elementary", knowledgeTarget: "La Révolution française éclate en 1789." };
+  const b = { level: "expert", knowledgeTarget: "En 1789, les États généraux se réunissent à Versailles pour tenter de résoudre la crise financière du royaume." };
+  assert.equal(isCrossLevelNearDuplicateKnowledge(a, b), false);
+});
+
+test("findCrossLevelNearDuplicates : ignore les paires de MÊME niveau, même si elles seraient par ailleurs détectées comme quasi équivalentes", () => {
+  const list = [
+    { id: "a", level: "expert", knowledgeTarget: "Constantinople est conquise en 1453." },
+    { id: "b", level: "expert", knowledgeTarget: "La prise de Constantinople a lieu en 1453." }
+  ];
+  assert.deepEqual(findCrossLevelNearDuplicates(list), []);
+});
+
+// Test global (section B5) : curriculum complet avec des doublons répartis
+// sur les trois niveaux — reproduit les 3 cas réels mesurés.
+test("evictCrossLevelDuplicates : cas réel complet (k4/k15, k5/k19, k8/k21) — conserve systématiquement le niveau le plus bas, jamais l'inverse", () => {
+  const curriculum = [
+    { id: "k4", level: "elementary", knowledgeTarget: "Le sultanat ottoman a été aboli le 1er novembre 1922, mettant fin à la monarchie impériale ottomane." },
+    { id: "k15", level: "expert", knowledgeTarget: "Le sultanat ottoman est aboli le 1er novembre 1922, ce qui met fin à l'Empire ottoman comme régime sultanien." },
+    { id: "k5", level: "deepening", knowledgeTarget: "La conquête de Constantinople, le 29 mai 1453, constitue une étape majeure de l'histoire de l'Empire ottoman." },
+    { id: "k19", level: "expert", knowledgeTarget: "La conquête de Constantinople a lieu le 29 mai 1453." },
+    { id: "k8", level: "deepening", knowledgeTarget: "La religion d'État de l'Empire ottoman est l'islam sunnite, avec l'école hanafite comme école mentionnée." },
+    { id: "k21", level: "expert", knowledgeTarget: "L'islam sunnite est la religion d'État de l'Empire ottoman, qui suit l'école juridique hanafite." },
+    // Connaissances réellement distinctes, à préserver sans exception.
+    { id: "k2", level: "elementary", knowledgeTarget: "Constantinople est conquise par les Ottomans en 1453." },
+    { id: "kX", level: "expert", knowledgeTarget: "La conquête de Constantinople permet aux Ottomans de faire de la ville le centre politique majeur de leur Empire." }
+  ];
+  const { curriculum: kept, evicted } = evictCrossLevelDuplicates(curriculum);
+  assert.deepEqual(evicted.map((k) => k.id).sort(), ["k15", "k19", "k21"]);
+  assert.deepEqual(kept.map((k) => k.id).sort(), ["k2", "k4", "k5", "k8", "kX"]);
+  // Priorité de conservation : jamais un niveau supérieur gardé au détriment d'un niveau inférieur.
+  for (const item of kept) assert.ok(LEVEL_RANK[item.level] != null);
+});
+
+test("evictCrossLevelDuplicates : curriculum sans aucun doublon inter-niveaux -> renvoyé intégralement, jamais modifié", () => {
+  const curriculum = [
+    { id: "k1", level: "elementary", knowledgeTarget: "Osman I fonde la dynastie ottomane." },
+    { id: "k2", level: "deepening", knowledgeTarget: "Soliman le Magnifique réforme le droit ottoman." },
+    { id: "k3", level: "expert", knowledgeTarget: "Les janissaires jouent un rôle central dans l'administration militaire." }
+  ];
+  const { curriculum: kept, evicted } = evictCrossLevelDuplicates(curriculum);
+  assert.equal(kept.length, 3);
+  assert.equal(evicted.length, 0);
+});
+
+test("evictCrossLevelDuplicates : jamais évincé côté niveau le plus bas même en cas de doublons multiples chaînés", () => {
+  const curriculum = [
+    { id: "e1", level: "elementary", knowledgeTarget: "La bataille de Waterloo a lieu en 1815." },
+    { id: "d1", level: "deepening", knowledgeTarget: "La bataille de Waterloo se déroule en 1815." },
+    { id: "x1", level: "expert", knowledgeTarget: "La bataille de Waterloo survient en 1815." }
+  ];
+  const { curriculum: kept } = evictCrossLevelDuplicates(curriculum);
+  assert.deepEqual(kept.map((k) => k.id), ["e1"]);
 });
