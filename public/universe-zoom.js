@@ -327,7 +327,15 @@ function layoutUniverseWorld(galaxies, worldRadius) {
 
   // Même protection au niveau supérieur : une galaxie garde son disque visuel historique, tandis
   // que son rayon de collision agrégé peut grandir avec ses groupes Solar.
-  const galaxyGap = Math.max(0.8, worldRadius * 0.025);
+  // Écart nettement plus large qu'entre deux solars d'une même galaxie (interGroupGap ci-dessus,
+  // ~4% du rayon de LA galaxie) — demande du 08/09/2026 : la bulle galaxie qui matérialisait le
+  // regroupement thématique disparaît dès que ses solars deviennent visibles (childrenCanShow,
+  // cf. onCameraChange), donc sans ce vide nettement plus grand ENTRE deux galaxies qu'À
+  // L'INTÉRIEUR d'une galaxie, les solars de thématiques différentes semblaient aussi proches les
+  // uns des autres que ceux d'une même thématique. Ne resserre jamais interGroupGap pour
+  // compenser (déjà élargi le 13/08/2026 car les solars d'une même galaxie étaient trop
+  // proches/collés) — seul ce vide inter-galaxies grandit.
+  const galaxyGap = Math.max(0.8, worldRadius * 0.7);
   const packedGalaxies = packFixedGroupsWithGrowth(
     galaxyDrafts.map((draft) => ({
       weight: galaxyItems[draft.gi].weight,

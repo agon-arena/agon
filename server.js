@@ -16284,42 +16284,44 @@ function buildNotionMasterSlot(sourceType, sourceDebateId) {
 // corpus maître complet pour ce sujet. N'écrit jamais rien, ne fait aucun
 // appel IA — l'appelant reste responsable de la génération si rien n'est
 // trouvé (cf. ensureCustomTopicMasterGenerated/ensureNotionMasterGenerated).
-// Lecture en 2 temps (audit egress du 01/09/2026) : (slot, quiz_date) seuls
-// ne coûtent presque rien, alors que `questions` porte tout le poids
-// (jusqu'à 20 questions, fiche/placement dupliqués sur chacune). On ne
-// rapatrie donc `questions` en entier que ligne par ligne, dans le même
-// ordre qu'avant, en s'arrêtant au premier candidat réellement éligible —
-// jamais pour tout l'historique de régénérations des slots candidats. Le
-// candidat retourné (le même que le fetch en une passe d'avant) est
-// strictement inchangé.
+// Lecture en 2 temps (audit egress du 01/09/2026, V2 le 08/09/2026) :
+// (slot, quiz_date) seuls ne coûtent presque rien, alors que `questions`
+// porte tout le poids (jusqu'à 20 questions, fiche/placement dupliqués sur
+// chacune). V1 (01/09) relisait encore ce payload complet ligne par ligne
+// jusqu'au premier candidat éligible — dans le pire cas (aucun candidat
+// éligible dans l'historique du slot), elle finissait par tout relire en
+// full payload. isMasterEligibleQuiz ne regarde en réalité que la LONGUEUR
+// de `questions` et le champ `pedagogicalRank` de chaque élément : le résumé
+// léger déjà exposé par daily_quiz_question_summaries() (colonne calculée
+// PostgREST, cf. data/migration-daily-quiz-question-summaries.sql, utilisée
+// par GET /api/users/notion-quizzes) porte exactement ces deux informations
+// sans jamais transférer le JSONB complet. Le payload complet n'est donc
+// plus relu qu'UNE seule fois, pour la seule ligne finalement retenue comme
+// master — jamais pour un candidat rejeté. Le candidat retourné (le même
+// que le fetch en une passe d'avant V1) est strictement inchangé.
 async function findExistingQuizMaster(candidateSlots) {
   const { data: rows, error } = await supabase
     .from("daily_quiz")
-    .select("slot, quiz_date")
+    .select("slot, quiz_date, progressive_status, curriculum, summary:daily_quiz_question_summaries")
     .in("slot", candidateSlots)
     .order("quiz_date", { ascending: false });
   if (error) throw new Error(error.message);
   for (const row of rows || []) {
-    const { data: fullRow, error: fullError } = await supabase
-      .from("daily_quiz")
-      .select("questions, progressive_status, curriculum")
-      .eq("slot", row.slot)
-      .eq("quiz_date", row.quiz_date)
-      .maybeSingle();
-    if (fullError) throw new Error(fullError.message);
-    // Bug constaté lors du canari de pré-génération Batch du 07/09/2026 :
-    // cet appel n'a JAMAIS transmis le contexte progressif (progressiveStatus/
-    // curriculum) à isMasterEligibleQuiz, contrairement à la route utilisateur
-    // réelle (server.js, /custom/progressive) — un master progressif
-    // elementary_ready/deepening_ready/ready retombait donc systématiquement
-    // sur le seuil legacy MIN_MASTER_QUESTIONS (15), bien plus strict que le
-    // seuil réellement applicable à son propre statut. Résultat concret :
-    // findExistingQuizMaster (utilisé par l'enqueue de pré-génération ET la
-    // Course 4 du scheduler) pouvait juger "absent du catalogue" un sujet
-    // pourtant déjà généré et servable — jamais cohérent avec ce que la route
-    // utilisateur elle-même déciderait pour LE MÊME master.
-    if (isMasterEligibleQuiz(fullRow?.questions, { progressiveStatus: fullRow?.progressive_status, curriculum: fullRow?.curriculum })) {
-      return { slot: row.slot, quizDate: row.quiz_date, questions: fullRow.questions, progressiveStatus: fullRow.progressive_status };
+    const summaryQuestions = row.summary?.questions || [];
+    // Contexte progressif (progressiveStatus/curriculum) transmis depuis le
+    // 07/09/2026 (canari de pré-génération Batch) : sans lui, un master
+    // progressif elementary_ready/deepening_ready/ready retombait à tort sur
+    // le seuil legacy MIN_MASTER_QUESTIONS (15), bien plus strict que le
+    // seuil réellement applicable à son propre statut — inchangé ici.
+    if (isMasterEligibleQuiz(summaryQuestions, { progressiveStatus: row.progressive_status, curriculum: row.curriculum })) {
+      const { data: fullRow, error: fullError } = await supabase
+        .from("daily_quiz")
+        .select("questions")
+        .eq("slot", row.slot)
+        .eq("quiz_date", row.quiz_date)
+        .maybeSingle();
+      if (fullError) throw new Error(fullError.message);
+      return { slot: row.slot, quizDate: row.quiz_date, questions: fullRow?.questions, progressiveStatus: row.progressive_status };
     }
   }
   return null;

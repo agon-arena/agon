@@ -75,8 +75,8 @@ test("findExistingQuizMaster et findEquivalentGeneratedCustomTopic renvoient pro
   const findMasterIndex = SERVER_SOURCE.indexOf("async function findExistingQuizMaster(candidateSlots) {");
   assert.ok(findMasterIndex > 0);
   const findMasterBody = SERVER_SOURCE.slice(findMasterIndex, findMasterIndex + 2200);
-  assert.match(findMasterBody, /\.select\("questions, progressive_status, curriculum"\)/);
-  assert.match(findMasterBody, /progressiveStatus: fullRow\.progressive_status/);
+  assert.match(findMasterBody, /\.select\("slot, quiz_date, progressive_status, curriculum, summary:daily_quiz_question_summaries"\)/);
+  assert.match(findMasterBody, /progressiveStatus: row\.progressive_status/);
 
   const findEquivIndex = SERVER_SOURCE.indexOf("async function findEquivalentGeneratedCustomTopic(topic, level) {");
   assert.ok(findEquivIndex > 0);

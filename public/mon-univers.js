@@ -13,7 +13,7 @@ import {
   computeUniverseWorldBounds,
   focusScaleForUniverseNode,
   createUniverseCamera
-} from "/universe-zoom.js?v=20260901-solar-group-envelopes";
+} from "/universe-zoom.js?v=20260908-galaxy-cluster-gap-2";
 
 // ---- Identité anonyme : même logique exacte que script.js, aucune nouvelle convention ----
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }

@@ -17,27 +17,36 @@ const SERVER_SOURCE = fs.readFileSync(path.join(__dirname, "../server.js"), "utf
 
 // ── 1. findExistingQuizMaster : plus de select("...questions") d'un coup ──
 
-test("findExistingQuizMaster ne sélectionne plus `questions` dans le fetch initial (slot, quiz_date seuls)", () => {
+test("findExistingQuizMaster ne sélectionne jamais `questions` en clair dans le fetch initial (résumé léger daily_quiz_question_summaries à la place)", () => {
   const fnIndex = SERVER_SOURCE.indexOf("async function findExistingQuizMaster(candidateSlots)");
   assert.ok(fnIndex > 0);
   const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 900);
-  assert.match(fnBody, /\.select\("slot, quiz_date"\)/);
-  assert.doesNotMatch(fnBody, /\.select\("slot, quiz_date, questions"\)/);
+  assert.match(fnBody, /\.select\("slot, quiz_date, progressive_status, curriculum, summary:daily_quiz_question_summaries"\)/);
+  assert.doesNotMatch(fnBody, /\.select\("slot, quiz_date, questions/);
 });
 
-test("findExistingQuizMaster ne relit `questions` que ligne par ligne (eq slot + eq quiz_date + maybeSingle), jamais toutes en une fois", () => {
+// V2 (08/09/2026, cf. [[project_egress_priority]]) : V1 ci-dessus relisait
+// encore `questions` en entier ligne par ligne jusqu'au premier candidat
+// éligible — dans le pire cas (aucun candidat éligible), elle finissait par
+// tout relire en full payload. isMasterEligibleQuiz ne regarde que la
+// longueur de `questions` et `pedagogicalRank` par élément : le résumé léger
+// daily_quiz_question_summaries() porte déjà ces deux informations, donc le
+// payload complet n'est plus relu qu'UNE fois, pour la seule ligne
+// finalement retenue comme master.
+test("findExistingQuizMaster n'évalue l'éligibilité que sur le résumé léger (summary.questions), jamais sur `questions` complet", () => {
   const fnIndex = SERVER_SOURCE.indexOf("async function findExistingQuizMaster(candidateSlots)");
   const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 1800);
-  // Phase 2.2 (04/09/2026) : progressive_status ajoutée à ce select (plafond
-  // de niveau progressif des questions, cf.
-  // test/qcm-progressive-level-ceiling-wiring.test.js) — l'egress reste
-  // ligne par ligne, seule la colonne supplémentaire change. `curriculum`
-  // ajoutée le 07/09/2026 (canari de pré-génération Batch) : isMasterEligibleQuiz
-  // a besoin du contexte progressif complet, exactement comme la route
-  // utilisateur réelle (server.js, /custom/progressive) — sans quoi un
-  // master progressif retombait à tort sur le seuil legacy MIN_MASTER_QUESTIONS=15.
-  assert.match(fnBody, /\.select\("questions, progressive_status, curriculum"\)\s*\n\s*\.eq\("slot", row\.slot\)\s*\n\s*\.eq\("quiz_date", row\.quiz_date\)\s*\n\s*\.maybeSingle\(\)/);
-  assert.match(fnBody, /isMasterEligibleQuiz\(fullRow\?\.questions, \{ progressiveStatus: fullRow\?\.progressive_status, curriculum: fullRow\?\.curriculum \}\)/);
+  assert.match(fnBody, /const summaryQuestions = row\.summary\?\.questions \|\| \[\];/);
+  assert.match(fnBody, /isMasterEligibleQuiz\(summaryQuestions, \{ progressiveStatus: row\.progressive_status, curriculum: row\.curriculum \}\)/);
+});
+
+test("findExistingQuizMaster ne relit `questions` complet que pour la ligne retenue comme master, jamais pour un candidat rejeté", () => {
+  const fnIndex = SERVER_SOURCE.indexOf("async function findExistingQuizMaster(candidateSlots)");
+  const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 1800);
+  assert.match(fnBody, /\.select\("questions"\)\s*\n\s*\.eq\("slot", row\.slot\)\s*\n\s*\.eq\("quiz_date", row\.quiz_date\)\s*\n\s*\.maybeSingle\(\)/);
+  const eligibleIndex = fnBody.indexOf("if (isMasterEligibleQuiz(summaryQuestions");
+  const fullSelectIndex = fnBody.indexOf('.select("questions")');
+  assert.ok(eligibleIndex > 0 && fullSelectIndex > eligibleIndex, "la relecture complète doit se faire APRÈS le test d'éligibilité, jamais avant");
 });
 
 // ── 2. GET /explore : plus de select("...questions") complet pour tout ────

@@ -1145,20 +1145,151 @@
       font-style: italic;
       color: #6b7280;
     }
-    /* Intitulé de groupe par thématique (demande du 30/08/2026, "classés par
-       thématique, la même que Ma mémoire") : même caractère typographique que
-       .qcm-mesqcm-theme-toggle (thématiques de "Mes apprentissages"), en
-       simple étiquette sans carte/fond ici — la liste "Explorer" reste plate,
-       jamais repliable. */
-    .qcm-explore-theme-heading {
-      margin: 14px 0 2px;
+    /* Rubriques repliables (demande du 08/09/2026, "on clique et ça ouvre la
+       liste") : même mécanique d'accordéon que .qcm-mesqcm-theme-group
+       ("Mes apprentissages"), classes dédiées ici pour ne jamais coupler les
+       deux listes — le panneau de celle-ci contient des boutons .qcm-explore-item,
+       pas un tableau. Remplace l'ancien .qcm-explore-theme-heading (simple
+       étiquette, liste toujours à plat). */
+    .qcm-explore-groups {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .qcm-explore-theme-group {
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+    }
+    .qcm-explore-theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      margin: 0;
+      padding: 12px 14px;
+      border: none;
+      background: #f7f9fa;
+      color: #111827;
+      font: inherit;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 18px;
       font-weight: 700;
-      color: #111827;
+      text-align: left;
+      cursor: pointer;
     }
-    .qcm-explore-theme-heading:first-child {
-      margin-top: 0;
+    .qcm-explore-theme-icon {
+      flex: 0 0 20px;
+      width: 20px;
+      color: #516776;
+      font-size: 15px;
+      text-align: center;
+    }
+    .qcm-explore-theme-toggle:hover,
+    .qcm-explore-theme-toggle:focus-visible,
+    .qcm-explore-theme-group.is-open .qcm-explore-theme-toggle {
+      background: #eef3f6;
+    }
+    .qcm-explore-theme-group.is-open .qcm-explore-theme-toggle {
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .qcm-explore-theme-count {
+      flex: 0 0 auto;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: #eef3f6;
+      color: #516776;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .qcm-explore-theme-chevron {
+      flex: 0 0 auto;
+      margin-left: auto;
+      color: #9ca3af;
+      font-size: 13px;
+      transition: transform 0.15s ease;
+    }
+    .qcm-explore-theme-group.is-open .qcm-explore-theme-chevron {
+      transform: rotate(90deg);
+    }
+    .qcm-explore-theme-panel {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+    }
+    .qcm-explore-theme-group.is-open .qcm-explore-theme-panel {
+      display: flex;
+    }
+    /* 10 sujets par page dans chaque rubrique (demande du 08/09/2026, "il va
+       y en avoir énormément") — même styles que .qcm-mesqcm-pagination*
+       ("Mes apprentissages"), classes dédiées ici pour ne jamais coupler les
+       deux listes. */
+    .qcm-explore-page {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .qcm-explore-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .qcm-explore-pagination-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid #d1d5db;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #243038;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .qcm-explore-pagination-btn:disabled {
+      color: #c4c9ce;
+      border-color: #eceff1;
+      cursor: default;
+    }
+    .qcm-explore-pagination-label {
+      min-width: 54px;
+      color: #516776;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+    }
+    /* "Derniers créés"/"Populaires" (demande du 08/09/2026, même jour, suite
+       immédiate) : PAS des thématiques (deux top 10 calculés côté serveur,
+       cf. renderExploreList) — accent ambre dédié, jamais utilisé par les
+       rubriques thématiques ci-dessous, pour ne jamais les confondre au
+       premier coup d'oeil. */
+    .qcm-explore-theme-group--special {
+      border-color: #f0d189;
+    }
+    .qcm-explore-theme-group--special .qcm-explore-theme-toggle {
+      background: #fdf6e6;
+    }
+    .qcm-explore-theme-group--special .qcm-explore-theme-toggle:hover,
+    .qcm-explore-theme-group--special .qcm-explore-theme-toggle:focus-visible,
+    .qcm-explore-theme-group--special.is-open .qcm-explore-theme-toggle {
+      background: #faecc8;
+    }
+    .qcm-explore-theme-group--special.is-open .qcm-explore-theme-toggle {
+      border-bottom-color: #f0d189;
+    }
+    .qcm-explore-theme-group--special .qcm-explore-theme-icon {
+      color: #b3791a;
+    }
+    .qcm-explore-theme-group--special .qcm-explore-theme-count {
+      background: #faecc8;
+      color: #8a5f10;
     }
     /* Confirmation avant génération IA (demande du 13/08/2026, restaurée le
        01/09/2026) : reprend le sujet + niveau choisis, pour éviter une
@@ -3849,7 +3980,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260907-notion-quiz-generation-reliability" defer></script>
+<script src="/script.min.js?v=20260908-memoire-frame-cache" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -4418,12 +4549,15 @@
   function buildFicheImageFigureHtml(img, altText) {
     if (!img || !img.url) return '';
     var attributionLabel = img.credit || (img.source === 'press' ? "source de l'actualité" : (img.source === 'wikimedia-commons' ? 'Wikimedia Commons' : 'Wikipedia'));
-    var captionText = img.caption ? (img.caption + ' — ' + attributionLabel) : ('Image : ' + attributionLabel);
+    // Seul le nom du site source est un lien (donc souligné) — la légende
+    // elle-même reste du texte brut, jamais soulignée (demande du 07/09/2026).
+    var attributionHtml = img.pageUrl
+      ? '<a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(attributionLabel) + '</a>'
+      : escapeHtml(attributionLabel);
+    var captionHtml = img.caption ? (escapeHtml(img.caption) + ' — ' + attributionHtml) : ('Image : ' + attributionHtml);
     return '<figure class="qcm-fiche-image">' +
       '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(altText || '') + '" loading="lazy" onerror="this.closest(\'.qcm-fiche-image\').remove();">' +
-      (img.pageUrl
-        ? '<figcaption><a href="' + escapeHtml(img.pageUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(captionText) + '</a></figcaption>'
-        : '<figcaption>' + escapeHtml(captionText) + '</figcaption>') +
+      '<figcaption>' + captionHtml + '</figcaption>' +
       '</figure>';
   }
 
@@ -6644,6 +6778,95 @@
       '</button>';
     }
 
+    var EXPLORE_PAGE_SIZE = 10;
+
+    // Dix sujets maximum affichés à la fois par rubrique (demande du
+    // 08/09/2026, "il va y en avoir énormément") — les autres restent
+    // accessibles par les flèches sous la liste, sans recharger la page ni
+    // fermer l'accordéon. Même principe que renderMesQcmPaginatedTablesHtml,
+    // classes dédiées ici (boutons .qcm-explore-item, pas un tableau).
+    function renderExplorePaginatedItemsHtml(items) {
+      var pageCount = Math.max(1, Math.ceil(items.length / EXPLORE_PAGE_SIZE));
+      var html = '<div class="qcm-explore-paged-list" data-page-count="' + pageCount + '" data-current-page="0">';
+      for (var pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+        var pageItems = items.slice(pageIndex * EXPLORE_PAGE_SIZE, (pageIndex + 1) * EXPLORE_PAGE_SIZE);
+        html += '<div class="qcm-explore-page" data-page-index="' + pageIndex + '"' + (pageIndex ? ' hidden' : '') + '>' +
+          pageItems.map(renderExploreItemHtml).join('') + '</div>';
+      }
+      if (pageCount > 1) {
+        html += '<nav class="qcm-explore-pagination" aria-label="Pages de sujets">';
+        // Retour direct page 1 (demande du 08/09/2026, "met une flèche pour
+        // retourner directement à la page 1") : utile dès qu'il y a plus de
+        // deux pages, sinon "page précédente" suffit déjà à y revenir.
+        if (pageCount > 2) {
+          html += '<button type="button" class="qcm-explore-pagination-btn is-first" aria-label="Première page" disabled><i class="fa-solid fa-angles-left" aria-hidden="true"></i></button>';
+        }
+        html += '<button type="button" class="qcm-explore-pagination-btn is-previous" aria-label="Page précédente" disabled><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>';
+        html += '<span class="qcm-explore-pagination-label"><span class="qcm-explore-current-page">1</span> / ' + pageCount + '</span>';
+        html += '<button type="button" class="qcm-explore-pagination-btn is-next" aria-label="Page suivante"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>';
+        html += '</nav>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    // Une rubrique = un accordéon replié par défaut (demande du 08/09/2026,
+    // "on clique et ça ouvre la liste") — remplace l'ancien intitulé plat
+    // .qcm-explore-theme-heading. iconClass est optionnel (aucune icône pour
+    // "Derniers créés"/"Populaires" si null). isSpecial (demande du 08/09/2026,
+    // même jour, suite immédiate) : "Derniers créés"/"Populaires" ne sont PAS
+    // des thématiques (ce sont des top 10 calculés côté serveur) — accent visuel
+    // .qcm-explore-theme-group--special dédié pour ne jamais les confondre avec
+    // les rubriques thématiques qui suivent.
+    function renderExploreGroupHtml(groupId, title, iconClass, items, isSpecial) {
+      return '<section class="qcm-explore-theme-group' + (isSpecial ? ' qcm-explore-theme-group--special' : '') + '" data-explore-group="' + escapeHtml(groupId) + '">' +
+        '<button type="button" class="qcm-explore-theme-toggle" aria-expanded="false">' +
+        (iconClass ? '<i class="fa-solid ' + iconClass + ' qcm-explore-theme-icon" aria-hidden="true"></i>' : '') +
+        '<span>' + escapeHtml(title) + '</span>' +
+        '<span class="qcm-explore-theme-count">' + items.length + '</span>' +
+        '<i class="fa-solid fa-chevron-right qcm-explore-theme-chevron" aria-hidden="true"></i>' +
+        '</button>' +
+        '<div class="qcm-explore-theme-panel">' + renderExplorePaginatedItemsHtml(items) + '</div>' +
+        '</section>';
+    }
+
+    // Même mécanique que initMesQcmPagination, classes dédiées à Explorer.
+    function initExplorePagination(scope) {
+      (scope || listEl).querySelectorAll('.qcm-explore-paged-list').forEach(function (pagedList) {
+        var pageCount = Number(pagedList.getAttribute('data-page-count')) || 1;
+        var firstBtn = pagedList.querySelector('.qcm-explore-pagination-btn.is-first');
+        var previousBtn = pagedList.querySelector('.qcm-explore-pagination-btn.is-previous');
+        var nextBtn = pagedList.querySelector('.qcm-explore-pagination-btn.is-next');
+        var pageLabel = pagedList.querySelector('.qcm-explore-current-page');
+
+        function showPage(requestedPage, moveToTop) {
+          var pageIndex = Math.max(0, Math.min(pageCount - 1, requestedPage));
+          pagedList.setAttribute('data-current-page', String(pageIndex));
+          pagedList.querySelectorAll('.qcm-explore-page').forEach(function (page) {
+            page.hidden = Number(page.getAttribute('data-page-index')) !== pageIndex;
+          });
+          if (firstBtn) firstBtn.disabled = pageIndex === 0;
+          if (previousBtn) previousBtn.disabled = pageIndex === 0;
+          if (nextBtn) nextBtn.disabled = pageIndex === pageCount - 1;
+          if (pageLabel) pageLabel.textContent = String(pageIndex + 1);
+          updateExploreFadeHint();
+          if (moveToTop) requestAnimationFrame(function () {
+            pagedList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        }
+
+        if (firstBtn) firstBtn.addEventListener('click', function () {
+          showPage(0, true);
+        });
+        if (previousBtn) previousBtn.addEventListener('click', function () {
+          showPage((Number(pagedList.getAttribute('data-current-page')) || 0) - 1, true);
+        });
+        if (nextBtn) nextBtn.addEventListener('click', function () {
+          showPage((Number(pagedList.getAttribute('data-current-page')) || 0) + 1, true);
+        });
+      });
+    }
+
     function renderExploreList(items, latest, popular) {
       if (!items.length) {
         listEl.innerHTML = '<p class="qcm-state-message">Aucun sujet trouvé pour le moment.</p>';
@@ -6656,36 +6879,50 @@
       // ci-dessous, jamais à sa place — un même sujet peut donc apparaître
       // jusqu'à trois fois (ici, dans les populaires, et dans son groupe
       // thématique).
-      var html = '';
+      var html = '<div class="qcm-explore-groups">';
       if (latest && latest.length) {
-        html += '<p class="qcm-explore-theme-heading">Derniers apprentissages créés</p>' +
-          latest.map(renderExploreItemHtml).join('');
+        html += renderExploreGroupHtml('latest', 'Derniers apprentissages créés', 'fa-clock-rotate-left', latest, true);
       }
       if (popular && popular.length) {
-        html += '<p class="qcm-explore-theme-heading">Apprentissages populaires</p>' +
-          popular.map(renderExploreItemHtml).join('');
+        html += renderExploreGroupHtml('popular', 'Apprentissages populaires', 'fa-fire', popular, true);
       }
       // Classés par thématique (demande du 30/08/2026, "la même que Ma
       // mémoire") : items déjà groupés par item.theme côté serveur (cf. GET
-      // .../explore) — on insère juste un intitulé de groupe à chaque
-      // changement de thématique, jamais de logique de tri ici.
-      var lastTheme;
-      var hasSeenTheme = false;
-      html += items.map(function (item) {
-        var themeHeadingHtml = '';
-        if (!hasSeenTheme || item.theme !== lastTheme) {
-          themeHeadingHtml = '<p class="qcm-explore-theme-heading">' + escapeHtml(item.theme || 'Autres sujets') + '</p>';
-          lastTheme = item.theme;
-          hasSeenTheme = true;
+      // .../explore) — on regroupe juste les items consécutifs de même
+      // thématique en une rubrique repliable, jamais de logique de tri ici.
+      // normalizeKnowledgeThemeLabel (demande du 08/09/2026) : replie les
+      // anciennes rubriques hybrides sur une des 21 Galaxies actuelles, pour
+      // ne jamais afficher deux rubriques distinctes pour un même thème
+      // (ex. "Culture - arts" ancien ET "Culture" nouveau côte à côte).
+      var themeGroups = [];
+      var currentGroup = null;
+      items.forEach(function (item) {
+        var theme = item.theme ? normalizeKnowledgeThemeLabel(item.theme) : 'Autres sujets';
+        if (!currentGroup || theme !== currentGroup.theme) {
+          currentGroup = { theme: theme, items: [] };
+          themeGroups.push(currentGroup);
         }
-        return themeHeadingHtml + renderExploreItemHtml(item);
+        currentGroup.items.push(item);
+      });
+      html += themeGroups.map(function (group, index) {
+        return renderExploreGroupHtml('theme-' + index, group.theme, getMesAcquisThemeIconClass(group.theme), group.items);
       }).join('');
+      html += '</div>';
       listEl.innerHTML = html;
       listEl.querySelectorAll('.qcm-explore-item:not(:disabled)').forEach(function (itemBtn) {
         itemBtn.addEventListener('click', function () {
           adoptExploreItem(itemBtn.getAttribute('data-slot'), itemBtn.getAttribute('data-quiz-date'), itemBtn);
         });
       });
+      listEl.querySelectorAll('.qcm-explore-theme-toggle').forEach(function (toggle) {
+        toggle.addEventListener('click', function () {
+          var group = toggle.closest('.qcm-explore-theme-group');
+          var isOpen = group.classList.toggle('is-open');
+          toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+          updateExploreFadeHint();
+        });
+      });
+      initExplorePagination();
       requestAnimationFrame(updateExploreFadeHint);
     }
 
@@ -7811,22 +8048,39 @@
   // thématiques qui ne font pas partie de la taxonomie actuelle.
   function getMesAcquisThemeIconClass(theme) {
     var iconsByTheme = {
+      // Les 21 Galaxies de "Ma mémoire" (cf. server.js KNOWLEDGE_GALAXY_DEFINITIONS,
+      // vérifié le 08/09/2026 : c'est déjà la source exacte de item.theme/q.themes
+      // pour du contenu classé par le moteur actuel — sourcePlacement.category "pilote
+      // aussi la galaxie de Ma mémoire", cf. getPrimaryNotionQuizTheme).
+      'Histoire': 'fa-landmark',
+      'Arts': 'fa-palette',
+      'Sciences - technologie': 'fa-flask',
+      'Philosophie': 'fa-brain',
+      'Sciences sociales': 'fa-people-group',
+      'Société - éducation': 'fa-users',
+      'Économie - emploi': 'fa-briefcase',
       'Politique': 'fa-scale-balanced',
       'International': 'fa-globe',
-      'Économie - emploi': 'fa-briefcase',
-      'Société - éducation': 'fa-users',
-      'Sciences - technologie': 'fa-flask',
-      'Climat - environnement': 'fa-leaf',
+      'Géographie': 'fa-earth-europe',
       'Justice - faits divers': 'fa-scale-balanced',
-      'Culture - arts': 'fa-palette',
-      'Histoire': 'fa-landmark',
-      'Philosophie - sciences sociales': 'fa-brain',
-      'Langues et Lettres': 'fa-language',
+      'Climat - environnement': 'fa-leaf',
+      'Culture': 'fa-masks-theater',
+      'Sport': 'fa-futbol',
+      'Loisirs': 'fa-puzzle-piece',
+      'Langues': 'fa-language',
+      'Lettres': 'fa-book',
       'Médias - divertissements': 'fa-tv',
-      'Sports - loisirs': 'fa-futbol',
       'Santé - bien-être': 'fa-heart-pulse',
       'Vie personnelle - modes de vie': 'fa-house',
       'Espace jeunes': 'fa-star',
+      // Anciennes rubriques hybrides (avant la scission des Galaxies ci-dessus,
+      // cf. classifyCultureGeneraleKnowledgePlacementWithAI "plus de rubriques
+      // hybrides côté connaissances") : gardées ici pour les sujets déjà classés
+      // avant ce changement, jamais produites par le moteur actuel.
+      'Culture - arts': 'fa-palette',
+      'Philosophie - sciences sociales': 'fa-brain',
+      'Langues et Lettres': 'fa-language',
+      'Sports - loisirs': 'fa-futbol',
       'Arènes sous tension': 'fa-bolt'
     };
     return iconsByTheme[String(theme || '').trim()] || 'fa-layer-group';
@@ -7836,18 +8090,34 @@
   // ("Culture", "Arts" ou "Arts et culture") alors que la rubrique
   // officielle d'Explorer est unique. La normalisation reste purement
   // visuelle : elle regroupe les cartes sans réécrire leurs données.
-  function normalizeMesAcquisThemeLabel(theme) {
+  // Anciennes rubriques hybrides, remplac\u00e9es le 30/08/2026 par des Galaxies
+  // s\u00e9par\u00e9es (cf. server.js KNOWLEDGE_GALAXY_DEFINITIONS/
+  // classifyCultureGeneraleKnowledgePlacementWithAI, "plus de rubriques
+  // hybrides c\u00f4t\u00e9 connaissances") : les sujets class\u00e9s AVANT ce changement
+  // portent encore l'ancien libell\u00e9 fusionn\u00e9, ambigu entre ses deux
+  // sous-branches \u2014 rattach\u00e9s ici \u00e0 la 1\u00e8re par convention explicite de
+  // l'utilisateur (08/09/2026, "on doit mettre les m\u00eames rubriques que Ma
+  // m\u00e9moire"), pour toujours retomber sur une des 21 Galaxies actuelles,
+  // jamais un libell\u00e9 qui n'existe plus nulle part. Partag\u00e9 par Explorer ET
+  // "Mes apprentissages" (auparavant appliqu\u00e9 \u00e0 ce seul second rendu).
+  var LEGACY_HYBRID_THEME_KEY_TO_GALAXY = {
+    'culture arts': 'Culture',
+    'arts et culture': 'Culture',
+    'culture et arts': 'Culture',
+    'langues et lettres': 'Langues',
+    'philosophie sciences sociales': 'Philosophie',
+    'sports loisirs': 'Sport'
+  };
+  function normalizeKnowledgeThemeLabel(theme) {
     var raw = String(theme || '').trim();
+    if (!raw) return raw;
     var key = raw
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/&/g, ' et ')
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
-    if (key === 'culture' || key === 'arts' || key === 'arts et culture' || key === 'culture et arts') {
-      return 'Culture - arts';
-    }
-    return raw;
+    return LEGACY_HYBRID_THEME_KEY_TO_GALAXY[key] || raw;
   }
 
   // "Mes acquis" : tous les apprentissages (réalisés ou non), classés par thématique — même
@@ -7870,7 +8140,7 @@
       }
       var primaryTheme = Array.isArray(q.themes) ? q.themes.filter(Boolean)[0] : null;
       if (!primaryTheme) { untagged.push(q); return; }
-      primaryTheme = normalizeMesAcquisThemeLabel(primaryTheme);
+      primaryTheme = normalizeKnowledgeThemeLabel(primaryTheme);
       (byTheme[primaryTheme] = byTheme[primaryTheme] || []).push(q);
     });
     var themeNames = Object.keys(byTheme).sort(function (a, b) { return a.localeCompare(b, 'fr', { sensitivity: 'base' }); });
@@ -8922,7 +9192,19 @@
             (data.answers || []).forEach(function (a) { answeredByQuestionId[a.questionId] = a; });
             var firstUnanswered = questions.findIndex(function (q) { return !answeredByQuestionId[q.id]; });
             if (firstUnanswered === -1) {
-              renderFinalScore();
+              // Reprise d'un QCM déjà entièrement répondu (demande du
+              // 08/09/2026, "ça ne marche pas d'Approfondir à Expert" —
+              // reproduit : le bug touchait précisément cette reprise, jamais
+              // le fil direct pendant la session) : passait tout droit par
+              // renderFinalScore(), qui ne fait JAMAIS lui-même enchaîner sur
+              // le niveau suivant même prêt (ce rôle est exclusivement celui
+              // de finishCurrentBlockOrContinue, seul appelant qui teste
+              // nextLevelReady avant de choisir). Un utilisateur qui avait
+              // déjà terminé Approfondi puis rouvrait le sujet plus tard
+              // (Expert entre-temps devenu prêt) ne voyait donc ni la suite
+              // ni le message d'attente — jamais rien. Même chemin que la fin
+              // "en direct" d'un bloc désormais.
+              finishCurrentBlockOrContinue();
             } else {
               currentIndex = firstUnanswered;
               renderQuestion();

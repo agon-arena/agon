@@ -36470,18 +36470,58 @@ function markMnoriaHomeTrendsSectionTopReady() {
   window.__mnoriaHomeTrendsSectionTopReady = true;
   window.dispatchEvent(new Event('mnoria:memoire-frame-ready'));
 }
+// Signature d'écran (largeur x hauteur x mode standalone) utilisée pour mémoriser en
+// localStorage les valeurs de calage du cadre "Ma mémoire" déjà verrouillées à une visite
+// précédente : au retour sur la page avec le même écran, on les réapplique directement au lieu
+// de remesurer/attendre — demande du 08/09/2026, "pas besoin de recalculer". Un écran différent
+// (rotation, autre appareil) invalide le cache et redéclenche une mesure normale.
+function mnoriaFrameCacheSignature() {
+  var standalone = document.body.classList.contains('is-standalone') ? '1' : '0';
+  return window.innerWidth + 'x' + window.innerHeight + 'x' + standalone;
+}
+function readMnoriaFrameCache(key) {
+  try {
+    var raw = localStorage.getItem(key + ':' + location.pathname);
+    if (!raw) return null;
+    var data = JSON.parse(raw);
+    if (!data || data.sig !== mnoriaFrameCacheSignature()) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+function writeMnoriaFrameCache(key, data) {
+  try {
+    data.sig = mnoriaFrameCacheSignature();
+    localStorage.setItem(key + ':' + location.pathname, JSON.stringify(data));
+  } catch (e) {}
+}
+// Verrouillé après la première application réussie (mesure fraîche ou cache) : le sablier de
+// démarrage standalone (#mnoria-memoire-loading-veil, cf. index.html) attend précisément
+// l'événement déclenché par markMnoriaHomeTrendsSectionTopReady ci-dessous, donc plus aucune
+// remesure n'est utile une fois cette position obtenue pour l'écran courant.
+var _mnoriaHomeTrendsSectionTopLocked = false;
 function syncMnoriaHomeTrendsSectionMinHeight() {
   const body = document.body;
   if (!body || !body.classList.contains('is-standalone') || !body.classList.contains('page-home-mobile') || window.innerWidth > 768) {
     markMnoriaHomeTrendsSectionTopReady();
     return;
   }
+  if (_mnoriaHomeTrendsSectionTopLocked) return;
   if (window.__mnoriaDebateModalOpen === true) return;
   const section = document.getElementById('mnoria-tag-trends-section');
   if (!section) return;
   if (section.hidden) {
     __mnoriaTrendsSectionTopPending = null;
     __memoireFrameDiagLog('skip-hidden', { memoire: !!_memoireCloudMode });
+    return;
+  }
+  const cachedTop = readMnoriaFrameCache('mnoriaHomeTrendsSectionTop');
+  if (cachedTop && typeof cachedTop.sectionTop === 'number') {
+    document.documentElement.style.setProperty('--mnoria-home-trends-section-top', cachedTop.sectionTop + 'px');
+    _mnoriaHomeTrendsSectionTopLocked = true;
+    markMnoriaHomeTrendsSectionTopReady();
+    __memoireFrameDiagLog('applied-from-cache', { sectionTop: cachedTop.sectionTop });
     return;
   }
   // getBoundingClientRect().top est relatif au viewport COURANT, pas au document : dès que la
@@ -36516,6 +36556,8 @@ function syncMnoriaHomeTrendsSectionMinHeight() {
   }
   document.documentElement.style.setProperty('--mnoria-home-trends-section-top', `${sectionTop}px`);
   markMnoriaHomeTrendsSectionTopReady();
+  _mnoriaHomeTrendsSectionTopLocked = true;
+  writeMnoriaFrameCache('mnoriaHomeTrendsSectionTop', { sectionTop: sectionTop });
   // Mesures supplémentaires (hauteur réellement rendue de la section, position du switch de
   // mode et des flèches flottantes de scroll) : la min-height n'est qu'un plancher, la valeur
   // mesurée peut donc être correcte tout en laissant le rendu final incohérent pour une autre
@@ -37618,24 +37660,50 @@ function syncMobileCloudFrameHeight(recheckToken) {
   var bottomNavEl = document.querySelector('.home-bottom-nav');
   var bottomBarTop = bottomNavEl ? bottomNavEl.getBoundingClientRect().top : window.innerHeight;
 
-  var desiredFrameTop = headerBottom - 8;
-  var desiredFrameBottom = bottomBarTop - 25;
+  // Rejoue directement une hauteur/marge déjà verrouillées à une visite précédente pour ce même
+  // écran (largeur x hauteur x mode standalone), sans remesurer le bandeau haut/bas ni la
+  // position naturelle de la section : seule la revérification de sécurité plus bas (safe-areas
+  // en standalone) peut encore invalider ce raccourci — demande du 08/09/2026, "pas besoin de
+  // recalculer" au retour sur la page.
+  var cached = recheckToken === MOBILE_CLOUD_FRAME_RECHECK ? null : readMnoriaFrameCache('mnoriaMobileFrame');
+  var marginTopToApply, boxHeight;
 
-  // Neutralise la marge le temps de mesurer la position naturelle (sans elle) du bloc,
-  // comme alignStandaloneBubbleFrameToActiveFilter le fait pour le standalone.
-  section.style.marginTop = '0px';
-  // + scrollY (demande du 26/08/2026, "marge qui grandit à chaque changement de mode") :
-  // getBoundingClientRect().top est relatif au VIEWPORT, pas au document — si cette fonction
-  // s'exécute pendant que la page est scrollée (ex. juste après un tap sur le sélecteur de mode,
-  // situé sous la ligne de flottaison), naturalTop ressort plus petit qu'il ne l'est réellement,
-  // et boxTop/desiredFrameTop restent eux des cibles de VIEWPORT à scrollY=0 (dérivées de
-  // headerBottom/bottomBarTop, tous deux insensibles au scroll) — la marge calculée sous-corrige
-  // alors d'exactement le scrollY courant, laissant le cadre plus bas que prévu une fois la page
-  // remontée en haut. Convertir naturalTop en position DOCUMENT (indépendante du scroll) aligne
-  // les deux mesures sur la même référence.
-  var scrollYAtMeasure = window.scrollY || document.documentElement.scrollTop || 0;
-  var naturalTop = section.getBoundingClientRect().top + scrollYAtMeasure;
-  var boxTop = desiredFrameTop - MNORIA_MOBILE_FRAME_TOP_INSET;
+  if (cached && typeof cached.marginTop === 'number' && typeof cached.boxHeight === 'number') {
+    marginTopToApply = cached.marginTop;
+    boxHeight = cached.boxHeight;
+    _mobileCloudFrameTrustedHeight = boxHeight;
+  } else {
+    var desiredFrameTop = headerBottom - 8;
+    var desiredFrameBottom = bottomBarTop - 25;
+
+    // Neutralise la marge le temps de mesurer la position naturelle (sans elle) du bloc,
+    // comme alignStandaloneBubbleFrameToActiveFilter le fait pour le standalone.
+    section.style.marginTop = '0px';
+    // + scrollY (demande du 26/08/2026, "marge qui grandit à chaque changement de mode") :
+    // getBoundingClientRect().top est relatif au VIEWPORT, pas au document — si cette fonction
+    // s'exécute pendant que la page est scrollée (ex. juste après un tap sur le sélecteur de mode,
+    // situé sous la ligne de flottaison), naturalTop ressort plus petit qu'il ne l'est réellement,
+    // et boxTop/desiredFrameTop restent eux des cibles de VIEWPORT à scrollY=0 (dérivées de
+    // headerBottom/bottomBarTop, tous deux insensibles au scroll) — la marge calculée sous-corrige
+    // alors d'exactement le scrollY courant, laissant le cadre plus bas que prévu une fois la page
+    // remontée en haut. Convertir naturalTop en position DOCUMENT (indépendante du scroll) aligne
+    // les deux mesures sur la même référence.
+    var scrollYAtMeasure = window.scrollY || document.documentElement.scrollTop || 0;
+    var naturalTop = section.getBoundingClientRect().top + scrollYAtMeasure;
+    var boxTop = desiredFrameTop - MNORIA_MOBILE_FRAME_TOP_INSET;
+    marginTopToApply = boxTop - naturalTop;
+
+    boxHeight = Math.max(200, (desiredFrameBottom + MNORIA_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
+    if (scrollYAtMeasure <= 4) {
+      // Mesure fiable (barre d'adresse garantie dépliée) : devient/confirme la référence de confiance.
+      _mobileCloudFrameTrustedHeight = boxHeight;
+    } else if (_mobileCloudFrameTrustedHeight !== null) {
+      // Mesure prise pendant/juste après un scroll : ne jamais dépasser la référence de confiance
+      // (la barre d'adresse repliée en ce moment redonne de la hauteur qui n'est pas garantie stable).
+      boxHeight = Math.min(boxHeight, _mobileCloudFrameTrustedHeight);
+    }
+  }
+
   if (isStandalone) {
     // body.is-standalone .mnoria-tag-trends-section pose margin-top:0 et un min-height calc()
     // basé sur 100dvh en !important (cf. style.css) : un simple .style.marginTop= perdrait
@@ -37643,21 +37711,12 @@ function syncMobileCloudFrameHeight(recheckToken) {
     // les deux ; min-height repasse à 'auto' pour laisser boxHeight (cloud, ci-dessous)
     // piloter seul la hauteur réelle plutôt que ce calc() imprécis dès qu'un élément est
     // ajouté au-dessus de la section (cf. commentaire de cette règle CSS).
-    section.style.setProperty('margin-top', (boxTop - naturalTop) + 'px', 'important');
+    section.style.setProperty('margin-top', marginTopToApply + 'px', 'important');
     section.style.setProperty('min-height', 'auto', 'important');
   } else {
-    section.style.marginTop = (boxTop - naturalTop) + 'px';
+    section.style.marginTop = marginTopToApply + 'px';
   }
 
-  var boxHeight = Math.max(200, (desiredFrameBottom + MNORIA_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
-  if (scrollYAtMeasure <= 4) {
-    // Mesure fiable (barre d'adresse garantie dépliée) : devient/confirme la référence de confiance.
-    _mobileCloudFrameTrustedHeight = boxHeight;
-  } else if (_mobileCloudFrameTrustedHeight !== null) {
-    // Mesure prise pendant/juste après un scroll : ne jamais dépasser la référence de confiance
-    // (la barre d'adresse repliée en ce moment redonne de la hauteur qui n'est pas garantie stable).
-    boxHeight = Math.min(boxHeight, _mobileCloudFrameTrustedHeight);
-  }
   cloud.style.height = boxHeight + 'px';
   cloud.style.minHeight = boxHeight + 'px';
   if (isStandalone) {
@@ -37673,6 +37732,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // chaque frame lorsque la géométrie ne change pas.
   observeMobileCloudModeSwitchAlignment(cloud);
   _mobileCloudFrameLocked = true;
+  writeMnoriaFrameCache('mnoriaMobileFrame', { marginTop: marginTopToApply, boxHeight: boxHeight });
 
   // En standalone, env(safe-area-inset-top) ET env(safe-area-inset-bottom) (bandeaux haut et
   // bas, cf. style.css body.is-standalone.page-home-mobile .topbar / .home-bottom-nav) peuvent
