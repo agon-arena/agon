@@ -79,7 +79,7 @@ test("WEB_SEARCH_GROUNDING_TIMEOUT_MS est porté à 12000 ms (était 8000)", () 
 
 test("réponse Brave réussie avec résultats : un seul appel fetch, résultats normalisés retournés tels quels, jamais de retry", async () => {
   const { sandbox, calls } = makeSandbox(() => fakeResponse({ jsonBody: { web: { results: [RESULT_A] } } }));
-  const results = await sandbox.braveSearchRaw("Stoïcisme", "fake-key", "gen-1");
+  const results = await sandbox.braveSearchRawUncached("Stoïcisme", "fake-key", "gen-1");
   assert.equal(calls.length, 1, "le chemin normal doit rester un seul appel réseau, jamais deux");
   assert.equal(results.length, 1);
   assert.equal(results[0].url, RESULT_A.url);
@@ -87,7 +87,7 @@ test("réponse Brave réussie avec résultats : un seul appel fetch, résultats 
 
 test("réponse Brave réussie avec 0 résultat (zero_results) : jamais de retry, tableau vide retourné", async () => {
   const { sandbox, calls } = makeSandbox(() => fakeResponse({ jsonBody: { web: { results: [] } } }));
-  const results = await sandbox.braveSearchRaw("Un sujet obscur sans aucune source", "fake-key", "gen-2");
+  const results = await sandbox.braveSearchRawUncached("Un sujet obscur sans aucune source", "fake-key", "gen-2");
   assert.equal(calls.length, 1, "une réponse Brave valide à 0 résultat ne doit JAMAIS être retentée");
   assert.equal(results.length, 0);
 });
@@ -99,7 +99,7 @@ test("timeout (AbortSignal.timeout, error.name=TimeoutError) : une seule relance
     if (callIndex === 1) throw timeoutError();
     return fakeResponse({ jsonBody: { web: { results: [RESULT_A] } } });
   });
-  const results = await sandbox.braveSearchRaw("Stoïcisme", "fake-key", "gen-3");
+  const results = await sandbox.braveSearchRawUncached("Stoïcisme", "fake-key", "gen-3");
   assert.equal(calls.length, 2, "un timeout doit déclencher exactement une relance");
   assert.equal(results.length, 1, "le résultat de la relance réussie doit être retourné");
 });
@@ -109,7 +109,7 @@ test("erreur réseau (TypeError \"fetch failed\", jamais TimeoutError) : une seu
     if (callIndex === 1) throw networkError();
     return fakeResponse({ jsonBody: { web: { results: [RESULT_A] } } });
   });
-  const results = await sandbox.braveSearchRaw("Stoïcisme", "fake-key", "gen-4");
+  const results = await sandbox.braveSearchRawUncached("Stoïcisme", "fake-key", "gen-4");
   assert.equal(calls.length, 2);
   assert.equal(results.length, 1);
 });
@@ -120,7 +120,7 @@ for (const status of [500, 502, 503, 429]) {
       if (callIndex === 1) return fakeResponse({ ok: false, status });
       return fakeResponse({ jsonBody: { web: { results: [RESULT_A] } } });
     });
-    const results = await sandbox.braveSearchRaw("Stoïcisme", "fake-key", "gen-5");
+    const results = await sandbox.braveSearchRawUncached("Stoïcisme", "fake-key", "gen-5");
     assert.equal(calls.length, 2, `HTTP ${status} doit être considéré récupérable et déclencher une relance`);
     assert.equal(results.length, 1);
   });
@@ -131,7 +131,7 @@ for (const status of [500, 502, 503, 429]) {
 for (const status of [400, 401, 403, 404]) {
   test(`erreur HTTP ${status} (non récupérable) : jamais de relance, tableau vide`, async () => {
     const { sandbox, calls } = makeSandbox(() => fakeResponse({ ok: false, status }));
-    const results = await sandbox.braveSearchRaw("Stoïcisme", "fake-key", "gen-6");
+    const results = await sandbox.braveSearchRawUncached("Stoïcisme", "fake-key", "gen-6");
     assert.equal(calls.length, 1, `HTTP ${status} ne doit jamais déclencher de relance (même clé, même requête → échec identique garanti)`);
     assert.equal(results.length, 0);
   });
@@ -141,7 +141,7 @@ for (const status of [400, 401, 403, 404]) {
 
 test("timeout puis nouvel échec (2e tentative aussi en timeout) : tableau vide, jamais d'exception, jamais une 3e tentative", async () => {
   const { sandbox, calls } = makeSandbox(() => { throw timeoutError(); });
-  const results = await sandbox.braveSearchRaw("Stoïcisme", "fake-key", "gen-7");
+  const results = await sandbox.braveSearchRawUncached("Stoïcisme", "fake-key", "gen-7");
   assert.equal(calls.length, 2, "au plus 2 tentatives, jamais plus, même si la relance échoue aussi");
   assert.equal(results.length, 0);
 });

@@ -15162,8 +15162,8 @@ async function braveSearchAttempt(query, braveKey, id, timeoutMs) {
   return { ok: true, results };
 }
 
-// Point d'entrée public, SEUL appelé par resolveWebSearchGrounding — même
-// signature et même contrat de retour qu'avant ce correctif (toujours un
+// Point d'entrée réseau réel, SEUL appelé par braveSearchRaw ci-dessous —
+// même signature et même contrat de retour qu'avant ce correctif (toujours un
 // tableau, jamais un objet ni une exception, comportement best-effort
 // inchangé). Ajoute UNE seule relance automatique, et seulement quand elle a
 // une chance réelle de changer l'issue : timeout, erreur réseau, ou erreur
@@ -15171,7 +15171,7 @@ async function braveSearchAttempt(query, braveKey, id, timeoutMs) {
 // (zero_results, cf. point 4 de la demande : Brave a répondu correctement,
 // retenter ne changerait rien) ni sur une erreur HTTP non récupérable (même
 // requête, même clé → échec identique garanti).
-async function braveSearchRaw(query, braveKey, id) {
+async function braveSearchRawUncached(query, braveKey, id) {
   const first = await braveSearchAttempt(query, braveKey, id, WEB_SEARCH_GROUNDING_TIMEOUT_MS);
   if (first.ok) return first.results;
   const shouldRetry = first.kind === "timeout" || first.kind === "network_error" || (first.kind === "http_error" && first.recoverable);
@@ -15179,6 +15179,35 @@ async function braveSearchRaw(query, braveKey, id) {
   console.info(`[web-search-grounding:${id}] Brave (${first.kind}) — une seule relance automatique.`);
   const second = await braveSearchAttempt(query, braveKey, id, WEB_SEARCH_GROUNDING_TIMEOUT_MS);
   return second.ok ? second.results : [];
+}
+
+// Point d'entrée public, SEUL appelé par resolveWebSearchGrounding et
+// expandWebSearchGroundingSources. Incident quota Brave du 08/09/2026 : en
+// pré-génération, le pipeline progressif est rejoué depuis le début à CHAQUE
+// cycle scheduler tant qu'un sujet attend un résultat Batch OpenAI plus loin
+// dans le pipeline (curriculum, fiche...) — braveSearchRawUncached
+// s'exécutait donc en entier à chaque cycle, pour chaque sujet encore en
+// attente, jusqu'à épuiser le quota. En contexte de pré-génération
+// (pregenerationContext actif), le résultat est mis en cache dès le premier
+// succès (même table que les appels OpenAI, notion_quiz_pregeneration_calls,
+// via resolveCachedSyncStep — jamais un statut "pending"/Batch ici, Brave
+// étant synchrone) et simplement relu aux cycles suivants : jamais un second
+// appel réseau pour la même requête. `nextOccurrence` distingue la requête
+// principale de l'éventuelle relance ciblée (shouldAttemptAuthorityRetry),
+// exactement comme pour les appels IA. Hors pré-génération (chemin
+// utilisateur synchrone), comportement inchangé.
+async function braveSearchRaw(query, braveKey, id) {
+  const pregenStore = pregenerationContext.getStore();
+  if (!pregenStore) return braveSearchRawUncached(query, braveKey, id);
+  const occurrence = nextOccurrence(pregenStore, "brave_search_raw");
+  return pregenStepCache.resolveCachedSyncStep({
+    supabase,
+    queueId: pregenStore.queueId,
+    callKey: "brave_search_raw",
+    occurrence,
+    requestPayload: { query },
+    compute: () => braveSearchRawUncached(query, braveKey, id)
+  });
 }
 
 async function resolveWebSearchGrounding(apiKey, subject, id) {
