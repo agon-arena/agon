@@ -97,3 +97,37 @@ test("countUnclaimedReadyTopics : zéro sujet ready -> 0, sans même interroger 
   const count = await queue.countUnclaimedReadyTopics({ supabase });
   assert.equal(count, 0);
 });
+
+test("selectUnclaimedReadyTopics : ne renvoie que les sujets ready non encore adoptés, jamais un pending/generating (demande du 08/09/2026 : plus de génération en direct)", async () => {
+  const supabase = makeFakeSupabase({
+    notion_quiz_pregeneration_queue: [
+      { id: 1, title: "Aaa", status: "ready", master_slot: "notion:custom:aaa", updated_at: "2026-09-08T10:00:00Z" },
+      { id: 2, title: "Bbb", status: "ready", master_slot: "notion:custom:bbb", updated_at: "2026-09-08T09:00:00Z" },
+      { id: 3, title: "Ccc pending", status: "pending", master_slot: null, updated_at: "2026-09-08T08:00:00Z" },
+      { id: 4, title: "Ddd generating", status: "generating", master_slot: "notion:custom:ddd", updated_at: "2026-09-08T07:00:00Z" }
+    ],
+    user_notion_quizzes: [
+      { user_id: "u1", slot: "notion:custom:aaa", quiz_date: "2026-09-08" }
+    ]
+  });
+  const topics = await queue.selectUnclaimedReadyTopics({ supabase, limit: 10 });
+  assert.deepEqual(topics.map((t) => t.title), ["Bbb"], "aaa déjà adopté (exclu), pending/generating jamais servis, seul bbb reste");
+});
+
+test("selectUnclaimedReadyTopics : respecte limit, plus récent d'abord", async () => {
+  const supabase = makeFakeSupabase({
+    notion_quiz_pregeneration_queue: [
+      { id: 1, title: "Ancien", status: "ready", master_slot: "notion:custom:a1", updated_at: "2026-09-06T10:00:00Z" },
+      { id: 2, title: "Recent", status: "ready", master_slot: "notion:custom:a2", updated_at: "2026-09-08T10:00:00Z" },
+      { id: 3, title: "Moyen", status: "ready", master_slot: "notion:custom:a3", updated_at: "2026-09-07T10:00:00Z" }
+    ]
+  });
+  const topics = await queue.selectUnclaimedReadyTopics({ supabase, limit: 2 });
+  assert.deepEqual(topics.map((t) => t.title), ["Recent", "Moyen"]);
+});
+
+test("selectUnclaimedReadyTopics : zéro sujet ready -> tableau vide, sans même interroger user_notion_quizzes", async () => {
+  const supabase = makeFakeSupabase({ notion_quiz_pregeneration_queue: [] });
+  const topics = await queue.selectUnclaimedReadyTopics({ supabase, limit: 5 });
+  assert.deepEqual(topics, []);
+});

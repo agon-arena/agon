@@ -17332,16 +17332,17 @@ html body.in-iframe .home-bottom-nav {
   bottom: 0 !important;
 }
 
-/* Pages secondaires standalone : contrairement aux arènes (dock spécifique),
-   leur iframe doit s'arrêter exactement au bord physique du viewport. Le
-   débordement historique de #debate-iframe-modal sous la safe-area raccourcit
-   visuellement l'iframe et laisse le fond pétrole du parent sous son bandeau. */
+/* Pages secondaires standalone ordinaires : contrairement aux surfaces
+   réellement plein écran (Débat, Apprentissage et Ma mémoire), leur iframe
+   s'arrête au viewport. Les trois surfaces plein écran conservent donc le
+   bottom négatif piloté en JavaScript par --mnoria-safe-bottom : c'est la
+   boîte de l'iframe qui descend, pas la hauteur de son bandeau interne. */
 @media (display-mode: standalone) and (max-width: 768px) {
-  #debate-iframe-modal.open:not(.debate-frame-open) {
+  #debate-iframe-modal.open:not(.debate-frame-open):not(.qcm-frame-open):not(.mon-univers-frame-open) {
     bottom: 0 !important;
   }
 
-  #debate-iframe-modal.open:not(.debate-frame-open)::after {
+  #debate-iframe-modal.open:not(.debate-frame-open):not(.qcm-frame-open):not(.mon-univers-frame-open)::after {
     content: none !important;
     display: none !important;
   }
@@ -28229,7 +28230,7 @@ html body .home-bottom-nav .home-bottom-nav-item span {
    page reprend le même bandeau que l'accueil mais n'était pas dans cette
    liste). */
 @media (display-mode: standalone) and (max-width: 768px) {
-  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile, .page-qcm-du-jour):not(.page-memory-only) {
+  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile, .page-qcm-du-jour):not(.page-memory-only):not(.in-iframe) {
     /* Même scroll racine que l'accueil : overflow-x:hidden fait calculer
        overflow-y:auto sur WebKit et stabilise immédiatement le viewport des
        éléments fixed, sans attendre le premier geste vertical. */
@@ -28238,10 +28239,19 @@ html body .home-bottom-nav .home-bottom-nav-item span {
     -webkit-overflow-scrolling: touch;
   }
 
-  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile, .page-qcm-du-jour)
+  body.is-standalone:is(.page-create, .page-create-mobile, .page-notifications, .page-notifications-mobile, .page-qcm-du-jour):not(.in-iframe)
     .home-bottom-nav {
     bottom: calc(0px - max(36px, env(safe-area-inset-bottom, 0px))) !important;
     padding-bottom: calc(3px + max(36px, env(safe-area-inset-bottom, 0px))) !important;
+  }
+
+  /* Apprentissage embarqué : sa boîte iframe descend déjà sous le viewport
+     comme celle de Débat. Conserver la hauteur normale du bandeau et le
+     remonter exactement du débordement mesuré par le JS partagé. */
+  html.in-iframe body.page-qcm-du-jour .qcm-home-bottom-nav,
+  html body.page-qcm-du-jour.in-iframe .qcm-home-bottom-nav {
+    bottom: var(--mnoria-embedded-bottom-ext, 0px) !important;
+    padding-bottom: 3px !important;
   }
 }
 

@@ -16,6 +16,7 @@ const { pregenerationContext, runInPregenerationContext, nextOccurrence } = requ
 const pregenStepCache = require("./lib/notion-quiz-pregeneration-step-cache");
 const pregenQueue = require("./lib/notion-quiz-pregeneration-queue");
 const openaiBatchClient = require("./lib/openai-batch-client");
+const debateAnalysisBatchCache = require("./lib/debate-analysis-batch-cache");
 const { recordNotionQuizGenerationFailure, fetchRecentNotionQuizFailures } = require("./lib/notion-quiz-generation-failures");
 const {
   NOTION_QUIZ_STALE_AFTER_MS,
@@ -667,7 +668,7 @@ function replaceMetaPlaceholders(template, meta) {
     .replace(/\u2029/g, "\\u2029");
   const debateAiSummary = meta?.debateAiSummary || null;
   const debateAiSummaryJson = JSON.stringify(debateAiSummary).replace(/</g, "\\u003c");
-  const debateAiBadgeHtml = debateAiSummary?.hasReport && debateAiSummary?.status !== "scheduled" && debateAiSummary?.status !== "generating"
+  const debateAiBadgeHtml = debateAiSummary?.hasReport && debateAiSummary?.status !== "scheduled" && debateAiSummary?.status !== "generating" && debateAiSummary?.status !== "batch_pending"
     ? '<span class="ada-countdown-ready is-visible" style="cursor:pointer" title="Voir l\'analyse"><img src="/sablier2-64.png" alt="" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;">Analyse IA disponible</span>'
     : "";
   return String(template || "")
@@ -1632,6 +1633,49 @@ function countCloudSourcesForGroup(debate, politicalGroup, orientationMaps) {
   return count;
 }
 
+// Scan complet de `debates` (avec media_extras BRUT, pas la colonne allégée
+// media_extras_list_preview — countCloudSourcesForGroup a besoin de l'historique
+// entier pour compter les sources distinctes) — c'était le principal poste
+// d'egress mesuré le 08/09/2026 (~13 Mo/scan, déclenché à CHAQUE publication de
+// débat par rebuildCloudBubblesAfterPublish). Les 3 pools (mixed/left/right)
+// partagent les mêmes lignes brutes (le filtre politicalGroup se fait en JS plus
+// bas, jamais en SQL) : un seul scan sert donc /api/admin/update-cloud (3 appels
+// dos à dos) ET plusieurs publications rapprochées.
+// TTL court, pas d'invalidation sur écriture : une publication pendant la
+// fenêtre de fraîcheur peut donc manquer son propre débat dans le nuage jusqu'à
+// expiration du cache (au pire CLOUD_BUBBLES_DEBATES_SCAN_CACHE_TTL_MS plus
+// tard) — compromis assumé, cohérent avec les autres caches courts du fichier
+// (CLOUD_BUBBLES_CACHE_TTL_MS, ANALYSIS_STATUSES_CACHE_TTL_MS...), la fonction
+// se rappelle de toute façon à chaque nouvelle publication.
+const CLOUD_BUBBLES_DEBATES_SCAN_CACHE_TTL_MS = 90 * 1000;
+let _cloudBubblesDebatesScanCache = null;
+let _cloudBubblesDebatesScanFreshUntil = 0;
+let _cloudBubblesDebatesScanInFlight = null;
+
+async function getAllDebatesForCloudBubblesScan() {
+  if (_cloudBubblesDebatesScanCache && Date.now() < _cloudBubblesDebatesScanFreshUntil) {
+    return _cloudBubblesDebatesScanCache;
+  }
+  if (_cloudBubblesDebatesScanInFlight) return _cloudBubblesDebatesScanInFlight;
+
+  _cloudBubblesDebatesScanInFlight = (async () => {
+    const { data, error } = await supabase
+      .from("debates")
+      .select("id, question, source_url, media_extras, created_at, source_published_at, keywords, cloud_label, creator_key, political_group")
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    _cloudBubblesDebatesScanCache = data || [];
+    _cloudBubblesDebatesScanFreshUntil = Date.now() + CLOUD_BUBBLES_DEBATES_SCAN_CACHE_TTL_MS;
+    return _cloudBubblesDebatesScanCache;
+  })();
+
+  try {
+    return await _cloudBubblesDebatesScanInFlight;
+  } finally {
+    _cloudBubblesDebatesScanInFlight = null;
+  }
+}
+
 // politicalGroup ("mixed" par défaut) sépare le nuage officiel en 3 pools indépendants
 // (général / gauche / droite) sans dupliquer cette logique — cf. rebuildCloudBubbles()
 // ci-dessous, conservé comme alias "mixed" pour ne rien changer aux appelants existants.
@@ -1644,12 +1688,7 @@ async function rebuildCloudBubblesForGroup(politicalGroup = "mixed") {
   if (politicalGroup !== "mixed" && veilleMediasCacheIsStale()) await _loadVeilleMediasFromSupabase();
   const orientationMaps = politicalGroup === "mixed" ? null : buildCloudMediaOrientationMaps();
 
-  const { data: allDebates, error } = await supabase
-    .from("debates")
-    .select("id, question, source_url, media_extras, created_at, source_published_at, keywords, cloud_label, creator_key, political_group")
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
+  const allDebates = await getAllDebatesForCloudBubblesScan();
 
   // Masque les ancêtres explicitement cités par la tendance, sur toute la
   // profondeur de la chaîne (ex: 941→940→921 doit masquer 940 ET 921, même si 940
@@ -8953,7 +8992,7 @@ app.get("/api/admin/analysis-queue", requireAdmin, async (req, res) => {
   const { data, error } = await supabase
     .from("debates")
     .select("id, question, ai_analysis_status, ai_analysis_scheduled_at")
-    .in("ai_analysis_status", ["scheduled", "generating"])
+    .in("ai_analysis_status", ["scheduled", "generating", "batch_pending"])
     .order("ai_analysis_scheduled_at", { ascending: true })
     .limit(100);
   if (error) return res.status(500).json({ error: error.message });
@@ -9004,7 +9043,7 @@ app.get("/api/debates/analysis-statuses", rateLimit("analysis-read", 240), async
       const { data, error } = await supabase
         .from("debates")
         .select("id, ai_analysis_status, ai_analysis_scheduled_at")
-        .in("ai_analysis_status", ["scheduled", "generating", "ready"]);
+        .in("ai_analysis_status", ["scheduled", "generating", "batch_pending", "ready"]);
       if (error) throw error;
 
       const map = {};
@@ -12763,20 +12802,54 @@ async function _fetchSourceContent(url) {
   }
 }
 
-async function _generateAndSaveAnalysis(debateId, { forceRescore = false } = {}) {
+// trigger distingue explicitement l'origine du déclenchement (chantier Batch
+// automatique, 08/09/2026) :
+// - "manual" (défaut) : clic admin "Générer le rapport" — chemin synchrone
+//   inchangé, _callOpenAI appelle réellement OpenAI et attend la réponse.
+// - "automatic" : expiration du compte à rebours (scheduler) — chaque appel
+//   IA de generateAnalysisJson (JAMAIS réécrit) est redirigé vers
+//   lib/debate-analysis-batch-cache.js plutôt que vers un vrai appel réseau ;
+//   voir le bloc catch plus bas pour la gestion de l'attente Batch.
+async function _generateAndSaveAnalysis(debateId, { forceRescore = false, trigger = "manual" } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return;
 
   const canonicalId = resolveSharedDebateId(debateId) || String(debateId);
   const groupIds = getDebateIdsInSharedSpace(canonicalId);
+  const isAutomaticBatch = trigger === "automatic";
 
-  await supabase.from("debates").update({ ai_analysis_status: "generating" }).eq("id", canonicalId);
+  // "generating" (sync, manuel) vs "batch_pending" (automatique, Batch) :
+  // statuts distincts pour que le watchdog de reprise après crash (plus bas)
+  // ne réinitialise jamais un débat qui attend légitimement un Batch OpenAI
+  // en cours (jusqu'à 24h), qu'il confondrait sinon avec une génération
+  // synchrone bloquée par un crash serveur.
+  await supabase.from("debates").update({ ai_analysis_status: isAutomaticBatch ? "batch_pending" : "generating" }).eq("id", canonicalId);
+
+  // Transport : seule différence entre les deux chemins (cf. rapport final,
+  // section 3 — "le Batch et le synchrone doivent partager la construction du
+  // prompt, le modèle, les paramètres, le parsing, la validation, la
+  // persistance"). generateAnalysisJson et ses builders de prompt
+  // (lib/debate-analysis.js) restent strictement identiques dans les deux cas.
+  const callOpenAI = isAutomaticBatch
+    ? (messages, opts = {}) => debateAnalysisBatchCache.resolveStep({
+        supabase,
+        debateId: canonicalId,
+        stepKey: opts.stepKey || opts.feature,
+        feature: opts.feature || null,
+        requestPayload: {
+          model: opts.model || "gpt-4o-mini",
+          messages,
+          ...(opts.temperature != null ? { temperature: opts.temperature } : {}),
+          ...(opts.responseFormat ? { responseFormat: opts.responseFormat } : {})
+        }
+      }).then((r) => r.content)
+    : (messages, opts) => _callOpenAI(apiKey, messages, { ...opts, generationId: canonicalId });
 
   try {
     const generationScoreScope = groupIds.length > 1 ? groupIds : null;
     const { score: generationScore } = await _computeAnalysisScore(canonicalId, generationScoreScope);
     const payload = await _fetchDebatePayload(canonicalId, groupIds.length > 1 ? groupIds : null);
-    const result  = await generateAnalysisJson(payload, (messages, opts) => _callOpenAI(apiKey, messages, opts), { forceRescore, fetchContent: _fetchSourceContent });
+    const result  = await generateAnalysisJson(payload, callOpenAI, { forceRescore, fetchContent: _fetchSourceContent });
     const raw     = JSON.stringify(result);
     // Scoring par idée extrait une fois ici et stocké à part (colonne légère)
     // plutôt que reparsé depuis ai_analysis en entier à chaque lecture — cf.
@@ -12803,26 +12876,61 @@ async function _generateAndSaveAnalysis(debateId, { forceRescore = false } = {})
       }
     }
 
-    // Analyse popularité vs robustesse (colonne séparée)
-    try {
-      const popularityResult = await generatePopularityAnalysis(result, (messages) => _callOpenAI(apiKey, messages, { feature: "debate_popularity_analysis" }));
-      const popularityRaw    = JSON.stringify(popularityResult);
-      const { error: popErr } = await supabase.from("debates")
-        .update({ popularity_analysis: popularityRaw })
-        .eq("id", canonicalId);
-      if (popErr) {
-        console.error(`[auto-analysis] débat ${canonicalId} — erreur sauvegarde popularité :`, popErr.message);
-      } else {
-        console.log(`[auto-analysis] débat ${canonicalId} — analyse popularité sauvegardée.`);
+    // Analyse popularité vs robustesse (colonne séparée) — jamais lancée en
+    // mode Batch automatique (08/09/2026) : contrairement au rapport
+    // principal ci-dessus, elle n'a pas de mécanisme de reprise après le
+    // passage du statut à "ready" (le scheduler ne retente plus un débat
+    // "ready" — cf. boucle scheduler plus bas), ce qui la laisserait bloquée
+    // indéfiniment à null si elle tombait en attente Batch après ce point,
+    // plutôt que simplement absente comme déjà toléré aujourd'hui en cas
+    // d'échec quelconque. Reste générée normalement pour toute génération
+    // manuelle. Point à surveiller si popularity_analysis devient requis pour
+    // les rapports automatiques (cf. rapport final, section risques).
+    if (!isAutomaticBatch) {
+      try {
+        const popularityResult = await generatePopularityAnalysis(result, (messages) => _callOpenAI(apiKey, messages, { feature: "debate_popularity_analysis", generationId: canonicalId }));
+        const popularityRaw    = JSON.stringify(popularityResult);
+        const { error: popErr } = await supabase.from("debates")
+          .update({ popularity_analysis: popularityRaw })
+          .eq("id", canonicalId);
+        if (popErr) {
+          console.error(`[auto-analysis] débat ${canonicalId} — erreur sauvegarde popularité :`, popErr.message);
+        } else {
+          console.log(`[auto-analysis] débat ${canonicalId} — analyse popularité sauvegardée.`);
+        }
+      } catch (popErr) {
+        console.error(`[auto-analysis] débat ${canonicalId} — analyse popularité échouée :`, popErr.message);
       }
-    } catch (popErr) {
-      console.error(`[auto-analysis] débat ${canonicalId} — analyse popularité échouée :`, popErr.message);
     }
 
     return raw;
   } catch (err) {
+    // Batch en attente : normal, jamais un échec — ce débat sera retenté au
+    // prochain cycle scheduler (cf. boucle scheduler plus bas), qui rejouera
+    // generateAnalysisJson depuis le début ; tous les appels déjà résolus
+    // seront servis instantanément depuis le cache.
+    if (isAutomaticBatch && err instanceof debateAnalysisBatchCache.DebateBatchPendingError) {
+      console.log(`[auto-analysis] débat ${canonicalId} — Batch en attente (${err.stepKey || err.message}), nouvelle tentative au prochain cycle.`);
+      return null;
+    }
+    // Un appel précis de CE débat a définitivement échoué (Batch OpenAI
+    // failed/expired) : le débat passe failed, jamais de boucle de
+    // resoumission ni de repli automatique vers un appel synchrone payant
+    // (cf. rapport final, section 7 — comportement en cas d'échec).
+    if (isAutomaticBatch && err instanceof debateAnalysisBatchCache.DebateBatchCallFailedError) {
+      console.error(`[auto-analysis] débat ${canonicalId} — appel Batch définitivement échoué (${err.stepKey}) :`, err.message);
+      await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", canonicalId);
+      return null;
+    }
     console.error(`[auto-analysis] débat ${canonicalId} — échec :`, err.message);
     await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", canonicalId);
+    // Le chemin manuel (route admin) a besoin de cette exception pour
+    // renvoyer une erreur 502 au clic — comportement inchangé. Le chemin
+    // automatique ne doit en revanche jamais la laisser remonter : la boucle
+    // scheduler traite plusieurs débats par cycle (cf. plus bas) et une
+    // exception non rattrapée y interromprait le traitement des débats
+    // suivants du même cycle.
+    if (isAutomaticBatch) return null;
     throw err;
   }
 }
@@ -13091,7 +13199,7 @@ async function _scheduleAnalysisIfNeeded(debateId) {
   const status = debate.ai_analysis_status || "none";
 
   // Ne pas re-programmer si déjà en attente ou en cours de génération
-  if (status === "scheduled" || status === "generating") return;
+  if (status === "scheduled" || status === "generating" || status === "batch_pending") return;
 
   const groupIds = getDebateIdsInSharedSpace(canonicalId);
   const { score, argIds } = await _computeAnalysisScore(canonicalId, groupIds.length > 1 ? groupIds : null);
@@ -13113,6 +13221,71 @@ async function _scheduleAnalysisIfNeeded(debateId) {
     console.log(`[auto-analysis] débat ${canonicalId}${groupIds.length > 1 ? ` (fusionné avec ${groupIds.filter((gid) => String(gid) !== String(canonicalId)).join(",")})` : ""} — seuil atteint (score ${score}, dernier trigger ${lastScore}), analyse programmée pour ${scheduledAt}`);
     for (const id of groupIds) {
       _notifyParticipantsAnalysisScheduled(id, debate.question, argIds).catch(console.error);
+    }
+  }
+}
+
+// Batch OpenAI pour les rapports de débat déclenchés automatiquement
+// (compte à rebours, chantier du 08/09/2026) — mêmes fonctions que le driver
+// notion-quiz-pregeneration (_pregenSubmitPendingBatch/_pregenReconcileActiveBatches,
+// plus bas dans ce fichier), mais table/cache dédiés
+// (lib/debate-analysis-batch-cache.js) : jamais partagé avec le pipeline QCM.
+const DEBATE_ANALYSIS_BATCH_SIZE = Math.max(1, parseInt(process.env.DEBATE_ANALYSIS_BATCH_SIZE, 10) || 20);
+
+async function _debateBatchSubmitPending() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
+  const pendingCalls = await debateAnalysisBatchCache.selectPendingCalls({ supabase, limit: DEBATE_ANALYSIS_BATCH_SIZE });
+  if (!pendingCalls.length) return;
+  // Même garde que _callOpenAI (modèles rejetant `temperature`) : le Batch ne
+  // doit jamais diverger du chemin synchrone pour le même modèle.
+  const requestLines = pendingCalls.map((call) => openaiBatchClient.buildBatchRequestLine({
+    customId: call.custom_id,
+    model: call.request_payload.model,
+    messages: call.request_payload.messages,
+    temperature: MODELS_WITHOUT_CUSTOM_TEMPERATURE.has(call.request_payload.model) ? undefined : call.request_payload.temperature,
+    responseFormat: call.request_payload.responseFormat
+  }));
+  const { batchId } = await openaiBatchClient.submitBatch(fetch, apiKey, requestLines, { metadata: { purpose: "debate_analysis_auto" } });
+  await debateAnalysisBatchCache.markCallsBatchSubmitted({ supabase, callIds: pendingCalls.map((c) => c.id), batchId });
+  console.info(`[auto-analysis] Batch soumis batch_id=${batchId} requêtes=${pendingCalls.length}`);
+}
+
+async function _debateBatchApplyCompletedBatch(apiKey, batchId, batchStatus) {
+  const resultsByCustomId = new Map();
+  // output_file_id (succès) et error_file_id (échecs au niveau ligne)
+  // peuvent coexister (succès partiel) — jamais un "else", toujours les deux
+  // si présents (même schéma de ligne, cf. parseBatchOutputJsonl).
+  if (batchStatus.output_file_id) {
+    const outputText = await openaiBatchClient.downloadFileContent(fetch, apiKey, batchStatus.output_file_id);
+    for (const [customId, result] of openaiBatchClient.parseBatchOutputJsonl(outputText)) resultsByCustomId.set(customId, result);
+  }
+  if (batchStatus.error_file_id) {
+    const errorText = await openaiBatchClient.downloadFileContent(fetch, apiKey, batchStatus.error_file_id);
+    for (const [customId, result] of openaiBatchClient.parseBatchOutputJsonl(errorText)) resultsByCustomId.set(customId, result);
+  }
+  await debateAnalysisBatchCache.applyBatchResults({ supabase, batchId, resultsByCustomId });
+}
+
+async function _debateBatchReconcileActive() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return;
+  const activeBatchIds = await debateAnalysisBatchCache.selectActiveBatchIds({ supabase });
+  for (const batchId of activeBatchIds) {
+    try {
+      const status = await openaiBatchClient.retrieveBatch(fetch, apiKey, batchId);
+      if (status.status === "completed") {
+        await _debateBatchApplyCompletedBatch(apiKey, batchId, status);
+      } else if (openaiBatchClient.TERMINAL_BATCH_STATUSES.has(status.status)) {
+        await debateAnalysisBatchCache.markBatchFailed({ supabase, batchId, reason: `batch ${status.status}` });
+      }
+      // in_progress/validating/finalizing/cancelling : rien à faire, jamais resoumis.
+    } catch (error) {
+      if (error?.status === 404) {
+        await debateAnalysisBatchCache.markBatchFailed({ supabase, batchId, reason: "batch introuvable côté OpenAI" });
+      } else {
+        console.warn(`[auto-analysis] réconciliation batch ${batchId} :`, error.message);
+      }
     }
   }
 }
@@ -13145,28 +13318,74 @@ if (ANALYSIS_SCHEDULER_ENABLED) {
       if (error) console.error("[auto-analysis] reset des analyses bloquées :", error.message);
     });
 
+  // "batch_pending" (automatique) : marge de 48h plutôt que 60 min — un Batch
+  // OpenAI en cours peut légitimement rester actif jusqu'à 24h (fenêtre de
+  // complétion), jamais un simple crash comme pour "generating" ci-dessus.
+  // Nettoie aussi le cache Batch de ce débat : au redémarrage, une tentative
+  // abandonnée depuis plus de 48h repart de zéro plutôt que de rester
+  // bloquée indéfiniment sur un batch_id devenu introuvable.
+  supabase
+    .from("debates")
+    .select("id")
+    .eq("ai_analysis_status", "batch_pending")
+    .lt("ai_analysis_scheduled_at", new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+    .then(async ({ data: stuck, error }) => {
+      if (error) return console.error("[auto-analysis] lecture des analyses Batch bloquées :", error.message);
+      for (const row of (stuck || [])) {
+        await debateAnalysisBatchCache.clearCallsForDebate({ supabase, debateId: row.id }).catch((e) => console.error(`[auto-analysis] débat ${row.id} — nettoyage cache Batch :`, e.message));
+        await supabase.from("debates").update({ ai_analysis_status: "scheduled" }).eq("id", row.id).eq("ai_analysis_status", "batch_pending");
+      }
+    });
+
   setInterval(async () => {
     try {
       const now = new Date().toISOString();
-      const { data: pending } = await supabase
+      const { data: due } = await supabase
         .from("debates")
         .select("id")
         .eq("ai_analysis_status", "scheduled")
         .lte("ai_analysis_scheduled_at", now);
 
-      for (const row of (pending || [])) {
-        // Claim atomique : seule l'instance qui réussit à basculer scheduled→generating
-        // lance la génération. Sans cette condition, deux instances qui pollent au même
-        // moment généraient (et payaient) la même analyse deux fois.
+      for (const row of (due || [])) {
+        // Claim atomique : seule l'instance qui réussit à basculer scheduled→
+        // batch_pending prend ce débat en charge — sans cette condition, deux
+        // instances qui pollent au même moment soumettraient (et paieraient)
+        // le même Batch deux fois.
         const { data: claimed, error: claimError } = await supabase
           .from("debates")
-          .update({ ai_analysis_status: "generating" })
+          .update({ ai_analysis_status: "batch_pending" })
           .eq("id", row.id)
           .eq("ai_analysis_status", "scheduled")
           .select("id");
         if (claimError || !claimed || !claimed.length) continue;
-        await _generateAndSaveAnalysis(row.id);
+        // Nouveau cycle de génération automatique : table de cache Batch
+        // vierge pour ce débat, jamais la réutilisation d'un résultat figé
+        // d'une tentative précédente abandonnée (cf. rapport final, section 5
+        // — idempotence).
+        await debateAnalysisBatchCache.clearCallsForDebate({ supabase, debateId: row.id }).catch((err) =>
+          console.error(`[auto-analysis] débat ${row.id} — nettoyage cache Batch :`, err.message)
+        );
       }
+
+      // Réconcilie les Batchs déjà soumis EN PREMIER — les résultats
+      // fraîchement appliqués permettent aux débats concernés d'avancer dès
+      // ce cycle-ci.
+      await _debateBatchReconcileActive();
+
+      // Fait avancer chaque débat en génération automatique : replay complet
+      // de generateAnalysisJson (jamais réécrit), servi depuis le cache pour
+      // toute étape déjà résolue, jusqu'au premier appel encore non résolu.
+      const { data: inProgress } = await supabase
+        .from("debates")
+        .select("id")
+        .eq("ai_analysis_status", "batch_pending");
+      for (const row of (inProgress || [])) {
+        await _generateAndSaveAnalysis(row.id, { trigger: "automatic" });
+      }
+
+      // Soumet en un seul Batch OpenAI tous les appels nouvellement
+      // découverts ci-dessus (jamais un Batch par débat).
+      await _debateBatchSubmitPending();
     } catch (err) {
       console.error("[auto-analysis scheduler]", err.message);
     }
@@ -13793,7 +14012,11 @@ app.post("/api/admin/analyze-debate", requireAdmin, rateLimit("analysis-generate
   if (!debateId) return res.status(400).json({ error: "debateId manquant." });
 
   try {
-    const raw = await _generateAndSaveAnalysis(debateId, { forceRescore: !!force });
+    // trigger: "manual" explicite (défaut de _generateAndSaveAnalysis, mais
+    // rendu explicite ici) : le clic admin "Générer le rapport" reste
+    // TOUJOURS synchrone, quel que soit l'état d'un éventuel Batch
+    // automatique en cours pour ce débat (cf. rapport final, section 7).
+    const raw = await _generateAndSaveAnalysis(debateId, { forceRescore: !!force, trigger: "manual" });
     const canonicalId = resolveSharedDebateId(debateId) || String(debateId);
     const { data: popData } = await supabase.from("debates").select("popularity_analysis").eq("id", canonicalId).single();
     return res.json({ raw, popularityRaw: popData?.popularity_analysis || null });
@@ -22502,19 +22725,15 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
         .catch((error) => console.warn("[notion-quiz-pregeneration] enqueue :", error.message));
     }
 
-    const payload = resolved.map((p) => {
-      if (p.isNew) {
-        return {
-          isAiProposal: true,
-          gapSignature,
-          title: p.title,
-          reason: p.reason,
-          relatedKnownTopics: p.relatedKnownTopics,
-          suggestedTheme: p.suggestedTheme,
-          difficulty: p.difficulty,
-          recommendationType: p.proposalType
-        };
-      }
+    // Demande explicite du 08/09/2026 : plus jamais un sujet affiché ici ne
+    // doit pouvoir déclencher une génération IA en direct au clic — un
+    // isNew:true n'existe encore nulle part (cf. enqueue ci-dessus, il vient
+    // tout juste de rejoindre la file), donc il n'est PLUS renvoyé du tout
+    // dans cette réponse. Seuls les sujets déjà réellement disponibles sont
+    // montrés : soit un équivalent déjà généré (isNew:false, inchangé),
+    // soit un sujet du stock de réserve déjà terminé par le Batch
+    // (selectUnclaimedReadyTopics, jamais encore adopté par personne).
+    const payload = resolved.filter((p) => !p.isNew).map((p) => {
       // Sujet équivalent déjà généré (par un autre visiteur, ou par un appel
       // précédent) : se comporte exactement comme un item V1 normal — même
       // action "Apprendre", même ouverture de fiche, jamais de génération.
@@ -22531,6 +22750,19 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
       } : null;
     }).filter(Boolean);
 
+    const reserveNeeded = Math.max(0, neededCount - payload.length);
+    if (reserveNeeded > 0) {
+      const reserveTopics = await pregenQueue.selectUnclaimedReadyTopics({ supabase, limit: reserveNeeded });
+      payload.push(...reserveTopics.map((r) => ({
+        isAiProposal: false,
+        subjectType: "custom",
+        subjectSourceId: r.master_slot.slice("notion:custom:".length),
+        name: r.title,
+        reasonText: null,
+        recommendationType: "ai_gap_fallback"
+      })));
+    }
+
     res.json({ proposals: payload, triggered: true });
   } catch (error) {
     // Best-effort strict (section 15) : la V2 ne doit JAMAIS casser "À
@@ -22538,30 +22770,6 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
     // "aucune proposition supplémentaire", jamais une erreur générale.
     console.error("[learn-next ai-fallback]", error.message);
     res.json({ proposals: [], triggered: false });
-  }
-});
-
-// Marque une proposition IA comme adoptée (section 9) — appelée par le
-// frontend juste après la création réussie du sujet via le pipeline existant
-// POST /api/users/notion-quizzes/custom (jamais un deuxième format de
-// connaissance, cf. adoptAiLearnNextProposal, qcm-du-jour.html). Best-effort :
-// un échec ici ne remet jamais en cause la création déjà réussie.
-app.post("/api/users/recommendations/learn-next/ai-fallback/adopt", rateLimit("users", 30), async (req, res) => {
-  try {
-    const validation = validateLegacyKey(req.body?.legacyKey);
-    if (validation.error) return res.status(400).json({ ok: false });
-    const gapSignature = String(req.body?.gapSignature || "").trim();
-    const title = String(req.body?.title || "").trim().slice(0, learnNextConfig.AI_FALLBACK_MAX_TITLE_LENGTH);
-    if (!gapSignature || !title) return res.status(400).json({ ok: false });
-
-    await learnNextRepository.markGapProposalAdopted(supabase, gapSignature, title);
-    recordAiUsage(supabase, { feature: "learn_next_ai_fallback_adopted", success: true });
-    invalidateLearnNextRecommendations(validation.legacyKey);
-
-    res.json({ ok: true });
-  } catch (error) {
-    console.error("[learn-next ai-fallback] adopt :", error.message);
-    res.json({ ok: false });
   }
 });
 

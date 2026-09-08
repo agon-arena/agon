@@ -89,12 +89,23 @@ test("GET .../learn-next/ai-fallback enqueue chaque proposition FINALEMENT reten
   const body = SERVER_SOURCE.slice(routeIdx, routeIdx + 9000);
   const sliceIdx = body.indexOf("resolved = resolved.slice(0, neededCount);");
   const enqueueIdx = body.indexOf("pregenQueue.enqueueProposedTopic(");
-  const payloadIdx = body.indexOf("const payload = resolved.map(");
+  const payloadIdx = body.indexOf("const payload = resolved.filter((p) => !p.isNew).map(");
   assert.ok(sliceIdx > 0 && enqueueIdx > sliceIdx, "l'enqueue doit se faire APRÈS la troncature finale à neededCount");
   assert.ok(payloadIdx > enqueueIdx, "l'enqueue doit précéder la construction de la réponse (fire-and-forget, jamais attendu)");
   assert.match(body, /if \(!p\.isNew\) continue;/);
   assert.match(body, /findExistingMaster: findExistingQuizMaster/);
   assert.match(body, /\.catch\(\(error\) => console\.warn\("\[notion-quiz-pregeneration\] enqueue :", error\.message\)\);/);
+});
+
+test("GET .../learn-next/ai-fallback ne renvoie JAMAIS un isNew:true dans sa réponse — un sujet tout juste enqueué ne peut pas être servi tant qu'il n'est pas passé par le Batch (demande du 08/09/2026)", () => {
+  const routeIdx = SERVER_SOURCE.indexOf('app.get("/api/users/recommendations/learn-next/ai-fallback"');
+  assert.ok(routeIdx > 0);
+  const body = SERVER_SOURCE.slice(routeIdx, routeIdx + 10000);
+  assert.match(body, /const payload = resolved\.filter\(\(p\) => !p\.isNew\)\.map\(\(p\) => \{/);
+  assert.doesNotMatch(body, /isAiProposal: true/, "plus aucune branche isNew:true ne doit être mappée dans le payload affiché");
+  // Complète le payload avec le stock déjà prêt (Batch terminé, jamais adopté) —
+  // jamais une génération en direct au clic.
+  assert.match(body, /pregenQueue\.selectUnclaimedReadyTopics\(\{ supabase, limit: reserveNeeded \}\)/);
 });
 
 // ── Scheduler : configuration, anti-chevauchement, désactivation ─────────

@@ -30239,7 +30239,7 @@ function renderDebateAiProgressInlineFromAnalysis(debateId) {
   fetchAnalysis
     .then((json) => {
       if (!json) return;
-      const hasPending = (json.status === "scheduled" || json.status === "generating") && !!json.scheduledAt;
+      const hasPending = (json.status === "scheduled" || json.status === "generating" || json.status === "batch_pending") && !!json.scheduledAt;
       const hasReady = !hasPending && !!(json.raw || json.status === "ready");
       const remaining = Number(json.contributionsRemaining);
 

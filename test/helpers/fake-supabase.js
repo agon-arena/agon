@@ -5,6 +5,8 @@
 // exactement les méthodes utilisées par lib/notion-quiz-pregeneration-*.js :
 // .select/.eq/.not/.in/.order/.limit/.maybeSingle/.upsert/.update/.insert, et
 // l'attente directe du builder comme un thenable (comme le vrai client).
+// .delete() (08/09/2026, chantier Batch rapports de débat) : ajout additif,
+// aucune méthode existante modifiée — cf. test/debate-analysis-batch-cache.test.js.
 //
 // Chaque table est un tableau d'objets indépendant — `db.rows(table)` permet
 // d'inspecter/pré-remplir l'état dans les tests.
@@ -65,6 +67,13 @@ function makeFakeSupabase(initialTables = {}) {
         for (const row of matched) Object.assign(row, pendingOp.payload);
         return { data: matched.map((r) => ({ ...r })), error: null };
       }
+      if (pendingOp?.type === "delete") {
+        const matched = new Set(applyFilters(rows, filters));
+        const remaining = rows.filter((row) => !matched.has(row));
+        remaining.forEach((row, i) => { rows[i] = row; });
+        rows.length = remaining.length;
+        return { data: [...matched].map((r) => ({ ...r })), error: null };
+      }
       let result = applyFilters(rows, filters);
       if (orderSpecs.length) {
         result = [...result].sort((a, b) => {
@@ -89,6 +98,7 @@ function makeFakeSupabase(initialTables = {}) {
       upsert(payload, options) { pendingOp = { type: "upsert", payload, options }; return builder; },
       insert(payload) { pendingOp = { type: "insert", payload }; return builder; },
       update(payload) { pendingOp = { type: "update", payload }; return builder; },
+      delete() { pendingOp = { type: "delete" }; return builder; },
       async maybeSingle() {
         const { data, error } = await execute();
         return { data: (data && data[0]) || null, error };

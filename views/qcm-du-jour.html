@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260907-fondchargement-cleanup">
+  <link rel="stylesheet" href="/style.min.css?v=20260908-fullscreen-iframe-bottom-v2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -1726,8 +1726,17 @@
       vertical-align: middle;
       object-fit: contain;
       animation: qcmHourglassSpin 0.9s linear infinite;
+      /* Sans ceci, la rotation est rerasterisée par le CPU à chaque frame plutôt que
+         composée par le GPU sur sa propre couche : dès que le thread principal est
+         occupé (fetch des QCM/de la jauge/des sujets proposés en parallèle au montage
+         de cette rubrique), la rotation saccade au lieu de tourner franchement. */
+      will-change: transform;
+      backface-visibility: hidden;
     }
-    @keyframes qcmHourglassSpin { to { transform: rotate(360deg); } }
+    @keyframes qcmHourglassSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
     .qcm-final-score {
       text-align: center;
       padding: 8px 0;
@@ -3980,7 +3989,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260908-memoire-frame-cache" defer></script>
+<script src="/script.min.js?v=20260908-debate-report-batch" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -7276,26 +7285,6 @@
       })
     }).catch(function () {});
   }
-  // Clic sur une proposition IA réellement nouvelle (jamais encore une fiche/
-  // QCM générée à ce stade, cf. section 8 de la mission du 27/08/2026) :
-  // réutilise EXACTEMENT le pipeline "Générer avec l'IA" existant
-  // (startCustomTopicGeneration) — même sélecteur de niveau, même génération,
-  // même ouverture du QCM au clic.
-  function adoptAiLearnNextProposal(item) {
-    if (customSearchInput) customSearchInput.value = item.title;
-    startCustomTopicGeneration(item.title, function () {
-      // Best-effort : marque la proposition adoptée (jamais reproposée telle
-      // quelle, cf. section 9) et invalide le cache de recommandations côté
-      // serveur — un échec ici ne remet jamais en cause la création déjà
-      // réussie ci-dessus.
-      fetch('/api/users/recommendations/learn-next/ai-fallback/adopt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ legacyKey: voterKey, gapSignature: item.gapSignature, title: item.title })
-      }).catch(function () {});
-      replaceLearnNextItem(item);
-    });
-  }
   // Clic sur un sujet DÉJÀ EXISTANT du catalogue (demande du 30/08/2026) :
   // ajoute directement à "Mes apprentissages" (rubrique "En attente de
   // réalisation"), jamais une fiche de consultation intermédiaire — un seul
@@ -7381,7 +7370,7 @@
   // Les blocs de Découvrir sont préparés en parallèle, puis révélés ensemble.
   var discoverContentReady = false;
   function learnNextItemKey(item) {
-    return item.isAiProposal ? ('ai:' + item.gapSignature + ':' + item.title) : (item.subjectType + ':' + item.subjectSourceId);
+    return item.subjectType + ':' + item.subjectSourceId;
   }
   function learnNextThemeIconClass(item) {
     var sourceTypeIcons = {
@@ -7460,10 +7449,10 @@
         var item = learnNextVisible[parseInt(btn.getAttribute('data-index'), 10)];
         if (!item) return;
         btn.disabled = true;
-        if (item.isAiProposal) {
-          adoptAiLearnNextProposal(item);
-          return;
-        }
+        // Tout item affiché ici pointe désormais toujours vers un sujet déjà
+        // réellement disponible (équivalent catalogue ou réserve pré-générée
+        // en Batch, cf. server.js .../ai-fallback, 08/09/2026) — plus jamais
+        // de génération IA en direct déclenchée par ce clic.
         adoptCatalogRecommendation(item, btn);
       });
     });

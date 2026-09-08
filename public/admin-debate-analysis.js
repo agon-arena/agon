@@ -2218,7 +2218,7 @@
             : renderScoringReport(json.raw));
           bindLoadMoreArguments(body);
         };
-      } else if (json.status === 'scheduled' || json.status === 'generating') {
+      } else if (json.status === 'scheduled' || json.status === 'generating' || json.status === 'batch_pending') {
         applyContent = () => { body.innerHTML = '<span class="ada-empty">Analyse IA en préparation — disponible prochainement.</span>'; };
       } else if (json.status === 'failed') {
         applyContent = () => { body.innerHTML = '<span class="ada-error">La génération de l\'analyse a échoué.</span>'; };
@@ -2326,7 +2326,7 @@
         : await fetchStoredAnalysis(debateId);
       if (!r.ok) return;
 
-      const hasPending = (json.status === 'scheduled' || json.status === 'generating') && !!json.scheduledAt;
+      const hasPending = (json.status === 'scheduled' || json.status === 'generating' || json.status === 'batch_pending') && !!json.scheduledAt;
       // Une régénération peut être programmée alors qu'un rapport précédent existe
       // déjà (cf. _scheduleAnalysisIfNeeded côté serveur) : dans ce cas, seul le
       // compte à rebours est affiché ici — le rapport existant reste consultable
