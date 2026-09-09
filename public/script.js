@@ -7607,11 +7607,14 @@ function openDebateIframeModal(url, options = {}) {
        Apprentissage et Ma mémoire peuvent encore utiliser cette iframe ; en
        standalone, ils reprennent la navigation top-level concluante des
        28-29/08/2026 afin de posséder directement le viewport physique iOS. */
-    // Apprentissage conserve sa navigation top-level en standalone pour son
-    // document long et scrollable. Ma mémoire reste désormais dans la modale
-    // plein écran : l'accueil demeure chargé derrière et réapparaît donc
-    // immédiatement à la fermeture.
-    const isStandaloneTopLevelPage = isStandaloneMode() && parsedModalUrl.pathname === "/apprentissage";
+    // Apprentissage et Ma mémoire conservent une navigation top-level en
+    // standalone : ces pages doivent posséder directement le viewport physique
+    // iOS. Sinon la page plein écran reste enfermée dans l'iframe modale du
+    // parent et peut laisser apparaître une bande en bas sur certains iPhone.
+    const isStandaloneTopLevelPage = isStandaloneMode() && (
+      parsedModalUrl.pathname === "/apprentissage" ||
+      parsedModalUrl.pathname === "/mon-univers"
+    );
     const isIframeModalPath = parsedModalUrl.pathname === "/debate" ||
       parsedModalUrl.pathname.indexOf("/debates/") === 0 ||
       (!isStandaloneTopLevelPage && parsedModalUrl.pathname === "/apprentissage") ||

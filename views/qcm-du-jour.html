@@ -19,7 +19,7 @@
     document.documentElement.style.setProperty('--mnoria-loader-phase', '-' + (Date.now() % 1000) + 'ms');
   </script>
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260908-actu-sortbtn-gap">
+  <link rel="stylesheet" href="/style.min.css?v=20260909-learning-no-back-arrow-v29">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -3795,71 +3795,7 @@
       }
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
-  <!-- Flèche retour/fermeture (accès direct/standalone à /apprentissage, hors
-       modale iframe) : reprend le visuel et l'emplacement exacts de
-       #learning-iframe-modal-close (script.js, ensureDebateIframeModal) —
-       même bouton rond dégradé bas-gauche que sur la page débat — puisque ce
-       bouton-là vit dans le document PARENT et n'existe donc pas ici (demande
-       du 03/09/2026). Réutilise .mobile-back-button (masquée globalement en
-       !important, cf. style.css fin de fichier) : la règle ci-dessous, plus
-       spécifique, la réactive UNIQUEMENT sur cette page. Masquée à son tour
-       quand la page est réellement embarquée dans la modale (html.in-iframe)
-       — le vrai #learning-iframe-modal-close du parent fait alors déjà ce
-       travail, pas besoin des deux.
-  -->
-  <style>
-    body.page-qcm-du-jour .mobile-back-button {
-      display: none;
-      position: fixed;
-      left: 16px;
-      /* Position/taille alignées sur .tribunes-mobile-back-button d'autres-
-         sources (demande du 06/09/2026, "trop haut... comme sur page autres
-         sources"). */
-      bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-      z-index: 10002;
-      width: 40px;
-      height: 40px;
-      min-width: 40px;
-      min-height: 40px;
-      padding: 0;
-      align-items: center;
-      justify-content: center;
-      border: 3px solid transparent;
-      border-radius: 999px;
-      background:
-        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
-      color: #e5edf3;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-      cursor: pointer;
-      font-size: 16px;
-      line-height: 1;
-    }
-    html:not(.in-iframe) body.page-qcm-du-jour .mobile-back-button {
-      display: inline-flex !important;
-    }
-    body.page-qcm-du-jour .mobile-back-button:hover,
-    body.page-qcm-du-jour .mobile-back-button:focus-visible {
-      background:
-        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
-      color: #ffffff;
-    }
-    @media (max-width: 768px) {
-      body.page-qcm-du-jour .mobile-back-button {
-        left: calc(20% - 13px);
-        bottom: 37px;
-        width: 38px;
-        height: 38px;
-        min-width: 38px;
-        min-height: 38px;
-        font-size: 16px;
-      }
-    }
-  </style>
+  <script src="/header-score-widget.min.js?v=20260909-anti-heat-hidden-pause" defer></script>
 </head>
 <body class="page-qcm-du-jour qcm-learning-background">
 <style id="qcm-initial-arrival-loading-style">
@@ -3929,9 +3865,6 @@
     <div class="page-arrival-loading-title" id="page-arrival-loading-title">Chargement de mes apprentissages en cours</div>
   </div>
 </div>
-<button type="button" class="mobile-back-button" aria-label="Retour à l'accueil" title="Retour à l'accueil" onclick="qcmBottomNavHome()">
-  <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
-</button>
 <header class="topbar topbar--mnoria-uniform">
   <div class="container topbar-inner topbar-home">
     <div class="home-brand-block">
@@ -4071,7 +4004,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260909-learning-home-single-prepaint-v18" defer></script>
+<script src="/script.min.js?v=20260909-memory-top-level-v29" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
