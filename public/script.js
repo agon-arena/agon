@@ -5699,6 +5699,13 @@ function hideDebateIframeParentLoadingOverlay() {
   if (!overlay) return;
   delete overlay.dataset.mnoriaBoundsFrozen;
   overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
+  // debate-iframe-parent-loading-learning-page impose opacity:1 !important sans condition
+  // (cf. son commentaire "Aucun fondu ici" dans ensureDebateIframeParentLoadingStyles) —
+  // showDebateIframeParentLoadingOverlay la retire avant un NOUVEL affichage, mais rien ne le
+  // faisait ici : une fois posée pour Apprentissages, le voile restait donc opaque pour
+  // toujours, même après la fin réelle du chargement (learningContentReady, "loading" retirée) —
+  // "page de chargement sans fin" reproduite en local le 09/09/2026.
+  overlay.classList.remove("debate-iframe-parent-loading-learning-page");
 }
 
 function cleanupStaleDebateIframeModalBlockers() {
@@ -5726,6 +5733,7 @@ function cleanupStaleDebateIframeModalBlockers() {
   if (overlay) {
     delete overlay.dataset.mnoriaBoundsFrozen;
     overlay.classList.remove("debate-iframe-parent-loading-overlay-visible");
+    overlay.classList.remove("debate-iframe-parent-loading-learning-page");
     overlay.classList.remove("debate-iframe-parent-loading-stuck");
   }
 }
@@ -5860,7 +5868,8 @@ function setDebateIframeModalCloseButtonVisible(isVisible) {
 
 function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
   const safePathname = String(pathname || "");
-  return safePathname === "/notifications" ||
+  return safePathname === "/apprentissage" ||
+    safePathname === "/notifications" ||
     safePathname === "/contributions";
 }
 
@@ -5871,7 +5880,14 @@ function syncDebateIframeModalPageClass(pathname = "") {
   if (safePathname !== "/apprentissage") modal.classList.remove("learning-frame-ready");
   modal.classList.toggle("contact-frame-open", safePathname === "/contact");
   modal.classList.toggle("tribunes-frame-open", safePathname === "/autres-sources");
-  modal.classList.toggle("debate-frame-open", safePathname === "/debate");
+  /* Classe technique de géométrie plein écran : Ma mémoire doit utiliser le
+     même conteneur étendu que Débat. Dans l'iframe, initMnoriaDockAlignment
+     mesure ensuite exactement la différence entre innerHeight enfant et
+     innerHeight parent (--mnoria-embedded-bottom-ext). */
+  modal.classList.toggle(
+    "debate-frame-open",
+    safePathname === "/debate" || safePathname === "/mon-univers"
+  );
   modal.classList.toggle("create-frame-open", safePathname === "/create");
   modal.classList.toggle("notifications-frame-open", safePathname === "/notifications");
   modal.classList.toggle("qcm-frame-open", safePathname === "/apprentissage");
@@ -6693,6 +6709,13 @@ function ensureDebateIframeModal() {
        bouton par-dessus cette règle pendant certaines phases du QCM. */
     #debate-iframe-modal.open.mon-univers-frame-open #learning-iframe-modal-close {
       display: inline-flex;
+    }
+    /* Apprentissages possède déjà son bouton Accueil dans le bandeau interne.
+       Verrou CSS contre les callbacks génériques de l'iframe qui pourraient
+       brièvement réafficher l'une des deux flèches du parent. */
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close,
+    #debate-iframe-modal.qcm-frame-open #learning-iframe-modal-close {
+      display: none !important;
     }
     #learning-iframe-modal-close:hover,
     #learning-iframe-modal-close:focus-visible {
@@ -7660,7 +7683,7 @@ function openDebateIframeModal(url, options = {}) {
   window.__mnoriaIframeCurrentPathname = iframeUrlPathname;
   syncDebateIframeModalPageClass(iframeUrlPathname);
   __mnoriaDebugRefreshLog("openDebateIframeModal", "loader", { overlay: "showDebateIframeParentLoadingOverlay", targetUrl: url });
-  setDebateIframeModalCloseButtonVisible(true);
+  setDebateIframeModalCloseButtonVisible(!shouldHideDebateIframeModalCloseButtonForPath(iframeUrlPathname));
   if (!modalAlreadyOpen) suspendIndexEmbedsForDebateModal();
   // .loading DOIT être posé AVANT .open (jamais après) : #debate-iframe-modal-inner
   // (fond #fff) n'est masqué (opacity:0) que par la règle CSS
@@ -29184,6 +29207,22 @@ function applyDebateCachedPreview(debate) {
   const questionEl = document.getElementById("debate-question");
   if (questionEl) questionEl.textContent = d.question || "";
   renderDebateContext(d.content || "", isOpenDebate(d));
+  // Posé dès la preview (demande du 09/09/2026, "le badge... a tendance à
+  // sauter") : #debate-evaluation-axis + le déplacement de #debate-ai-progress-slot/
+  // #debate-ai-analysis-slot sous lui n'existaient auparavant qu'à partir de
+  // loadDebateFullData (le seul appelant jusqu'ici) — sur le chemin preview/iframe
+  // (le plus fréquent, cf. p.debate ci-dessous dans loadDebate), rien n'occupait
+  // encore cet emplacement au premier paint, donc TOUT le contenu sous le titre se
+  // décalait d'un coup dès que loadDebateFullData arrivait, quelques centaines de ms
+  // plus tard. evaluation_axis/evaluation_axis_hidden/is_owner n'existent pas sur
+  // l'objet debate de preview (absents de DEBATES_LIST_SELECT_COLUMNS, jamais
+  // rapatriés pour la liste) — renderEvaluationAxis se rabat alors sur le texte par
+  // défaut, IDENTIQUE à ce que la plupart des arènes (sans barème personnalisé)
+  // afficheront de toute façon une fois loadDebateFullData rejoué avec les vraies
+  // données : aucun re-saut pour elles. Seules les arènes AVEC un barème personnalisé
+  // verront encore le texte remplacé au second passage — un simple changement de
+  // texte au même endroit, plus jamais l'apparition brutale de tout le bloc.
+  renderEvaluationAxis(d);
   renderDebateEpisodeNavigation(d);
   const videoUrl = String(d.video_url || "").trim();
   const imageUrl = String(d.image_url || "").trim();

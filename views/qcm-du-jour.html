@@ -2109,6 +2109,15 @@
     .qcm-mesqcm-theme-panel .qcm-mesqcm-table td:nth-child(3) {
       left: -6px;
     }
+    /* "En cours de création" n'a que 2 colonnes (Apprentissage/État, colonne "Niveau"
+       supprimée le 09/09/2026) : sans cet override, "État" garderait ici sa largeur de base
+       (30%, pensée pour un total à 3 colonnes) — les 25% laissés vacants par la suppression
+       de "Niveau" lui reviennent plutôt que de laisser un espace vide à droite du tableau. */
+    .qcm-mesqcm-group--creating .qcm-mesqcm-table th:nth-child(2),
+    .qcm-mesqcm-group--creating .qcm-mesqcm-table td:nth-child(2) {
+      width: 55%;
+      left: -12px;
+    }
     /* État et Niveau centrés (nom/valeur au-dessus du chiffre/sous-libellé,
        l'un au-dessus de l'autre, plutôt que collés au bord gauche de la
        colonne — demande du 02/09/2026), en-têtes inclus. */
@@ -5746,6 +5755,12 @@
   function applyProgressiveNextLevelHint(hintEl, continueBtn, data) {
     if (!data || !data.progressive || !data.nextLevel) return;
     if (data.nextLevelReady) {
+      // hintEl explicitement masqué (pas seulement laissé tel quel) : cette branche est aussi
+      // atteinte depuis le polling, une fois le sablier "en cours de création" déjà affiché
+      // (cf. startProgressiveNextLevelPoll) — sans ce masquage, le message sablier restait
+      // visible en même temps que le bouton "Continuer" (demande du 09/09/2026, "le sablier
+      // disparaît et le bouton continuer apparaît ?").
+      hintEl.hidden = true;
       continueBtn.textContent = 'Continuer en ' + (data.nextLevelLabel || data.nextLevel);
       continueBtn.hidden = false;
       var slotAtClick = currentSlot;
@@ -5759,20 +5774,23 @@
     hintEl.innerHTML = '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">' +
       'La suite (' + escapeHtml(data.nextLevelLabel || data.nextLevel) + ') est en cours de création — reviens dans quelques instants.';
     hintEl.hidden = false;
-    // Bascule automatique dès que prêt (demande du 07/09/2026, "dès que
-    // c'est prêt, le sablier arrête d'être visible et la question apparaît ?")
-    // : sans ce polling, un utilisateur qui reste sur cet écran de score
-    // n'aurait jamais su que la suite était devenue disponible sans quitter
-    // puis rouvrir le sujet — même cadence (8s) que
-    // checkPendingNotionQuizzesReadiness (script.js), qui fait déjà ça pour
-    // "Mes apprentissages en cours de création" ailleurs sur le site.
-    startProgressiveNextLevelPoll(hintEl, currentSlot, currentQuizDate);
+    // Repasse en revue l'état dès que prêt (demande du 07/09/2026, "dès que
+    // c'est prêt, le sablier arrête d'être visible..." — MAIS sans enchaîner
+    // tout seul, corrigé le 09/09/2026, "si je ne clique pas sur un bouton,
+    // on ne m'envoie pas sur avancé par défaut" : ce polling ne fait plus que
+    // remplacer le sablier par le bouton "Continuer en X" une fois prêt — au
+    // clic seulement, jamais automatiquement. Sans ce polling, un utilisateur
+    // qui reste sur cet écran de score n'aurait jamais su que la suite était
+    // devenue disponible sans quitter puis rouvrir le sujet — même cadence
+    // (8s) que checkPendingNotionQuizzesReadiness (script.js), qui fait déjà
+    // ça pour "Mes apprentissages en cours de création" ailleurs sur le site.
+    startProgressiveNextLevelPoll(hintEl, continueBtn, currentSlot, currentQuizDate);
   }
   var progressiveNextLevelPollTimer = null;
   function stopProgressiveNextLevelPoll() {
     if (progressiveNextLevelPollTimer) { clearInterval(progressiveNextLevelPollTimer); progressiveNextLevelPollTimer = null; }
   }
-  function startProgressiveNextLevelPoll(hintEl, slotAtCall, dateAtCall) {
+  function startProgressiveNextLevelPoll(hintEl, continueBtn, slotAtCall, dateAtCall) {
     stopProgressiveNextLevelPoll();
     progressiveNextLevelPollTimer = setInterval(function () {
       // hintEl.isConnected : l'écran de score a pu être quitté ("Terminé",
@@ -5791,7 +5809,10 @@
           if (!hintEl.isConnected || currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) { stopProgressiveNextLevelPoll(); return; }
           if (data && data.progressive && data.nextLevel && data.nextLevelReady) {
             stopProgressiveNextLevelPoll();
-            continueToNextProgressiveLevel(slotAtCall, dateAtCall);
+            // Ne bascule plus automatiquement vers la suite (cf. commentaire ci-dessus) :
+            // remplace juste le sablier par le bouton "Continuer en X" cliquable, exactement
+            // comme si le niveau suivant avait été prêt dès l'arrivée sur cet écran de score.
+            applyProgressiveNextLevelHint(hintEl, continueBtn, data);
           }
         })
         .catch(function () {});
@@ -6204,17 +6225,16 @@
     return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating">' +
       '<h2 class="qcm-mesqcm-group-title">En cours de création</h2>' +
       '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
-      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th><th>Niveau</th></tr></thead><tbody>' +
+      // Colonne "Niveau" supprimée dans cette rubrique uniquement (demande du 09/09/2026) —
+      // "État" (badge "En cours de création") gardée. Ne reste que 2 colonnes ici (contre 3
+      // pour "Mes apprentissages en cours" juste en dessous) : largeur de la colonne "État"
+      // réajustée ci-dessous (.qcm-mesqcm-group--creating) pour occuper l'espace laissé libre
+      // plutôt que de garder les 30% pensés pour 3 colonnes.
+      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th></tr></thead><tbody>' +
       pending.map(function (item) {
         return '<tr><td><span class="qcm-mesqcm-name-btn is-static">' +
           '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span></span></td>' +
-          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td>' +
-          // 3e colonne "Niveau" vide (demande du 02/09/2026) : sans elle, table-layout:fixed
-          // ne répartit les largeurs que sur 2 colonnes ici contre 3 dans "Mes apprentissages
-          // en cours" juste en dessous — même largeur théorique (52%/24%) mais rapportée à un
-          // total différent (76% vs 100%), donc la colonne État ne tombait pas au même endroit
-          // entre ces deux rubriques empilées.
-          '<td></td></tr>';
+          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td></tr>';
       }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></section>';
   }
 
@@ -7857,7 +7877,7 @@
       // pour autant repasser en "En cours" (realized reste vrai dès que
       // answeredCount, qui lui inclut les questions passées, atteint Y).
       var stateHtml = q.realized
-        ? '<span class="qcm-mesqcm-state is-realized">Réalisé (' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
+        ? '<span class="qcm-mesqcm-state is-realized">Réalisé<br>(' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
         : (q.inProgress
           ? '<span class="qcm-mesqcm-state is-inprogress">En cours<br>' + (Number(q.answeredCount) || 0) + '/' + questionCount + '</span>'
           : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>');

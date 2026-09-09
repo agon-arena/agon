@@ -17349,8 +17349,9 @@ html body.in-iframe .home-bottom-nav {
   bottom: 0 !important;
 }
 
-/* Les pages secondaires restent arrêtées au viewport. Débat conserve seul
-   son mécanisme de dock/scroll spécialisé. */
+/* Les pages secondaires restent arrêtées au viewport. Les surfaces auxquelles
+   le JavaScript attribue debate-frame-open (Débat et Ma mémoire plein écran)
+   conservent seules le mécanisme étendu mesuré dans l'iframe. */
 @media (display-mode: standalone) and (max-width: 768px) {
   #debate-iframe-modal.open:not(.debate-frame-open) {
     bottom: 0 !important;

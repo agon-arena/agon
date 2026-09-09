@@ -23,6 +23,35 @@
         document.documentElement.classList.add('mnoria-conn-retry-cover');
       }
     } catch (_) {}
+    /* Lancement réel depuis l'icône standalone : neutralise AVANT le premier
+       paint les marqueurs de retour éventuellement restés en sessionStorage.
+       Sinon leur prepaint "Chargement de l'accueil" peut passer devant
+       l'animation de démarrage. Le paramètre skipStartup protège les vrais
+       retours internes vers l'accueil. */
+    try {
+      var __mnoriaEarlyParams = new URLSearchParams(window.location.search);
+      var __mnoriaEarlyStandalone = !!(
+        window.navigator.standalone ||
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+      );
+      var __mnoriaEarlyNav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+      var __mnoriaEarlyNavType = __mnoriaEarlyNav
+        ? __mnoriaEarlyNav.type
+        : (performance.navigation && performance.navigation.type === 0 ? 'navigate' : 'unknown');
+      var __mnoriaColdStandaloneStart = __mnoriaEarlyStandalone &&
+        window.location.pathname === '/' &&
+        __mnoriaEarlyNavType === 'navigate' &&
+        !document.referrer &&
+        !__mnoriaEarlyParams.has('skipStartup') &&
+        !__mnoriaEarlyParams.has('mnoriaHomeReturn') &&
+        !__mnoriaEarlyParams.has('_swrefresh') &&
+        !__mnoriaEarlyParams.has('connRetry');
+      if (__mnoriaColdStandaloneStart) {
+        document.documentElement.classList.add('mnoria-cold-standalone-start');
+        sessionStorage.removeItem('mnoria_home_return_loading');
+        sessionStorage.removeItem('mnoria_home_memory_return_loading');
+      }
+    } catch (_) {}
   </script>
   <script src="/no-zoom.js?v=20260603" defer></script>
 
@@ -80,10 +109,10 @@
     /* Retour interne vers Accueil : posé dans le <head>, avant toute peinture,
        afin que le contenu de la page ne puisse jamais apparaître avant Ma mémoire. */
     try {
-      if (sessionStorage.getItem('mnoria_home_return_loading') === '1') {
+      if (!document.documentElement.classList.contains('mnoria-cold-standalone-start') && sessionStorage.getItem('mnoria_home_return_loading') === '1') {
         document.documentElement.classList.add('mnoria-home-return-loading');
       }
-      if (sessionStorage.getItem('mnoria_home_memory_return_loading') === 'mon-univers') {
+      if (!document.documentElement.classList.contains('mnoria-cold-standalone-start') && sessionStorage.getItem('mnoria_home_memory_return_loading') === 'mon-univers') {
         document.documentElement.classList.add('mnoria-home-memory-return-loading');
       } else {
         /* Nettoie notamment l'ancien marqueur "1" qui pouvait laisser un
@@ -184,7 +213,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260909-startup-scroll-lock">
+  <link rel="stylesheet" href="/style.min.css?v=20260909-memory-debate-geometry-v26">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -413,6 +442,15 @@
         -webkit-backface-visibility: hidden;
         transform: translateZ(0);
       }
+      /* Au lancement à froid, l'intro #mnoria-startup-loader est déjà l'écran
+         plein écran officiel. Ne jamais peindre ce voile de stabilisation
+         par-dessus : il créait une première page "Chargement de l'accueil"
+         furtive, suivie de l'animation. La classe startup-active est posée
+         avant ce nœud dans le HTML, donc le voile est masqué dès son premier
+         paint et non retiré après coup. */
+      html.mnoria-startup-active body.is-standalone.page-home-mobile #mnoria-memoire-loading-veil {
+        display: none !important;
+      }
       body.is-standalone.page-home-mobile #mnoria-memoire-loading-veil.is-hiding {
         opacity: 0;
         pointer-events: none;
@@ -496,6 +534,12 @@
       }
       .mnoria-startup-loader.is-ready {
         opacity: 1;
+      }
+      /* Lancement depuis l'icône : aucun délai transparent de 400ms et donc
+         aucune possibilité de voir l'accueil sous le loader. */
+      html.mnoria-cold-standalone-start .mnoria-startup-loader {
+        opacity: 1;
+        transition: opacity 0.45s ease, visibility 0.45s ease;
       }
       /* Règle "html.mnoria-user-refresh-startup .mnoria-startup-loader { opacity: 1; }" retirée le
          17/08/2026 ("au milieu de l'animation le fond est coupé en bas avant de réapparaître
@@ -929,6 +973,12 @@
     window.__mnoriaSkipStartupOnce = true;
     document.documentElement.classList.add('mnoria-skip-startup-once');
   } else {
+    /* Une intro réelle gagne toujours sur un éventuel ancien écran de retour. */
+    document.documentElement.classList.remove('mnoria-home-return-loading', 'mnoria-home-memory-return-loading');
+    try {
+      sessionStorage.removeItem('mnoria_home_return_loading');
+      sessionStorage.removeItem('mnoria_home_memory_return_loading');
+    } catch (_) {}
     document.documentElement.classList.add('mnoria-startup-active');
     // TEMPORAIRE : diagnostic du 26/08/2026 (animation de démarrage visible parfois en fermant
     // Scores et contributions / Meilleures idées) — capture le contexte exact d'une vraie
@@ -989,6 +1039,14 @@
 (function(){
   var veil = document.getElementById('mnoria-memoire-loading-veil');
   if (!veil) return;
+  /* Une vraie intro de lancement est déjà en cours : elle doit être l'unique
+     surface visible. Le sélecteur CSS critique ci-dessus empêche le premier
+     paint ; ce retrait évite que le voile réapparaisse si la classe de
+     démarrage est retirée avant mnoria:memoire-frame-ready. */
+  if (document.documentElement.classList.contains('mnoria-startup-active')) {
+    veil.remove();
+    return;
+  }
   /* Lors d'un retour interne, .mnoria-home-return-prepaint couvre déjà toute
      l'attente jusqu'au cadre stabilisé. Retirer ce second voile immédiatement
      évite qu'il prenne visuellement le relais avec une autre typographie. */
@@ -1059,6 +1117,10 @@
       if (revealed) return;
       revealed = true;
       loader.classList.add('is-ready');
+    }
+    if (document.documentElement.classList.contains('mnoria-cold-standalone-start')) {
+      reveal();
+      return;
     }
     // Page issue d'un refresh utilisateur (bouton "Actualiser", cf. forceFullPageRefresh/
     // showMnoriaStartupBeforeRefresh, script.js — _swrefresh dans l'URL détecté en tête de <head>,
@@ -2346,7 +2408,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260909-remove-learning-iframe-arrow" defer></script>
+<script src="/script.min.js?v=20260909-cold-start-single-surface-v27" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

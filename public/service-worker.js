@@ -37,7 +37,7 @@
 // revalidation arrière-plan ci-dessous, même stratégie que les assets
 // statiques immuables locaux (cf. isMutableStaticAsset plus bas) — une police
 // change assez rarement pour que ça ne soit jamais un problème de fraîcheur.
-const SW_VERSION = "20260909-memory-fullscreen-iframe-close-v20";
+const SW_VERSION = "20260909-cold-start-single-surface-v27";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

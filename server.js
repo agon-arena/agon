@@ -165,6 +165,8 @@ const {
   formatIdentifiedSourcesBlock,
   appendIdentifiedSources,
   buildPublicGroundingSources,
+  buildSourceGuessPrompt,
+  parseGuessedSourcesResponse,
   WEB_SEARCH_RAW_RESULTS_COUNT,
   WEB_SEARCH_MAX_SELECTED_SOURCES
 } = require("./lib/web-search-grounding");
@@ -3748,6 +3750,23 @@ function isAdmin(req) {
   return verifyAdminToken(req.headers["x-admin-token"]);
 }
 
+// Jeton séparé, lecture seule (audit egress du 09/09/2026) : donne accès
+// UNIQUEMENT à GET /api/admin/egress-stats, jamais au reset ni au reste de
+// l'admin — pensé pour un agent planifié externe (surveillance 3x/jour) sans
+// lui confier ADMIN_PASSWORD (suppression de débats, etc.). Absent de
+// process.env => fonctionnalité désactivée (comparaison de longueurs nulles
+// toujours fausse avant timingSafeEqual).
+const EGRESS_MONITOR_TOKEN = String(process.env.EGRESS_MONITOR_TOKEN || "");
+function isEgressMonitor(req) {
+  const token = req.headers["x-egress-monitor-token"];
+  if (!EGRESS_MONITOR_TOKEN || typeof token !== "string" || token.length !== EGRESS_MONITOR_TOKEN.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(EGRESS_MONITOR_TOKEN));
+  } catch {
+    return false;
+  }
+}
+
 function requireAdmin(req, res, next) {
   if (!isAdmin(req)) {
     return res.status(403).json({ error: "Accès admin refusé." });
@@ -6746,7 +6765,10 @@ function buildAdminTagOccurrenceStats(debates = [], cloudData = { bubbles: [] })
 // nombre de requêtes et les octets réellement transférés depuis le dernier redémarrage
 // (ou le dernier reset manuel) — sert à vérifier concrètement qu'un correctif fait bien
 // baisser le trafic, plutôt que de le supposer après lecture du code.
-app.get("/api/admin/egress-stats", requireAdmin, (req, res) => {
+app.get("/api/admin/egress-stats", (req, res, next) => {
+  if (isEgressMonitor(req) || isAdmin(req)) return next();
+  return res.status(403).json({ error: "Accès admin refusé." });
+}, (req, res) => {
   const byKey = [...supabaseEgressStats.byKey.entries()]
     .map(([key, v]) => ({ key, requests: v.requests, bytes: v.bytes, mb: +(v.bytes / 1024 / 1024).toFixed(3) }))
     .sort((a, b) => b.bytes - a.bytes);
@@ -15429,20 +15451,72 @@ async function braveSearchRaw(query, braveKey, id) {
   });
 }
 
+// Repli sans Brave (cf. lib/web-search-grounding.js buildSourceGuessPrompt/
+// parseGuessedSourcesResponse pour le détail complet et sa justification) :
+// appelé UNIQUEMENT par resolveWebSearchGrounding ci-dessous, quand la voie
+// Brave (avec ou sans clé) n'a produit AUCUN candidat exploitable. Toujours
+// best-effort — une erreur IA ou une réponse vide retombe sur [] (jamais une
+// exception qui bloquerait la génération), exactement comme braveSearchRaw.
+// Les URLs proposées ne sont JAMAIS prises pour argent comptant : l'appelant
+// les fait retraverser EXACTEMENT le même scoring/seuil/fetch/validation
+// qu'un résultat Brave — une URL hallucinée ou périmée est donc simplement
+// écartée plus loin (échec de fetch ou contenu hors-sujet), jamais publiée
+// telle quelle.
+async function guessSourcesWithAI(apiKey, subject, id) {
+  let content;
+  try {
+    content = await _callOpenAI(apiKey, [{ role: "user", content: buildSourceGuessPrompt(subject) }], {
+      model: DAILY_QUIZ_NARRATIVE_MODEL,
+      temperature: 0.2,
+      responseFormat: { type: "json_object" },
+      feature: "web_search_source_guess_fallback",
+      generationId: id
+    });
+  } catch (error) {
+    // Garde pré-génération (même logique que web_search_source_selection
+    // plus bas dans resolveWebSearchGrounding) : "ce sujet doit attendre un
+    // résultat Batch" n'est JAMAIS une vraie erreur de repli — jamais avalée
+    // ici, jamais transformée en "l'IA n'a rien proposé" (ce qui ferait à
+    // tort générer une fiche dégradée sans grounding au lieu d'attendre
+    // proprement le prochain cycle scheduler).
+    if (error instanceof pregenStepCache.PregenerationPendingError || error instanceof pregenStepCache.PregenerationCallFailedError) throw error;
+    console.warn(`[web-search-grounding:${id}] repli IA (devine des sources) :`, error.message);
+    return [];
+  }
+  return parseGuessedSourcesResponse(content);
+}
+
 async function resolveWebSearchGrounding(apiKey, subject, id) {
   const braveKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (!braveKey) return { diagnostic: { reason: "no_brave_key" } };
   const query = String(subject || "").trim();
   if (!query) return { diagnostic: { reason: "empty_subject" } };
 
-  const rawResults = await braveSearchRaw(query, braveKey, id);
+  const rawResults = braveKey ? await braveSearchRaw(query, braveKey, id) : [];
   let candidates = filterCandidateSources(rawResults);
-  if (!candidates.length) return { diagnostic: { reason: "no_candidates", detail: `${rawResults.length} résultat(s) Brave brut(s)` } };
+  if (!candidates.length) {
+    // Incident du 09/09/2026 ("Cour d'assises" admise avec
+    // grounding_sources=[] faute de quota Brave) : plutôt que d'abandonner
+    // tout grounding, demande à l'IA elle-même de proposer des candidats
+    // (cf. guessSourcesWithAI ci-dessus) — jamais une seconde requête Brave
+    // ici (déjà absente ou déjà en échec par construction).
+    const guessed = await guessSourcesWithAI(apiKey, subject, id);
+    candidates = filterCandidateSources(guessed);
+    if (!candidates.length) {
+      return {
+        diagnostic: {
+          reason: braveKey ? "no_candidates_and_ai_fallback_empty" : "no_brave_key_and_ai_fallback_empty",
+          detail: `${rawResults.length} résultat(s) Brave brut(s), 0 candidat après repli IA`
+        }
+      };
+    }
+    console.info(`[web-search-grounding:${id}] repli IA (Brave indisponible) : ${candidates.length} candidat(s) proposé(s).`);
+  }
 
   // Scoring déterministe (lib/source-scoring.js) : ordonne les candidats
-  // AVANT de solliciter l'IA — aucun appel réseau/IA supplémentaire ici,
-  // seulement des signaux déjà en main (domaine, titre, description,
-  // page_age déjà renvoyés par Brave dans la même réponse).
+  // AVANT de solliciter l'IA de sélection — aucun appel réseau/IA
+  // supplémentaire ici, seulement des signaux déjà en main (domaine, titre,
+  // description, page_age déjà renvoyés par Brave dans la même réponse, ou
+  // fournis par le repli IA ci-dessus).
   const topicContext = buildTopicContext(subject);
   let ranked = rankCandidates(candidates, topicContext);
 
@@ -15451,8 +15525,9 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
   // registre manifestement compétente pour ce sujet manque encore parmi les
   // candidats (ex. NASA absente des résultats bruts sur "Composition de
   // l'atmosphère de Mars", alors que Wikipédia seule ne dépasse pas
-  // GOOD_ENOUGH_THRESHOLD).
-  const retryAuthority = shouldAttemptAuthorityRetry(ranked, topicContext);
+  // GOOD_ENOUGH_THRESHOLD). Nécessite une clé Brave valide — jamais tentée
+  // quand elle est absente (le repli IA ci-dessus est alors seul en jeu).
+  const retryAuthority = braveKey ? shouldAttemptAuthorityRetry(ranked, topicContext) : null;
   if (retryAuthority) {
     const retryQuery = buildAuthorityRetryQuery(query, retryAuthority.domain);
     const retryRawResults = await braveSearchRaw(retryQuery, braveKey, id);
@@ -19124,6 +19199,23 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     // ce cas (pas de session anonyme possible, rien à montrer sans historique).
     const quizDate = resolveDailyQuizRequestDate(slot, req.query.date);
     const voterKey = String(req.query.voterKey || "").trim();
+    // Rattrapage de promotion AWAITÉ (demande du 09/09/2026, "on me renvoie vers la page
+    // précédente" après avoir cliqué "Continuer en Avancé") : maybeAdvanceProgressiveLevelAfterAnswer
+    // n'est normalement déclenchée QUE par POST /answer, juste après la toute dernière réponse du
+    // bloc courant — mais à cet instant précis, le niveau suivant peut ne pas encore être généré
+    // (computeNextUnlockedProgressiveLevel renvoie alors null, no-op silencieux, cf. son
+    // commentaire "le filet de rattrapage de GET /api/users/notion-quizzes reste seul
+    // responsable"). Ce filet-là existe bien MAIS est fire-and-forget et non reflété dans SA
+    // PROPRE réponse (cf. son commentaire "le niveau promu ne devient visible qu'au prochain
+    // chargement de cette liste") — jamais consulté par continueToNextProgressiveLevel
+    // (qcm-du-jour.html), qui appelle uniquement CETTE route. Le niveau persisté restait donc
+    // "elementaire" pour de bon dès que la génération d'Avancé finissait APRÈS la dernière
+    // réponse d'Élémentaire (cas courant) : /today continuait à ne renvoyer que les questions
+    // Élémentaire (déjà toutes répondues), et continueToNextProgressiveLevel retombait sur
+    // renderFinalScore() après ses 3 tentatives. Awaitée ici (contrairement à POST /answer), sa
+    // propre écriture est donc bien prise en compte par resolvePersistedNotionRequestedLevel
+    // juste après, dans cette même réponse.
+    if (voterKey) await maybeAdvanceProgressiveLevelAfterAnswer({ voterKey, quizDate, slot });
     // V4.1 : niveau réellement demandé pour CETTE session, quand le client
     // le connaît (cf. commentaire de requestedLevel dans getDailyQuizQuestions)
     // — absent, comportement V4.0 inchangé.
