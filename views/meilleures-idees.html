@@ -182,6 +182,51 @@
       border-top: 1px solid #e5e7eb;
       padding-top: 12px;
     }
+    /* Sous-menu déroulant "Arènes libres"/"Arènes à positions" (demande du 09/09/2026) :
+       même mécanique <details>/<summary> que l'accordéon parent, en plus discret (fond
+       blanc au lieu du gris du parent, libellé plus petit) pour ne pas empiler deux boîtes
+       identiques l'une dans l'autre. */
+    .page-contributions .contributions-accordion-nested {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      margin: 0 0 10px;
+      overflow: hidden;
+    }
+    .page-contributions .contributions-accordion-nested:last-child {
+      margin-bottom: 2px;
+    }
+    .page-contributions .contributions-accordion-nested summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 13px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .page-contributions .contributions-accordion-nested summary::-webkit-details-marker {
+      display: none;
+    }
+    .page-contributions .contributions-accordion-nested .best-ideas-subheading {
+      margin: 0;
+    }
+    .page-contributions .contributions-accordion-nested .contributions-accordion-chevron {
+      color: #9ca3af;
+      font-size: 12px;
+      transition: transform 0.18s ease;
+      flex: 0 0 auto;
+    }
+    .page-contributions .contributions-accordion-nested[open] .contributions-accordion-chevron {
+      transform: rotate(180deg);
+    }
+    .page-contributions .contributions-accordion-nested-body {
+      padding: 0 12px 12px;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 10px;
+    }
     .page-contributions .contribution-item {
       display: block;
       color: #111827;
@@ -287,31 +332,71 @@
       animation: createSubmitSpin 0.8s linear infinite;
     }
 
+    /* Même visuel exact que les onglets "Score"/"Contributions" de la page Scores et
+       contributions (.contributions-section-title, views/mon-univers.html — elle-même
+       reprise de Découvrir/Ancrer/Relier/Mes acquis, page Apprentissage) : demande du
+       09/09/2026, "même police, même trait jaune". */
     .best-ideas-period-tabs {
       display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
+      justify-content: center;
+      align-items: baseline;
+      gap: 9px;
+      margin: 0 0 14px;
     }
     .best-ideas-period-tab {
-      flex: 1;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      background: #f3f4f6;
-      border: 1px solid #d1d5db;
-      color: #374151;
-      border-radius: 999px;
-      padding: 8px 10px;
-      font-size: 13px;
-      font-weight: 700;
+      position: relative;
+      width: auto;
+      flex: 0 0 auto;
+      padding: 6px 3px 10px;
+      border: none;
+      background: none;
+      color: #111827;
+      font-family: "Barlow Condensed", Arial, sans-serif !important;
+      font-size: 26px !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      white-space: nowrap;
       cursor: pointer;
-      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
     }
     .best-ideas-period-tab.active {
-      background: #eff6ff;
-      border-color: #bfdbfe;
-      color: #1e3a8a;
+      font-weight: 700 !important;
+    }
+    .best-ideas-period-tab.active::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 3px;
+      border-radius: 999px;
+      background: #f5b642;
+    }
+    @media (max-width: 480px) {
+      .best-ideas-period-tabs {
+        gap: 6px;
+      }
+      .best-ideas-period-tab {
+        font-size: 15px !important;
+        letter-spacing: 0.005em;
+      }
+    }
+    /* Titre "Les meilleures idées" aligné sur la police des sous-titres (onglets
+       Du jour/De la semaine/Du mois, Barlow Condensed) et centré (demande du
+       09/09/2026). */
+    body.page-best-ideas-fullscreen .section-header-home {
+      /* flex-direction:column sur cette page (pas row) : c'est align-items,
+         pas justify-content, qui centre horizontalement ici. */
+      align-items: center;
+    }
+    body.page-best-ideas-fullscreen .section-header-home h3 {
+      width: 100%;
+      text-align: center;
+      /* !important nécessaire : body.page-contributions impose var(--font-ui) via un
+         sélecteur à très haute spécificité (empilement de :not(), cf. style.min.css) —
+         même contournement que .best-ideas-period-tab plus haut. */
+      font-family: "Barlow Condensed", Arial, sans-serif !important;
     }
     .best-ideas-subheading {
       display: flex;
@@ -363,10 +448,24 @@
         <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
       </summary>
       <div class="contributions-accordion-body">
-        <p class="best-ideas-subheading"><span class="mnoria-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-votes-count"></span></p>
-        <div id="best-ideas-open-votes"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
-        <p class="best-ideas-subheading"><i class="fa-solid fa-scale-balanced"></i> Arènes à positions <span class="contributions-count" id="best-ideas-positioned-votes-count"></span></p>
-        <div id="best-ideas-positioned-votes"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
+        <details class="contributions-accordion-nested">
+          <summary>
+            <p class="best-ideas-subheading"><span class="mnoria-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-votes-count"></span></p>
+            <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+          </summary>
+          <div class="contributions-accordion-nested-body">
+            <div id="best-ideas-open-votes"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
+          </div>
+        </details>
+        <details class="contributions-accordion-nested">
+          <summary>
+            <p class="best-ideas-subheading"><i class="fa-solid fa-scale-balanced"></i> Arènes à positions <span class="contributions-count" id="best-ideas-positioned-votes-count"></span></p>
+            <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+          </summary>
+          <div class="contributions-accordion-nested-body">
+            <div id="best-ideas-positioned-votes"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
+          </div>
+        </details>
       </div>
     </details>
 
@@ -376,10 +475,24 @@
         <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
       </summary>
       <div class="contributions-accordion-body">
-        <p class="best-ideas-subheading"><span class="mnoria-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-aiscore-count"></span></p>
-        <div id="best-ideas-open-aiscore"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
-        <p class="best-ideas-subheading"><i class="fa-solid fa-scale-balanced"></i> Arènes à positions <span class="contributions-count" id="best-ideas-positioned-aiscore-count"></span></p>
-        <div id="best-ideas-positioned-aiscore"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
+        <details class="contributions-accordion-nested">
+          <summary>
+            <p class="best-ideas-subheading"><span class="mnoria-arena-icon" aria-hidden="true"></span> Arènes libres <span class="contributions-count" id="best-ideas-open-aiscore-count"></span></p>
+            <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+          </summary>
+          <div class="contributions-accordion-nested-body">
+            <div id="best-ideas-open-aiscore"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
+          </div>
+        </details>
+        <details class="contributions-accordion-nested">
+          <summary>
+            <p class="best-ideas-subheading"><i class="fa-solid fa-scale-balanced"></i> Arènes à positions <span class="contributions-count" id="best-ideas-positioned-aiscore-count"></span></p>
+            <i class="fa-solid fa-chevron-down contributions-accordion-chevron"></i>
+          </summary>
+          <div class="contributions-accordion-nested-body">
+            <div id="best-ideas-positioned-aiscore"><div class="empty-state contributions-loading"><img src="/sablier-96.png" alt="" class="contributions-loading-spinner"></div></div>
+          </div>
+        </details>
       </div>
     </details>
   </section>
@@ -582,5 +695,5 @@
 </script>
 
 <script src="/script.min.js?v=20260909-debate-home-cache-unblock-v16-antiheat-gong-fix-memoire-wait" defer></script>
-<script src="/bottom-nav.js?v=20260909-eclairages-nav-swap-v2"></script>
+<script src="/bottom-nav.js?v=20260909-meilleures-idees-mon-file"></script>
 </body></html>

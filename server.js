@@ -2981,10 +2981,14 @@ const LATEST_DEBATES_META_CACHE_TTL_MS = 60 * 1000;
 // scanne toute la table debates (aucune limite, aucune pagination) — identifiée comme
 // gros contributeur egress lors du pic du 26/08/2026. Même principe anti-dogpile que
 // latestDebatesMetaInFlight ci-dessus : une seule lecture Supabase partagée par fenêtre
-// de 60 s, quel que soit le nombre de visiteurs simultanés.
+// de quelques minutes, quel que soit le nombre de visiteurs simultanés. Les mutations
+// d'état IA invalident explicitement ce cache pour préserver la réactivité des badges.
 let analysisStatusesCache = null;
 let analysisStatusesInFlight = null;
-const ANALYSIS_STATUSES_CACHE_TTL_MS = 60 * 1000;
+const ANALYSIS_STATUSES_CACHE_TTL_MS = 5 * 60 * 1000;
+function invalidateAnalysisStatusesCache() {
+  analysisStatusesCache = null;
+}
 const DEBATES_LIST_SELECT_COLUMNS = [
   "id",
   "question",
@@ -9111,6 +9115,7 @@ app.post("/api/admin/analysis-queue/:id/cancel", requireAdmin, async (req, res) 
   if (!updated || !updated.length) {
     return res.status(409).json({ error: "Plus annulable : la génération a probablement déjà démarré." });
   }
+  invalidateAnalysisStatusesCache();
   return res.json({ ok: true, status: restoredStatus });
 });
 
@@ -12905,6 +12910,7 @@ async function _generateAndSaveAnalysis(debateId, { forceRescore = false, trigge
   // en cours (jusqu'à 24h), qu'il confondrait sinon avec une génération
   // synchrone bloquée par un crash serveur.
   await supabase.from("debates").update({ ai_analysis_status: isAutomaticBatch ? "batch_pending" : "generating" }).eq("id", canonicalId);
+  invalidateAnalysisStatusesCache();
 
   // Transport : seule différence entre les deux chemins (cf. rapport final,
   // section 3 — "le Batch et le synchrone doivent partager la construction du
@@ -12951,6 +12957,7 @@ async function _generateAndSaveAnalysis(debateId, { forceRescore = false, trigge
     if (saveError) {
       console.error(`[auto-analysis] débat ${canonicalId} — erreur sauvegarde :`, saveError.message);
     } else {
+      invalidateAnalysisStatusesCache();
       console.log(`[auto-analysis] débat ${canonicalId}${groupIds.length > 1 ? ` (fusionné avec ${groupIds.filter((gid) => String(gid) !== String(canonicalId)).join(",")})` : ""} — analyse générée et sauvegardée.`);
       for (const id of groupIds) {
         _notifyParticipantsAnalysisReady(id, payload.question, result).catch(console.error);
@@ -13001,10 +13008,12 @@ async function _generateAndSaveAnalysis(debateId, { forceRescore = false, trigge
     if (isAutomaticBatch && err instanceof debateAnalysisBatchCache.DebateBatchCallFailedError) {
       console.error(`[auto-analysis] débat ${canonicalId} — appel Batch définitivement échoué (${err.stepKey}) :`, err.message);
       await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", canonicalId);
+      invalidateAnalysisStatusesCache();
       return null;
     }
     console.error(`[auto-analysis] débat ${canonicalId} — échec :`, err.message);
     await supabase.from("debates").update({ ai_analysis_status: "failed" }).eq("id", canonicalId);
+    invalidateAnalysisStatusesCache();
     // Le chemin manuel (route admin) a besoin de cette exception pour
     // renvoyer une erreur 502 au clic — comportement inchangé. Le chemin
     // automatique ne doit en revanche jamais la laisser remonter : la boucle
@@ -13299,6 +13308,7 @@ async function _scheduleAnalysisIfNeeded(debateId) {
       ai_analysis_scheduled_at: scheduledAt,
       ai_analysis_last_score:   score
     }).eq("id", canonicalId);
+    invalidateAnalysisStatusesCache();
     console.log(`[auto-analysis] débat ${canonicalId}${groupIds.length > 1 ? ` (fusionné avec ${groupIds.filter((gid) => String(gid) !== String(canonicalId)).join(",")})` : ""} — seuil atteint (score ${score}, dernier trigger ${lastScore}), analyse programmée pour ${scheduledAt}`);
     for (const id of groupIds) {
       _notifyParticipantsAnalysisScheduled(id, debate.question, argIds).catch(console.error);
@@ -13397,6 +13407,7 @@ if (ANALYSIS_SCHEDULER_ENABLED) {
     .lt("ai_analysis_scheduled_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
     .then(({ error }) => {
       if (error) console.error("[auto-analysis] reset des analyses bloquées :", error.message);
+      else invalidateAnalysisStatusesCache();
     });
 
   // "batch_pending" (automatique) : marge de 48h plutôt que 60 min — un Batch
@@ -13415,6 +13426,7 @@ if (ANALYSIS_SCHEDULER_ENABLED) {
       for (const row of (stuck || [])) {
         await debateAnalysisBatchCache.clearCallsForDebate({ supabase, debateId: row.id }).catch((e) => console.error(`[auto-analysis] débat ${row.id} — nettoyage cache Batch :`, e.message));
         await supabase.from("debates").update({ ai_analysis_status: "scheduled" }).eq("id", row.id).eq("ai_analysis_status", "batch_pending");
+        invalidateAnalysisStatusesCache();
       }
     });
 
@@ -13439,6 +13451,7 @@ if (ANALYSIS_SCHEDULER_ENABLED) {
           .eq("ai_analysis_status", "scheduled")
           .select("id");
         if (claimError || !claimed || !claimed.length) continue;
+        invalidateAnalysisStatusesCache();
         // Nouveau cycle de génération automatique : table de cache Batch
         // vierge pour ce débat, jamais la réutilisation d'un résultat figé
         // d'une tentative précédente abandonnée (cf. rapport final, section 5
@@ -17008,7 +17021,7 @@ async function getCustomTopicQuizRows() {
   _customTopicQuizRowsInFlight = (async () => {
     const { data, error } = await supabase
       .from("daily_quiz")
-      .select("slot, quiz_date, questions, progressive_status")
+      .select("slot, quiz_date, progressive_status, curriculum, summary:daily_quiz_question_summaries")
       .like("slot", "notion:custom:%");
     if (error) throw new Error(error.message);
     _customTopicQuizRowsCache = data || [];
@@ -17035,17 +17048,40 @@ async function findEquivalentGeneratedCustomTopic(topic, level) {
   const masterCandidates = [];
   const legacyCandidates = [];
   for (const row of latestBySlot.values()) {
-    const topicText = row.questions?.[0]?.searchTopic || row.questions?.[0]?.sourceName || null;
+    const summaryQuestions = row.summary?.questions || [];
+    const first = summaryQuestions[0] || null;
+    const topicText = first?.searchTopic || first?.sourceName || null;
     if (!topicText) continue;
-    const candidate = { slot: row.slot, quizDate: row.quiz_date, questions: row.questions, progressiveStatus: row.progressive_status, topicText };
-    if (isMasterEligibleQuiz(row.questions)) {
+    const candidate = {
+      slot: row.slot,
+      quizDate: row.quiz_date,
+      summaryQuestions,
+      progressiveStatus: row.progressive_status,
+      curriculum: row.curriculum,
+      topicText
+    };
+    if (isMasterEligibleQuiz(summaryQuestions, { progressiveStatus: row.progressive_status, curriculum: row.curriculum })) {
       masterCandidates.push(candidate);
     } else if (parseCustomTopicSlotLevel(row.slot) === level) {
       legacyCandidates.push(candidate);
     }
   }
 
-  return findEquivalentCustomTopic(topic, masterCandidates) || findEquivalentCustomTopic(topic, legacyCandidates);
+  const equivalent = findEquivalentCustomTopic(topic, masterCandidates) || findEquivalentCustomTopic(topic, legacyCandidates);
+  if (!equivalent) return null;
+  const { data: fullRow, error: fullError } = await supabase
+    .from("daily_quiz")
+    .select("questions")
+    .eq("slot", equivalent.slot)
+    .eq("quiz_date", equivalent.quizDate)
+    .maybeSingle();
+  if (fullError) throw new Error(fullError.message);
+  return {
+    slot: equivalent.slot,
+    quizDate: equivalent.quizDate,
+    questions: fullRow?.questions || [],
+    progressiveStatus: equivalent.progressiveStatus
+  };
 }
 
 /* ================================================================= */
@@ -21555,7 +21591,8 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
     // ci-dessus reste toutes dates confondues pour ce même slot.
     const bySlot = new Map();
     for (const row of quizRows || []) {
-      const first = row.questions?.[0];
+      const summaryQuestions = row.summary?.questions || [];
+      const first = summaryQuestions[0];
       const label = first?.sourceName;
       if (!label) continue;
       const existing = bySlot.get(row.slot);
@@ -21565,7 +21602,7 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
           quizDate: row.quiz_date,
           label,
           first,
-          questionCount: Array.isArray(row.questions) ? row.questions.length : 0
+          questionCount: Array.isArray(summaryQuestions) ? summaryQuestions.length : 0
         });
       }
     }

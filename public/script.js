@@ -2977,7 +2977,7 @@ function ensurePageArrivalLoadingOverlayStyles() {
         position: absolute;
         left: 50%;
         top: 50vh;
-        top: 50lvh;
+        top: 50dvh;
         width: min(90vw, 220px);
         transform: translate(-50%, -50%) translateZ(0);
       }
@@ -5670,7 +5670,7 @@ function ensureDebateIframeParentLoadingStyles() {
         position: absolute;
         left: 50%;
         top: 50vh;
-        top: 50lvh;
+        top: 50dvh;
         width: min(90vw, 220px);
         transform: translate(-50%, -50%) translateZ(0) !important;
       }
@@ -6031,15 +6031,6 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("historical-events-frame-open", safePathname === "/historical-events-test");
   modal.classList.toggle("about-frame-open", safePathname === "/about");
   modal.classList.toggle("mon-univers-frame-open", safePathname === "/mon-univers" || safePathname === "/contributions");
-  const auxiliaryClose = document.getElementById("learning-iframe-modal-close");
-  if (auxiliaryClose) {
-    const closesMemory = safePathname === "/mon-univers";
-    auxiliaryClose.setAttribute(
-      "aria-label",
-      closesMemory ? "Quitter Ma mémoire et retourner à l'accueil" : "Quitter les apprentissages et retourner à l'accueil"
-    );
-    auxiliaryClose.setAttribute("title", "Retour à l'accueil");
-  }
   syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
 
@@ -6802,69 +6793,15 @@ function ensureDebateIframeModal() {
       visibility: hidden;
       pointer-events: none;
     }
-    #learning-iframe-modal-close {
-      display: none;
-      position: fixed;
-      left: 16px;
-      /* Position/taille alignées sur .tribunes-mobile-back-button d'autres-
-         sources (demande du 06/09/2026, "trop haut... comme sur page autres
-         sources") : le bouton était bien plus haut (80px/59px) que son
-         équivalent tribunes (60px+safe/37px). */
-      bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-      z-index: 10002;
-      width: 40px;
-      height: 40px;
-      min-width: 40px;
-      min-height: 40px;
-      padding: 0;
-      align-items: center;
-      justify-content: center;
-      border: 3px solid transparent;
-      border-radius: 999px;
-      background:
-        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
-      color: #e5edf3;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-      cursor: pointer;
-      font-size: 16px;
-      line-height: 1;
-    }
-    /* Flèche retour supprimée sur /apprentissage (demande du 09/09/2026) : la page a déjà son
-       propre bouton "Accueil" dans son bandeau bas (qcm-du-jour.html), cette flèche flottante
-       du parent faisait doublon. Gardée uniquement pour mon-univers/contributions, qui n'ont
-       pas cette alternative. setParentIframeCloseVisible (qcm-du-jour.html) est désactivée en
-       conséquence, sans quoi ses styles inline !important auraient continué à réafficher ce
-       bouton par-dessus cette règle pendant certaines phases du QCM. */
-    #debate-iframe-modal.open.mon-univers-frame-open #learning-iframe-modal-close {
-      display: inline-flex;
-    }
-    /* Apprentissages possède déjà son bouton Accueil dans le bandeau interne.
-       Verrou CSS contre les callbacks génériques de l'iframe qui pourraient
-       brièvement réafficher l'une des deux flèches du parent. */
-    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close,
-    #debate-iframe-modal.qcm-frame-open #learning-iframe-modal-close {
+    /* Flèche retour flottante du parent (#learning-iframe-modal-close) supprimée
+       (demande du 09/09/2026, d'abord sur /apprentissage puis sur mon-univers/contributions) :
+       les pages concernées ont toutes désormais leur propre bouton "Accueil" dans leur bandeau
+       bas (qcm-du-jour.html / mon-univers.html), cette flèche flottante faisait doublon
+       partout — élément retiré entièrement plutôt que juste masqué.
+       Apprentissages garde son verrou contre les callbacks génériques de l'iframe qui
+       pourraient brièvement réafficher le bouton de fermeture standard du parent. */
+    #debate-iframe-modal.qcm-frame-open #debate-iframe-modal-close {
       display: none !important;
-    }
-    #learning-iframe-modal-close:hover,
-    #learning-iframe-modal-close:focus-visible {
-      background:
-        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box;
-      color: #ffffff;
-    }
-    @media (max-width: 768px) {
-      #learning-iframe-modal-close {
-        left: calc(20% - 13px);
-        bottom: 37px;
-        width: 38px;
-        height: 38px;
-        min-width: 38px;
-        min-height: 38px;
-        font-size: 16px;
-      }
     }
   `;
   document.head.appendChild(style);
@@ -6879,7 +6816,6 @@ function ensureDebateIframeModal() {
       <button id="debate-iframe-modal-refresh" type="button" aria-label="Actualiser" title="Actualiser"><i class="fa-solid fa-rotate-right" style="font-size:18px;line-height:1;"></i></button>
       <iframe id="debate-iframe-modal-frame" src="" title="Arène" allowfullscreen></iframe>
     </div>
-    <button id="learning-iframe-modal-close" type="button" aria-label="Quitter les apprentissages et retourner à l'accueil" title="Retour à l'accueil"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
   `;
   document.body.appendChild(modal);
 
@@ -6895,10 +6831,6 @@ function ensureDebateIframeModal() {
   if (debateIframeModalRefreshButton) {
     debateIframeModalRefreshButton.addEventListener("click", reloadDebateIframeModalFrame);
   }
-  document.getElementById("learning-iframe-modal-close")?.addEventListener("click", () => {
-    closeDebateIframeModal({ skipReturnLoader: true });
-  });
-
   // Écoute le postMessage envoyé par les flèches retour de la page débat
   window.addEventListener("message", (e) => {
     if (!e.data || typeof e.data !== "object") return;
@@ -20881,7 +20813,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260909-minimap-longpress-zoomout').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260909-root-overview-fit').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         window.dispatchEvent(new Event("mnoria:memoire-content-ready"));

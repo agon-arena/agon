@@ -3813,7 +3813,7 @@
     position: absolute;
     left: 50%;
     top: 50vh;
-    top: 50lvh;
+    top: 50dvh;
     width: min(90vw, 220px);
     padding: 0;
     display: flex;
@@ -4011,7 +4011,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260909-memory-top-level-v29-gong-fix-memoire-wait" defer></script>
+<script src="/script.min.js?v=20260909-memory-top-level-v29-gong-fix-memoire-wait-antiblock-retry" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -7104,6 +7104,15 @@
           '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>' +
         '<div class="qcm-ai-generate-slot" id="qcm-ai-generate-slot"></div>' +
+        // Même bouton/style que les autres fenêtres d'import (cf. .qcm-learning-return-bottom,
+        // openKnowledgeAddWindow/openKnowledgeRouteModal/openMesQcmExploreModal) — accès direct
+        // à la liste "Mes apprentissages" sans repasser par la croix (demande du 09/09/2026).
+        '<div class="qcm-learning-return-bottom">' +
+          '<button type="button" class="qcm-learning-return-btn" data-action="return">' +
+            '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>' +
+            '<span>Retourner aux apprentissages</span>' +
+          '</button>' +
+        '</div>' +
       '</div>';
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
@@ -7131,6 +7140,10 @@
     });
     document.addEventListener('keydown', onKeydown);
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeAiGenerateModal);
+    overlay.querySelector('[data-action="return"]').addEventListener('click', function () {
+      closeAiGenerateModal();
+      returnToLearningOverview();
+    });
     aiGenerateModalEls = { overlay: overlay, onKeydown: onKeydown };
     if (customSearchInput) customSearchInput.focus();
   }

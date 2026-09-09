@@ -385,18 +385,9 @@
         padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)) !important;
       }
     }
-    /* Flèche de fermeture/retour : .page-mon-univers (style.css) masque tout
-       ce qui n'est pas le logo dans le bandeau — on réintroduit .topbar-actions
-       ici, pour les deux pages qui partagent ce gabarit (Ma mémoire ET Scores
-       et contributions). Mon univers n'est jamais ouvert dans la modale iframe
-       (bulles incompatibles avec ce rendu), donc pas de vrai
-       #debate-iframe-modal-close ici : on reproduit son visuel exact (bouton
-       rond, bas-gauche, même dégradé/couleurs) plutôt que le petit bouton carré
-       en haut à droite utilisé par défaut sur desktop pour .mobile-back-button.
-       Scores et contributions, elle, s'ouvre normalement dans la modale iframe
-       comme Meilleures idées : on ne reproduit rien, la flèche doit rester au
-       même endroit et avoir le même visuel que sur les autres pages
-       "notifications" (Meilleures idées, etc.) — demande du 27/08/2026. */
+    /* Scores et contributions réutilise ce gabarit et conserve ses actions de
+       navigation. Ma mémoire plein écran, elle, ne doit plus afficher de
+       flèche flottante. */
     body.page-mon-univers .topbar-inner.topbar-home > .topbar-actions {
       display: flex !important;
     }
@@ -404,39 +395,8 @@
     body.page-mon-univers .back-link {
       display: none !important;
     }
-    body.page-mon-univers:not(.page-contributions-only) .mobile-back-button {
-      display: flex !important;
-      position: fixed !important;
-      top: auto !important;
-      bottom: calc(5vh + 78px) !important;
-      left: 26px !important;
-      right: auto !important;
-      z-index: 10000 !important;
-      align-items: center;
-      justify-content: center;
-      width: auto !important;
-      height: auto !important;
-      min-width: 0 !important;
-      min-height: 0 !important;
-      padding: 10px 20px !important;
-      border-radius: 999px !important;
-      border-width: 3px !important;
-      border-color: transparent !important;
-      background:
-        linear-gradient(rgba(26,39,47,0.94), rgba(26,39,47,0.94)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box !important;
-      color: #e5edf3 !important;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.22) !important;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    body.page-mon-univers:not(.page-contributions-only) .mobile-back-button:hover {
-      background:
-        linear-gradient(rgba(17,24,39,0.98), rgba(17,24,39,0.98)) padding-box,
-        linear-gradient(to bottom, #f3f4f6 0%, #d1d5db 42%, #111827 58%, #111827 100%) border-box !important;
-      color: #ffffff !important;
+    body.page-memory-only .mobile-back-button {
+      display: none !important;
     }
     /* Ouvert dans la modale iframe (comme les autres pages) : le vrai bouton
        #debate-iframe-modal-close du parent fait déjà ce travail, on masque
@@ -1613,9 +1573,9 @@
   <button type="button" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="contributionsBottomNavHome()">
     <i class="fa-solid fa-house"></i><span>Accueil</span>
   </button>
-  <a href="/create" class="home-bottom-nav-item" aria-label="Ouvrir une arène">
-    <i class="fa-solid fa-plus"></i><span>Ouvrir</span>
-  </a>
+  <button type="button" class="home-bottom-nav-item" aria-label="Mon file">
+    <i class="fa-solid fa-user"></i><span>Mon file</span>
+  </button>
   <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
     <i class="fa-solid fa-rotate-right"></i><span>Actualiser</span>
   </button>
@@ -1663,7 +1623,7 @@ if (location.pathname === "/contributions") {
 <script src="/script.min.js?v=20260909-memory-fullscreen-iframe-v19-antiheat-gong-fix-memoire-wait" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260909-minimap-longpress-zoomout");
+    import("/mon-univers.js?v=20260909-root-overview-fit");
   }
 </script>
 </body>

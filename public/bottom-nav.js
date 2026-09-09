@@ -31,6 +31,17 @@
     return button;
   }
 
+  function makeStaticItem(iconClass, label) {
+    var button = makeItem(iconClass, label, function (event) {
+      event.preventDefault();
+    });
+    button.setAttribute('aria-disabled', 'true');
+    button.setAttribute('tabindex', '-1');
+    button.style.pointerEvents = 'none';
+    button.style.cursor = 'default';
+    return button;
+  }
+
   function mount() {
     var pathname = String(window.location.pathname || '');
     if (pathname === '/debate' || pathname.indexOf('/debates/') === 0 || pathname.indexOf('/admin') === 0) return;
@@ -53,16 +64,25 @@
     // Page Éclairages (demande du 09/09/2026) : "Explorer" remplacé par "Accueil" (1ère place),
     // et "Apprentissages" (même icône/cible que partout ailleurs sur le site, cf. views/index.html
     // bottom-nav-item "Apprentissages" → /apprentissage) prend la place habituelle d'"Accueil"
-    // plus loin dans la barre — les deux permutés, jamais dupliqués. Les 13 autres pages qui
-    // chargent ce même script gardent "Explorer"/"Accueil" inchangés.
-    if (pathname === '/eclairages') {
+    // plus loin dans la barre — les deux permutés, jamais dupliqués. Étendu le même jour à
+    // Meilleures idées ("idem sur page scores et contributions" puis "... les meilleures idées") ;
+    // Scores et contributions (/contributions) a le même résultat mais via son propre template
+    // codé en dur (cf. views/mon-univers.html), pas ce script. Les autres pages qui chargent ce
+    // même script gardent "Explorer"/"Accueil" inchangés.
+    var usesAccueilFirst = pathname === '/eclairages' || pathname === '/meilleures-idees' || pathname === '/historical-events-test';
+    var usesStaticMonFile = pathname === '/eclairages' || pathname === '/meilleures-idees' || pathname === '/historical-events-test';
+    if (usesAccueilFirst) {
       nav.appendChild(makeItem('fa-solid fa-house', 'Accueil', goHome));
     } else {
       nav.appendChild(makeItem('fa-regular fa-compass', 'Explorer', goHome));
     }
-    nav.appendChild(makeItem('fa-solid fa-plus', 'Ouvrir', function () { openPage('/create'); }));
+    if (usesStaticMonFile) {
+      nav.appendChild(makeStaticItem('fa-solid fa-user', 'Mon file'));
+    } else {
+      nav.appendChild(makeItem('fa-solid fa-plus', 'Ouvrir', function () { openPage('/create'); }));
+    }
     nav.appendChild(makeItem('fa-solid fa-rotate-right', 'Actualiser', function () { window.location.reload(); }));
-    if (pathname === '/eclairages') {
+    if (usesAccueilFirst) {
       nav.appendChild(makeItem('fa-solid fa-list-check', 'Apprentissages', function () { openPage('/apprentissage'); }));
     } else {
       nav.appendChild(makeItem('fa-solid fa-house', 'Accueil', goHome));

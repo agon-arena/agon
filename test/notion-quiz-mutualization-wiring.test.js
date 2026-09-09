@@ -88,9 +88,11 @@ test("POST /custom : l'ordre est master (tout niveau) -> exact même niveau (leg
 test("findEquivalentGeneratedCustomTopic distingue candidats master (tout niveau) et legacy (même niveau uniquement), jamais mélangés", () => {
   const fnIndex = SERVER_SOURCE.indexOf("async function findEquivalentGeneratedCustomTopic(topic, level) {");
   assert.ok(fnIndex > 0);
-  const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 1800);
-  assert.match(fnBody, /if \(isMasterEligibleQuiz\(row\.questions\)\) \{\s*\n\s*masterCandidates\.push\(candidate\);\s*\n\s*\} else if \(parseCustomTopicSlotLevel\(row\.slot\) === level\) \{\s*\n\s*legacyCandidates\.push\(candidate\);/);
-  assert.match(fnBody, /return findEquivalentCustomTopic\(topic, masterCandidates\) \|\| findEquivalentCustomTopic\(topic, legacyCandidates\);/);
+  const fnBody = SERVER_SOURCE.slice(fnIndex, fnIndex + 2600);
+  assert.match(fnBody, /const summaryQuestions = row\.summary\?\.questions \|\| \[\];/);
+  assert.match(fnBody, /if \(isMasterEligibleQuiz\(summaryQuestions, \{ progressiveStatus: row\.progressive_status, curriculum: row\.curriculum \}\)\) \{\s*\n\s*masterCandidates\.push\(candidate\);\s*\n\s*\} else if \(parseCustomTopicSlotLevel\(row\.slot\) === level\) \{\s*\n\s*legacyCandidates\.push\(candidate\);/);
+  assert.match(fnBody, /const equivalent = findEquivalentCustomTopic\(topic, masterCandidates\) \|\| findEquivalentCustomTopic\(topic, legacyCandidates\);/);
+  assert.match(fnBody, /\.from\("daily_quiz"\)\s*\n\s*\.select\("questions"\)\s*\n\s*\.eq\("slot", equivalent\.slot\)\s*\n\s*\.eq\("quiz_date", equivalent\.quizDate\)/);
 });
 
 // ── Verrou de génération en mémoire, keyed par identité de master ──────────

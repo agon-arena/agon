@@ -460,6 +460,33 @@ function focusScaleFor(node) {
   return focusScaleForUniverseNode(node, FOCUS_CHILD_TARGET_PX, FOCUS_ORBIT_FIT_PX);
 }
 
+function computeRootOverviewCameraState(rootNodes, viewportW, viewportH) {
+  const visibleNodes = (rootNodes || []).filter(Boolean);
+  if (!visibleNodes.length) return { x: 0, y: 0, scale: 1 };
+
+  const bounds = visibleNodes.reduce((acc, node) => {
+    const radius = Math.max(0, Number(node.r) || 0);
+    acc.minX = Math.min(acc.minX, node.x - radius);
+    acc.maxX = Math.max(acc.maxX, node.x + radius);
+    acc.minY = Math.min(acc.minY, node.y - radius);
+    acc.maxY = Math.max(acc.maxY, node.y + radius);
+    return acc;
+  }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+
+  const padding = Math.max(18, Math.min(36, Math.min(viewportW, viewportH) * 0.08));
+  const availableW = Math.max(1, viewportW - padding * 2);
+  const availableH = Math.max(1, viewportH - padding * 2);
+  const contentW = Math.max(1, bounds.maxX - bounds.minX);
+  const contentH = Math.max(1, bounds.maxY - bounds.minY);
+  const scale = Math.max(0.58, Math.min(1, availableW / contentW, availableH / contentH));
+
+  return {
+    x: (bounds.minX + bounds.maxX) / 2,
+    y: (bounds.minY + bounds.maxY) / 2,
+    scale
+  };
+}
+
 function pluralize(n, word) { return `${n} ${word}${n > 1 ? "s" : ""}`; }
 
 function ariaLabelFor(kind, node) {
@@ -1366,6 +1393,12 @@ function mountUniverse() {
     nodeById.set(unclassifiedNode.id, unclassifiedNode);
   }
 
+  const overviewCameraState = computeRootOverviewCameraState(
+    [...worldLayout.galaxies, unclassifiedNode],
+    vw,
+    vh
+  );
+
   // Plafond dérivé de la révélation réelle des étoiles plutôt qu'une valeur fixe arbitraire —
   // demande du 13/08/2026, resserrée le même jour ("une fois que les étoiles apparaissent, le
   // zoom ne puisse plus aller plus loin") : le plafond correspond au moment où le plus gros
@@ -1392,12 +1425,12 @@ function mountUniverse() {
     backgroundEl,
     backgroundTileWidth: backgroundTileMetrics.width,
     backgroundTileHeight: backgroundTileMetrics.height,
-    minScale: 1,
+    minScale: overviewCameraState.scale,
     maxScale,
     onChange: onCameraChange
   });
   createUniverseMinimap();
-  camera.setState({ x: 0, y: 0, scale: 1 }, false);
+  camera.setState(overviewCameraState, false);
   onCameraChange(camera.getState());
 }
 
@@ -2522,25 +2555,38 @@ const UNIVERSE_EMPTY_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 // quelques minutes dans sessionStorage, qui survit à cette navigation dans le même onglet : la
 // scène peut ainsi être montée dès l'évaluation du module, sans attendre le réseau.
 const UNIVERSE_DATA_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+const UNIVERSE_BACKGROUND_REFRESH_MIN_AGE_MS = 2 * 60 * 1000;
 
 function getUniverseDataCacheKey() {
   return `mnoriaUniverseData:${getKey()}`;
 }
 
-function readCachedUniverseData() {
+function readCachedUniverseDataEntry() {
   try {
     const cached = JSON.parse(sessionStorage.getItem(getUniverseDataCacheKey()) || "null");
     if (!cached || !Number.isFinite(cached.at) || Date.now() - cached.at > UNIVERSE_DATA_CACHE_MAX_AGE_MS) return null;
-    return cached.data || null;
+    return cached;
   } catch {
     return null;
   }
+}
+
+function readCachedUniverseData() {
+  return readCachedUniverseDataEntry()?.data || null;
 }
 
 function cacheUniverseData(data) {
   try {
     sessionStorage.setItem(getUniverseDataCacheKey(), JSON.stringify({ data, at: Date.now() }));
   } catch {}
+}
+
+function shouldRefreshCachedUniverseData(cachedEntry) {
+  if (!cachedEntry || !Number.isFinite(cachedEntry.at)) return true;
+  const ageMs = Date.now() - cachedEntry.at;
+  if (ageMs < UNIVERSE_BACKGROUND_REFRESH_MIN_AGE_MS) return false;
+  if (isUniverseEmpty(cachedEntry.data) && hasFreshEmptyUniverseCache()) return false;
+  return true;
 }
 
 function getUniverseEmptyCacheKey() {
@@ -2632,9 +2678,9 @@ async function loadUniverse() {
   // Ouverture instantanée depuis un cache tout frais (typiquement le "Plein écran" juste après
   // la scène embarquée de l'accueil) : monte directement, puis rafraîchit le cache en tâche de
   // fond pour la prochaine fois, sans jamais retoucher la scène déjà montée à partir de lui.
-  const cachedUniverseData = readCachedUniverseData();
-  if (cachedUniverseData) {
-    universeData = cachedUniverseData;
+  const cachedUniverseEntry = readCachedUniverseDataEntry();
+  if (cachedUniverseEntry?.data) {
+    universeData = cachedUniverseEntry.data;
     if (modeToken !== window._mnoriaCloudModeToken) return;
     const emptyUniverse = isUniverseEmpty(universeData);
     if (emptyUniverse) {
@@ -2644,12 +2690,19 @@ async function loadUniverse() {
       showStatus("none");
       await mountUniverseAndHideSpinnerWhenReady(modeToken);
     }
-    fetchIntellectualUniverseWithRetry(modeToken, 1).then(cacheUniverseData).catch(() => {});
+    if (shouldRefreshCachedUniverseData(cachedUniverseEntry)) {
+      fetchIntellectualUniverseWithRetry(modeToken, 1).then(cacheUniverseData).catch(() => {});
+    }
     return;
   }
 
   const showedCachedEmpty = hasFreshEmptyUniverseCache();
-  showStatus(showedCachedEmpty ? "empty" : "loading");
+  if (showedCachedEmpty) {
+    showStatus("empty");
+    window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+    return;
+  }
+  showStatus("loading");
 
   try {
     universeData = await fetchIntellectualUniverseWithRetry(modeToken, 1);

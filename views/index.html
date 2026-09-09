@@ -179,14 +179,20 @@
       gap: 8px;
       text-align: center;
     }
-    @media (display-mode: standalone) and (max-width: 768px) {
+    @media (max-width: 768px) {
       .mnoria-home-return-prepaint-box {
         position: absolute;
         left: 50%;
         top: 50vh;
-        top: 50lvh;
+        top: 50dvh;
         width: min(90vw, 220px);
         transform: translate(-50%, -50%);
+      }
+    }
+    @media (display-mode: standalone) and (max-width: 768px) {
+      .mnoria-home-return-prepaint-box {
+        top: 50vh;
+        top: 50lvh;
       }
     }
     .mnoria-home-return-prepaint img {
@@ -875,12 +881,6 @@
   } catch(e) {}
 })();
 </script>
-<script>(function(){try{history.scrollRestoration='manual';}catch(_){}sessionStorage.removeItem('mnoria_scroll_top');function t(){try{window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;}catch(_){}}
-  // Restauration depuis le bfcache (retour navigateur) : la page est ressuscitée
-  // telle quelle, scroll inclus — ne pas rejouer t() ici, sous peine de remettre
-  // à zéro une position déjà correcte.
-  function guardedPageshow(fn){return function(e){if(e&&e.persisted)return;fn();};}
-  t();window.addEventListener('pageshow',guardedPageshow(t),true);window.addEventListener('load',function(){t();setTimeout(t,0);setTimeout(t,80);},true);})()</script>
 <script>
 (function(){
   var shouldSkipStartup = false;
@@ -2382,7 +2382,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260909-generate-confirm-modal" defer></script>
+<script src="/script.min.js?v=20260909-home-return-loader-dvh" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

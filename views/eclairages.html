@@ -1316,62 +1316,98 @@
     // (contrainte serveur : 3 à 150 caractères).
     var useOfficialPipeline = !!topicField && masterTopic.length >= 3 && masterTopic.length <= 150;
 
-    var pendingSlot = useOfficialPipeline
-      ? 'notion:custom:pending:' + rubric + ':' + String(sourceDebateId)
-      : 'notion:' + rubric + ':' + String(sourceDebateId);
+    function computeOfficialPendingSlot(topic) {
+      if (typeof computeCustomTopicKey === 'function') {
+        return computeCustomTopicKey(topic).then(function (key) {
+          return key ? 'notion:custom:' + key : '';
+        });
+      }
+      var normalized = String(topic || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+      if (!window.crypto || !window.crypto.subtle || typeof TextEncoder !== 'function') return Promise.resolve('');
+      return window.crypto.subtle.digest('SHA-1', new TextEncoder().encode(normalized))
+        .then(function (digest) {
+          var key = Array.from(new Uint8Array(digest)).map(function (byte) {
+            return byte.toString(16).padStart(2, '0');
+          }).join('').slice(0, 16);
+          return key ? 'notion:custom:' + key : '';
+        })
+        .catch(function () { return ''; });
+    }
+
+    var legacyPendingSlot = 'notion:' + rubric + ':' + String(sourceDebateId);
     var pendingLabel = useOfficialPipeline ? masterTopic : notionName;
 
     function proceed() {
-      // Optimiste : le bouton passe actif et le message nommé s'affiche
-      // immédiatement. La page Apprentissage reprend ensuite ce même état et
-      // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
-      setMemorizeButtonState(btn, true);
-      if (typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
-        window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingSlot, label: pendingLabel });
-      }
-      var explainer = showMemorizeExplainerModal(pendingLabel);
+      var pendingSlotPromise = useOfficialPipeline
+        ? computeOfficialPendingSlot(masterTopic)
+        : Promise.resolve(legacyPendingSlot);
 
-      var request = useOfficialPipeline
-        ? fetch('/api/users/notion-quizzes/custom', {
+      pendingSlotPromise.then(function (pendingSlot) {
+        // Optimiste : le bouton passe actif et le message nommé s'affiche
+        // immédiatement. La page Apprentissage reprend ensuite ce même état et
+        // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
+        setMemorizeButtonState(btn, true);
+        if (pendingSlot && typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
+          window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingSlot, label: pendingLabel });
+        }
+        var explainer = showMemorizeExplainerModal(pendingLabel);
+
+        var endpoint = useOfficialPipeline ? '/api/users/notion-quizzes/custom/progressive' : '/api/users/notion-quizzes';
+        var payload = useOfficialPipeline
+          ? { legacyKey: voterKey, topic: masterTopic, level: 'expert' }
+          : { legacyKey: voterKey, sourceType: rubric, sourceDebateId: String(sourceDebateId), item: item };
+        var disarmBeaconFallback = useOfficialPipeline && typeof window.mnoriaArmNotionQuizGenerationBeaconFallback === 'function'
+          ? window.mnoriaArmNotionQuizGenerationBeaconFallback(endpoint, payload)
+          : function () {};
+
+        fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             keepalive: true,
-            // Niveau Expert directement (demande du 09/09/2026, "fiche complète, expert") :
-            // pas de montée progressive Élémentaire → Expert pour cette entrée-là — la
-            // profondeur de recherche du master est de toute façon toujours maximale
-            // (MASTER_GENERATION_DEPTH_CONFIG côté serveur), seul change ce qui est servi
-            // immédiatement.
-            body: JSON.stringify({ legacyKey: voterKey, topic: masterTopic, level: 'expert' })
+            body: JSON.stringify(payload)
           })
-        : fetch('/api/users/notion-quizzes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            keepalive: true,
-            body: JSON.stringify({ legacyKey: voterKey, sourceType: rubric, sourceDebateId: String(sourceDebateId), item: item })
+        .then(function (res) {
+          disarmBeaconFallback();
+          return res.text().then(function (body) {
+            var data = null;
+            try { data = body ? JSON.parse(body) : null; } catch (e) {}
+            return { ok: res.ok, status: res.status, data: data, invalidJson: !data };
           });
-
-      request
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-            window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
-          }
-          if (!data.ok) {
-            explainer.failed();
-            setMemorizeButtonState(btn, false);
+        })
+        .then(function (result) {
+          if (result.invalidJson) return;
+          if (result.ok && result.data && result.data.ok) {
+            if (pendingSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+              window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
+            }
+            explainer.ready();
+            btn.setAttribute('data-quiz-slot', result.data.slot);
+            btn.setAttribute('data-quiz-date', result.data.quizDate);
             return;
           }
-          explainer.ready();
-          btn.setAttribute('data-quiz-slot', data.slot);
-          btn.setAttribute('data-quiz-date', data.quizDate);
+          if (pendingSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+            window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
+          }
+          if (result.data && !result.data.ok) {
+            explainer.failed();
+            setMemorizeButtonState(btn, false);
+          }
         })
-        .catch(function () {
-          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+        .catch(function (error) {
+          disarmBeaconFallback();
+          if (useOfficialPipeline) return;
+          if (pendingSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
             window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
           }
           explainer.failed();
           setMemorizeButtonState(btn, false);
         });
+      });
     }
 
     // Confirmation avant de lancer l'appel IA (demande du 09/09/2026, "exactement la même
@@ -3654,6 +3690,6 @@
   loadToday();
 })();
 </script>
-<script src="/bottom-nav.js?v=20260909-eclairages-nav-swap-v2"></script>
+<script src="/bottom-nav.js?v=20260909-eclairages-mon-file"></script>
 </body>
 </html>
