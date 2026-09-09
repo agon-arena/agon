@@ -37,7 +37,7 @@
 // revalidation arrière-plan ci-dessous, même stratégie que les assets
 // statiques immuables locaux (cf. isMutableStaticAsset plus bas) — une police
 // change assez rarement pour que ça ne soit jamais un problème de fraîcheur.
-const SW_VERSION = "20260907-standalone-launch-speed";
+const SW_VERSION = "20260909-memory-fullscreen-iframe-close-v20";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -225,7 +225,9 @@ self.addEventListener("fetch", (event) => {
     // entrée "?_swrefresh=…" que les lancements normaux (URL propre) ne
     // consulteront jamais.
     const requestUrl = new URL(request.url);
-    const forcedFresh = requestUrl.searchParams.has("_swrefresh");
+    const forcedRefresh = requestUrl.searchParams.has("_swrefresh");
+    const forcedHomeReturnFresh = requestUrl.searchParams.has("mnoriaHomeReturn");
+    const forcedFresh = forcedRefresh || forcedHomeReturnFresh;
     // "/" volontairement absente de cette liste (correctif du 07/09/2026,
     // "lancement standalone lent") : c'est le start_url du manifest, donc LA
     // page ouverte à chaque tap sur l'icône — elle redevient cache-first
@@ -242,12 +244,15 @@ self.addEventListener("fetch", (event) => {
     let cacheKeyRequest = request;
     if (forcedFresh) {
       requestUrl.searchParams.delete("_swrefresh");
+      requestUrl.searchParams.delete("mnoriaHomeReturn");
       cacheKeyRequest = new Request(requestUrl.toString(), { headers: request.headers });
     }
 
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
-        const cachedFallback = !forcedFresh && navigationNetworkFirst
+        const cachedFallback = forcedHomeReturnFresh
+          ? await cache.match(cacheKeyRequest)
+          : !forcedFresh && navigationNetworkFirst
           ? await cache.match(cacheKeyRequest)
           : null;
         const cachedResponse = forcedFresh || navigationNetworkFirst

@@ -1096,9 +1096,15 @@ function showNotionQuizReadyAnnouncement(label, target = {}) {
   closeBtn.addEventListener("click", close);
   qcmBtn.addEventListener("click", () => {
     close();
+    // Rejoint "Mes apprentissages" et fait défiler + clignoter la ligne "En attente
+    // de réalisation" correspondante (cf. views/qcm-du-jour.html, pendingHighlightRowKey)
+    // — demande du 09/09/2026 : avant cette date, ce bouton ouvrait directement la page
+    // de la connaissance (ancien paramètre openKnowledge=1), au lieu du même
+    // scroll+clignotement que partout ailleurs (adoption catalogue, notification
+    // "connaissance ajoutée"...).
     const learningSlot = String(target.learningSlot || target.slot || "").trim();
     const quizDate = String(target.quizDate || "").trim();
-    const params = new URLSearchParams({ openKnowledge: "1" });
+    const params = new URLSearchParams({ highlight: "1" });
     if (learningSlot) params.set("slot", learningSlot);
     if (quizDate) params.set("date", quizDate);
     if (label) params.set("label", label);
@@ -2875,7 +2881,16 @@ function ensurePageArrivalLoadingOverlayStyles() {
     /* Même écran intermédiaire que le conteneur .loading d'une arène :
        bleu pétrole uni, sans laisser transparaître la page en dessous. */
     .page-arrival-loading-overlay.page-arrival-loading-overlay-learning {
-      inset: 0 !important;
+      /* Même couverture physique que le voile de départ et le prepaint de
+         l'accueil : marge sous le viewport iOS, compensée dans le padding
+         afin de ne pas déplacer le sablier. */
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px)) !important;
+      height: auto !important;
+      box-sizing: border-box;
+      padding-bottom: calc(20px + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
       z-index: 10030;
       background: #243038;
       backdrop-filter: none;
@@ -2889,12 +2904,37 @@ function ensurePageArrivalLoadingOverlayStyles() {
       background: transparent;
       border: none;
       box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
 
     .page-arrival-loading-overlay.page-arrival-loading-overlay-learning .page-arrival-loading-title {
-      margin-top: 8px;
+      margin-top: 0 !important;
       color: #ffffff;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: 0.02em;
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+    }
+
+    .page-arrival-loading-overlay.page-arrival-loading-overlay-learning .page-arrival-loading-hourglass {
+      margin: 0 auto;
+    }
+
+    @media (max-width: 768px) {
+      .page-arrival-loading-overlay.page-arrival-loading-overlay-learning .page-arrival-loading-box {
+        position: absolute;
+        left: 50%;
+        top: 50vh;
+        top: 50lvh;
+        width: min(90vw, 220px);
+        transform: translate(-50%, -50%) translateZ(0);
+      }
     }
 
     .page-arrival-loading-overlay.page-arrival-loading-overlay-opaque {
@@ -3017,6 +3057,10 @@ function ensurePageArrivalLoadingOverlayStyles() {
       object-fit: contain;
       animation: pageArrivalLogoSpin 1s linear infinite;
       transform-origin: center;
+      will-change: transform;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      contain: paint;
     }
 
     .page-arrival-loading-title {
@@ -3033,8 +3077,8 @@ function ensurePageArrivalLoadingOverlayStyles() {
     }
 
     @keyframes pageArrivalLogoSpin {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
+      from { transform: translate3d(0, 0, 0) rotate(0deg); }
+      to   { transform: translate3d(0, 0, 0) rotate(360deg); }
     }
   `;
 
@@ -3259,6 +3303,7 @@ function applyPageArrivalLoadingVisuals() {
     };
     loadingImage.dataset.fallbackApplied = "false";
     loadingImage.src = desiredSrc;
+    loadingImage.style.animationDelay = isLearningArrival ? `-${Date.now() % 1000}ms` : "";
   }
 }
 
@@ -3304,6 +3349,15 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
   }
 
   applyPageArrivalLoadingVisuals();
+
+  // /apprentissage top-level fournit ce même voile directement dans son HTML
+  // pour couvrir la toute première peinture. À présent que les styles JS
+  // complets sont installés, retirer uniquement le marqueur de prépeinture :
+  // le même nœud reste affiché, il n'est ni supprimé ni recréé.
+  if (overlay.classList.contains("qcm-initial-arrival-loading")) {
+    overlay.classList.remove("qcm-initial-arrival-loading");
+    document.getElementById("qcm-initial-arrival-loading-style")?.remove();
+  }
 
   const title = document.getElementById("page-arrival-loading-title");
   if (title) {
@@ -3424,7 +3478,7 @@ function initPageArrivalLoadingOverlay() {
 
   const isNotificationsInIframe = window.self !== window.top && location.pathname === "/notifications";
   let waitForHomeMemoryReturn = false;
-  try { waitForHomeMemoryReturn = location.pathname === "/" && sessionStorage.getItem("mnoria_home_memory_return_loading") === "1"; } catch (error) {}
+  try { waitForHomeMemoryReturn = location.pathname === "/" && sessionStorage.getItem("mnoria_home_memory_return_loading") === "mon-univers"; } catch (error) {}
   // Retour depuis Autres actus (ou reload interne à l'index) : window.__mnoriaSkipStartupOnce
   // est déjà posé pour sauter l'intro logo (cf. index.html) — même logique ici, sans quoi
   // le voile sombre/flou plein écran s'affiche par-dessus le cadre nuages ET les boutons
@@ -3466,7 +3520,10 @@ function initPageArrivalLoadingOverlay() {
   // (absente si shouldSkipStartup a déjà choisi de la sauter, auquel cas ce
   // voile générique reste le seul indicateur et doit continuer à s'afficher).
   const skipForBrandedStartupOnHome = location.pathname === "/" && document.documentElement.classList.contains("mnoria-startup-active");
-  const shouldShowOverlayImmediately = !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && !skipForFullscreenMemoryPage && !skipForBrandedStartupOnHome && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
+  /* Retour interne vers Accueil : le prepaint inline d'index.html est déjà
+     présent avant le premier pixel et reste désormais jusqu'au cadre final.
+     Ne pas construire un deuxième voile générique derrière lui. */
+  const shouldShowOverlayImmediately = !waitForHomeMemoryReturn && !skipForIndexReturn && !skipForLightweightIframePage && !skipForParentLoadingOnlyPage && !skipForFullscreenMemoryPage && !skipForBrandedStartupOnHome && ((!isIframeDebateLoadingOverlayContext() && !isNotificationsInIframe) || hasActiveNotificationTransition());
 
   if (shouldShowOverlayImmediately) {
     // Le texte "/" et "/notifications" est forcé plus loin
@@ -3508,13 +3565,19 @@ function initPageArrivalLoadingOverlay() {
             cloud.getBoundingClientRect().width > 0 &&
             cloud.getBoundingClientRect().height > 0
           );
-          if (!frameIsVisible) {
+          /* Le voile inline #mnoria-memoire-loading-veil est supprimé dans ce
+             parcours : le prepaint reste donc seul jusqu'à la stabilisation
+             réellement signalée par markMnoriaHomeTrendsSectionTopReady. */
+          const frameLayoutIsReady = window.__mnoriaHomeTrendsSectionTopReady === true;
+          if (!frameIsVisible || !frameLayoutIsReady) {
             requestAnimationFrame(finishWhenFrameIsVisible);
             return;
           }
           try { sessionStorage.removeItem("mnoria_home_memory_return_loading"); } catch (error) {}
+          try { sessionStorage.removeItem("mnoria_home_return_loading"); } catch (error) {}
           markPageArrivalLoadingOverlayReady();
           document.documentElement.classList.remove("mnoria-home-memory-return-loading");
+          document.documentElement.classList.remove("mnoria-home-return-loading");
       };
       requestAnimationFrame(() => requestAnimationFrame(finishWhenFrameIsVisible));
     }, { once: true });
@@ -5212,6 +5275,27 @@ function ensureDebateIframeParentLoadingStyles() {
       z-index: 10001 !important;
     }
 
+    /* Filet de peinture pour la navigation top-level vers Accueil. Sur iOS
+       standalone, une couche fixed peut rater les derniers pixels lors de la
+       première composition. Cette couche absolue, plus haute que le grand
+       viewport, reste derrière le voile et devant toute la page de départ. */
+    #mnoria-home-return-paint-underlay {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: var(--mnoria-home-return-underlay-top, 0px);
+      height: calc(100vh + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
+      min-height: calc(100lvh + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 240px);
+      z-index: 10029;
+      pointer-events: none;
+      background: #243038;
+    }
+
+    body.mnoria-home-return-loading-paint #mnoria-home-return-paint-underlay {
+      display: block;
+    }
+
     #debate-iframe-parent-loading-overlay {
       position: fixed;
       left: 0;
@@ -5317,6 +5401,8 @@ function ensureDebateIframeParentLoadingStyles() {
       display: flex;
       align-items: center;
       justify-content: center;
+      contain: layout paint;
+      transform: translateZ(0);
     }
 
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-hourglass img {
@@ -5325,6 +5411,10 @@ function ensureDebateIframeParentLoadingStyles() {
       object-fit: contain;
       animation: pageArrivalLogoSpin 1s linear infinite;
       transform-origin: center;
+      will-change: transform;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      contain: paint;
     }
 
     #debate-iframe-parent-loading-overlay .debate-iframe-parent-loading-title {
@@ -5404,12 +5494,55 @@ function ensureDebateIframeParentLoadingStyles() {
     }
 
     #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-learning-page {
-      inset: 0 !important;
+      /* Retour top-level Apprentissage -> Accueil en standalone : WebKit peut
+         agrandir le viewport physique pendant les quelques frames qui
+         précèdent la navigation. L'ancien inset à zéro arrêtait ce voile exactement
+         à l'ancienne limite et laissait apparaître une bande sous lui. Comme
+         les loaders robustes de l'accueil, la surface déborde volontairement
+         sous l'écran ; le padding équivalent exclut ce débordement de la zone
+         de centrage, donc le sablier reste au centre du viewport visible. */
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px)) !important;
       height: auto !important;
+      box-sizing: border-box;
+      padding-bottom: calc(20px + var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
       z-index: 10030;
       background: #243038;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
+      /* Aucun fondu ici : même très bref, il révélait encore la barre basse
+         de la page de départ sous le fond bleu pétrole. */
+      opacity: 1 !important;
+      transition: none !important;
+    }
+
+    #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-learning-page .debate-iframe-parent-loading-title {
+      /* Police système identique au prepaint d'Accueil : aucune substitution
+         de police web au milieu de la transition. */
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: 0.02em;
+    }
+
+    #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-learning-page .debate-iframe-parent-loading-actions {
+      display: none !important;
+    }
+
+    /* Même ancrage sur tous les mobiles : ainsi le document de départ et le
+       document d'arrivée utilisent strictement la même coordonnée. */
+    @media (max-width: 768px) {
+      #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-learning-page .debate-iframe-parent-loading-box {
+        position: absolute;
+        left: 50%;
+        top: 50vh;
+        top: 50lvh;
+        width: min(90vw, 220px);
+        transform: translate(-50%, -50%) translateZ(0) !important;
+      }
     }
   `;
 
@@ -5464,6 +5597,21 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours", o
     document.body.appendChild(overlay);
   }
 
+  const normalizedLoadingMessage = String(message || "");
+  const isHomeReturnLoading = normalizedLoadingMessage.includes("Chargement de l'accueil");
+  const needsFullPagePaintUnderlay = isHomeReturnLoading || /apprentissage/i.test(normalizedLoadingMessage);
+  let homeReturnPaintUnderlay = document.getElementById("mnoria-home-return-paint-underlay");
+  if (needsFullPagePaintUnderlay && !homeReturnPaintUnderlay) {
+    homeReturnPaintUnderlay = document.createElement("div");
+    homeReturnPaintUnderlay.id = "mnoria-home-return-paint-underlay";
+    homeReturnPaintUnderlay.setAttribute("aria-hidden", "true");
+    document.body.insertBefore(homeReturnPaintUnderlay, overlay);
+  }
+  document.body.classList.toggle("mnoria-home-return-loading-paint", needsFullPagePaintUnderlay);
+  if (homeReturnPaintUnderlay && needsFullPagePaintUnderlay) {
+    homeReturnPaintUnderlay.style.setProperty("--mnoria-home-return-underlay-top", `${Math.max(0, window.scrollY || 0)}px`);
+  }
+
   // Toute (re)mise en route d'un chargement repart d'un état propre : on efface
   // un éventuel état "bloqué" (sablier arrêté + actions de récupération) laissé
   // par un chargement précédent.
@@ -5495,6 +5643,11 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours", o
       image.src = "/sablier-96.png";
     };
     image.src = getDebateIframeParentLoadingImageSrc();
+    /* Phase fondée sur l'horloge réelle : le sablier du document Accueil peut
+       reprendre au même angle au lieu de recommencer à zéro. */
+    image.style.animationDelay = (isHomeReturnLoading || /apprentissage/i.test(normalizedLoadingMessage))
+      ? `-${Date.now() % 1000}ms`
+      : "";
   }
 
   document.body.classList.add("debate-iframe-parent-loading-open");
@@ -5536,6 +5689,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours", o
 function hideDebateIframeParentLoadingOverlay() {
   const overlay = document.getElementById("debate-iframe-parent-loading-overlay");
   document.body.classList.remove("debate-iframe-parent-loading-open");
+  document.body.classList.remove("mnoria-home-return-loading-paint");
 
   if (debateIframeParentLoadingFallbackTimer) {
     clearTimeout(debateIframeParentLoadingFallbackTimer);
@@ -5557,6 +5711,7 @@ function cleanupStaleDebateIframeModalBlockers() {
   setDebateIframeNativeParentScrollMode(false);
   document.body.classList.remove("index-background-suspended");
   document.body.classList.remove("debate-iframe-parent-loading-open");
+  document.body.classList.remove("mnoria-home-return-loading-paint");
   if (modal) {
     modal.classList.remove("loading");
     modal.classList.remove("argument-form-open-in-child");
@@ -5706,8 +5861,7 @@ function setDebateIframeModalCloseButtonVisible(isVisible) {
 function shouldHideDebateIframeModalCloseButtonForPath(pathname) {
   const safePathname = String(pathname || "");
   return safePathname === "/notifications" ||
-    safePathname === "/contributions" ||
-    safePathname === "/mon-univers";
+    safePathname === "/contributions";
 }
 
 function syncDebateIframeModalPageClass(pathname = "") {
@@ -5730,6 +5884,15 @@ function syncDebateIframeModalPageClass(pathname = "") {
   modal.classList.toggle("historical-events-frame-open", safePathname === "/historical-events-test");
   modal.classList.toggle("about-frame-open", safePathname === "/about");
   modal.classList.toggle("mon-univers-frame-open", safePathname === "/mon-univers" || safePathname === "/contributions");
+  const auxiliaryClose = document.getElementById("learning-iframe-modal-close");
+  if (auxiliaryClose) {
+    const closesMemory = safePathname === "/mon-univers";
+    auxiliaryClose.setAttribute(
+      "aria-label",
+      closesMemory ? "Quitter Ma mémoire et retourner à l'accueil" : "Quitter les apprentissages et retourner à l'accueil"
+    );
+    auxiliaryClose.setAttribute("title", "Retour à l'accueil");
+  }
   syncDebateIframeParentScrollModeForPath(safePathname, { lockWhenOpen: true });
 }
 
@@ -6522,14 +6685,14 @@ function ensureDebateIframeModal() {
       font-size: 16px;
       line-height: 1;
     }
-    #debate-iframe-modal.open.qcm-frame-open.learning-frame-ready #learning-iframe-modal-close {
+    /* Flèche retour supprimée sur /apprentissage (demande du 09/09/2026) : la page a déjà son
+       propre bouton "Accueil" dans son bandeau bas (qcm-du-jour.html), cette flèche flottante
+       du parent faisait doublon. Gardée uniquement pour mon-univers/contributions, qui n'ont
+       pas cette alternative. setParentIframeCloseVisible (qcm-du-jour.html) est désactivée en
+       conséquence, sans quoi ses styles inline !important auraient continué à réafficher ce
+       bouton par-dessus cette règle pendant certaines phases du QCM. */
+    #debate-iframe-modal.open.mon-univers-frame-open #learning-iframe-modal-close {
       display: inline-flex;
-    }
-    #debate-iframe-modal.qcm-fiche-open-in-child #learning-iframe-modal-close {
-      display: none !important;
-      opacity: 0 !important;
-      visibility: hidden !important;
-      pointer-events: none !important;
     }
     #learning-iframe-modal-close:hover,
     #learning-iframe-modal-close:focus-visible {
@@ -6799,18 +6962,6 @@ function ensureDebateIframeModal() {
       const debateModal = document.getElementById("debate-iframe-modal");
       if (debateModal) debateModal.classList.toggle("qcm-fiche-open-in-child", !!e.data.open);
       if (!e.data.open) {
-        // La page Apprentissage masque aussi cette flèche directement avec
-        // des styles inline `!important`. La classe du parent ne suffit donc
-        // pas à la faire revenir : nettoyer explicitement ces styles lorsque
-        // la dernière fenêtre enfant se ferme.
-        const learningCloseButton = document.getElementById("learning-iframe-modal-close");
-        if (learningCloseButton) {
-          ["display", "opacity", "visibility", "pointer-events"].forEach((property) => {
-            learningCloseButton.style.removeProperty(property);
-          });
-          learningCloseButton.setAttribute("aria-hidden", "false");
-          learningCloseButton.tabIndex = 0;
-        }
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             syncDebateIframeModalCloseButtonWithFramePage(document.getElementById("debate-iframe-modal-frame"));
@@ -7272,39 +7423,95 @@ function _showEpisodeNavNotFound() {
   notice._hideTimer = setTimeout(() => notice.classList.remove("show"), 3500);
 }
 
+let _learningPageNavigationPending = false;
 function openLearningPageWithArenaLoading(url = "/apprentissage") {
-  openDebateIframeModal(url);
+  if (_learningPageNavigationPending) return;
+  _learningPageNavigationPending = true;
+
+  // Le voile appartient au clic sur Accueil et doit être peint AVANT toute la
+  // préparation de l'iframe ou de la navigation standalone. Si les deux sont
+  // exécutés dans le même événement, WebKit attend la fin du travail JS avant
+  // d'afficher le premier pixel du loader, ce qui donne l'impression que le
+  // bouton ne répond pas immédiatement.
+  closeHomeTopbarMenu();
+  showDebateIframeParentLoadingOverlay("Chargement de mes apprentissages en cours", { instant: true });
+  document.getElementById("debate-iframe-parent-loading-overlay")
+    ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
+
+  requestAnimationFrame(() => {
+    _learningPageNavigationPending = false;
+    openDebateIframeModal(url);
+  });
 }
 
 function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
+  /* Le start_url "/" est volontairement cache-first pour démarrer vite. Lors
+     d'un retour interne, ce choix pouvait toutefois enchaîner le voile neuf de
+     la page de départ avec un ancien prepaint d'Accueil encore en cache (fond
+     court et police Oswald). Ce marqueur demande au service worker une copie
+     fraîche pour cette navigation précise ; il est retiré de l'URL dès le
+     début du document d'arrivée. */
+  let homeNavigationUrl = url;
+  try {
+    const parsedHomeUrl = new URL(String(url || "/?skipStartup=1"), window.location.origin);
+    if (parsedHomeUrl.origin === window.location.origin && parsedHomeUrl.pathname === "/") {
+      parsedHomeUrl.searchParams.set("mnoriaHomeReturn", "20260909-smooth-spinner-v7");
+      homeNavigationUrl = `${parsedHomeUrl.pathname}${parsedHomeUrl.search}${parsedHomeUrl.hash}`;
+    }
+  } catch (error) {}
+
   if (window.self !== window.top) {
+    // Une arène ouverte depuis l'accueil vit dans son iframe modale : l'accueil
+    // est déjà chargé et intact juste derrière. Revenir à Accueil ne doit donc
+    // déclencher ni navigation ni écran de chargement ; on ferme directement
+    // la modale. Ce message fonctionne même si le document parent encore
+    // ouvert provient d'une version précédente du bundle.
+    if (location.pathname === "/debate" || location.pathname.startsWith("/debates/")) {
+      try {
+        if (typeof window.parent.closeDebateIframeModal === "function") {
+          window.parent.closeDebateIframeModal({ skipReturnLoader: true });
+        } else {
+          window.parent.postMessage({ type: "mnoria:close-debate-modal", skipReturnLoader: true }, "*");
+        }
+      } catch (error) {
+        try { window.parent.postMessage({ type: "mnoria:close-debate-modal", skipReturnLoader: true }, "*"); } catch (nestedError) {}
+      }
+      return;
+    }
     try {
       if (typeof window.parent.openHomePageWithArenaLoading === "function") {
-        window.parent.openHomePageWithArenaLoading(url);
+        window.parent.openHomePageWithArenaLoading(homeNavigationUrl);
         return;
       }
     } catch (error) {}
-    window.top.location.href = url;
+    window.top.location.href = homeNavigationUrl;
     return;
   }
 
   closeHomeTopbarMenu();
   if (window.__mnoriaDebateModalOpen === true && document.getElementById("debate-iframe-modal")?.classList.contains("open")) {
     closeDebateIframeModal({ skipReturnLoader: true });
-    showDebateIframeParentLoadingOverlay("Chargement de l'accueil en cours");
-    document.getElementById("debate-iframe-parent-loading-overlay")
-      ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
-    setTimeout(() => hideDebateIframeParentLoadingOverlay(), 240);
     return;
   }
-  try { sessionStorage.setItem("mnoria_home_memory_return_loading", "1"); } catch (error) {}
+  // Ce verrou ne doit exister que lors d'un vrai retour depuis Ma mémoire.
+  // Posé auparavant pour Débat/Notifications/Apprentissage également, il
+  // faisait attendre à l'accueil un événement `mnoria:memoire-content-ready`
+  // qui n'arrivait jamais : loader infini et aucun retour visible.
+  try {
+    sessionStorage.setItem("mnoria_home_return_loading", "1");
+    if (location.pathname === "/mon-univers") {
+      sessionStorage.setItem("mnoria_home_memory_return_loading", "mon-univers");
+    } else {
+      sessionStorage.removeItem("mnoria_home_memory_return_loading");
+    }
+  } catch (error) {}
   showDebateIframeParentLoadingOverlay("Chargement de l'accueil en cours");
   document.getElementById("debate-iframe-parent-loading-overlay")
     ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      setTimeout(() => { window.location.href = url; }, 80);
+      setTimeout(() => { window.location.href = homeNavigationUrl; }, 80);
     });
   });
 }
@@ -7335,16 +7542,19 @@ function openDebateIframeModal(url, options = {}) {
     /* Toutes les pages publiques ordinaires sont désormais de vraies
        navigations top-level. Leur scroll, leur bandeau et leur zone sûre
        appartiennent directement au viewport. Seules les arènes conservent
-       l'iframe modale et son dock spécialisé — "Ma mémoire" plein écran
-       (/mon-univers) les rejoint (demande du 03/09/2026, "quand je quitte le
-       mode plein écran, il y a un temps de chargement trop long") : rester
-       dans la même page parent déjà chargée évite de refaire une navigation
-       top-level complète (reparse de script.min.js/style.min.css, remontage
-       de tout l'accueil) juste pour revenir en arrière. */
+       l'iframe modale et son dock spécialisé. En navigateur classique,
+       Apprentissage et Ma mémoire peuvent encore utiliser cette iframe ; en
+       standalone, ils reprennent la navigation top-level concluante des
+       28-29/08/2026 afin de posséder directement le viewport physique iOS. */
+    // Apprentissage conserve sa navigation top-level en standalone pour son
+    // document long et scrollable. Ma mémoire reste désormais dans la modale
+    // plein écran : l'accueil demeure chargé derrière et réapparaît donc
+    // immédiatement à la fermeture.
+    const isStandaloneTopLevelPage = isStandaloneMode() && parsedModalUrl.pathname === "/apprentissage";
     const isIframeModalPath = parsedModalUrl.pathname === "/debate" ||
       parsedModalUrl.pathname.indexOf("/debates/") === 0 ||
-      parsedModalUrl.pathname === "/apprentissage" ||
-      parsedModalUrl.pathname === "/mon-univers";
+      (!isStandaloneTopLevelPage && parsedModalUrl.pathname === "/apprentissage") ||
+      (!isStandaloneTopLevelPage && parsedModalUrl.pathname === "/mon-univers");
     if (parsedModalUrl.origin === window.location.origin && !isIframeModalPath) {
       const pageTarget = `${parsedModalUrl.pathname}${parsedModalUrl.search}${parsedModalUrl.hash}`;
       const targetsTop = window.top && window.top !== window;
@@ -7352,6 +7562,17 @@ function openDebateIframeModal(url, options = {}) {
         if (targetsTop) window.top.location.href = pageTarget;
         else window.location.href = pageTarget;
       };
+      /* Standalone Accueil -> Apprentissage : le loader doit appartenir au
+         clic, pas au document suivant chargé plus tard. Il est créé, rendu
+         opaque et stabilisé synchroniquement ; deux frames seulement sont
+         laissées à WebKit pour le peindre avant la navigation top-level. */
+      if (isStandaloneTopLevelPage && parsedModalUrl.pathname === "/apprentissage" && !targetsTop) {
+        showDebateIframeParentLoadingOverlay("Chargement de mes apprentissages en cours", { instant: true });
+        document.getElementById("debate-iframe-parent-loading-overlay")
+          ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
+        requestAnimationFrame(() => requestAnimationFrame(navigate));
+        return;
+      }
       // Cloche de notifications : sans feedback immédiat, rien ne s'affiche
       // pendant la navigation top-level + le parse de script.min.js sur la
       // page de destination (demande du 03/09/2026, "la page de chargement
@@ -19341,19 +19562,30 @@ function renderIndexContextToggleText(textEl, expanded) {
 // côté serveur), jamais une nouvelle route dédiée. Cache mémoire par
 // debateId : un second dépliage de la même carte, ou une carte dupliquée
 // dans un autre carousel, ne refait jamais le fetch.
+// La Map contient soit le texte résolu, soit la Promise du chargement en cours.
+// Mémoriser également la Promise évite que touch/pointer/click (ou deux cartes
+// représentant le même débat) lancent plusieurs requêtes concurrentes.
 const _indexContextFullTextCache = new Map();
 async function fetchIndexContextFullText(debateId) {
   const id = String(debateId || '').trim();
   if (!id) return '';
   if (_indexContextFullTextCache.has(id)) return _indexContextFullTextCache.get(id);
-  try {
+
+  const pendingRequest = (async () => {
     const res = await fetch(`/api/debates/${encodeURIComponent(id)}`);
     if (!res.ok) return '';
     const data = await res.json();
-    const fullText = String(data?.debate?.content || '').trim();
-    _indexContextFullTextCache.set(id, fullText);
+    return String(data?.debate?.content || '').trim();
+  })();
+  _indexContextFullTextCache.set(id, pendingRequest);
+
+  try {
+    const fullText = await pendingRequest;
+    if (fullText) _indexContextFullTextCache.set(id, fullText);
+    else _indexContextFullTextCache.delete(id);
     return fullText;
   } catch (e) {
+    _indexContextFullTextCache.delete(id);
     return '';
   }
 }
@@ -19366,6 +19598,33 @@ function toggleIndexContextPreview(button) {
   if (!button || (!textEl && !metaEl)) return;
 
   const nextExpanded = button.getAttribute('aria-expanded') !== 'true';
+
+  // Premier dépliage : ne jamais ouvrir la carte avec l'aperçu court puis
+  // remplacer celui-ci par le texte intégral après le fetch. Cette ancienne
+  // séquence créait deux hauteurs successives (et donc le saut des notions)
+  // uniquement à la première ouverture de chaque carte. Le bouton accuse
+  // réception immédiatement, mais la carte reste fermée jusqu'à ce que sa
+  // hauteur finale soit connue ; elle ne s'ouvre ensuite qu'une seule fois.
+  if (nextExpanded && textEl && textEl.getAttribute('data-full-text-loaded') !== 'true') {
+    if (button.getAttribute('data-context-load-pending') === 'true') return;
+    const debateId = textEl.getAttribute('data-debate-id');
+    button.setAttribute('data-context-load-pending', 'true');
+    button.setAttribute('aria-busy', 'true');
+    button.classList.add('is-loading');
+    button.innerHTML = `<span>Chargement…</span>${INDEX_CONTEXT_TOGGLE_CHEVRON_HTML}`;
+
+    fetchIndexContextFullText(debateId).then((fullText) => {
+      if (!button.isConnected) return;
+      textEl.setAttribute('data-full-text', fullText || textEl.getAttribute('data-short-text') || '');
+      textEl.setAttribute('data-full-text-loaded', 'true');
+      button.removeAttribute('data-context-load-pending');
+      button.removeAttribute('aria-busy');
+      button.classList.remove('is-loading');
+      button.innerHTML = INDEX_CONTEXT_TOGGLE_COLLAPSED_HTML;
+      toggleIndexContextPreview(button);
+    });
+    return;
+  }
 
   // Verrou anti-fermeture accidentelle : bloque la fermeture pendant 400ms après l'ouverture
   if (!nextExpanded && article) {
@@ -19380,24 +19639,6 @@ function toggleIndexContextPreview(button) {
   if (textEl) {
     renderIndexContextToggleText(textEl, nextExpanded);
     textEl.setAttribute('data-expanded', nextExpanded ? 'true' : 'false');
-    // Chargement à la demande du texte complet (correctif egress du
-    // 06/09/2026, cf. content_list_preview côté serveur) : la liste n'envoie
-    // plus qu'un aperçu — le texte complet n'est récupéré qu'au premier
-    // dépliage de CETTE carte, jamais au chargement de l'accueil. Réutilise
-    // GET /api/debates/:id (déjà caché 3 min côté serveur,
-    // DEBATE_DETAIL_CACHE_TTL_MS), jamais une nouvelle route.
-    if (nextExpanded && textEl.getAttribute('data-full-text-loaded') !== 'true') {
-      const debateId = textEl.getAttribute('data-debate-id');
-      fetchIndexContextFullText(debateId).then((fullText) => {
-        textEl.setAttribute('data-full-text', fullText || textEl.getAttribute('data-short-text') || '');
-        textEl.setAttribute('data-full-text-loaded', 'true');
-        // Ne réaffiche que si la carte est toujours dépliée : l'utilisateur
-        // a pu la refermer pendant le temps du fetch.
-        if (textEl.getAttribute('data-expanded') === 'true') {
-          renderIndexContextToggleText(textEl, true);
-        }
-      });
-    }
   }
 
   if (metaEl) {
@@ -36311,14 +36552,31 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
   // syncMnoriaCloudModeSwitch) : même absence de contentBottomDoc, donc même
   // calage symétrique 24px — demande du 02/09/2026, "même écart qu'en Ma
   // mémoire" entre la légende Communauté et le bandeau du dessous.
-  const isMemoireMode = body.classList.contains('mnoria-memoire-cloud-mode');
-  const isSortBarSymmetricMode = isMemoireMode || _mnoriaCloudMode;
+  // Actualités (Bulles Actu) : ajoutée au calage symétrique (demande du
+  // 08/09/2026, "même espace que Ma mémoire" sous le bouton Trier/Rechercher)
+  // — contrairement à Ma mémoire/Communauté, "Autres actus" reste visible ici
+  // et fournit un contentBottomDoc valide, donc la logique historique plus bas
+  // (ancrée sur ce bouton) continuerait sinon à écraser --mnoria-home-first-row-mt
+  // avec un écart différent : son écriture finale est donc sautée ci-dessous
+  // quand isSortBarSymmetricMode est vrai (cf. garde juste avant le dernier
+  // setProperty de cette fonction).
+  const isSortBarSymmetricMode = true;
   const sortBar = document.querySelector('.index-explorer-topbar');
   const firstRowForSort = document.querySelector('#debates-list .theme-row-section');
   if (isSortBarSymmetricMode && sortBar && firstRowForSort) {
     const MNORIA_SORT_BTN_GAP = 24;
     const MNORIA_SORT_BTN_BOTTOM_GAP = 21;
-    const sectionBottomDoc = section.getBoundingClientRect().bottom + scrollY;
+    // En Actualités, "Ce jour dans l'Histoire / Éclairages" (.home-secondary-actions)
+    // est visible entre le nuage et ce bouton (masqué en Ma mémoire/Communauté,
+    // cf. syncMnoriaCloudModeSwitch) : ancrer sur le bas du nuage comme si ce
+    // bandeau n'existait pas tirait le bouton Trier/Rechercher (et le liseret
+    // -20px au-dessus de lui) jusqu'à recouvrir ce bandeau — demande du
+    // 08/09/2026, "remonte Ce jour dans l'Histoire et Éclairages plus haut, au
+    // dessus du liseret". Le point d'ancrage réel est donc le bas du DERNIER
+    // élément visible avant le bouton, quel qu'il soit.
+    const secondaryActions = document.querySelector('.home-secondary-actions');
+    const anchorBeforeSort = (secondaryActions && isMnoriaVisibleElement(secondaryActions)) ? secondaryActions : section;
+    const sectionBottomDoc = anchorBeforeSort.getBoundingClientRect().bottom + scrollY;
     const sortRect = sortBar.getBoundingClientRect();
     const sortTopDoc = sortRect.top + scrollY;
     const currentSortMarginTop = parseFloat(window.getComputedStyle(sortBar).marginTop) || 0;
@@ -36361,47 +36619,13 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
   }
   root.style.setProperty('--mnoria-home-trends-caption-top', `${offset}px`);
 
-  // Espace symétrique : autant de vide entre la légende et le bandeau
-  // thématique ("À la une") en dessous qu'entre le bouton Autres actus et la
-  // légende au-dessus. La marge est posée en variable (consommée par le
-  // margin-top du premier .theme-row-section) et recalculée par delta sur la
-  // position mesurée du bandeau : idempotent d'une passe à l'autre.
-  const caption = section.querySelector('.mnoria-tag-trends-caption');
-  const firstRow = document.querySelector('#debates-list .theme-row-section');
-  if (!caption || !firstRow || contentBottomDoc === null) {
-    __scrollJumpDiagLog('guard-caption-or-firstrow', {
-      hasCaption: !!caption,
-      hasFirstRow: !!firstRow,
-      contentBottomDoc,
-      offset
-    });
-    return;
-  }
-  const captionDocTop = sectionDocTop + offset;
-  const gapAbove = captionDocTop - contentBottomDoc;
-  const captionHeight = caption.getBoundingClientRect().height;
-  const captionBottomDoc = captionDocTop + captionHeight;
-  const bandTargetTop = captionBottomDoc + gapAbove;
-  const bandEl = firstRow.querySelector('.theme-row-title') || firstRow;
-  const bandDocTop = bandEl.getBoundingClientRect().top + scrollY;
-  const currentMarginTop = parseFloat(window.getComputedStyle(firstRow).marginTop) || 0;
-  const nextMarginTop = Math.round(currentMarginTop + (bandTargetTop - bandDocTop));
-  if (!Number.isFinite(nextMarginTop)) {
-    __scrollJumpDiagLog('guard-nextmargintop-invalid', { bandTargetTop, bandDocTop, currentMarginTop });
-    return;
-  }
-  __scrollJumpDiagLog('success', {
-    offset,
-    scrollY,
-    gapAbove,
-    captionBottomDoc,
-    bandTargetTop,
-    bandDocTop,
-    currentMarginTop,
-    nextMarginTop,
-    modalOpen: window.__mnoriaDebateModalOpen === true
-  });
-  root.style.setProperty('--mnoria-home-first-row-mt', `${nextMarginTop}px`);
+  // --mnoria-home-first-row-mt est désormais TOUJOURS posée par le calage
+  // symétrique ci-dessus (isSortBarSymmetricMode toujours vrai depuis le
+  // 08/09/2026, les 3 modes Actualités/Ma mémoire/Communauté y sont inclus) —
+  // l'ancien recalcul ici, ancré sur la position de la légende plutôt que sur
+  // le bouton Trier/Rechercher lui-même, produisait un écart différent en
+  // Actualités (seul mode où "Autres actus" restait visible pour l'ancrer) et
+  // a été retiré plutôt que laissé mort derrière une garde toujours vraie.
 }
 
 // Le min-height CSS de .mnoria-tag-trends-section en standalone (cf. style.css,
@@ -36591,8 +36815,18 @@ function syncMnoriaHomeTrendsSectionMinHeight() {
 }
 
 function updateHomeBottomNavViewportOffset() {
-  syncMnoriaHomeTrendsCaptionAnchor();
+  // syncMnoriaHomeTrendsSectionMinHeight() D'ABORD : c'est lui qui commit la hauteur
+  // définitive de #mnoria-tag-trends-section (--mnoria-home-trends-section-top) la première
+  // fois qu'elle se stabilise. Appeler syncMnoriaHomeTrendsCaptionAnchor() après (pas avant,
+  // comme précédemment) lui laisse lire cette hauteur déjà committée dans CETTE passe plutôt
+  // que l'ancienne valeur de repli — son calcul est un delta sur la position actuelle, donc
+  // rejouer une passe séparée juste après (essayé le 09/09/2026 via un déclencheur sur
+  // mnoria:memoire-frame-ready, retiré) appliquait deux corrections rapprochées coup sur coup,
+  // visible comme un petit saut/disparition furtive du liseret, du bouton Trier/Rechercher et
+  // de la bande "À la une" avant qu'ils ne se stabilisent (cf. commentaire sur le débounce
+  // 100ms plus bas, qui documentait déjà ce risque).
   syncMnoriaHomeTrendsSectionMinHeight();
+  syncMnoriaHomeTrendsCaptionAnchor();
   const viewportBottomFill = getMnoriaMobileViewportBottomFill();
   const cssSafeBottomFill = getMnoriaCssSafeAreaBottomFill();
   const legacyBottomFill = getMnoriaLegacyStandaloneBottomFallback(cssSafeBottomFill);
@@ -36676,6 +36910,20 @@ function bindMnoriaMobileViewportBottomFillSync() {
   // scroll) — un listener sur le scroll de la page comble ce trou, sans nouveau calcul
   // (réutilise le même throttle rAF que les autres déclencheurs).
   window.addEventListener("scroll", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+
+  // Le bloc "isSortBarSymmetricMode" de syncMnoriaHomeTrendsCaptionAnchor (liseret, bouton
+  // Trier/Rechercher, bande "À la une") a besoin de #debates-list .theme-row-section:first-child
+  // pour calculer quoi que ce soit — un élément que seul applyIndexFilters() insère, juste avant
+  // ce même événement. Le cadre "Ma mémoire" se stabilise généralement AVANT que les cartes
+  // réseau soient arrivées : à cette première passe (celle qui compte, cf. commentaire dans
+  // updateHomeBottomNavViewportOffset), firstRowForSort est encore null, tout le bloc est
+  // silencieusement sauté, et rien ne le redéclenche avant le prochain scroll/resize fortuit —
+  // ces 3 éléments apparaissaient donc en retard par rapport au switch Actu/Ma mémoire/Communauté
+  // (positionné, lui, par pur CSS une fois la classe posée par JS, sans dépendre des cartes).
+  // Distinct du déclencheur sur mnoria:memoire-frame-ready essayé puis retiré le 09/09/2026 : ces
+  // deux événements arrivent à des moments différents (l'un dépend du réseau, l'autre non), donc
+  // pas de risque de repasser deux fois de suite sur la même correction.
+  window.addEventListener("mnoria:feed-ready", scheduleHomeBottomNavViewportOffsetUpdate, { once: true });
 
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });

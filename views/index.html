@@ -80,16 +80,45 @@
     /* Retour interne vers Accueil : posé dans le <head>, avant toute peinture,
        afin que le contenu de la page ne puisse jamais apparaître avant Ma mémoire. */
     try {
-      if (sessionStorage.getItem('mnoria_home_memory_return_loading') === '1') {
+      if (sessionStorage.getItem('mnoria_home_return_loading') === '1') {
+        document.documentElement.classList.add('mnoria-home-return-loading');
+      }
+      if (sessionStorage.getItem('mnoria_home_memory_return_loading') === 'mon-univers') {
         document.documentElement.classList.add('mnoria-home-memory-return-loading');
+      } else {
+        /* Nettoie notamment l'ancien marqueur "1" qui pouvait laisser un
+           retour depuis Débat bloqué indéfiniment sur le loader. */
+        sessionStorage.removeItem('mnoria_home_memory_return_loading');
       }
     } catch (_) {}
   </script>
   <style>
+    .mnoria-home-return-prepaint-underlay {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      min-height: calc(100vh + env(safe-area-inset-bottom, 0px) + 240px);
+      min-height: calc(100lvh + env(safe-area-inset-bottom, 0px) + 240px);
+      z-index: 2147483645;
+      pointer-events: none;
+      background: #243038;
+    }
+    html.mnoria-home-return-loading .mnoria-home-return-prepaint-underlay,
+    html.mnoria-home-memory-return-loading .mnoria-home-return-prepaint-underlay { display: block; }
     .mnoria-home-return-prepaint {
       display: none;
       position: fixed;
-      inset: 0;
+      top: 0;
+      left: 0;
+      right: 0;
+      /* Le voile affiché dès le premier paint doit rejoindre sans coupure
+         celui de la page de départ. Il déborde donc sous le viewport iOS ;
+         le padding équivalent garde le sablier centré dans la zone visible. */
+      bottom: calc(-1 * (env(safe-area-inset-bottom, 0px) + 160px));
+      box-sizing: border-box;
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 160px);
       z-index: 2147483646;
       background: #243038;
       align-items: center;
@@ -97,19 +126,50 @@
       flex-direction: column;
       gap: 8px;
       color: #fff;
-      font: 600 15px/1.3 'Oswald', Impact, 'Arial Narrow', sans-serif;
+      /* Police locale disponible dès le premier pixel : pas de passage du
+         fallback vers Oswald pendant l'écran de transition. */
+      font: 600 15px/1.3 Arial, Helvetica, sans-serif;
+      font-family: Arial, Helvetica, sans-serif !important;
       letter-spacing: .02em;
       text-align: center;
       text-shadow: 0 2px 10px rgba(0, 0, 0, .32);
     }
+    html.mnoria-home-return-loading .mnoria-home-return-prepaint,
     html.mnoria-home-memory-return-loading .mnoria-home-return-prepaint { display: flex; }
+    .mnoria-home-return-prepaint span { font-family: Arial, Helvetica, sans-serif !important; }
+    .mnoria-home-return-prepaint-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
+    }
+    @media (display-mode: standalone) and (max-width: 768px) {
+      .mnoria-home-return-prepaint-box {
+        position: absolute;
+        left: 50%;
+        top: 50vh;
+        top: 50lvh;
+        width: min(90vw, 220px);
+        transform: translate(-50%, -50%);
+      }
+    }
     .mnoria-home-return-prepaint img {
       width: 64px;
       height: 64px;
       object-fit: contain;
       animation: mnoriaHomeReturnSpin 1s linear infinite;
+      transform-origin: center;
+      will-change: transform;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      contain: paint;
     }
-    @keyframes mnoriaHomeReturnSpin { to { transform: rotate(360deg); } }
+    @keyframes mnoriaHomeReturnSpin {
+      from { transform: translate3d(0, 0, 0) rotate(0deg); }
+      to   { transform: translate3d(0, 0, 0) rotate(360deg); }
+    }
   </style>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -124,7 +184,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260908-fullscreen-iframe-bottom-v2">
+  <link rel="stylesheet" href="/style.min.css?v=20260909-startup-scroll-lock">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -471,6 +531,12 @@
       visibility: hidden;
       pointer-events: none;
     }
+    /* cf. même règle et même commentaire dans style.css ("Le loader est fixed et opaque
+       mais ne bloquait jusqu'ici aucun scroll..."), à garder strictement cohérente. */
+    html.mnoria-startup-active,
+    html.mnoria-startup-active body {
+      overflow: hidden !important;
+    }
     html.mnoria-skip-startup-once .mnoria-startup-loader {
       display: none !important;
     }
@@ -677,10 +743,72 @@
 </head>
 
 <body class="page-home page-home-mobile">
+<div class="mnoria-home-return-prepaint-underlay" aria-hidden="true"></div>
 <div class="mnoria-home-return-prepaint" role="status" aria-live="polite" aria-busy="true">
-  <img src="/sablier-96.png" alt="">
-  <span>Chargement de l'accueil en cours</span>
+  <div class="mnoria-home-return-prepaint-box">
+    <img src="/sablier-96.png" alt="">
+    <span>Chargement de l'accueil en cours</span>
+  </div>
 </div>
+<script>
+  /* Même phase temporelle que le sablier de la page de départ : la rotation
+     reste visuellement continue malgré le changement de document. */
+  (function () {
+    var image = document.querySelector('.mnoria-home-return-prepaint img');
+    if (image) image.style.animationDelay = '-' + (Date.now() % 1000) + 'ms';
+  })();
+</script>
+<script>
+/* Retour standard (Apprentissage, Notifications, pages secondaires) : ce
+   prepaint est l'unique loader du document Accueil. Il reste jusqu'au rendu
+   du feed ET jusqu'à ce que le cadre "Ma mémoire" soit stabilisé, puis
+   disparaît sans être remplacé par un second composant.
+   N'attendre QUE mnoria:feed-ready laissait le switch Actu/Ma mémoire/
+   Communauté, le liseré sous ce switch, le bouton Trier/Rechercher et la
+   bande "À la une" apparaître un instant après la disparition du voile, mal
+   calés le temps que markMnoriaHomeTrendsSectionTopReady (script.js) déclenche
+   mnoria:memoire-frame-ready — visible comme un "pop-in" retardé de ces
+   éléments au retour d'Apprentissage (demande du 09/09/2026). Hors standalone
+   mobile ce second événement est déjà acquis au chargement de script.js et se
+   déclenche donc immédiatement, sans retarder ce cas. */
+(function () {
+  if (!document.documentElement.classList.contains('mnoria-home-return-loading')) return;
+  if (document.documentElement.classList.contains('mnoria-home-memory-return-loading')) return;
+  var finished = false;
+  var feedReady = false;
+  var frameReady = false;
+  function finishHomeReturnPrepaint() {
+    if (finished || !feedReady || !frameReady) return;
+    finished = true;
+    // Les deux événements ci-dessus signalent que le cadre "Ma mémoire" est stabilisé et que
+    // les cartes existent, mais pas que le liseret/bouton Trier-Rechercher/bande "À la une"
+    // (syncMnoriaHomeTrendsCaptionAnchor, script.js) ont déjà fini de se recaler dessus — ce
+    // recalcul est lui-même planifié via requestAnimationFrame par les écouteurs qui réagissent
+    // à ces mêmes événements, donc pas garanti terminé au moment précis où ceux-ci se déclenchent
+    // ici. Plutôt que de courir après chaque déclencheur séparément (essayé le 09/09/2026, jamais
+    // tout à fait synchronisé), on force une dernière synchro puis on laisse deux frames de plus
+    // avant de révéler la page : le voile de chargement reste affiché un instant de plus, mais
+    // tout est alors garanti déjà en place dessous (demande du 09/09/2026, "allonger la page de
+    // chargement, le temps que tout apparaisse bien").
+    if (typeof window.__mnoriaSyncMobileBottomNavViewport === 'function') {
+      window.__mnoriaSyncMobileBottomNavViewport();
+    }
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        document.documentElement.classList.remove('mnoria-home-return-loading');
+        try { sessionStorage.removeItem('mnoria_home_return_loading'); } catch (_) {}
+        var prepaint = document.querySelector('.mnoria-home-return-prepaint');
+        var underlay = document.querySelector('.mnoria-home-return-prepaint-underlay');
+        if (prepaint) prepaint.remove();
+        if (underlay) underlay.remove();
+      });
+    });
+  }
+  window.addEventListener('mnoria:feed-ready', function () { feedReady = true; finishHomeReturnPrepaint(); }, { once: true });
+  window.addEventListener('mnoria:memoire-frame-ready', function () { frameReady = true; finishHomeReturnPrepaint(); }, { once: true });
+  setTimeout(function () { feedReady = true; frameReady = true; finishHomeReturnPrepaint(); }, 10000);
+})();
+</script>
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
 <script>
 // Pose mnoria-mobile-cloud-viewport tout de suite (même calcul que isMnoriaMobileCloudViewport
@@ -783,11 +911,16 @@
 
   try {
     var params = new URLSearchParams(window.location.search);
-    if (params.get('skipStartup') === '1') {
+    var skipStartupRequested = params.get('skipStartup') === '1';
+    var hasHomeReturnMarker = params.has('mnoriaHomeReturn');
+    if (skipStartupRequested || hasHomeReturnMarker) {
       params.delete('skipStartup');
+      params.delete('mnoriaHomeReturn');
       var query = params.toString();
       var nextUrl = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
       window.history.replaceState(window.history.state || {}, '', nextUrl);
+    }
+    if (skipStartupRequested) {
       shouldSkipStartup = true;
     }
   } catch (_) {}
@@ -856,6 +989,13 @@
 (function(){
   var veil = document.getElementById('mnoria-memoire-loading-veil');
   if (!veil) return;
+  /* Lors d'un retour interne, .mnoria-home-return-prepaint couvre déjà toute
+     l'attente jusqu'au cadre stabilisé. Retirer ce second voile immédiatement
+     évite qu'il prenne visuellement le relais avec une autre typographie. */
+  if (document.documentElement.classList.contains('mnoria-home-memory-return-loading')) {
+    veil.remove();
+    return;
+  }
   // Rien à attendre hors du seul contexte concerné (le CSS ne le peint de toute façon
   // que là, même condition) — vidé immédiatement pour ne jamais laisser un noeud DOM
   // inerte traîner jusqu'au filet de sécurité de 3s plus bas.
@@ -1844,6 +1984,13 @@ window.addEventListener("pageshow", function() {
     if (cloud) {
       cloud.style.flex = "0 0 auto";
       cloud.style.height = s.h + "px";
+      cloud.dataset.prepaintHeight = String(s.h);
+      // Marque le cache comme déjà appliqué : le script plus bas ("Dimensionne le cadre
+      // principal...") ne doit surtout pas recalculer par-dessus avec une mesure à chaud
+      // (polices/bandeau pas encore stabilisés), sous peine d'écraser cette valeur fiable
+      // par une légèrement différente à chaque chargement — décalage visible malgré le
+      // cache (constaté le 09/09/2026, régression introduite par ce second script).
+      window.__mnoriaInitialCloudBaseHeight = s.h;
     }
   } catch (e) {}
 })();
@@ -1976,6 +2123,13 @@ window.addEventListener("pageshow", function() {
       window.__mnoriaInitialMobileCloudFrameHeight = mobileHeight;
       return;
     }
+
+    // Cache desktop déjà restauré par le script précédent (sessionStorage
+    // "mnoriaMemoireCloudSize:") : ne pas recalculer par-dessus avec une mesure à chaud,
+    // sous peine d'écraser une valeur fiable par une légèrement différente à chaque
+    // chargement (décalage visible malgré le cache, régression du 29/08/2026 corrigée le
+    // 09/09/2026 — ce bloc ne sert que de filet pour la toute première visite sans cache).
+    if (typeof window.__mnoriaInitialCloudBaseHeight === 'number') return;
 
     var docTop = section.getBoundingClientRect().top + window.scrollY;
     var isStandaloneDesktop = document.body.classList.contains('is-standalone');
@@ -2192,7 +2346,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260908-debate-report-batch" defer></script>
+<script src="/script.min.js?v=20260909-remove-learning-iframe-arrow" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

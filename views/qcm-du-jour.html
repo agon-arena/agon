@@ -12,8 +12,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
+  <script>
+    /* Phase absolue du sablier, posée avant la première peinture. Le loader
+       Accueil utilise la même horloge (Date.now modulo 1 seconde) : le relais
+       entre documents reprend au même angle au lieu de repartir de 0. */
+    document.documentElement.style.setProperty('--mnoria-loader-phase', '-' + (Date.now() % 1000) + 'ms');
+  </script>
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260908-fullscreen-iframe-bottom-v2">
+  <link rel="stylesheet" href="/style.min.css?v=20260908-actu-sortbtn-gap">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -1705,8 +1711,8 @@
     }
     .qcm-final-actions {
       display: flex;
-      justify-content: center;
-      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: center;
       gap: 10px;
       margin-top: 16px;
     }
@@ -3847,6 +3853,73 @@
   </style>
 </head>
 <body class="page-qcm-du-jour qcm-learning-background">
+<style id="qcm-initial-arrival-loading-style">
+  #page-arrival-loading-overlay.qcm-initial-arrival-loading {
+    position: fixed;
+    inset: 0 0 calc(-1 * (env(safe-area-inset-bottom, 0px) + 160px)) 0;
+    z-index: 10030;
+    display: block;
+    box-sizing: border-box;
+    background: #243038;
+    opacity: 1;
+    pointer-events: none;
+  }
+  #page-arrival-loading-overlay.qcm-initial-arrival-loading .page-arrival-loading-box {
+    position: absolute;
+    left: 50%;
+    top: 50vh;
+    top: 50lvh;
+    width: min(90vw, 220px);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
+    transform: translate(-50%, -50%) translateZ(0);
+  }
+  #page-arrival-loading-overlay.qcm-initial-arrival-loading .page-arrival-loading-hourglass {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #page-arrival-loading-overlay.qcm-initial-arrival-loading .page-arrival-loading-hourglass img {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    animation: qcmInitialArrivalSpin 1s linear infinite;
+    animation-delay: var(--mnoria-loader-phase, 0ms);
+    transform-origin: center;
+    will-change: transform;
+  }
+  #page-arrival-loading-overlay.qcm-initial-arrival-loading .page-arrival-loading-title {
+    margin: 0;
+    color: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.02em;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+  }
+  html.in-iframe #page-arrival-loading-overlay.qcm-initial-arrival-loading {
+    display: none;
+  }
+  @keyframes qcmInitialArrivalSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+</style>
+<div id="page-arrival-loading-overlay" class="page-arrival-loading-overlay page-arrival-loading-overlay-visible page-arrival-loading-overlay-iframe-debate page-arrival-loading-overlay-learning qcm-initial-arrival-loading" aria-live="polite">
+  <div class="page-arrival-loading-box" role="status" aria-live="polite" aria-busy="true">
+    <div class="page-arrival-loading-hourglass" aria-hidden="true"><img src="/sablier-96.png" alt=""></div>
+    <div class="page-arrival-loading-title" id="page-arrival-loading-title">Chargement de mes apprentissages en cours</div>
+  </div>
+</div>
 <button type="button" class="mobile-back-button" aria-label="Retour à l'accueil" title="Retour à l'accueil" onclick="qcmBottomNavHome()">
   <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
 </button>
@@ -3989,7 +4062,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260908-debate-report-batch" defer></script>
+<script src="/script.min.js?v=20260909-learning-home-single-prepaint-v18" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -4265,14 +4338,16 @@
   // le popup "Explorer les apprentissages disponibles" pour ne pas proposer
   // d'adopter un sujet déjà présent dans la liste personnelle du visiteur.
   var currentMesQcmQuizzes = [];
-  // Ouverture demandée depuis l'alerte globale « Apprentissage prêt » : la
-  // liste est chargée normalement, puis la page globale de cette connaissance
-  // (Noès, parcours, QCM) s'ouvre sans lancer directement la première question.
-  var pendingOpenKnowledgeRowKey = null;
   // Slot|date de l'apprentissage à faire défiler jusqu'à "En attente de
   // réalisation" puis à faire clignoter, une fois la liste rechargée (cf.
   // adoptCatalogRecommendation, consommé et remis à null dans
-  // renderMesQcmList — demande du 30/08/2026).
+  // renderMesQcmList — demande du 30/08/2026). Alimenté aussi depuis l'alerte
+  // globale « Apprentissage prêt » (showNotionQuizReadyAnnouncement,
+  // script.js) via ?highlight=1&slot=...&date=... — demande du 09/09/2026 :
+  // avant cette date, ce lien ouvrait directement la page de la connaissance
+  // (ancien pendingOpenKnowledgeRowKey, retiré, plus aucun appelant) au lieu
+  // de rejoindre "Mes apprentissages" avec le même scroll+clignotement que
+  // partout ailleurs.
   var pendingHighlightRowKey = null;
   // Arrivée depuis la notification "connaissance(s) ajoutée(s)" (photo/PDF/
   // texte/URL/YouTube/manuel, cf. server.js addValidatedKnowledgeImport) —
@@ -4335,16 +4410,20 @@
           requestAnimationFrame(waitForActuallyVisiblePanel);
           return;
         }
+        // window.__mnoriaPageArrivalReady (posé par markPageArrivalLoadingOverlayReady,
+        // cf. script.js) doit être posé ICI MÊME EN IFRAME : c'est le seul signal que
+        // le filet de secours du parent (resolveStuckDebateIframeParentLoading, cf.
+        // script.js) sait lire sur frame.contentWindow pour dévoiler la page si jamais
+        // le postMessage ci-dessous se perd (course, listener pas encore attaché...) —
+        // sans lui, une perte du postMessage laissait le voile parent bloqué pour de
+        // bon, "verrou central" oblige, malgré un contenu déjà réellement affiché.
+        if (typeof markPageArrivalLoadingOverlayReady === 'function') markPageArrivalLoadingOverlayReady();
         // En page autonome (lien direct, nouvel onglet, lancement PWA), il n'y a
-        // pas de parent à qui poster ce message : on signale directement au voile
-        // de la page elle-même (cf. markPageArrivalLoadingOverlayReady dans
-        // script.js, désormais bloqué en attente explicite pour /apprentissage)
-        // que le vrai contenu est affiché, au lieu de le laisser disparaître au
-        // bout d'un délai générique déconnecté du fetch réel.
-        if (window.self === window.top) {
-          if (typeof markPageArrivalLoadingOverlayReady === 'function') markPageArrivalLoadingOverlayReady();
-          return;
-        }
+        // pas de parent à qui poster ce message : le flag ci-dessus suffit (cf.
+        // markPageArrivalLoadingOverlayReady dans script.js, désormais bloqué en
+        // attente explicite pour /apprentissage), au lieu de le laisser disparaître
+        // au bout d'un délai générique déconnecté du fetch réel.
+        if (window.self === window.top) return;
         try {
           window.parent.postMessage({ type: 'mnoria:debate-iframe-ready', pathname: location.pathname, href: location.href }, '*');
         } catch (e) {}
@@ -4632,20 +4711,12 @@
     questionSourceNameEl.hidden = !show;
   }
 
-  function setParentIframeCloseVisible(visible) {
-    if (window.self === window.top) return;
-    try {
-      var closeButton = window.parent.document.getElementById('learning-iframe-modal-close') ||
-        window.parent.document.getElementById('debate-iframe-modal-close');
-      if (!closeButton) return;
-      closeButton.style.setProperty('display', visible ? 'flex' : 'none', 'important');
-      closeButton.style.setProperty('opacity', visible ? '1' : '0', 'important');
-      closeButton.style.setProperty('visibility', visible ? 'visible' : 'hidden', 'important');
-      closeButton.style.setProperty('pointer-events', visible ? 'auto' : 'none', 'important');
-      closeButton.setAttribute('aria-hidden', visible ? 'false' : 'true');
-      closeButton.tabIndex = visible ? 0 : -1;
-    } catch (e) {}
-  }
+  // Flèche retour du parent (#learning-iframe-modal-close) supprimée sur /apprentissage
+  // (demande du 09/09/2026, doublon avec le bouton "Accueil" du bandeau bas de cette page) :
+  // ce bouton reste désormais caché en permanence côté parent (script.js). No-op conservé ici
+  // (plutôt que de retirer chacun de ses appels) pour ne pas devoir toucher les nombreux
+  // endroits qui l'appellent pendant le déroulé du QCM.
+  function setParentIframeCloseVisible(visible) {}
 
   // Croix propre au cadre (demande du 13/08/2026), visible pendant "Refaire" —
   // contrairement à setParentIframeCloseVisible (bouton du parent iframe,
@@ -4676,26 +4747,40 @@
   };
   var FILL_BLANK_MARKER = '___';
 
-  // Bouton discret "Fiche" pendant le passage du QCM (demande du 07/09/2026) :
-  // jusqu'ici la fiche (détail de la notion + corrigé complet) n'était
-  // accessible que depuis la liste "Mes apprentissages", après coup — jamais
-  // pendant qu'on répond aux questions. Limité aux vrais slots de notion
-  // (`notion:...`) : GET /api/users/notion-quizzes/fiche rejette Renforcement/
-  // Comprendre (slots `renforcement`/`comprendre`, cf. server.js), qui n'ont
-  // d'ailleurs pas de fiche de notion à afficher.
-  function renderFicheOpenButtonHtml() {
-    if (!currentSlot || currentSlot.indexOf('notion:') !== 0) return '';
+  // Bouton discret "Fiche" pendant le passage du QCM (demande du 07/09/2026,
+  // étendue à Ancrer le 09/09/2026) : jusqu'ici la fiche (détail de la notion
+  // + corrigé complet) n'était accessible que depuis la liste "Mes
+  // apprentissages", après coup — jamais pendant qu'on répond aux questions.
+  // Sur un vrai slot de notion (`notion:...`, Découvrir/Relier une fois
+  // adopté), retrouvée par (slot, date) — cf. openMesQcmFiche. Sur Ancrer
+  // (pseudo-slot "renforcement" qui mélange des questions de plusieurs
+  // notions différentes, cf. fetchCultureGeneraleReviewInjectionForToday),
+  // currentSlot/currentQuizDate ne correspondent à AUCUN master réel : on
+  // retrouve alors la fiche par l'identité de la question COURANTE
+  // (sourceType/sourceDebateId), même mécanisme que "Les liens"
+  // (openMesQcmFicheByLink) — absente quand ces deux champs manquent (ancien
+  // contenu jamais backfillé). "Comprendre" reste exclu (jamais de
+  // sourceDebateId unique par question, cf. son propre commentaire plus haut
+  // sur renderExcludeButtonHtml).
+  function renderFicheOpenButtonHtml(question) {
+    var isRealNotionSlot = currentSlot && currentSlot.indexOf('notion:') === 0;
+    var isReinforcementWithSource = currentCategory === 'renforcement' && question && question.sourceType && question.sourceDebateId != null;
+    if (!isRealNotionSlot && !isReinforcementWithSource) return '';
     return '<div class="qcm-fiche-open-row"><button type="button" class="qcm-fiche-open-btn" id="qcm-fiche-open-btn" title="Voir la fiche de cette notion">' +
       '<i class="fa-solid fa-file-lines" aria-hidden="true"></i><span>Fiche</span></button></div>';
   }
-  function wireFicheOpenButton() {
+  function wireFicheOpenButton(question) {
     var btn = document.getElementById('qcm-fiche-open-btn');
     if (!btn) return;
     // Pas d'onClose (comme Éclairages/"Les liens", cf. openFicheOverlay) :
     // la question en cours reste intacte sous l'overlay, fermer la fiche
     // suffit à la retrouver telle quelle.
     btn.onclick = function () {
-      openMesQcmFiche({ slot: currentSlot, quizDate: currentQuizDate, label: currentQuizLabel });
+      if (currentSlot && currentSlot.indexOf('notion:') === 0) {
+        openMesQcmFiche({ slot: currentSlot, quizDate: currentQuizDate, label: currentQuizLabel });
+      } else if (question && question.sourceType && question.sourceDebateId != null) {
+        openMesQcmFicheByLink(question.sourceType, String(question.sourceDebateId), question.sourceName);
+      }
     };
   }
 
@@ -4705,13 +4790,13 @@
   // l'ancien texte "Question X / Y" gardé jusqu'ici sur Découvrir. Fonction
   // partagée par les 4 rendus de question (qcm/texte_a_trous/association/
   // qcm_multi/ordre) plutôt que dupliquée.
-  function renderProgressIndicatorHtml() {
+  function renderProgressIndicatorHtml(question) {
     // currentIndex (pas +1) : la barre reflète les questions déjà terminées,
     // jamais la position courante — sur la toute première question (index 0,
     // aucun QCM commencé), elle doit rester vide (demande du 30/08/2026,
     // "la barre n'apparaît pas vide même quand je n'ai pas commencé").
     var pct = questions.length ? Math.round((currentIndex / questions.length) * 100) : 0;
-    return renderFicheOpenButtonHtml() +
+    return renderFicheOpenButtonHtml(question) +
       '<div class="qcm-progress-bar" role="progressbar" aria-valuenow="' + currentIndex + '" aria-valuemin="0" aria-valuemax="' + questions.length + '" aria-label="Progression du QCM">' +
       '<div class="qcm-progress-bar-fill" style="width:' + pct + '%"></div>' +
       '<span class="qcm-progress-bar-smoke" style="left:' + pct + '%" aria-hidden="true">' +
@@ -5014,7 +5099,7 @@
     } else {
       renderChoiceQuestion(question, answer);
     }
-    wireFicheOpenButton();
+    wireFicheOpenButton(question);
   }
 
   // Partagé avec wireExcludeButton ci-dessus : après confirmation de "Ne plus
@@ -5046,19 +5131,20 @@
     nextBtn.onclick = goToNextQuestion;
   }
 
-  // Enchaînement automatique Élémentaire → Approfondi → Expert (demande du
-  // 07/09/2026, "si les questions sont déjà prêtes, il faut les servir
-  // directement à la fin, sinon on prévient que la suite est en cours de
-  // création") : à la dernière question du bloc actuellement chargé, on
-  // vérifie D'ABORD si un niveau supérieur est déjà prêt côté serveur (auto-
-  // promotion déjà appliquée en base par maybeAdvanceProgressiveLevelAfterAnswer
-  // pendant qu'on répondait) avant de basculer sur l'écran de score final —
-  // jamais l'inverse, pour ne jamais arrêter un utilisateur qui pourrait
-  // continuer tout de suite. Un seul appel à level-status ici : son résultat
-  // est transmis à renderFinalScore quand on ne continue pas, pour éviter un
-  // second aller-retour réseau redondant avec maybeShowProgressiveNextLevelHint.
-  // practiceMode ("Refaire") exclu : ne compte jamais pour la progression
-  // réelle, cf. POST /api/daily-quiz/practice-answer.
+  // À la dernière question du bloc actuellement chargé, interroge le statut
+  // du niveau suivant (chantier "démarrage toujours Élémentaire + avancement
+  // automatique", 06-07/09/2026) pour l'écran de score qui va suivre. Jusqu'au
+  // 09/09/2026, un niveau déjà prêt enchaînait automatiquement SANS repasser
+  // par l'écran de score (aucun choix laissé à l'utilisateur) — remplacé par
+  // un vrai choix explicite (demande du 09/09/2026, "proposer à l'utilisateur
+  // de poursuivre" plutôt que d'enchaîner tout seul) : on affiche TOUJOURS
+  // l'écran de score d'abord, avec son propre bouton "Continuer en X" quand
+  // pertinent (cf. renderFinalScore/applyProgressiveNextLevelHint) — jamais
+  // l'inverse. Un seul appel à level-status ici : son résultat est transmis
+  // à renderFinalScore pour éviter un second aller-retour réseau redondant
+  // avec maybeShowProgressiveNextLevelHint. practiceMode ("Refaire") exclu :
+  // ne compte jamais pour la progression réelle, cf. POST
+  // /api/daily-quiz/practice-answer.
   function finishCurrentBlockOrContinue() {
     if (practiceMode || !voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) {
       renderFinalScore();
@@ -5077,11 +5163,7 @@
         // Session déjà quittée pendant l'appel (Retourner aux apprentissages,
         // nouveau slot chargé...) : ne jamais réinjecter un écran obsolète.
         if (currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) return;
-        if (data && data.progressive && data.nextLevel && data.nextLevelReady) {
-          continueToNextProgressiveLevel(slotAtCall, dateAtCall);
-        } else {
-          renderFinalScore(data);
-        }
+        renderFinalScore(data);
       })
       .catch(function () { renderFinalScore(); });
   }
@@ -5160,7 +5242,7 @@
       : escapeHtml(question.question);
 
     var html = '';
-    html += renderProgressIndicatorHtml();
+    html += renderProgressIndicatorHtml(question);
     html += renderTypeBadge(type);
     html += '<p class="qcm-question">' + questionHtml + '</p>';
     var gated = needsRevealGate(type, answer, question);
@@ -5258,7 +5340,7 @@
   // avec le reste du site (vanilla JS, sans framework). ─────────────────
   function renderAssociationQuestion(question, answer) {
     var html = '';
-    html += renderProgressIndicatorHtml();
+    html += renderProgressIndicatorHtml(question);
     html += renderTypeBadge('association');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     html += '<div id="qcm-assoc-rows"></div>';
@@ -5389,7 +5471,7 @@
   // principe que le bouton de "association" ci-dessus. ───────────────────
   function renderMultiChoiceQuestion(question, answer) {
     var html = '';
-    html += renderProgressIndicatorHtml();
+    html += renderProgressIndicatorHtml(question);
     html += renderTypeBadge('qcm_multi');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     var gated = needsRevealGate('qcm_multi', answer, question);
@@ -5485,7 +5567,7 @@
   // un élément déjà placé le retire (pour corriger sans tout recommencer). ─
   function renderOrderQuestion(question, answer) {
     var html = '';
-    html += renderProgressIndicatorHtml();
+    html += renderProgressIndicatorHtml(question);
     html += renderTypeBadge('ordre');
     html += '<p class="qcm-question">' + escapeHtml(question.question) + '</p>';
     html += '<p class="qcm-order-hint">Touche les éléments dans le bon ordre.</p>';
@@ -5621,9 +5703,10 @@
   // fetch normal ci-dessous.
   function maybeShowProgressiveNextLevelHint(precomputedData) {
     var hintEl = document.getElementById('qcm-progressive-next-hint');
-    if (!hintEl) return;
+    var continueBtn = document.getElementById('qcm-progressive-continue-btn');
+    if (!hintEl || !continueBtn) return;
     if (precomputedData !== undefined) {
-      applyProgressiveNextLevelHint(hintEl, precomputedData);
+      applyProgressiveNextLevelHint(hintEl, continueBtn, precomputedData);
       return;
     }
     if (!voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) return;
@@ -5643,15 +5726,36 @@
         // bien à la fin d'Élémentaire qu'à la fin d'Approfondi, confirmé le
         // 07/09/2026.
         if (!hintEl.isConnected) return;
-        applyProgressiveNextLevelHint(hintEl, data);
+        applyProgressiveNextLevelHint(hintEl, continueBtn, data);
       })
       .catch(function () {});
   }
-  // Même sablier tournant que "En cours de création" dans Mes apprentissages
-  // (cf. renderCreatingNotionQuizzesHtml, classe .qcm-loading-hourglass +
-  // /sablier-96.png) plutôt qu'un second composant visuel pour la même idée.
-  function applyProgressiveNextLevelHint(hintEl, data) {
-    if (!data || !data.progressive || !data.nextLevel || data.nextLevelReady) return;
+  // Deux affichages exclusifs selon l'état RÉEL du niveau suivant (demande du
+  // 09/09/2026, "proposer de poursuivre plutôt qu'enchaîner tout seul") :
+  // - prêt (nextLevelReady) : bouton "Continuer en {label}" cliquable, posé
+  //   juste au-dessus de "Terminé" (cf. .qcm-final-actions) — au clic,
+  //   continueToNextProgressiveLevel réutilise TEL QUEL le même mécanisme
+  //   que l'ancien enchaînement automatique (GET /today sur le MÊME (slot,
+  //   date), jamais une nouvelle génération) ;
+  // - pas encore prêt : même sablier tournant que "En cours de création"
+  //   dans Mes apprentissages (cf. renderCreatingNotionQuizzesHtml, classe
+  //   .qcm-loading-hourglass + /sablier-96.png) plutôt qu'un second
+  //   composant visuel pour la même idée — le passage au niveau suivant reste
+  //   automatique dès qu'il devient prêt (polling ci-dessous, comportement
+  //   inchangé depuis le 07/09/2026), aucun second clic requis.
+  function applyProgressiveNextLevelHint(hintEl, continueBtn, data) {
+    if (!data || !data.progressive || !data.nextLevel) return;
+    if (data.nextLevelReady) {
+      continueBtn.textContent = 'Continuer en ' + (data.nextLevelLabel || data.nextLevel);
+      continueBtn.hidden = false;
+      var slotAtClick = currentSlot;
+      var dateAtClick = currentQuizDate;
+      continueBtn.onclick = function () {
+        continueBtn.disabled = true;
+        continueToNextProgressiveLevel(slotAtClick, dateAtClick);
+      };
+      return;
+    }
     hintEl.innerHTML = '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">' +
       'La suite (' + escapeHtml(data.nextLevelLabel || data.nextLevel) + ') est en cours de création — reviens dans quelques instants.';
     hintEl.hidden = false;
@@ -5780,6 +5884,14 @@
       // score le temps de cet appel réseau.
       '<p class="qcm-final-score-hint" id="qcm-progressive-next-hint" hidden></p>' +
       '<div class="qcm-final-actions">' +
+      // Rempli/révélé par applyProgressiveNextLevelHint (demande du
+      // 09/09/2026) UNIQUEMENT quand le niveau suivant est prêt — jamais de
+      // libellé générique par défaut, jamais visible tant que son texte n'a
+      // pas été posé (évite un bouton vide qui clignote avant l'arrivée de
+      // la réponse level-status). Toujours AU-DESSUS de "Terminé" dans le
+      // flux (cf. .qcm-final-actions en colonne) : poursuivre reste possible,
+      // quitter aussi, jamais l'un sans l'autre.
+      '<button type="button" class="qcm-next-btn visible" id="qcm-progressive-continue-btn" hidden></button>' +
       '<button type="button" class="qcm-next-btn visible" id="qcm-finish-btn">Terminé</button>' +
       '</div>';
     maybeShowProgressiveNextLevelHint(precomputedLevelStatus);
@@ -7970,21 +8082,6 @@
     html += '</div>';
     body.innerHTML = html;
     wireMesQcmListInteractions(quizzes);
-    if (pendingOpenKnowledgeRowKey) {
-      var openKnowledgeKey = pendingOpenKnowledgeRowKey;
-      pendingOpenKnowledgeRowKey = null;
-      var openKnowledgeIndex = quizzes.findIndex(function (q) {
-        return getMesQcmRowKey(q) === openKnowledgeKey;
-      });
-      if (openKnowledgeIndex !== -1) {
-        var openKnowledgeButton = body.querySelector('[data-mesqcm-index="' + openKnowledgeIndex + '"]');
-        if (openKnowledgeButton) {
-          requestAnimationFrame(function () {
-            openMesQcmActionMenu(openKnowledgeButton, quizzes[openKnowledgeIndex], quizzes);
-          });
-        }
-      }
-    }
     if (pendingHighlightRowKey) {
       var highlightKey = pendingHighlightRowKey;
       pendingHighlightRowKey = null;
@@ -9249,9 +9346,15 @@
     // notion précis plutôt que la liste "Mes QCM".
     var params = new URLSearchParams(window.location.search);
     var requestedSlot = params.get('slot');
-    if (params.get('openKnowledge') === '1' && requestedSlot && requestedSlot.indexOf('notion:') === 0) {
-      pendingOpenKnowledgeRowKey = requestedSlot + '|' + (params.get('date') || '');
-      params.delete('openKnowledge');
+    // Arrivée depuis l'alerte globale « Apprentissage prêt » (showNotionQuizReadyAnnouncement,
+    // script.js) : rejoint "Mes apprentissages" et fait défiler + clignoter la ligne
+    // "En attente de réalisation" correspondante — demande du 09/09/2026, même
+    // comportement que partout ailleurs (adoptCatalogRecommendation, notification
+    // "connaissance ajoutée"...), plutôt que d'ouvrir directement la page de la
+    // connaissance (ancien paramètre openKnowledge=1, retiré).
+    if (params.get('highlight') === '1' && requestedSlot && requestedSlot.indexOf('notion:') === 0) {
+      pendingHighlightRowKey = requestedSlot + '|' + (params.get('date') || '');
+      params.delete('highlight');
       params.delete('slot');
       params.delete('date');
       params.delete('label');

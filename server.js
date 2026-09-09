@@ -2989,18 +2989,14 @@ const DEBATES_LIST_SELECT_COLUMNS = [
   "option_a",
   "option_b",
   "type",
-  // Colonne calculée PostgREST (cf. data/migration-debates-content-preview.sql,
-  // exécutée le 06/09/2026) : renvoie {preview, hasMore} au lieu du texte
-  // intégral — la carte fermée n'affiche que la 1ère phrase
-  // (getIndexContextClosedPreviewText, public/script.js), le reste (~600
-  // octets/débat en moyenne, mesuré) ne servait qu'au clic "en savoir plus"
-  // (buildIndexContextPreviewHtml), désormais chargé à la demande
-  // (fetchIndexContextFullText, réutilise GET /api/debates/:id déjà caché).
-  // Alias `content` conservé côté réponse JSON : seul son TYPE change (objet
-  // au lieu de chaîne), cf. buildIndexContextPreviewHtml pour la lecture. La
-  // page débat individuelle (DEBATE_DETAIL_SELECT_COLUMNS) garde `content`
-  // en clair, comportement inchangé.
-  "content:content_list_preview",
+  // Le texte intégral est volontairement inclus dans la liste. L'optimisation
+  // du 06/09/2026 (`content_list_preview`) imposait un GET détail au premier
+  // clic sur chaque carte : sur mobile, la carte s'ouvrait d'abord à la
+  // hauteur de l'aperçu puis rebondissait plusieurs secondes plus tard quand
+  // le vrai texte arrivait. Le gain mesuré (~600 octets/débat avant gzip) ne
+  // justifie pas ce double layout visible. Avec `content`, le premier
+  // dépliage est immédiat et identique aux suivants.
+  "content",
   "category",
   "source_url",
   "image_url",
@@ -16853,12 +16849,44 @@ async function buildCustomTopicQuiz(topic, id, rawLevel, userId) {
 // niveau pédagogique uniquement, jamais un master (ne jamais assouplir cette
 // partie du filtre : un QCM sans pedagogicalRank n'a par construction que la
 // taille fixe d'UN niveau, l'utiliser pour un autre serait tronqué/faux).
+// Scan complet des quiz sujets personnalisés (slot "notion:custom:%"),
+// questions COMPLÈTES incluses (dédup/thème ont besoin de questions[0],
+// findEquivalentGeneratedCustomTopic de tout le tableau pour comparer les
+// sujets déjà générés) — mutualisé avec GET /api/users/notion-quizzes/explore
+// (même besoin exact) via un cache TTL court, egress audit du 08/09/2026 :
+// ces deux appelants relisaient chacun ~150 lignes/6 Mo indépendamment, sans
+// aucun partage ni cache, à chaque appel.
+const CUSTOM_TOPIC_QUIZ_ROWS_CACHE_TTL_MS = 2 * 60 * 1000;
+let _customTopicQuizRowsCache = null;
+let _customTopicQuizRowsFreshUntil = 0;
+let _customTopicQuizRowsInFlight = null;
+
+async function getCustomTopicQuizRows() {
+  if (_customTopicQuizRowsCache && Date.now() < _customTopicQuizRowsFreshUntil) {
+    return _customTopicQuizRowsCache;
+  }
+  if (_customTopicQuizRowsInFlight) return _customTopicQuizRowsInFlight;
+
+  _customTopicQuizRowsInFlight = (async () => {
+    const { data, error } = await supabase
+      .from("daily_quiz")
+      .select("slot, quiz_date, questions, progressive_status")
+      .like("slot", "notion:custom:%");
+    if (error) throw new Error(error.message);
+    _customTopicQuizRowsCache = data || [];
+    _customTopicQuizRowsFreshUntil = Date.now() + CUSTOM_TOPIC_QUIZ_ROWS_CACHE_TTL_MS;
+    return _customTopicQuizRowsCache;
+  })();
+
+  try {
+    return await _customTopicQuizRowsInFlight;
+  } finally {
+    _customTopicQuizRowsInFlight = null;
+  }
+}
+
 async function findEquivalentGeneratedCustomTopic(topic, level) {
-  const { data: rows, error } = await supabase
-    .from("daily_quiz")
-    .select("slot, quiz_date, questions, progressive_status")
-    .like("slot", "notion:custom:%");
-  if (error) throw new Error(error.message);
+  const rows = await getCustomTopicQuizRows();
 
   const latestBySlot = new Map();
   for (const row of rows || []) {
@@ -17408,7 +17436,22 @@ async function fetchExcludedQuestionIds(voterKey) {
 // lib/spaced-repetition/scheduler-version.js) — conservé uniquement pour ne
 // pas changer la signature côté appelants (getDailyQuizQuestions, GET
 // /api/daily-quiz/status).
-async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) {
+// includeDisabledKnowledgeTargets (correctif du 08/09/2026, "je ne peux pas
+// décider de ne plus mémoriser en Ancrer") : false par défaut (GET /today,
+// qui décide quoi proposer comme NOUVELLES repasses — un knowledgeTarget tout
+// juste désactivé doit bien disparaître de cette liste). Les appelants qui
+// notent une réponse déjà en cours (POST /answer, POST /practice-answer, GET
+// /results) doivent au contraire passer true : sinon, désactiver "Mémoriser"
+// PUIS valider la question qu'on a encore sous les yeux la fait disparaître
+// de `due` avant même d'avoir pu être notée — POST /answer ne la retrouve
+// plus (questions.find introuvable), répond 404 "QCM introuvable.", et le
+// client échoue silencieusement (aucun message, cf. wireDifficultyButtons/
+// submitChoiceAnswer, boutons juste réactivés). Le clic "Non mémorisée" reste
+// pourtant censé être TOTALEMENT indépendant de la réponse en cours (cf.
+// wireExcludeButton côté client) — cette désactivation ne doit jamais
+// empêcher de noter la question affichée, seulement ne plus la reproposer
+// ENSUITE.
+async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey, { includeDisabledKnowledgeTargets = false } = {}) {
   const key = String(voterKey || "").trim();
   if (!key) return [];
 
@@ -17484,8 +17527,9 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
     // jamais persisté ici). subject_type/subject_source_id viennent de
     // memory_items (identité stable du Subject), pas de la question.
     const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${memoryItem.quiz_date}:${memoryItem.slot}`));
-    if (knowledgeTargetId && memoryItem.subject_type && memoryItem.subject_source_id
-        && disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(memoryItem.subject_type, memoryItem.subject_source_id, knowledgeTargetId))) {
+    const isDisabled = knowledgeTargetId && memoryItem.subject_type && memoryItem.subject_source_id
+      && disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(memoryItem.subject_type, memoryItem.subject_source_id, knowledgeTargetId));
+    if (isDisabled && !includeDisabledKnowledgeTargets) {
       continue;
     }
     due.push({
@@ -17495,14 +17539,16 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey) 
       // quelle formulation, helpLevel = combien d'aide) — jamais fusionné
       // dans son calcul, jamais lu par selectVariantIndex.
       helpLevel,
-      // knowledgeTargetId/memorizationEnabled (chantier "Mémoriser/Non
-      // mémorisée") : memorizationEnabled vaut toujours true ici PAR
-      // CONSTRUCTION — un item désactivé vient d'être exclu ci-dessus,
-      // jamais poussé dans `due`. knowledgeTargetId reste absent (undefined)
-      // quand ni le champ direct ni le fallback texte n'ont rien résolu
-      // (ancien master ambigu/sans curriculum) : le frontend n'affiche alors
-      // aucun contrôle plutôt que d'en brancher un sur un id inventé.
-      ...(knowledgeTargetId ? { knowledgeTargetId, memorizationEnabled: true } : {})
+      // knowledgeTargetId/memorizationEnabled : memorizationEnabled vaut
+      // toujours true pour l'appelant "liste" (un item désactivé vient d'être
+      // exclu ci-dessus, jamais poussé dans `due`) ; reflète le vrai état pour
+      // l'appelant "notation" (includeDisabledKnowledgeTargets:true), qui a
+      // justement besoin de retrouver un item tout juste désactivé.
+      // knowledgeTargetId reste absent (undefined) quand ni le champ direct
+      // ni le fallback texte n'ont rien résolu (ancien master ambigu/sans
+      // curriculum) : le frontend n'affiche alors aucun contrôle plutôt que
+      // d'en brancher un sur un id inventé.
+      ...(knowledgeTargetId ? { knowledgeTargetId, memorizationEnabled: !isDisabled } : {})
     });
   }
   return due;
@@ -18796,7 +18842,7 @@ async function resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot) {
 // repli strict sur le comportement V4.0 (niveau lu sur
 // `rawQuestions[0]?.level`), jamais une régression pour un appelant qui ne
 // fournit ni l'un ni l'autre.
-async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
+async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel, { includeDisabledKnowledgeTargets = false } = {}) {
   // "Renforcement des connaissances" : jamais de ligne daily_quiz à lire,
   // uniquement les repasses de répétition espacée dues aujourd'hui pour ce
   // visiteur (cf. fetchCultureGeneraleReviewInjectionForToday) — pas de
@@ -18807,7 +18853,7 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {
   if (slot === DAILY_QUIZ_REINFORCEMENT_SLOT) {
     const key = String(voterKey || "").trim();
     if (!key) return [];
-    return fetchCultureGeneraleReviewInjectionForToday(key, quizDate);
+    return fetchCultureGeneraleReviewInjectionForToday(key, quizDate, { includeDisabledKnowledgeTargets });
   }
   if (slot === DAILY_QUIZ_COMPREHENSION_SLOT) {
     const key = String(voterKey || "").trim();
@@ -19109,7 +19155,12 @@ app.get("/api/daily-quiz/results", async (req, res) => {
     // V4.1 : même repli que /today (cf. commentaire de requestedLevel dans
     // getDailyQuizQuestions).
     const requestedLevel = resolveNotionQuizLevel(req.query.level).level;
-    const questionsForSlot = await getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel);
+    // includeDisabledKnowledgeTargets:true (cf. commentaire de tête de
+    // fetchCultureGeneraleReviewInjectionForToday) : une réponse déjà
+    // enregistrée doit rester lisible ici même si sa connaissance a ensuite
+    // été désactivée ("Non mémorisée") — sinon elle disparaîtrait aussi de
+    // cette page de résultats.
+    const questionsForSlot = await getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel, { includeDisabledKnowledgeTargets: true });
     const questionsById = new Map(questionsForSlot.map((q) => [q.id, q]));
     if (!questionsById.size) return res.json({ date: quizDate, answers: [] });
 
@@ -21343,21 +21394,15 @@ app.get("/api/users/notion-quizzes/level-status", rateLimit("users", 60), async 
 // à revoir si le volume grossit significativement (cf. [[project_supabase_1000_rows]]).
 app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req, res) => {
   try {
-    // Phase 1 (léger, audit egress du 01/09/2026) : slot + quiz_date + SEULE
-    // la première question (questions->0, syntaxe de sélection JSON de
-    // PostgREST) — le dédoublonnage "une ligne par slot, la plus récente" et
-    // le libellé/searchTopic/thème affichés ne regardent jamais que cette
-    // première question (cf. getPrimaryNotionQuizTheme, toujours appelé sur
-    // questions?.[0] avant comme après ce correctif). Le tableau `questions`
-    // complet (jusqu'à 20 questions, fiche/placement dupliqués sur chacune)
-    // n'est plus rapatrié pour tout l'historique de régénérations ici — voir
-    // phase 2 plus bas, qui ne le relit que pour les lignes réellement
-    // affichées, pour le questionCount exact.
-    const { data: quizRows, error: quizError } = await supabase
-      .from("daily_quiz")
-      .select("quiz_date, slot, first:questions->0")
-      .like("slot", "notion:custom:%");
-    if (quizError) throw new Error(quizError.message);
+    // Scan mutualisé (cf. getCustomTopicQuizRows, cache TTL 2 min) : un seul
+    // aller-retour Supabase, partagé avec findEquivalentGeneratedCustomTopic,
+    // remplace les 2 requêtes indépendantes d'avant (léger questions->0 pour
+    // le dédoublonnage/libellé, puis relecture complète pour le questionCount
+    // exact — cf. audit egress du 01/09/2026 puis du 08/09/2026 : la 2e passe
+    // portait en pratique sur la quasi-totalité des lignes dès qu'aucune
+    // recherche n'était tapée, donc à peu près à chaque chargement initial de
+    // la page).
+    const quizRows = await getCustomTopicQuizRows();
 
     const { data: linkRows, error: linkError } = await supabase
       .from("user_notion_quizzes")
@@ -21376,11 +21421,18 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
     // ci-dessus reste toutes dates confondues pour ce même slot.
     const bySlot = new Map();
     for (const row of quizRows || []) {
-      const label = row.first?.sourceName;
+      const first = row.questions?.[0];
+      const label = first?.sourceName;
       if (!label) continue;
       const existing = bySlot.get(row.slot);
       if (!existing || row.quiz_date > existing.quizDate) {
-        bySlot.set(row.slot, { slot: row.slot, quizDate: row.quiz_date, label, first: row.first });
+        bySlot.set(row.slot, {
+          slot: row.slot,
+          quizDate: row.quiz_date,
+          label,
+          first,
+          questionCount: Array.isArray(row.questions) ? row.questions.length : 0
+        });
       }
     }
 
@@ -21397,35 +21449,11 @@ app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req,
       // thématique, la même que Ma mémoire") : getPrimaryNotionQuizTheme lit
       // sourcePlacement.category (ou repli sourceThemes), déjà la source
       // utilisée pour la galaxie de Ma mémoire (cf. GET /notion-quizzes).
-      theme: getPrimaryNotionQuizTheme(row.first)
+      theme: getPrimaryNotionQuizTheme(row.first),
+      questionCount: row.questionCount,
+      userCount: userCountBySlot.get(row.slot) || 0
     }));
     if (searchQuery) items = items.filter((item) => item.label.toLowerCase().includes(searchQuery));
-
-    // Phase 2 (audit egress du 01/09/2026) : questionCount exact nécessite le
-    // tableau complet — PostgREST n'expose pas jsonb_array_length() en
-    // select=, donc on ne peut pas l'obtenir sans lui — mais on ne le relit
-    // désormais que pour les lignes qui vont RÉELLEMENT être affichées (post
-    // dédoublonnage ET post recherche), jamais pour tout l'historique comme
-    // avant.
-    let questionCountBySlot = new Map();
-    if (items.length) {
-      const orFilter = items
-        .map((item) => `and(slot.eq.${item.slot},quiz_date.eq.${item.quizDate})`)
-        .join(",");
-      const { data: countRows, error: countError } = await supabase
-        .from("daily_quiz")
-        .select("slot, questions")
-        .or(orFilter);
-      if (countError) throw new Error(countError.message);
-      questionCountBySlot = new Map(
-        (countRows || []).map((row) => [row.slot, Array.isArray(row.questions) ? row.questions.length : 0])
-      );
-    }
-    items = items.map((item) => ({
-      ...item,
-      questionCount: questionCountBySlot.get(item.slot) || 0,
-      userCount: userCountBySlot.get(item.slot) || 0
-    }));
 
     // "Derniers apprentissages créés" (demande du 07/09/2026, section
     // affichée EN PLUS de la liste par thématique ci-dessous, jamais à sa
@@ -22697,7 +22725,7 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
     // depuis créé ce sujet) — jamais proposer "Créer" pour quelque chose qui
     // existe déjà. Une seule lecture bornée (même requête que
     // findEquivalentGeneratedCustomTopic), jamais une par proposition.
-    const existingTopics = await learnNextRepository.fetchGeneratedCustomTopics(supabase);
+    const existingTopics = learnNextRepository.fetchGeneratedCustomTopics(await getCustomTopicQuizRows());
     let resolved = learnNextAiFallback.resolveProposalsAgainstCatalog(proposals, existingTopics);
     if (resolved.some((p) => !p.isNew)) {
       recordAiUsage(supabase, { feature: "learn_next_ai_fallback_deduplicated", success: true });
@@ -25298,8 +25326,12 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     // Indépendantes l'une de l'autre : parallélisées plutôt qu'attendues en
     // séquence (questions quasi toujours servies depuis le cache mémoire,
     // donc en pratique un seul aller-retour Supabase réel ici, pas deux).
+    // includeDisabledKnowledgeTargets:true (correctif du 08/09/2026, cf.
+    // commentaire de tête de fetchCultureGeneraleReviewInjectionForToday) :
+    // noter la question affichée ne doit jamais dépendre de la préférence de
+    // mémorisation qu'on vient tout juste de changer dessus.
     const [questions, existingAnswerResult] = await Promise.all([
-      getDailyQuizQuestions(todayKey, slot, voterKey, requestedLevel),
+      getDailyQuizQuestions(todayKey, slot, voterKey, requestedLevel, { includeDisabledKnowledgeTargets: true }),
       supabase.from("daily_quiz_answers").select("option_index")
         .eq("quiz_date", todayKey).eq("voter_key", voterKey).eq("question_id", questionId).maybeSingle()
     ]);
@@ -25597,7 +25629,10 @@ app.post("/api/daily-quiz/practice-answer", rateLimit("daily-quiz-answer", 60), 
     // V4.1 : même repli que /today (cf. commentaire de requestedLevel dans
     // getDailyQuizQuestions).
     const requestedLevel = resolveNotionQuizLevel(req.body?.level).level;
-    const questions = await getDailyQuizQuestions(todayKey, slot, voterKey, requestedLevel);
+    // includeDisabledKnowledgeTargets:true : même raison que POST /answer
+    // ci-dessus, cf. commentaire de tête de
+    // fetchCultureGeneraleReviewInjectionForToday.
+    const questions = await getDailyQuizQuestions(todayKey, slot, voterKey, requestedLevel, { includeDisabledKnowledgeTargets: true });
     const question = questions.find((q) => q.id === questionId);
     if (!question) return res.status(404).json({ error: "QCM introuvable." });
 

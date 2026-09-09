@@ -2296,7 +2296,7 @@
   // ── Countdown ────────────────────────────────────────────────────────
   let countdownTickTimer = null;
 
-  async function initCountdown(debateId, progressSlotAttempt = 0) {
+  async function initCountdown(debateId, progressSlotAttempt = 0, forceLive = false) {
     if (countdownTickTimer) {
       clearTimeout(countdownTickTimer);
       countdownTickTimer = null;
@@ -2312,19 +2312,38 @@
     // scheduleDebateAiProgressInlineRender, avec ses propres tentatives différées).
     const progressSlot = document.getElementById('debate-ai-progress-slot');
     if (!slot && !progressSlot) return;
-    if (slot) slot.innerHTML = '';
-    if (progressSlot) progressSlot.innerHTML = '';
+    // Le vidage n'a lieu qu'une fois la réponse réseau en main (juste avant de réécrire,
+    // plus bas), jamais avant l'attente ci-dessous : le vider ici laissait le badge
+    // invisible pendant tout le temps de la requête (et à chaque nouvel appel, dont celui
+    // forceLive 300ms après le premier, cf. plus bas) — apparition/disparition/réapparition
+    // visible à chaque chargement de la page debate (constaté le 09/09/2026).
 
     try {
       // Le résumé léger est lancé dès le <head> de debate.html. Il suffit pour
       // afficher immédiatement le badge supérieur ; le rapport complet et le
       // calcul du compteur sous le barème continuent à charger séparément.
       const early = window.__mnoriaEarlyAnalysisFetch;
-      const earlyMatches = early && String(early.debateId || '') === String(debateId) && early.promise;
+      const earlyMatches = !forceLive && early && String(early.debateId || '') === String(debateId) && early.promise;
       const { r, json } = earlyMatches
         ? await early.promise
-        : await fetchStoredAnalysis(debateId);
+        : await fetchStoredAnalysis(debateId, forceLive ? { force: true } : undefined);
       if (!r.ok) return;
+
+      // Réponse exploitable en main : on peut maintenant réécrire sans laisser d'état vide
+      // visible entre-temps (le clear précédent, avant l'attente réseau ci-dessus, causait
+      // le clignotement — cf. commentaire en tête de fonction).
+      if (slot) slot.innerHTML = '';
+      if (progressSlot) progressSlot.innerHTML = '';
+
+      // Le résumé embarqué (embeddedSummary, généré côté serveur au moment du
+      // rendu de la page) peut être une version figée d'il y a plusieurs minutes
+      // ou heures : le service worker sert #/debate en cache-first à la navigation
+      // (cf. service-worker.js, navigationNetworkFirst) et rejoue alors le HTML
+      // (donc ce JSON embarqué) tel qu'il était lors de la mise en cache — avant
+      // même, par exemple, que l'analyse IA ait été programmée. Sans ce second
+      // passage en direct, le badge du haut restait alors durablement absent
+      // malgré un scheduledAt bien présent côté serveur (incident du 08/09/2026).
+      if (earlyMatches) setTimeout(() => initCountdown(debateId, 0, true), 300);
 
       const hasPending = (json.status === 'scheduled' || json.status === 'generating' || json.status === 'batch_pending') && !!json.scheduledAt;
       // Une régénération peut être programmée alors qu'un rapport précédent existe
