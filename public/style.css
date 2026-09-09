@@ -21322,6 +21322,15 @@ body.is-standalone.mnoria-mobile-cloud-viewport .mnoria-cloud-mode-switch {
   animation: mnoriaBubbleBreatheLight 3.5s ease-in-out infinite;
 }
 
+/* Anti-chauffe (09/09/2026) : en pause tant que l'onglet est caché (classe posée par script.js
+   sur <html> via visibilitychange) — aucun changement visuel une fois l'onglet revisible,
+   animation-play-state:paused reprend exactement où elle s'était arrêtée. Rien ne changeait de
+   toute façon à l'écran pendant que c'était caché ; ça évite juste de continuer à faire respirer
+   ~10-12 bulles pour rien en arrière-plan. */
+html.mnoria-tab-hidden .mnoria-tag-bubble {
+  animation-play-state: paused;
+}
+
 /* Anti-chauffe : la section cloud hors écran suspend les animations infinies
    des bulles (breathe + flash) et des badges tendance du cloud — classe posée
    par initMnoriaCloudAnimationPause (script.js). */

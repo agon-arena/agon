@@ -104,11 +104,6 @@
       resumedAt = Date.now();
       running = true;
     }
-    document.addEventListener("visibilitychange", function () { document.hidden ? pause() : resume(); });
-    window.addEventListener("blur", pause);
-    window.addEventListener("focus", resume);
-    window.addEventListener("pagehide", pause);
-
     var expired = false;
     var visible = true;
     var blinkActive = false;
@@ -134,7 +129,27 @@
       if (running) persistElapsed();
     }
     tick();
-    window.setInterval(tick, 1000);
+    // Anti-chauffe (09/09/2026) : coupé pendant que l'onglet est caché plutôt que laissé tourner
+    // en fond — rien ne change à l'écran puisque l'écran n'est justement pas visible (running
+    // vaut déjà false pendant ce temps, ce tick ne faisait qu'écrire dans le DOM/localStorage la
+    // même valeur figée toutes les secondes, pour rien). tick() immédiat à la reprise pour ne
+    // jamais laisser l'affichage stale, comme avant.
+    var tickIntervalId = window.setInterval(tick, 1000);
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        pause();
+        if (tickIntervalId) { window.clearInterval(tickIntervalId); tickIntervalId = null; }
+      } else {
+        resume();
+        if (!tickIntervalId) {
+          tick();
+          tickIntervalId = window.setInterval(tick, 1000);
+        }
+      }
+    });
+    window.addEventListener("blur", pause);
+    window.addEventListener("focus", resume);
+    window.addEventListener("pagehide", pause);
 
     if ("IntersectionObserver" in window) {
       new IntersectionObserver(function (entries) {

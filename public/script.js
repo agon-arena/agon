@@ -58,6 +58,18 @@ const _mq768 = typeof window !== "undefined" && window.matchMedia ? window.match
 let _isMobile768 = _mq768 ? _mq768.matches : false;
 if (_mq768) _mq768.addEventListener("change", (e) => { _isMobile768 = e.matches; });
 
+// Anti-chauffe (09/09/2026) : marqueur global posé/retiré sur <html> quand l'onglet est caché,
+// pour que le CSS puisse mettre en pause les animations infinies (cf. .mnoria-tag-bubble, style.css)
+// pendant que personne ne peut de toute façon les voir — aucun changement visuel une fois l'onglet
+// revisible (animation-play-state:paused reprend exactement où elle s'était arrêtée), juste moins
+// de travail GPU/CPU fait pour rien en arrière-plan.
+if (typeof document !== "undefined") {
+  document.documentElement.classList.toggle("mnoria-tab-hidden", document.hidden);
+  document.addEventListener("visibilitychange", () => {
+    document.documentElement.classList.toggle("mnoria-tab-hidden", document.hidden);
+  });
+}
+
 const COLOR_A          = '#516776';
 const COLOR_A_BG       = '#a0c6d4';
 const COLOR_A_BORDER   = '#516776';
@@ -1427,7 +1439,18 @@ if (isStandaloneMode()) {
   // les autres pages, ce réveil CPU chaque seconde empêchait l'idle profond
   // d'iOS et contribuait à la chauffe.
   if (document.body && document.body.classList.contains("page-debate")) {
-    setInterval(sync, 1000);
+    // Anti-chauffe (09/09/2026) : coupé pendant que l'onglet est caché — rien ne change à
+    // l'écran (invisible de toute façon), sync() immédiat à la reprise pour ne jamais laisser
+    // --mnoria-dock-button-bottom stale au retour.
+    let dockSyncIntervalId = setInterval(sync, 1000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        if (dockSyncIntervalId) { clearInterval(dockSyncIntervalId); dockSyncIntervalId = null; }
+      } else if (!dockSyncIntervalId) {
+        sync();
+        dockSyncIntervalId = setInterval(sync, 1000);
+      }
+    });
   }
 })();
 
@@ -1997,7 +2020,22 @@ function renderMnoriaTimeWidget() {
     if (running) persistElapsed();
   }
   tick();
-  setInterval(tick, 1000);
+  // Anti-chauffe (09/09/2026) : coupé pendant que l'onglet est caché plutôt que laissé tourner
+  // en fond — rien ne change à l'écran puisque l'écran n'est justement pas visible (running vaut
+  // déjà false pendant ce temps, ce tick ne faisait qu'écrire dans le DOM/localStorage la même
+  // valeur figée toutes les secondes, pour rien). tick() immédiat à la reprise pour ne jamais
+  // laisser l'affichage stale, comme avant. Même principe que header-score-widget.js (widget
+  // universel, seul réellement monté sur la quasi-totalité des pages — ce repli ne tourne que
+  // si ce dernier est absent), gardé synchronisé ici pour ne jamais diverger.
+  let timeWidgetTickIntervalId = setInterval(tick, 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (timeWidgetTickIntervalId) { clearInterval(timeWidgetTickIntervalId); timeWidgetTickIntervalId = null; }
+    } else if (!timeWidgetTickIntervalId) {
+      tick();
+      timeWidgetTickIntervalId = setInterval(tick, 1000);
+    }
+  });
 
   if ("IntersectionObserver" in window) {
     new IntersectionObserver((entries) => {
@@ -17291,6 +17329,18 @@ async function adminBroadcastDaily() {
   if (btn) { btn.disabled = true; }
   try {
     const res = await fetchJSON(API + "/admin/push/broadcast-daily", { method: "POST", headers: { "x-admin-token": getAdminToken() } });
+    // eclairages_not_ready/already_broadcast (09/09/2026, "fiabilise la route") : la route ne
+    // renvoie plus d'erreur quand ce n'est simplement pas encore prêt — un scheduler serveur
+    // reprend automatiquement toutes les 10 min, inutile de recliquer sur ce bouton.
+    if (res.skipped && res.reason === "eclairages_not_ready") {
+      const missing = (res.eclairages?.sections || []).filter(s => s.status !== "published").map(s => s.name);
+      alert("Les rubriques Éclairages ne sont pas encore toutes publiées" + (missing.length ? " (" + missing.join(", ") + ")" : "") + " — le push partira automatiquement dès que ce sera fait, inutile de recliquer.");
+      return;
+    }
+    if (res.skipped && res.reason === "already_broadcast") {
+      alert("La notification de cette vague a déjà été envoyée aujourd'hui.");
+      return;
+    }
     const sent = (res.results || []).filter(r => r.status === "sent").length;
     showReplacementSuccessMessage(
       "Push envoyé",

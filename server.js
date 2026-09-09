@@ -6995,58 +6995,110 @@ app.post("/api/admin/push/process-pending", requireAdmin, async (req, res) => {
   }
 });
 
+// trySendDailyPushBroadcast (chantier "fiabiliser le push quotidien", 09/09/2026) : remplace
+// l'ancien appel à ensureDailyEclairagesPublished (supprimé) DANS la requête HTTP — celui-ci
+// attendait jusqu'à 5 minutes en DÉCLENCHANT lui-même les générations manquantes (redondant :
+// tryRunDailySchedulers, plus bas, s'en charge déjà indépendamment toutes les 20 min), et
+// levait une exception dure si UNE SEULE des 7 rubriques échouait — un point de blocage unique
+// qui a empêché tout envoi jusqu'ici (vérifié le 09/09/2026 : app_config.last_push_broadcast_daily
+// n'a JAMAIS été écrit, donc ce push n'est jamais parti une seule fois). Une requête HTTP qui
+// bloque 5 minutes se fait de toute façon presque toujours tuer par un timeout de
+// plateforme/proxy avant d'aboutir. Ici, on ne fait qu'un CONSTAT non bloquant
+// (getDailyEclairagesPublicationStatus, déjà utilisé ailleurs,
+// jamais d'exception, résultat mis en cache) : "pas encore prêt" n'est plus une erreur mais un
+// état normal, à re-vérifier plus tard — la génération elle-même reste du ressort des
+// schedulers dédiés à chaque rubrique, jamais de cette fonction.
+async function trySendDailyPushBroadcast() {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    return { sent: false, reason: "vapid_missing" };
+  }
+
+  const eclairages = await getDailyEclairagesPublicationStatus(new Date());
+  if (!eclairages.available) {
+    return { sent: false, reason: "eclairages_not_ready", eclairages };
+  }
+
+  // Les publications se font par vagues (~8h et ~16h heure de Paris) : avant 13h on suppose
+  // la vague du matin, sinon celle du soir. Seuil au milieu des deux vagues, avec un peu de
+  // marge si l'admin clique/le scheduler passe un peu en retard sur la vague du matin.
+  const wave = parisHour() < 13 ? "morning" : "evening";
+  const body = "Les actualités du jour sont disponibles.";
+
+  // Idempotence (demande du 01/09/2026, "je reçois deux fois la même notification") : cette
+  // fonction est maintenant appelée à la fois par un scheduler périodique (potentiellement
+  // plusieurs passages avant que le marqueur ne soit lu à jour) et par le bouton admin manuel —
+  // sans garantie qu'ils ne se chevauchent jamais. Persisté dans app_config (pas en mémoire)
+  // pour survivre à un redémarrage serveur entre deux passages.
+  const todayKey = parisDateKey();
+  const { data: lastBroadcastRow, error: lastBroadcastError } = await supabase
+    .from("app_config").select("value").eq("key", "last_push_broadcast_daily").maybeSingle();
+  if (lastBroadcastError) throw lastBroadcastError;
+  const lastBroadcast = lastBroadcastRow?.value || null;
+  if (lastBroadcast && lastBroadcast.dateKey === todayKey && lastBroadcast.wave === wave) {
+    return { sent: false, reason: "already_broadcast", wave, body, eclairages };
+  }
+  await supabase.from("app_config")
+    .upsert({ key: "last_push_broadcast_daily", value: { dateKey: todayKey, wave }, updated_at: nowIso() });
+
+  const result = await broadcastPush(supabase, {
+    publicKey: VAPID_PUBLIC_KEY,
+    privateKey: VAPID_PRIVATE_KEY,
+    subject: VAPID_SUBJECT
+  }, {
+    title: "L'arène des idées",
+    body,
+    url: "/",
+    icon: "/mnoria-icon-192.png",
+    badge: "/mnoria-icon-192.png"
+  });
+
+  return { sent: true, wave, body, eclairages, ...result };
+}
+
+// Scheduler (remplace la dépendance à un pipeline externe qui n'a, en pratique, jamais réussi
+// à déclencher ce push — cf. commentaire de trySendDailyPushBroadcast) : revérifie l'état
+// toutes les 10 minutes, envoie dès que les 7 rubriques Éclairages sont publiées ET que la
+// vague courante n'a pas déjà été annoncée. Coût négligeable (lecture en cache la plupart du
+// temps) même en pur no-op les ~23h30 où rien n'est prêt.
+const DAILY_PUSH_BROADCAST_CHECK_INTERVAL_MS = 10 * 60 * 1000;
+const DAILY_PUSH_BROADCAST_SCHEDULER_ENABLED = isRenderScopedTaskEnabled("MNORIA_DAILY_PUSH_SCHEDULER");
+
+async function checkDailyPushBroadcastReady() {
+  const outcome = await trySendDailyPushBroadcast();
+  if (outcome.sent) {
+    const sentCount = (outcome.results || []).filter((r) => r.status === "sent").length;
+    console.log(`[daily-push-broadcast] vague ${outcome.wave} : envoyé à ${sentCount}/${outcome.total ?? "?"} abonné(s).`);
+  }
+}
+
+if (DAILY_PUSH_BROADCAST_SCHEDULER_ENABLED) {
+  setInterval(() => {
+    checkDailyPushBroadcastReady().catch((e) => console.error("[daily-push-broadcast] Erreur:", e.message));
+  }, DAILY_PUSH_BROADCAST_CHECK_INTERVAL_MS).unref();
+  checkDailyPushBroadcastReady().catch((e) => console.error("[daily-push-broadcast] Erreur:", e.message));
+} else {
+  console.log("[daily-push-broadcast] scheduler désactivé hors Render (forcer avec MNORIA_DAILY_PUSH_SCHEDULER=on).");
+}
+
 app.post("/api/admin/push/broadcast-daily", requireAdmin, async (req, res) => {
   try {
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    const outcome = await trySendDailyPushBroadcast();
+    if (!outcome.sent && outcome.reason === "vapid_missing") {
       return res.status(503).json({ error: "Configuration VAPID incomplète." });
     }
-
-    // Le pipeline appelle cet endpoint à la fin de sa vague de publication.
-    // Le push ne doit toutefois annoncer l'ouverture des arènes qu'une fois
-    // les sept rubriques Éclairages effectivement publiées. Cette attente
-    // déclenche aussi les générations manquantes, dans leur ordre de priorité.
-    const eclairages = await ensureDailyEclairagesPublished(new Date());
-
-    // Les publications se font par vagues (~8h et ~16h heure de Paris, cf.
-    // tryGenerateDailyQuiz) : avant 13h on suppose la vague du matin, sinon
-    // celle du soir. Seuil au milieu des deux vagues, avec un peu de marge
-    // si l'admin clique un peu en retard sur la vague du matin.
-    const isMorningWave = parisHour() < 13;
-    const wave = isMorningWave ? "morning" : "evening";
-    const body = "Les actualités du jour sont disponibles.";
-
-    // Idempotence (demande du 01/09/2026, "je reçois deux fois la même notification") :
-    // ce endpoint est appelé par le pipeline externe à la fin de sa vague de publication,
-    // sans garantie qu'il ne soit jamais rappelé deux fois pour la même vague (retry sur
-    // timeout, double déclenchement...). Persisté dans app_config (pas en mémoire) pour
-    // survivre à un redémarrage serveur entre les deux appels.
-    const todayKey = parisDateKey();
-    const { data: lastBroadcastRow, error: lastBroadcastError } = await supabase
-      .from("app_config").select("value").eq("key", "last_push_broadcast_daily").maybeSingle();
-    if (lastBroadcastError) throw lastBroadcastError;
-    const lastBroadcast = lastBroadcastRow?.value || null;
-    if (lastBroadcast && lastBroadcast.dateKey === todayKey && lastBroadcast.wave === wave) {
-      return res.json({ success: true, skipped: true, reason: "already_broadcast", wave, body, eclairages });
+    if (!outcome.sent && outcome.reason === "eclairages_not_ready") {
+      // Ni une erreur ni un envoi : état normal en cours de journée, avant que les 7
+      // rubriques ne soient publiées — le scheduler ci-dessus reprendra automatiquement dès
+      // que ce sera le cas, inutile de recliquer.
+      return res.json({ success: true, skipped: true, ...outcome });
     }
-    await supabase.from("app_config")
-      .upsert({ key: "last_push_broadcast_daily", value: { dateKey: todayKey, wave }, updated_at: nowIso() });
-
-    const result = await broadcastPush(supabase, {
-      publicKey: VAPID_PUBLIC_KEY,
-      privateKey: VAPID_PRIVATE_KEY,
-      subject: VAPID_SUBJECT
-    }, {
-      title: "L'arène des idées",
-      body,
-      url: "/",
-      icon: "/mnoria-icon-192.png",
-      badge: "/mnoria-icon-192.png"
-    });
-
-    return res.json({ success: true, wave, body, eclairages, ...result });
+    if (!outcome.sent && outcome.reason === "already_broadcast") {
+      return res.json({ success: true, skipped: true, ...outcome });
+    }
+    return res.json({ success: true, ...outcome });
   } catch (error) {
     console.error(error);
-    return sendServerError(res, "Éclairages non publiés : notification push non envoyée.");
+    return sendServerError(res, "Erreur lors de l'envoi de la notification push.");
   }
 });
 
@@ -18629,38 +18681,6 @@ const DAILY_ECLAIRAGES_PUBLICATION_SERVICES = [
   ["oeuvre_art_du_jour", oeuvreArtDuJourService],
   ["latin_du_jour", latinDuJourService]
 ];
-const DAILY_ECLAIRAGES_PUSH_WAIT_ATTEMPTS = 100;
-const DAILY_ECLAIRAGES_PUSH_WAIT_MS = 3000;
-
-async function ensureDailyEclairagesPublished(date = new Date()) {
-  const dateKey = parisDateKey(date);
-  const published = [];
-
-  for (const [name, service] of DAILY_ECLAIRAGES_PUBLICATION_SERVICES) {
-    let result = await service.generateIfNeeded(date);
-
-    // Un scheduler peut avoir réservé la rubrique quelques secondes avant
-    // l'appel du pipeline. On attend sa fin au lieu d'envoyer le push trop tôt
-    // ou de lancer une deuxième génération concurrente.
-    for (
-      let attempt = 0;
-      result?.status === "generating" && attempt < DAILY_ECLAIRAGES_PUSH_WAIT_ATTEMPTS;
-      attempt++
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, DAILY_ECLAIRAGES_PUSH_WAIT_MS));
-      result = await service.getByDate(dateKey);
-    }
-
-    if (result?.status !== "published") {
-      const reason = String(result?.error || result?.reason || result?.status || "statut inconnu");
-      throw new Error(`${name} non publié (${reason})`);
-    }
-    published.push(name);
-  }
-
-  return { date: dateKey, published };
-}
-
 // Mémoïsé par dateKey (audit egress du 26/08/2026) : /api/eclairages/status est pollée
 // toutes les 60s par CHAQUE visiteur qui laisse l'accueil ouvert (cf. refreshEclairagesAvailability
 // dans index.html), sans jamais s'arrêter tant que les 7 rubriques ne sont pas publiées — donc
