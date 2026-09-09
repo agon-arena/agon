@@ -224,7 +224,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260909-generate-confirm-modal">
+  <link rel="stylesheet" href="/style.min.css?v=20260909-startup-scroll-unlock-fade">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -579,9 +579,16 @@
       pointer-events: none;
     }
     /* cf. même règle et même commentaire dans style.css ("Le loader est fixed et opaque
-       mais ne bloquait jusqu'ici aucun scroll..."), à garder strictement cohérente. */
-    html.mnoria-startup-active,
-    html.mnoria-startup-active body {
+       mais ne bloquait jusqu'ici aucun scroll..."), à garder strictement cohérente.
+       :has(...:not(.is-hiding)) plutôt que simplement .mnoria-startup-active (demande du
+       09/09/2026, "je n'arrive plus à scroller... juste après le refresh") : tryHide()
+       (script.js) ne retire mnoria-startup-active que 500ms APRÈS avoir lancé le fondu de
+       sortie du loader (délai volontaire, sans rapport avec le scroll — cf. son propre
+       commentaire sur un souci de rendu WebKit) — le scroll restait donc verrouillé tout ce
+       temps alors que le loader était déjà quasi invisible. Ce sélecteur relâche le scroll
+       dès l'ajout de .is-hiding, sans toucher à ce délai ni au code JS. */
+    html.mnoria-startup-active:has(.mnoria-startup-loader:not(.is-hiding)),
+    html.mnoria-startup-active:has(.mnoria-startup-loader:not(.is-hiding)) body {
       overflow: hidden !important;
     }
     html.mnoria-skip-startup-once .mnoria-startup-loader {
@@ -2015,7 +2022,12 @@ window.addEventListener("pageshow", function() {
     var raw = sessionStorage.getItem("mnoriaMemoireCloudSize:" + location.pathname);
     if (!raw) return;
     var s = JSON.parse(raw);
-    if (!s || s.w !== window.innerWidth || typeof s.h !== "number") return;
+    // s.vh (demande du 09/09/2026, "le cadre réapparaît trop court après un refresh") : la
+    // hauteur mise en cache dépend de window.innerHeight au moment du calcul (cf.
+    // syncCloudSectionHeight, script.js) — sans revérifier aussi cette dimension, une
+    // hauteur disponible différente (redimensionnement, plein écran, zoom...) laissait
+    // réappliquer une valeur devenue fausse alors que seule la largeur avait été comparée.
+    if (!s || s.w !== window.innerWidth || s.vh !== window.innerHeight || typeof s.h !== "number") return;
     var cloud = document.getElementById("mnoria-tag-trends-cloud");
     if (cloud) {
       cloud.style.flex = "0 0 auto";
@@ -2088,7 +2100,7 @@ window.addEventListener("pageshow", function() {
     tabindex="-1"
     style="pointer-events:none;cursor:default"
   >
-    <i class="fa-solid fa-bars-staggered"></i>
+    <i class="fa-solid fa-user"></i>
     <span>Mon fil</span>
   </button>
 
@@ -2382,7 +2394,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260909-home-return-loader-dvh" defer></script>
+<script src="/script.min.js?v=20260909-mobile-frame-cache-validate" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

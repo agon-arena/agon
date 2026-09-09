@@ -69,15 +69,15 @@
     // Scores et contributions (/contributions) a le même résultat mais via son propre template
     // codé en dur (cf. views/mon-univers.html), pas ce script. Les autres pages qui chargent ce
     // même script gardent "Explorer"/"Accueil" inchangés.
-    var usesAccueilFirst = pathname === '/eclairages' || pathname === '/meilleures-idees' || pathname === '/historical-events-test';
-    var usesStaticMonFile = pathname === '/eclairages' || pathname === '/meilleures-idees' || pathname === '/historical-events-test';
+    var usesAccueilFirst = pathname === '/eclairages' || pathname === '/meilleures-idees' || pathname === '/historical-events-test' || pathname === '/about' || pathname === '/contact';
+    var usesStaticMonFile = pathname === '/eclairages' || pathname === '/meilleures-idees' || pathname === '/historical-events-test' || pathname === '/about' || pathname === '/contact';
     if (usesAccueilFirst) {
       nav.appendChild(makeItem('fa-solid fa-house', 'Accueil', goHome));
     } else {
       nav.appendChild(makeItem('fa-regular fa-compass', 'Explorer', goHome));
     }
     if (usesStaticMonFile) {
-      nav.appendChild(makeStaticItem('fa-solid fa-user', 'Mon file'));
+      nav.appendChild(makeStaticItem('fa-solid fa-user', 'Mon fil'));
     } else {
       nav.appendChild(makeItem('fa-solid fa-plus', 'Ouvrir', function () { openPage('/create'); }));
     }

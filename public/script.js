@@ -20813,7 +20813,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260909-root-overview-fit').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260909-societe-education-split').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
@@ -36737,7 +36737,7 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
   const sortBar = document.querySelector('.index-explorer-topbar');
   const firstRowForSort = document.querySelector('#debates-list .theme-row-section');
   if (isSortBarSymmetricMode && sortBar && firstRowForSort) {
-    const MNORIA_SORT_BTN_GAP = 24;
+    const MNORIA_SORT_BTN_GAP = 36;
     const MNORIA_SORT_BTN_BOTTOM_GAP = 21;
     // En Actualités, "Ce jour dans l'Histoire / Éclairages" (.home-secondary-actions)
     // est visible entre le nuage et ce bouton (masqué en Ma mémoire/Communauté,
@@ -38088,7 +38088,18 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // position naturelle de la section : seule la revérification de sécurité plus bas (safe-areas
   // en standalone) peut encore invalider ce raccourci — demande du 08/09/2026, "pas besoin de
   // recalculer" au retour sur la page.
-  var cached = recheckToken === MOBILE_CLOUD_FRAME_RECHECK ? null : readMnoriaFrameCache('mnoriaMobileFrame');
+  // headerBottom/bottomBarTop en plus de la signature écran (demande du 09/09/2026, "le cadre
+  // réapparaît trop court au refresh") : la signature (largeur x hauteur x standalone) ne
+  // change jamais d'un refresh à l'autre sur le même écran, donc une valeur mise en cache un
+  // jour où le bandeau haut/bas n'était pas encore stabilisé (police pas chargée, safe-area pas
+  // résolue...) restait "de confiance" indéfiniment — jamais réellement revérifiée contre les
+  // mesures réelles. Comparées avec la même tolérance que la revérification 400ms plus bas.
+  var rawCached = recheckToken === MOBILE_CLOUD_FRAME_RECHECK ? null : readMnoriaFrameCache('mnoriaMobileFrame');
+  var cached = rawCached
+    && typeof rawCached.headerBottom === 'number' && typeof rawCached.bottomBarTop === 'number'
+    && Math.abs(rawCached.headerBottom - headerBottom) <= 1 && Math.abs(rawCached.bottomBarTop - bottomBarTop) <= 1
+    ? rawCached
+    : null;
   var marginTopToApply, boxHeight;
 
   if (cached && typeof cached.marginTop === 'number' && typeof cached.boxHeight === 'number') {
@@ -38155,7 +38166,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // chaque frame lorsque la géométrie ne change pas.
   observeMobileCloudModeSwitchAlignment(cloud);
   _mobileCloudFrameLocked = true;
-  writeMnoriaFrameCache('mnoriaMobileFrame', { marginTop: marginTopToApply, boxHeight: boxHeight });
+  writeMnoriaFrameCache('mnoriaMobileFrame', { marginTop: marginTopToApply, boxHeight: boxHeight, headerBottom: headerBottom, bottomBarTop: bottomBarTop });
 
   // En standalone, env(safe-area-inset-top) ET env(safe-area-inset-bottom) (bandeaux haut et
   // bas, cf. style.css body.is-standalone.page-home-mobile .topbar / .home-bottom-nav) peuvent
@@ -38278,8 +38289,16 @@ function syncCloudSectionHeight(recomputeBase) {
   // y a encore déplacement du fond quand je rafraîchis"). Le script inline restaure cette valeur
   // avant même le premier rendu au prochain chargement, script.min.js n'a plus qu'à confirmer.
   try {
+    // vh (demande du 09/09/2026, "le cadre réapparaît trop court après un refresh") : la
+    // validité du cache ne vérifiait jusqu'ici que la largeur — or _cloudSectionBaseHeight
+    // dépend directement de window.innerHeight (calc juste au-dessus, "window.innerHeight -
+    // docTop - bottomBarH"). Un changement de hauteur disponible (redimensionnement,
+    // basculement plein écran, barre d'outils du navigateur, zoom...) sans changement de
+    // largeur laissait donc l'ancienne hauteur, désormais fausse, être réappliquée telle
+    // quelle au rafraîchissement suivant.
     sessionStorage.setItem('mnoriaMemoireCloudSize:' + location.pathname, JSON.stringify({
       w: window.innerWidth,
+      vh: window.innerHeight,
       h: _cloudSectionBaseHeight
     }));
   } catch (e) {}

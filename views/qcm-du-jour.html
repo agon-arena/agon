@@ -3872,6 +3872,19 @@
     </div>
   </div>
 </div>
+<script>
+  // Corrige AVANT la première peinture ce que applyPageArrivalLoadingVisuals()
+  // (script.js, chargé en defer donc toujours après) corrigerait de toute façon
+  // trop tard (demande du 09/09/2026, "petit saut furtif au niveau du message
+  // chargement en cours") : la classe -learning ci-dessus suppose une vraie
+  // navigation plein écran (window.self === window.top), mais l'ouverture la
+  // plus courante de cette page est en iframe modale depuis l'accueil — le
+  // retrait tardif de la classe changeait la taille du texte (15px → 16px) et
+  // la position du voile juste après le premier affichage.
+  if (window.self !== window.top) {
+    document.getElementById('page-arrival-loading-overlay')?.classList.remove('page-arrival-loading-overlay-learning');
+  }
+</script>
 <header class="topbar topbar--mnoria-uniform">
   <div class="container topbar-inner topbar-home">
     <div class="home-brand-block">
@@ -4287,6 +4300,24 @@
   // le popup "Explorer les apprentissages disponibles" pour ne pas proposer
   // d'adopter un sujet déjà présent dans la liste personnelle du visiteur.
   var currentMesQcmQuizzes = [];
+
+  // Cache court de GET /api/users/notion-quizzes (demande du 09/09/2026, audit egress
+  // "la page Apprentissage met du temps à apparaître") : loadMesQcm() (cf. plus bas)
+  // est appelée à CHAQUE retour sur "Découvrir" (bouton retour après une session de
+  // QCM, onglet Découvrir, "Terminé"...) — la route est lourde côté serveur (5+
+  // lectures Supabase séquentielles, ~1,1s), et dans l'écrasante majorité de ces
+  // retours rien n'a changé depuis le dernier chargement. Un simple retour peut donc
+  // désormais servir depuis ce cache (loadMesQcm() sans argument) ; les points qui
+  // AJOUTENT/MODIFIENT réellement un item (adopter, éditer les questions, accepter une
+  // préconisation Découvrir) appellent loadMesQcm(true) pour forcer une lecture
+  // fraîche — jamais l'inverse : mieux vaut une lecture Supabase de trop après une
+  // vraie mutation qu'une liste visiblement obsolète. removeMesQcmItems (suppression,
+  // qui ne passe jamais par loadMesQcm) invalide ce cache explicitement lui aussi.
+  var mesQcmListCache = null; // { key: voterKey, data: {quizzes:[...]}, fetchedAt: timestamp }
+  var MES_QCM_LIST_CACHE_TTL_MS = 45 * 1000;
+  function invalidateMesQcmListCache() {
+    mesQcmListCache = null;
+  }
   // Slot|date de l'apprentissage à faire défiler jusqu'à "En attente de
   // réalisation" puis à faire clignoter, une fois la liste rechargée (cf.
   // adoptCatalogRecommendation, consommé et remis à null dans
@@ -7045,7 +7076,7 @@
           .then(function (data) {
             if (!data.ok) { itemBtn.disabled = false; return; }
             closeMesQcmExploreModal();
-            loadMesQcm();
+            loadMesQcm(true);
           })
           .catch(function () { itemBtn.disabled = false; });
       });
@@ -7436,7 +7467,7 @@
         // Scroll + clignotement une fois la liste rechargée (cf.
         // scrollToAndBlinkMesQcmRow, demande du 30/08/2026).
         pendingHighlightRowKey = resolvedSlot + '|' + resolvedQuizDate;
-        loadMesQcm();
+        loadMesQcm(true);
       })
       .catch(function () {
         // Best-effort strict (même esprit que le reste de cette section,
@@ -7673,8 +7704,11 @@
 
   // Pas un créneau à charger (cf. isCategoryAvailable) : liste les QCM que ce
   // visiteur a choisi de mémoriser (cf. server.js GET /api/users/notion-quizzes),
-  // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot.
-  function loadMesQcm() {
+  // un clic sur l'un d'eux ouvre le vrai QCM via loadSlot. forceRefresh (demande du
+  // 09/09/2026, cf. mesQcmListCache ci-dessus) : true UNIQUEMENT depuis un appelant
+  // qui vient de créer/modifier un item (sinon un simple retour sur Découvrir sert
+  // depuis le cache s'il est encore frais).
+  function loadMesQcm(forceRefresh) {
     if (!iframeReadySignaled) iframeReadyDeferredForOverview = true;
     discoverContentReady = false;
     document.body.classList.add('qcm-discover-overview');
@@ -7706,8 +7740,17 @@
     }
     renderMessage('Chargement de tes QCM…');
     var myGaugeToken = ++loadGaugeToken;
-    var quizzesRequest = fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
-      .then(function (res) { return res.json(); });
+    var cachedQuizzesEntry = mesQcmListCache && mesQcmListCache.key === voterKey && (Date.now() - mesQcmListCache.fetchedAt) <= MES_QCM_LIST_CACHE_TTL_MS
+      ? mesQcmListCache
+      : null;
+    var quizzesRequest = (!forceRefresh && cachedQuizzesEntry)
+      ? Promise.resolve(cachedQuizzesEntry.data)
+      : fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            mesQcmListCache = { key: voterKey, data: data, fetchedAt: Date.now() };
+            return data;
+          });
     var gaugeRequest = fetchLoadGaugeData();
     // Les préconisations se chargent indépendamment : leur sablier reste
     // visible sans retenir la liste des apprentissages ni la jauge, et
@@ -8331,6 +8374,11 @@
             if (index !== -1) quizzes.splice(index, 1);
           });
           if (anyRemoved) {
+            // Cette suppression ne repasse jamais par loadMesQcm() (mutation locale
+            // directe de `quizzes`, cf. commentaire de tête de la fonction) : le cache
+            // court-circuiterait sinon un futur retour sur Découvrir avec les items
+            // pourtant déjà supprimés encore dedans.
+            invalidateMesQcmListCache();
             renderMesQcmList(quizzes);
             updateMesAcquisAvailability(quizzes);
           } else {
@@ -8673,7 +8721,7 @@
           pendingHighlightRowKey = result.slot + '|' + result.quizDate;
           var closeBtn = overlay.querySelector('.qcm-fiche-close');
           if (closeBtn) closeBtn.click();
-          loadMesQcm();
+          loadMesQcm(true);
         })
         .catch(function (error) {
           showEditError(error.message || 'Erreur réseau. Réessaie dans quelques instants.');
@@ -9382,7 +9430,7 @@
     <i class="fa-solid fa-house" aria-hidden="true"></i><span>Accueil</span>
   </a>
   <button type="button" class="home-bottom-nav-item" aria-label="Mon fil" aria-disabled="true" tabindex="-1" style="pointer-events:none;cursor:default">
-    <i class="fa-solid fa-bars-staggered" aria-hidden="true"></i><span>Mon fil</span>
+    <i class="fa-solid fa-user" aria-hidden="true"></i><span>Mon fil</span>
   </button>
   <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
     <i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>Actualiser</span>

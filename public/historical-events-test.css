@@ -666,54 +666,6 @@ html {
   }
 }
 
-/* Dégradé + "suite ↓" en bas de page tant que du contenu dépasse en dessous
-   (ex. un bloc catégorie déplié) — même principe que .page-scroll-fade-hint
-   dans style.css (cf. attachPageScrollFadeHint), dupliqué ici car cette page
-   ne charge pas script.js/style.css (fichier isolé, cf. en-tête du fichier). */
-.het-scroll-fade-hint {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 40px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 6px;
-  background: linear-gradient(180deg, transparent 0%, #ffffff 45%);
-  pointer-events: none;
-  opacity: 1;
-  transition: opacity 0.2s ease;
-  z-index: 500;
-}
-/* Même correctif que .page-scroll-fade-hint dans style.css (demande du
-   09/09/2026, "organiser le bandeau du bas") : remonte le dégradé/bouton
-   "Suite ↓" au-dessus du bandeau du bas plutôt que de le recouvrir. */
-body.mnoria-global-bottom-nav-enabled .het-scroll-fade-hint {
-  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-}
-.het-scroll-fade-hint.is-hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-.het-scroll-fade-hint-text {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #6b7280;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 999px;
-  padding: 4px 10px;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
-  pointer-events: auto;
-  cursor: pointer;
-}
-.het-scroll-fade-hint-text:hover {
-  color: #374151;
-  border-color: #d1d5db;
-}
+/* Bandeau dégradé + "suite ↓" en bas de page retiré (demande du 09/09/2026,
+   "enlever le bandeau avec dégradé en bas"). Ancien bloc .het-scroll-fade-hint
+   (créé par attachScrollFadeHint dans historical-events-test-page.js). */

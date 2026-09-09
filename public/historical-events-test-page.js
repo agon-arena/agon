@@ -73,6 +73,43 @@
     }
   }
 
+  // Cache localStorage des slots "notion:histoire:*" déjà mémorisés par ce visiteur
+  // (demande du 09/09/2026, "Ce jour dans l'Histoire met du temps à apparaître, limiter
+  // au max le coût egress") : évite un appel réseau/Supabase à chaque visite pour un
+  // simple badge "déjà mémorisé". Reste à jour en continu via addMemorizedSlotToCache/
+  // removeMemorizedSlotFromCache (appelées à chaque clic Mémoriser/déclic, cf. plus
+  // bas) — le TTL ci-dessous ne sert donc qu'à rattraper un changement fait depuis un
+  // AUTRE appareil/onglet, jamais celui-ci (toujours frais tant que ce visiteur clique
+  // uniquement ici).
+  var HISTOIRE_MEMORIZED_SLOTS_CACHE_KEY = "mnoria_histoire_memorized_slots_v1";
+  var HISTOIRE_MEMORIZED_SLOTS_CACHE_TTL_MS = 10 * 60 * 1000;
+
+  function readMemorizedSlotsCacheEntry(voterKey) {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(HISTOIRE_MEMORIZED_SLOTS_CACHE_KEY) || "null");
+      if (!parsed || parsed.voterKey !== voterKey || !Array.isArray(parsed.slots)) return null;
+      return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+  function writeMemorizedSlotsCache(voterKey, slots) {
+    try {
+      localStorage.setItem(HISTOIRE_MEMORIZED_SLOTS_CACHE_KEY, JSON.stringify({ voterKey: voterKey, updatedAt: Date.now(), slots: slots }));
+    } catch (e) {}
+  }
+  function addMemorizedSlotToCache(voterKey, slot, quizDate) {
+    var entry = readMemorizedSlotsCacheEntry(voterKey);
+    var slots = entry ? entry.slots.filter(function (s) { return s.slot !== slot; }) : [];
+    slots.push({ slot: slot, quizDate: quizDate });
+    writeMemorizedSlotsCache(voterKey, slots);
+  }
+  function removeMemorizedSlotFromCache(voterKey, slot) {
+    var entry = readMemorizedSlotsCacheEntry(voterKey);
+    if (!entry) return;
+    writeMemorizedSlotsCache(voterKey, entry.slots.filter(function (s) { return s.slot !== slot; }));
+  }
+
   // Même état local partagé que public/script.js, recopié ici parce que cette page historique
   // isolée ne charge volontairement pas script.min.js. /apprentissage peut ainsi afficher le
   // nom et le sablier même si ce document est remplacé pendant le fetch.
@@ -229,6 +266,7 @@
         explainer.ready();
         btn.setAttribute("data-quiz-slot", data.slot);
         btn.setAttribute("data-quiz-date", data.quizDate);
+        addMemorizedSlotToCache(voterKey, data.slot, data.quizDate);
       })
       .catch(function () {
         finishPendingNotionQuizGeneration(pendingSlot);
@@ -245,14 +283,23 @@
     var quizDate = btn.getAttribute("data-quiz-date");
     if (!slot || !quizDate) { setMemorizeButtonState(btn, false); return; }
     setMemorizeButtonState(btn, false); // optimiste, annulé si le retrait échoue
+    removeMemorizedSlotFromCache(voterKey, slot); // idem, ré-ajouté ci-dessous si le retrait échoue
     fetch("/api/users/notion-quizzes/remove", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate })
     })
       .then(function (res) { return res.json(); })
-      .then(function (data) { if (!data.ok) setMemorizeButtonState(btn, true); })
-      .catch(function () { setMemorizeButtonState(btn, true); });
+      .then(function (data) {
+        if (!data.ok) {
+          setMemorizeButtonState(btn, true);
+          addMemorizedSlotToCache(voterKey, slot, quizDate);
+        }
+      })
+      .catch(function () {
+        setMemorizeButtonState(btn, true);
+        addMemorizedSlotToCache(voterKey, slot, quizDate);
+      });
   }
 
   // Après rendu des blocs du jour (cf. renderEvents) : marque comme déjà
@@ -266,20 +313,34 @@
     var voterKey = getVoterKey();
     if (!voterKey) return;
 
-    fetch("/api/users/notion-quizzes?legacyKey=" + encodeURIComponent(voterKey), { cache: "no-store" })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
-        buttons.forEach(function (btn) {
-          var suffix = ":" + btn.getAttribute("data-source-id");
-          var match = quizzes.filter(function (q) { return q.slot.indexOf("notion:histoire:") === 0 && q.slot.slice(-suffix.length) === suffix; })[0];
-          if (!match) return;
-          setMemorizeButtonState(btn, true);
-          btn.setAttribute("data-quiz-slot", match.slot);
-          btn.setAttribute("data-quiz-date", match.quizDate);
-        });
-      })
-      .catch(function () {});
+    function applySlots(slots) {
+      buttons.forEach(function (btn) {
+        var suffix = ":" + btn.getAttribute("data-source-id");
+        var match = slots.filter(function (q) { return q.slot.indexOf("notion:histoire:") === 0 && q.slot.slice(-suffix.length) === suffix; })[0];
+        if (!match) return;
+        setMemorizeButtonState(btn, true);
+        btn.setAttribute("data-quiz-slot", match.slot);
+        btn.setAttribute("data-quiz-date", match.quizDate);
+      });
+    }
+
+    var cached = readMemorizedSlotsCacheEntry(voterKey);
+    if (cached && Date.now() - Number(cached.updatedAt || 0) <= HISTOIRE_MEMORIZED_SLOTS_CACHE_TTL_MS) {
+      // Cache encore frais : aucun appel réseau/Supabase pour ce visiteur.
+      applySlots(cached.slots);
+    } else {
+      // Route allégée (server.js GET /api/users/notion-quizzes/histoire-slots, demande
+      // du 09/09/2026) : ne lit QUE les slots notion:histoire:* de ce visiteur, jamais
+      // le contenu/la galaxie/l'état FSRS de la route complète "Mes apprentissages".
+      fetch("/api/users/notion-quizzes/histoire-slots?legacyKey=" + encodeURIComponent(voterKey), { cache: "no-store" })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          var slots = Array.isArray(data.slots) ? data.slots : [];
+          writeMemorizedSlotsCache(voterKey, slots);
+          applySlots(slots);
+        })
+        .catch(function () {});
+    }
 
     buttons.forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -757,43 +818,4 @@
   var initialDateKey = resolveInitialDateKey();
   goToDate(initialDateKey);
 
-  // Dégradé + "suite ↓" tant que le bas du panneau (.het-panel) dépasse le
-  // viewport — .het-body::after (cf. historical-events-test.css) réserve une
-  // grande zone tampon sous le panneau, donc on mesure la position réelle de
-  // .het-panel plutôt que document.documentElement.scrollHeight (même
-  // principe que attachPageScrollFadeHint dans script.js, dupliqué ici car
-  // cette page ne charge pas script.js).
-  (function attachScrollFadeHint() {
-    var hint = document.createElement("div");
-    hint.className = "het-scroll-fade-hint is-hidden";
-    hint.innerHTML = '<span class="het-scroll-fade-hint-text">suite <span aria-hidden="true">↓</span></span>';
-    document.body.appendChild(hint);
-    hint.querySelector(".het-scroll-fade-hint-text").addEventListener("click", function (e) {
-      e.stopPropagation();
-      window.scrollBy({ top: window.innerHeight * 0.8, behavior: "smooth" });
-    });
-
-    function update() {
-      var panel = document.querySelector(".het-panel");
-      var contentEnd = panel ? window.scrollY + panel.getBoundingClientRect().bottom : document.documentElement.scrollHeight;
-      var hasOverflow = contentEnd > window.innerHeight + 2;
-      var atBottom = window.scrollY + window.innerHeight >= contentEnd - 4;
-      hint.classList.toggle("is-hidden", !hasOverflow || atBottom);
-    }
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update, { passive: true });
-    requestAnimationFrame(update);
-
-    // attributes+attributeFilter:['hidden'] est nécessaire en plus de childList :
-    // ouvrir/fermer un bloc accordéon ne fait que basculer l'attribut "hidden"
-    // sur du contenu déjà présent dans le DOM, ce que childList seul ne détecte pas.
-    var mutationFrame = null;
-    new MutationObserver(function () {
-      if (mutationFrame) return;
-      mutationFrame = requestAnimationFrame(function () {
-        mutationFrame = null;
-        update();
-      });
-    }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
-  })();
 })();

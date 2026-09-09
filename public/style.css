@@ -139,10 +139,17 @@ html.thematic-scroll body {
    l'utilisateur. À la fermeture, tryHide() (script.js) force window.scrollTo(0,0) avant de le
    retirer — la page scrollée en douce remontait alors brutalement en haut au moment même où
    l'animation disparaît, donnant l'impression qu'elle "remonte toute seule" (demande du
-   09/09/2026). Verrouillé tant que html.mnoria-startup-active est posée (retirée par tryHide
-   au moment même où le scrollTo(0,0) devient sans effet, donc plus rien à compenser après). */
-html.mnoria-startup-active,
-html.mnoria-startup-active body {
+   09/09/2026).
+   :has(...:not(.is-hiding)) plutôt que simplement .mnoria-startup-active (revu le 09/09/2026,
+   "je n'arrive plus à scroller... juste après le refresh") : tryHide() ne retire
+   mnoria-startup-active que 500ms APRÈS avoir lancé le fondu de sortie du loader (délai
+   volontaire pour un souci de rendu WebKit sans rapport avec le scroll, cf. son propre
+   commentaire) — le scroll restait verrouillé tout ce temps alors que le loader était déjà
+   quasi invisible. Ce sélecteur relâche le scroll dès l'ajout de .is-hiding (donc dès que le
+   scrollTo(0,0) ci-dessus devient sans effet, même raisonnement qu'avant), sans toucher à ce
+   délai ni au code JS. */
+html.mnoria-startup-active:has(.mnoria-startup-loader:not(.is-hiding)),
+html.mnoria-startup-active:has(.mnoria-startup-loader:not(.is-hiding)) body {
   overflow: hidden !important;
 }
 
@@ -7829,17 +7836,19 @@ body.page-home-mobile .index-explorer-topbar {
 
 /* Liseret fin au-dessus du bouton, pour marquer la séparation avec ce qui
    précède (bulles/actions) sans une barre franche — dégradé qui s'estompe
-   sur les bords plutôt qu'une ligne pleine. Rapproché du bouton (-8px au lieu
-   de -20px, demande du 08/09/2026) pour laisser plus d'espace entre le
-   liseret et "Ce jour dans l'Histoire / Éclairages" au-dessus, sans déplacer
-   ni le bouton Trier/Rechercher ni le bandeau "À la une" en dessous (l'écart
-   total secondaryActions→bouton, fixé par MNORIA_SORT_BTN_GAP dans
-   syncMnoriaHomeTrendsCaptionAnchor, reste inchangé). */
+   sur les bords plutôt qu'une ligne pleine. Repoussé à -20px (demande du
+   09/09/2026, "plus d'espace entre le liseret et le bouton Trier/Rechercher"
+   sur les 3 modes Actualités/Ma mémoire/Communauté) tout en conservant
+   l'espace liseret→"Ce jour dans l'Histoire / Éclairages" réglé la veille
+   (08/09/2026) : MNORIA_SORT_BTN_GAP dans syncMnoriaHomeTrendsCaptionAnchor a
+   été augmenté d'autant (24→36) pour que l'écart total secondaryActions→bouton
+   grandisse exactement de ce qui est ajouté ici, sans grignoter l'espace
+   au-dessus du liseret. */
 body.page-home .index-explorer-topbar::before,
 body.page-home-mobile .index-explorer-topbar::before {
   content: "";
   position: absolute;
-  top: -8px;
+  top: -20px;
   left: 50%;
   transform: translateX(-50%);
   width: 130px;

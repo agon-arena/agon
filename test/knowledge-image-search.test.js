@@ -45,12 +45,50 @@ test("searchKnowledgeImage : image pertinente trouvée dès le premier appel (fr
   assert.deepEqual(result, {
     url: "https://upload.wikimedia.org/wikipedia/commons/thumb/aldo-moro.jpg",
     credit: null,
+    // Aucun `pageimage` dans ce mock (cf. wikipediaPageBody) : le repli
+    // deriveCaptionFromFileName n'a rien à partir de quoi dériver une légende.
+    caption: null,
     pageUrl: "https://fr.wikipedia.org/wiki/Aldo_Moro",
     source: "wikipedia",
     // Pas de motif ".../NNNpx-..." dans cette URL de test : largeur inconnue,
     // jamais une valeur inventée (cf. extractDeliveredWidthFromUrl).
     width: null
   });
+});
+
+// Couvre fetchWikipediaImageCaption + son repli deriveCaptionFromFileName (demande du
+// 09/09/2026, "je veux que ça le fasse SYSTÉMATIQUEMENT") : la plupart des portraits
+// d'infobox (cas réel constaté : John Dewey) n'ont AUCUNE légende structurée dans
+// l'article — sans repli, la fiche n'affichait alors que le nom de la source
+// (Wikipedia) sans rien d'autre sous l'image.
+test("searchKnowledgeImage : media-list sans légende pour ce fichier -> repli sur le nom de fichier (pageimage)", async () => {
+  const fetchImpl = async (url) => {
+    if (url.includes("/api/rest_v1/page/media-list/")) {
+      return jsonResponse({ items: [{ title: "File:John_Dewey_in_1902.jpg" }] });
+    }
+    return jsonResponse(wikipediaPageBody({
+      title: "John Dewey",
+      fullurl: "https://fr.wikipedia.org/wiki/John_Dewey",
+      pageimage: "John_Dewey_in_1902.jpg"
+    }));
+  };
+  const result = await searchKnowledgeImage("John Dewey", { fetchImpl });
+  assert.equal(result.caption, "John Dewey in 1902");
+});
+
+test("searchKnowledgeImage : media-list AVEC une légende réelle pour ce fichier -> priorité à la vraie légende, jamais le nom de fichier", async () => {
+  const fetchImpl = async (url) => {
+    if (url.includes("/api/rest_v1/page/media-list/")) {
+      return jsonResponse({ items: [{ title: "File:John_Dewey_in_1902.jpg", caption: { text: "John Dewey, philosophe américain, en 1902." } }] });
+    }
+    return jsonResponse(wikipediaPageBody({
+      title: "John Dewey",
+      fullurl: "https://fr.wikipedia.org/wiki/John_Dewey",
+      pageimage: "John_Dewey_in_1902.jpg"
+    }));
+  };
+  const result = await searchKnowledgeImage("John Dewey", { fetchImpl });
+  assert.equal(result.caption, "John Dewey, philosophe américain, en 1902.");
 });
 
 // Couvre extractDeliveredWidthFromUrl (demande du 18/08/2026, qualité en fond
@@ -202,6 +240,10 @@ test("searchKnowledgeImage : repli Wikimedia Commons quand Wikipedia (fr+en, 2 t
   assert.deepEqual(result, {
     url: "https://upload.wikimedia.org/wikipedia/commons/thumb/aldo-moro-commons.jpg",
     credit: "Mario Rossi",
+    // Commons n'a pas de légende d'article (notion propre à Wikipedia) : repli
+    // sur le nom de fichier ("File:Aldo_Moro_portrait.jpg" -> "Aldo Moro portrait"),
+    // demande du 09/09/2026 (systématique, cf. deriveCaptionFromFileName).
+    caption: "Aldo Moro portrait",
     pageUrl: "https://commons.wikimedia.org/wiki/File:Aldo_Moro_portrait.jpg",
     source: "wikimedia-commons",
     width: null

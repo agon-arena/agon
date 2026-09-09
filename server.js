@@ -472,6 +472,7 @@ app.get("/historical-events-test", (req, res) => {
 // log et on continue sans planter le serveur plutôt que de faire échouer
 // tout le démarrage pour une fonctionnalité annexe.
 const { createHistoricalEventsRepository } = require("./lib/historical-events/repository");
+const { hydrateFallbackImageCache: hydrateHistoricalEventsFallbackImageCache, setFallbackImageCachePersistHook: setHistoricalEventsFallbackImageCachePersistHook } = require("./lib/historical-events/service");
 let historicalEventsRepository = null;
 try {
   historicalEventsRepository = createHistoricalEventsRepository();
@@ -5005,13 +5006,28 @@ app.get("/autres-sources", (req, res) => {
 // notées). Population = seulement les auteurs actifs sur l'axe concerné
 // (au moins 1 idée postée / au moins 1 idée notée par l'IA), pour ne pas
 // gonfler artificiellement le classement avec des comptes jamais actifs.
-// Calcul lourd (scan de toutes les idées + tous les débats analysés) :
-// caché en mémoire process, servi immédiatement puis rafraîchi en fond une
-// fois périmé (même logique stale-while-revalidate que les cloud bubbles).
+// Calcul lourd (5 scans de table complets — arguments, debates, daily_quiz_answers,
+// memory_review_events, users — chacun paginé par blocs de 1000 lignes, TOUS
+// séquentiels : une trentaine d'allers-retours réseau Supabase l'un après l'autre,
+// cf. fetchAllSupabaseRows) : caché en mémoire process, servi immédiatement puis
+// rafraîchi en fond une fois périmé (même logique stale-while-revalidate que les
+// cloud bubbles).
+// Persisté dans app_config (clé USER_SCORE_CACHE_CONFIG_KEY, cf. persistUserScoreCache/
+// loadPersistedUserScoreCache plus bas) depuis le 09/09/2026 ("le score met du temps à
+// apparaître") : sans ça, un cache purement en mémoire repart à zéro à CHAQUE
+// redémarrage serveur (déploiement Render, restart pm2) — la toute première requête
+// /api/my-score après un redémarrage payait alors le calcul complet en direct, jusqu'à
+// plusieurs secondes. Chargé une seule fois au démarrage (app.listen ci-dessous) : une
+// lecture app_config, minuscule comparée aux 5 scans complets qu'elle évite.
+// TTL relevé de 15 min à 24h le même jour ("quitte à le mettre à jour moins souvent,
+// je veux éviter l'egress au maximum") : ces scores n'ont besoin d'aucune fraîcheur à la
+// minute près, et diviser la fréquence de calcul par ~96 réduit d'autant l'egress Supabase
+// cumulé de cette fonctionnalité.
 let _userScoreCache = null;
 let _userScoreCacheComputedAt = 0;
 let _userScoreRefreshPromise = null;
-const USER_SCORE_CACHE_TTL_MS = 15 * 60 * 1000;
+const USER_SCORE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const USER_SCORE_CACHE_CONFIG_KEY = "user_scores_cache";
 
 // Score% = part de la population dont la valeur est strictement supérieure
 // à celle de l'utilisateur — ex: 2% signifie que 98% des autres ont moins.
@@ -5315,12 +5331,83 @@ async function computeUserScores() {
   };
 }
 
+// (Dé)sérialisation du résultat de computeUserScores() pour app_config (colonne JSONB,
+// aucune Map native — cf. persistUserScoreCache/loadPersistedUserScoreCache plus bas).
+// Deux familles de Map dans ce résultat : la plupart indexées par authorKey (déjà une
+// chaîne, round-trip Object.fromEntries/Object.entries sans perte) ; deux indexées par
+// tier (nombre 1-4, cf. USER_SCORE_TIERS) — leurs clés redeviennent des chaînes après un
+// JSON.stringify/parse, donc explicitement reconverties en Number ici, sans quoi
+// votesTierSizeByTier.get(tier) (appelé avec un tier NUMBER, cf. /api/my-score plus bas)
+// ne trouverait plus jamais rien.
+const USER_SCORE_AUTHOR_KEYED_MAP_FIELDS = [
+  "votesScoreByAuthorKey", "notesScoreByAuthorKey", "gnosisScoreByAuthorKey", "noesisScoreByAuthorKey",
+  "tierByAuthorKey", "votesTotalByAuthorKey", "contributionCountByAuthorKey", "noteAvgByAuthorKey",
+  "noteCountByAuthorKey", "gnosisAnsweredByAuthorKey", "gnosisCorrectByAuthorKey",
+  "relierAnsweredByAuthorKey", "relierCorrectByAuthorKey"
+];
+const USER_SCORE_TIER_KEYED_MAP_FIELDS = ["votesTierSizeByTier", "notesTierSizeByTier"];
+const USER_SCORE_SCALAR_FIELDS = ["votesTotalUsers", "notesTotalUsers", "gnosisTotalUsers", "noesisTotalUsers"];
+
+function serializeUserScoreCache(result) {
+  const out = {};
+  for (const field of USER_SCORE_AUTHOR_KEYED_MAP_FIELDS) out[field] = Object.fromEntries(result[field]);
+  for (const field of USER_SCORE_TIER_KEYED_MAP_FIELDS) out[field] = Object.fromEntries(result[field]);
+  for (const field of USER_SCORE_SCALAR_FIELDS) out[field] = result[field];
+  return out;
+}
+
+function deserializeUserScoreCache(obj) {
+  const out = {};
+  for (const field of USER_SCORE_AUTHOR_KEYED_MAP_FIELDS) out[field] = new Map(Object.entries(obj?.[field] || {}));
+  for (const field of USER_SCORE_TIER_KEYED_MAP_FIELDS) {
+    out[field] = new Map(Object.entries(obj?.[field] || {}).map(([k, v]) => [Number(k), v]));
+  }
+  for (const field of USER_SCORE_SCALAR_FIELDS) out[field] = obj?.[field] ?? 0;
+  return out;
+}
+
+// Best-effort, jamais bloquant pour l'appelant (refreshUserScoreCache ci-dessous) : un
+// échec d'écriture app_config ne doit jamais faire échouer le calcul déjà réussi ni
+// invalider le cache mémoire tout juste posé — seule la survie au PROCHAIN redémarrage
+// serait perdue, pas la disponibilité actuelle.
+async function persistUserScoreCache(result) {
+  try {
+    await supabase.from("app_config").upsert({
+      key: USER_SCORE_CACHE_CONFIG_KEY,
+      value: serializeUserScoreCache(result),
+      updated_at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error("[user-score] persistance app_config :", e.message);
+  }
+}
+
+// Appelée une seule fois au démarrage (app.listen plus bas) : évite que la toute première
+// requête /api/my-score après un redémarrage paie le calcul complet en direct (cf.
+// commentaire de tête de _userScoreCache). `updated_at` (pas une clé dédiée) sert de
+// computedAt : un cache trouvé mais déjà périmé (> 24h) déclenche quand même un
+// rafraîchissement en fond dès la première requête plutôt qu'un blocage — jamais pire que
+// le comportement précédent, toujours au moins aussi bon.
+async function loadPersistedUserScoreCache() {
+  try {
+    const { data, error } = await supabase.from("app_config").select("value, updated_at").eq("key", USER_SCORE_CACHE_CONFIG_KEY).maybeSingle();
+    if (error || !data?.value) return false;
+    _userScoreCache = deserializeUserScoreCache(data.value);
+    _userScoreCacheComputedAt = data.updated_at ? new Date(data.updated_at).getTime() : Date.now();
+    return true;
+  } catch (e) {
+    console.error("[user-score] chargement app_config :", e.message);
+    return false;
+  }
+}
+
 async function refreshUserScoreCache() {
   if (_userScoreRefreshPromise) return _userScoreRefreshPromise;
   _userScoreRefreshPromise = computeUserScores()
     .then((result) => {
       _userScoreCache = result;
       _userScoreCacheComputedAt = Date.now();
+      persistUserScoreCache(result).catch(() => {});
       return result;
     })
     .catch((e) => {
@@ -19403,6 +19490,29 @@ const _notionQuizMasterGenerationPromises = new Map();
 // commentaire détaillé dans ensureProgressiveElementaryGenerated ("Course 1").
 const _notionQuizPregenMasterGenerationPromises = new Map();
 
+// Filet anti-doublon de notification (demande du 09/09/2026, "deux notifications pour Dewey") :
+// _notionQuizMasterGenerationPromises ci-dessus dédoublonne déjà l'APPEL IA (deux requêtes
+// concurrentes pour le même masterSlot attendent la même promesse), mais chaque requête HTTP
+// qui atteint ce point reste libre d'envoyer SA PROPRE notification "prêt" une fois cette
+// promesse partagée résolue — `reused` vaut `false` pour chacune, indépendamment du fait
+// qu'une seule d'entre elles ait réellement déclenché la génération. Concrètement atteint via
+// armNotionQuizGenerationBeaconFallback (script.js) : si la page passe en arrière-plan avant la
+// réponse du fetch normal, un navigator.sendBeacon identique repart en parallèle vers la même
+// route — sans ce garde, les deux requêtes finissaient chacune par notifier. Clé = (masterSlot,
+// utilisateur) : deux utilisateurs différents généreraient chacun leur propre notification
+// légitime pour un même sujet mutualisé, jamais supprimée ici — seul un doublon pour LE MÊME
+// utilisateur sur LE MÊME master est filtré. Fenêtre de 10 min largement suffisante (la
+// generation elle-même prend au plus quelques minutes) ; jamais persisté, une simple protection
+// anti-course en mémoire.
+const _notionQuizReadyNotifiedKeys = new Set();
+function shouldSendNotionQuizReadyNotification(masterSlot, legacyKey) {
+  const key = `${masterSlot}::${legacyKey}`;
+  if (_notionQuizReadyNotifiedKeys.has(key)) return false;
+  _notionQuizReadyNotifiedKeys.add(key);
+  setTimeout(() => _notionQuizReadyNotifiedKeys.delete(key), 10 * 60 * 1000).unref();
+  return true;
+}
+
 // Résout une collision d'insertion sans laisser un ancien petit corpus
 // bloquer toutes les générations futures. Un master complet créé par un
 // autre worker gagne toujours ; seul un corpus devenu inéligible est remplacé.
@@ -21019,7 +21129,7 @@ app.post("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =
     // Notification push (demande du 01/09/2026, même mécanisme que
     // /api/users/notion-quizzes/custom) : uniquement si le QCM vient d'être
     // réellement généré (jamais `existingQuiz`, déjà répondu instantanément).
-    if (!existingQuiz) {
+    if (!existingQuiz && shouldSendNotionQuizReadyNotification(masterSlot, validation.legacyKey)) {
       const readyLabel = questions[0]?.sourceName || item?.title || item?.name || "Nouvel apprentissage";
       const readyCount = questions.length;
       createNotification({
@@ -21218,7 +21328,7 @@ app.post("/api/users/notion-quizzes/custom", rateLimit("users", 30), async (req,
     // ne suffit alors plus, d'où ce push OS en complément, jamais à la place.
     // createNotification gère déjà l'insert in-app ET l'envoi Web Push réel
     // (cf. server.js:4376) — même mécanisme que pour learning_digest.
-    if (!reused) {
+    if (!reused && shouldSendNotionQuizReadyNotification(masterSlot, validation.legacyKey)) {
       const readyLabel = questions[0]?.sourceName || topic;
       const readyCount = questions.length;
       createNotification({
@@ -21456,7 +21566,7 @@ app.post("/api/users/notion-quizzes/custom/progressive", rateLimit("users", 30),
     // génération fraîche (jamais `reused`, où la réponse est déjà instantanée
     // et l'utilisateur reste sur place). createNotification gère déjà
     // l'insert in-app ET l'envoi Web Push réel (cf. server.js:4376).
-    if (!reused) {
+    if (!reused && shouldSendNotionQuizReadyNotification(masterSlot, validation.legacyKey)) {
       const readyLabel = servedQuestions[0]?.sourceName || questions[0]?.sourceName || topic;
       const readyCount = servedQuestions.length;
       createNotification({
@@ -22212,6 +22322,42 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
   } catch (error) {
     console.error("[notion-quizzes] liste :", error.message);
     res.status(500).json({ quizzes: [], error: error.message });
+  }
+});
+
+// Version allégée de GET /api/users/notion-quizzes ci-dessus (demande du 09/09/2026,
+// "Ce jour dans l'Histoire met du temps à apparaître" — audit egress) : la page "Ce
+// jour dans l'Histoire" (historical-events-test-page.js, syncMemorizeButtons) a
+// seulement besoin de savoir QUELS événements (slots notion:histoire:<id>) sont déjà
+// dans les QCM adoptés par ce visiteur, jamais leur contenu/progression/galaxie — la
+// route complète ci-dessus lit EN PLUS daily_quiz (résumé), user_article_acquisitions,
+// solar_systems et l'état FSRS pour construire une vue riche ("Mes apprentissages")
+// dont ce simple badge "déjà mémorisé" n'a aucun usage. Seulement 2 lectures Supabase
+// (users, user_notion_quizzes déjà filtrée sur ce préfixe de slot côté serveur), jamais
+// les 5+ de la route complète — mesuré ~1,1s sur la route complète, appelée à CHAQUE
+// visite de cette page (jamais mise en cache côté client avant ce correctif, cf. le
+// cache localStorage ajouté au même moment côté client).
+app.get("/api/users/notion-quizzes/histoire-slots", rateLimit("users", 30), async (req, res) => {
+  try {
+    const validation = validateLegacyKey(req.query?.legacyKey);
+    if (validation.error) return res.status(400).json({ error: validation.error });
+
+    const { data: userRow, error: userError } = await supabase
+      .from("users").select("id").eq("legacy_key", validation.legacyKey).maybeSingle();
+    if (userError) throw new Error(userError.message);
+    if (!userRow) return res.json({ slots: [] });
+
+    const { data: links, error: linksError } = await supabase
+      .from("user_notion_quizzes")
+      .select("quiz_date, slot")
+      .eq("user_id", userRow.id)
+      .like("slot", "notion:histoire:%");
+    if (linksError) throw new Error(linksError.message);
+
+    res.json({ slots: (links || []).map((l) => ({ slot: l.slot, quizDate: l.quiz_date })) });
+  } catch (error) {
+    console.error("[notion-quizzes] histoire-slots :", error.message);
+    res.status(500).json({ slots: [], error: error.message });
   }
 });
 
@@ -23385,7 +23531,8 @@ const KNOWLEDGE_GALAXY_DEFINITIONS = [
   { name: "Sciences - technologie", description: "Concepts, découvertes, mécanismes et méthodes des sciences exactes et naturelles : mathématiques, physique, chimie, biologie, sciences de la Terre, astronomie, informatique, ingénierie, énergie." },
   { name: "Philosophie", description: "Concepts, courants de pensée, questionnements et raisonnements philosophiques (éthique, épistémologie, logique, métaphysique) — la pensée en tant que telle, pas un fait qu'elle décrit." },
   { name: "Sciences sociales", description: "Sociologie, psychologie sociale, anthropologie — l'étude des comportements et structures sociales comme discipline, distincte de la philosophie (raisonnement) et de la société contemporaine (faits)." },
-  { name: "Société - éducation", description: "École, enseignement, famille, démographie, immigration, religions et croyances CONTEMPORAINES, discriminations, genre — le pendant contemporain de ce que \"Histoire\" couvre pour le passé." },
+  { name: "Société", description: "Famille, démographie, immigration, religions et croyances CONTEMPORAINES, logement, discriminations, genre, précarité — les dynamiques sociales contemporaines hors système éducatif (cf. \"Éducation\") — le pendant contemporain de ce que \"Histoire\" couvre pour le passé." },
+  { name: "Éducation", description: "École, enseignement, pédagogie, apprentissage, orientation, formation professionnelle, politiques éducatives, vie scolaire — le système éducatif et les apprentissages, de la petite enfance à la formation continue, distinct des faits de société au sens large (cf. \"Société\")." },
   { name: "Économie - emploi", description: "Mécanismes économiques, monnaie, emploi, entreprises, finances publiques, commerce, immobilier." },
   { name: "Politique", description: "Institutions politiques, pouvoirs, régimes, partis, relations internationales contemporaines." },
   { name: "International", description: "Régions, pays et zones géographiques du monde et leur actualité contemporaine (relations internationales, politique régionale, culture locale) — la géographie comme discipline (relief, climat, cartographie, population) appartient à Géographie, pas ici." },
@@ -23551,7 +23698,7 @@ async function matchCultureGeneraleGalaxyAndSolarWithAI(sourceType, sourceName, 
   const prompt = [
     "Réponds uniquement en json valide.",
     "Cette connaissance de culture générale doit être classée selon ce qu'elle ENSEIGNE RÉELLEMENT — jamais un simple mot-clé isolé. Lis bien la description de chaque Galaxy : certaines précisent explicitement une frontière à respecter (ex. un fait religieux/historique ancien vs. sa représentation artistique).",
-    "Étape 1 : choisis la Galaxy la plus pertinente parmi \"galaxies\" (recopie \"name\" EXACTEMENT comme fourni, sans le modifier). Cas particulier : si le sujet ou son détail montrent clairement qu'il s'agit d'un contenu conçu POUR un jeune public (conte pour enfants, dessin animé ou personnage jeunesse, vie scolaire d'un enfant/collégien/lycéen, sujet explicitement adressé/expliqué aux enfants ou aux ados...), choisis la Galaxy \"Espace jeunes\" plutôt qu'une Galaxy thématique concurrente (Histoire, Société - éducation, Médias - divertissements...), même si le sujet recoupe aussi cette dernière — le public visé prime alors sur le thème.",
+    "Étape 1 : choisis la Galaxy la plus pertinente parmi \"galaxies\" (recopie \"name\" EXACTEMENT comme fourni, sans le modifier). Cas particulier : si le sujet ou son détail montrent clairement qu'il s'agit d'un contenu conçu POUR un jeune public (conte pour enfants, dessin animé ou personnage jeunesse, vie scolaire d'un enfant/collégien/lycéen, sujet explicitement adressé/expliqué aux enfants ou aux ados...), choisis la Galaxy \"Espace jeunes\" plutôt qu'une Galaxy thématique concurrente (Histoire, Société, Éducation, Médias - divertissements...), même si le sujet recoupe aussi cette dernière — le public visé prime alors sur le thème.",
     "Étape 2 : DANS cette Galaxy uniquement, cherche si l'un de ses \"existingSolars\" est raisonnablement cohérent avec cette connaissance — même s'il est plus large ou moins précis qu'un intitulé idéal. La cohérence de la taxonomie prime sur la précision maximale du libellé : un Solar plus précis n'est jamais une raison de préférer no_match si un Solar existant convient déjà.",
     `Étape 3 : propose dans "starLabel" le nom d'une "Étoile" — une sous-catégorie précise mais RÉUTILISABLE pour plusieurs contenus, jamais le fait atomique de cette seule connaissance (2 à 4 mots, jamais une phrase). Si la Galaxy choisie fait partie de [${domainGalaxyNames}], l'Étoile doit rester une sous-catégorie encore assez large du Solar (imagine dix autres contenus différents rattachés au même Solar : ton Étoile doit convenir à plusieurs d'entre eux, pas seulement à celui-ci) ; pour les autres Galaxies, l'Étoile peut être la notion précise elle-même. Dans tous les cas, l'Étoile ne doit JAMAIS reprendre les mots du Solar lui-même (ex. sous \"Révolution française & Empire\", \"Révolution française\" est interdit — \"Directoire\" ou \"Terreur\" conviennent).`,
     "Si un Solar existant convient : {\"decision\":\"existing\",\"galaxy\":\"...\",\"solarId\":123,\"confidence\":0.8,\"starLabel\":\"...\"}.",
@@ -24396,9 +24543,7 @@ const CULTURE_GENERALE_SEED_SOLAR_SYSTEMS = {
     "Psychologie sociale",
     "Anthropologie"
   ],
-  "Société - éducation": [
-    "École & enseignement",
-    "Enseignement supérieur",
+  "Société": [
     "Famille & enfance",
     "Démographie",
     "Immigration & intégration",
@@ -24406,7 +24551,31 @@ const CULTURE_GENERALE_SEED_SOLAR_SYSTEMS = {
     "Religions & laïcité",
     "Discriminations & inclusion",
     "Genre & égalité",
-    "Précarité & exclusion sociale"
+    "Précarité & exclusion sociale",
+    "Classes sociales & inégalités",
+    "Solidarités & lien social",
+    "Jeunesse",
+    "Vieillissement & personnes âgées",
+    "Modes de vie & transformations sociales",
+    "Voyages, tourisme & vacances"
+  ],
+  "Éducation": [
+    "École & enseignement",
+    "Pédagogies & méthodes",
+    "Apprentissage & cognition",
+    "Enfance & adolescence",
+    "Famille & parentalité",
+    "Orientation & insertion",
+    "Études supérieures & recherche",
+    "Formation professionnelle & continue",
+    "Politiques éducatives",
+    "Inégalités, inclusion & handicap",
+    "Vie scolaire & climat scolaire",
+    "Numérique, médias & IA",
+    "Éducation civique & citoyenneté",
+    "Éducation populaire & extrascolaire",
+    "Histoire & philosophie de l’éducation",
+    "Éducation dans le monde & comparaisons internationales"
   ],
   "Sciences - technologie": [
     "Mathématiques",
@@ -24530,10 +24699,15 @@ const CULTURE_GENERALE_DOMAIN_GALAXIES = {
     matchExample: "ex. un contenu sur les structures et institutions sociales correspond à \"Sociologie\", un contenu sur les comportements de groupe correspond à \"Psychologie sociale\"",
     newExample: "le nom de cette discipline des sciences sociales (2 à 4 mots, jamais une phrase)"
   },
-  "Société - éducation": {
-    unitLabel: "le sous-domaine de société ou d'éducation dont il relève",
-    matchExample: "ex. un contenu sur le système scolaire correspond à \"École & enseignement\", un contenu sur les flux migratoires correspond à \"Immigration & intégration\"",
-    newExample: "le nom de ce sous-domaine de société ou d'éducation (2 à 4 mots, jamais une phrase)"
+  "Société": {
+    unitLabel: "le sous-domaine de société dont il relève",
+    matchExample: "ex. un contenu sur les flux migratoires correspond à \"Immigration & intégration\", un contenu sur la crise du logement correspond à \"Logement\", un contenu sur la laïcité correspond à \"Religions & laïcité\"",
+    newExample: "le nom de ce sous-domaine de société (2 à 4 mots, jamais une phrase)"
+  },
+  "Éducation": {
+    unitLabel: "le sous-domaine éducatif dont il relève",
+    matchExample: "ex. un contenu sur le système scolaire correspond à \"École & enseignement\", un contenu sur une réforme des programmes correspond à \"Politiques éducatives\", un contenu sur le harcèlement scolaire correspond à \"Vie scolaire & climat scolaire\"",
+    newExample: "le nom de ce sous-domaine éducatif (2 à 4 mots, jamais une phrase)"
   },
   "Sciences - technologie": {
     unitLabel: "la discipline scientifique ou technologique dont il relève",
@@ -26966,6 +27140,50 @@ app.listen(PORT, "0.0.0.0", async () => {
     console.error("[Mnoria] Erreur chargement shared_debate_links:", e.message);
     _sharedLinksCache = _getSharedLinksMap();
   }
+  // Chargement du cache de scores utilisateurs (Doxa/Logos/Gnosis/Noesis) depuis
+  // app_config (demande du 09/09/2026, "le score met du temps à apparaître") : sans ce
+  // chargement, la toute première requête /api/my-score après CE redémarrage paierait le
+  // calcul complet en direct (5 scans de table séquentiels, cf. commentaire de tête de
+  // _userScoreCache) — absent uniquement au tout premier déploiement de cette
+  // fonctionnalité (aucune ligne app_config encore écrite), auquel cas le comportement
+  // précédent (calcul à la demande) reste le repli naturel.
+  try {
+    const loaded = await loadPersistedUserScoreCache();
+    console.log(loaded
+      ? `[Mnoria] Cache de scores utilisateurs chargé depuis Supabase (calculé le ${new Date(_userScoreCacheComputedAt).toISOString()}).`
+      : "[Mnoria] Aucun cache de scores utilisateurs en base — calcul à la demande.");
+  } catch (e) {
+    console.error("[Mnoria] Erreur chargement cache de scores utilisateurs:", e.message);
+  }
+
+  // Chargement + branchement de la persistance du cache de repli image Wikipedia
+  // (« Ce jour dans l'Histoire », demande du 09/09/2026, même diagnostic que le cache de
+  // scores ci-dessus) : hydrate le cache mémoire de lib/historical-events/service.js AVANT
+  // toute requête réelle, puis persiste chaque NOUVELLE recherche Wikipedia au fil de l'eau
+  // (jamais une réécriture complète à chaque requête — seulement quand une entrée est
+  // réellement nouvelle). Toujours best-effort : ce fichier reste utilisable sans aucune
+  // persistance (comportement identique à avant ce correctif) si app_config est
+  // indisponible.
+  const HISTORICAL_EVENTS_IMAGE_FALLBACK_CACHE_CONFIG_KEY = "historical_events_image_fallback_cache";
+  let _historicalEventsFallbackImageCacheSnapshot = {};
+  try {
+    const { data, error } = await supabase.from("app_config").select("value").eq("key", HISTORICAL_EVENTS_IMAGE_FALLBACK_CACHE_CONFIG_KEY).maybeSingle();
+    if (!error && data?.value && typeof data.value === "object") {
+      _historicalEventsFallbackImageCacheSnapshot = data.value;
+      hydrateHistoricalEventsFallbackImageCache(_historicalEventsFallbackImageCacheSnapshot);
+      console.log(`[Mnoria] Cache d'images de repli (Ce jour dans l'Histoire) chargé depuis Supabase : ${Object.keys(_historicalEventsFallbackImageCacheSnapshot).length} événement(s).`);
+    } else {
+      console.log("[Mnoria] Aucun cache d'images de repli (Ce jour dans l'Histoire) en base — recherche Wikipedia à la demande.");
+    }
+  } catch (e) {
+    console.error("[Mnoria] Erreur chargement cache d'images de repli (Ce jour dans l'Histoire):", e.message);
+  }
+  setHistoricalEventsFallbackImageCachePersistHook((eventId, result) => {
+    _historicalEventsFallbackImageCacheSnapshot[eventId] = result;
+    supabase.from("app_config")
+      .upsert({ key: HISTORICAL_EVENTS_IMAGE_FALLBACK_CACHE_CONFIG_KEY, value: _historicalEventsFallbackImageCacheSnapshot, updated_at: new Date().toISOString() })
+      .then(() => {}).catch((e) => console.error("[Mnoria] Erreur persistance cache d'images de repli:", e.message));
+  });
 
   // Pré-chauffe légère du cache /api/debates au démarrage.
   // Ne jamais préchauffer la liste complète : avec des milliers d'arènes,
