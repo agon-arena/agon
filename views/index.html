@@ -10,7 +10,9 @@
     // 200 ms et laisse brièvement voir le fond puis le cadre des bulles.
     try {
       if (new URLSearchParams(window.location.search).has('_swrefresh')) {
-        document.documentElement.classList.add('mnoria-user-refresh-startup');
+        sessionStorage.removeItem('mnoria_home_return_loading');
+        sessionStorage.removeItem('mnoria_home_memory_return_loading');
+        document.documentElement.classList.add('mnoria-startup-active', 'mnoria-user-refresh-startup');
       }
     } catch (_) {}
     // Retour depuis la page "site inaccessible" (cf. retryIndexAfterConnectionError,
@@ -66,7 +68,6 @@
   <meta property="og:image" content="__META_IMAGE__">
   <meta property="og:image:alt" content="mnoria — l'arène des idées">
   <link rel="canonical" href="__META_URL__">
-  <link rel="preload" as="image" href="/logovisuelchargement.png">
   <!-- Le bouton Apprentissages du bandeau mobile est une destination fréquente.
        Anticiper seulement son document raccourcit le délai réseau au clic, sans
        exécuter la page ni charger ses ressources lourdes à l'avance. -->
@@ -145,7 +146,11 @@
       /* Le voile affiché dès le premier paint doit rejoindre sans coupure
          celui de la page de départ. Il déborde donc sous le viewport iOS ;
          le padding équivalent garde le sablier centré dans la zone visible. */
-      bottom: calc(-1 * (env(safe-area-inset-bottom, 0px) + 160px));
+      bottom: auto;
+      height: calc(100vh + env(safe-area-inset-bottom, 0px) + 260px);
+      min-height: calc(100vh + env(safe-area-inset-bottom, 0px) + 260px);
+      height: calc(100lvh + env(safe-area-inset-bottom, 0px) + 260px);
+      min-height: calc(100lvh + env(safe-area-inset-bottom, 0px) + 260px);
       box-sizing: border-box;
       padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 160px);
       z-index: 2147483646;
@@ -213,7 +218,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260909-memory-debate-geometry-v26-antiheat">
+  <link rel="stylesheet" href="/style.min.css?v=20260909-generate-confirm-modal">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -541,17 +546,9 @@
         opacity: 1;
         transition: opacity 0.45s ease, visibility 0.45s ease;
       }
-      /* Règle "html.mnoria-user-refresh-startup .mnoria-startup-loader { opacity: 1; }" retirée le
-         17/08/2026 ("au milieu de l'animation le fond est coupé en bas avant de réapparaître
-         rapidement", confirmé standalone) : elle forçait la pleine opacité dès la toute première
-         image de la page issue de la navigation post-refresh (cf. tête de <head> plus haut, qui
-         pose mnoria-user-refresh-startup dès que _swrefresh est présent dans l'URL) — précisément
-         la fenêtre que ce bloc entier existe pour éviter (le bug de composition WebKit décrit
-         juste au-dessus). revealStartupLoaderWhenStable() (script plus bas) reconnaît maintenant
-         ce marqueur et révèle via is-ready après seulement 2 requestAnimationFrame — assez vite
-         pour ne jamais ressembler à un redémarrage de l'intro, mais assez pour laisser WebKit
-         composer le calque fixed avant de le montrer, comme sur la page précédente juste avant
-         la navigation (cf. forceFullPageRefresh, script.js, même technique des 2 frames). */
+      html.mnoria-user-refresh-startup .mnoria-startup-loader {
+        opacity: 1;
+      }
     }
     /* Au lancement d'une PWA iOS, le layout viewport peut grandir pendant les
        premières images (par exemple 768px -> 812px). Le centrage flex du
@@ -786,7 +783,7 @@
   <script src="/header-score-widget.min.js?v=20260909-anti-heat-hidden-pause" defer></script>
 </head>
 
-<body class="page-home page-home-mobile">
+<body class="page-home page-home-mobile mnoria-memoire-cloud-mode">
 <div class="mnoria-home-return-prepaint-underlay" aria-hidden="true"></div>
 <div class="mnoria-home-return-prepaint" role="status" aria-live="polite" aria-busy="true">
   <div class="mnoria-home-return-prepaint-box">
@@ -834,17 +831,23 @@
     // avant de révéler la page : le voile de chargement reste affiché un instant de plus, mais
     // tout est alors garanti déjà en place dessous (demande du 09/09/2026, "allonger la page de
     // chargement, le temps que tout apparaisse bien").
-    if (typeof window.__mnoriaSyncMobileBottomNavViewport === 'function') {
-      window.__mnoriaSyncMobileBottomNavViewport();
+    function releasePrepaint() {
+      document.documentElement.classList.remove('mnoria-home-return-loading');
+      try { sessionStorage.removeItem('mnoria_home_return_loading'); } catch (_) {}
+      var prepaint = document.querySelector('.mnoria-home-return-prepaint');
+      var underlay = document.querySelector('.mnoria-home-return-prepaint-underlay');
+      if (prepaint) prepaint.remove();
+      if (underlay) underlay.remove();
     }
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        document.documentElement.classList.remove('mnoria-home-return-loading');
-        try { sessionStorage.removeItem('mnoria_home_return_loading'); } catch (_) {}
-        var prepaint = document.querySelector('.mnoria-home-return-prepaint');
-        var underlay = document.querySelector('.mnoria-home-return-prepaint-underlay');
-        if (prepaint) prepaint.remove();
-        if (underlay) underlay.remove();
+    function syncThenWaitOneFrame(next) {
+      if (typeof window.__mnoriaSyncMobileBottomNavViewport === 'function') {
+        window.__mnoriaSyncMobileBottomNavViewport();
+      }
+      requestAnimationFrame(function () { requestAnimationFrame(next); });
+    }
+    syncThenWaitOneFrame(function () {
+      syncThenWaitOneFrame(function () {
+        window.setTimeout(releasePrepaint, 80);
       });
     });
   }
@@ -1297,7 +1300,7 @@
             <i class="fa-solid fa-clock-rotate-left"></i>
             <span>Ce jour dans l'Histoire</span>
           </a>
-          <a href="/eclairages" class="home-topbar-menu-item eclairages-link-unavailable" id="home-topbar-eclairages-link" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
+          <a href="/eclairages" class="home-topbar-menu-item" id="home-topbar-eclairages-link" onclick="event.preventDefault(); closeHomeTopbarMenu(); openDebateIframeModal('/eclairages')">
             <i class="fa-solid fa-landmark"></i>
             <span>Éclairages</span>
           </a>
@@ -1508,7 +1511,7 @@
      flux dès le HTML initial afin que sa hauteur finale soit mesurable avant
      la première peinture. Les données restent chargées progressivement dans
      le cadre, mais le cadre lui-même ne part plus d'un état hidden trop court. -->
-<section id="mnoria-tag-trends-section" class="mnoria-tag-trends-section" style="visibility:hidden">
+<section id="mnoria-tag-trends-section" class="mnoria-tag-trends-section">
   <!-- Embed "Ma mémoire" (demande du 08/08/2026 : bulles directement sur l'accueil, pas une
        page à part) : réutilise #mnoria-tag-trends-cloud juste en dessous comme conteneur de
        bulles (mon-univers.js retombe dessus si #mnoria-universe-cloud n'existe pas sur la page,
@@ -1551,8 +1554,8 @@
     </div>
   </div>
 <div id="mnoria-cloud-mode-switch" class="mnoria-cloud-mode-switch" role="group" aria-label="Choix du nuage de bulles">
-  <button type="button" id="mnoria-cloud-mode-actu" class="mnoria-cloud-mode-segment mnoria-cloud-mode-segment-active" onclick="setMnoriaCloudMode(false)"><i class="fa-solid fa-circle-nodes mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Actualités</span></button>
-  <button type="button" id="mnoria-cloud-mode-memoire-btn" class="mnoria-cloud-mode-segment" onclick="setMemoireCloudMode(true)"><i class="fa-solid fa-brain mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Ma mémoire</span></button>
+  <button type="button" id="mnoria-cloud-mode-actu" class="mnoria-cloud-mode-segment" onclick="setMnoriaCloudMode(false)"><i class="fa-solid fa-circle-nodes mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Actualités</span></button>
+  <button type="button" id="mnoria-cloud-mode-memoire-btn" class="mnoria-cloud-mode-segment mnoria-cloud-mode-segment-active" onclick="setMemoireCloudMode(true)"><i class="fa-solid fa-brain mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Ma mémoire</span></button>
   <button type="button" id="mnoria-cloud-mode-mnoria-btn" class="mnoria-cloud-mode-segment" onclick="setMnoriaCloudMode(true)"><i class="fa-solid fa-atom mnoria-cloud-mode-segment-icon" aria-hidden="true"></i><span class="mnoria-cloud-mode-segment-label">Communauté</span></button>
 </div>
 <div id="universe-status" class="universe-status" role="status" aria-live="polite" hidden></div>
@@ -1688,7 +1691,11 @@ window.addEventListener("pageshow", function() {
     <i class="fa-solid fa-clock-rotate-left"></i>
     <span>Ce jour dans l'Histoire</span>
   </a>
-  <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn eclairages-link-unavailable" aria-disabled="true" tabindex="-1" onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); return false; } event.preventDefault(); openDebateIframeModal('/eclairages')">
+  <!-- Toujours actif, jamais grisé/masqué (demande du 09/09/2026, "remet juste éclairage") :
+       la page /eclairages elle-même affiche déjà son propre message ("Aucune rubrique n'est
+       disponible pour le moment. Reviens un peu plus tard.", cf. #ecl-empty-message) si rien
+       n'est encore publié — inutile de dupliquer cette information ici en bloquant le bouton. -->
+  <a href="/eclairages" id="home-eclairages-btn" class="home-qcm-btn" onclick="event.preventDefault(); openDebateIframeModal('/eclairages')">
     <i class="fa-solid fa-lightbulb"></i>
     <span>Éclairages</span>
   </a>
@@ -1764,7 +1771,7 @@ window.addEventListener("pageshow", function() {
     .home-secondary-actions .home-qcm-btn {
       flex: 1 1 0;
       min-width: 0;
-      padding: 8px 6px;
+      padding: 5px 6px;
       gap: 4px;
       white-space: normal;
       text-align: center;
@@ -1772,7 +1779,7 @@ window.addEventListener("pageshow", function() {
     }
     .home-secondary-actions .home-qcm-btn i,
     .home-secondary-actions .home-qcm-btn span {
-      font-size: 12px;
+      font-size: 11px;
     }
   }
   @media (max-width: 390px) {
@@ -1798,10 +1805,10 @@ window.addEventListener("pageshow", function() {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: 6px;
     flex: 0 0 auto;
     min-width: 160px;
-    padding: 10px 16px;
+    padding: 6px 16px;
     border: none;
     background: transparent;
     color: rgba(255, 255, 255, 0.78);
@@ -1828,20 +1835,11 @@ window.addEventListener("pageshow", function() {
   .home-qcm-btn span {
     position: relative;
     z-index: 2;
-    font-size: 15px;
+    font-size: 13px;
   }
   .home-qcm-btn:hover {
     background: rgba(255, 255, 255, 0.14);
     color: #ffffff;
-  }
-  .eclairages-link-unavailable,
-  .eclairages-link-unavailable:hover {
-    color: rgba(180, 185, 188, 0.48) !important;
-    background: rgba(110, 116, 120, 0.14) !important;
-    filter: grayscale(1);
-    opacity: 0.52;
-    cursor: not-allowed !important;
-    pointer-events: none;
   }
   /* Grand reflet posé par le script ci-dessous : ne balaie la barre que pendant
      les premières secondes ET seulement quand il est réellement visible à
@@ -1919,34 +1917,16 @@ window.addEventListener("pageshow", function() {
   observer.observe(secondaryActions);
 })();
 </script>
-<script>
-(function () {
-  // Désactivé par défaut dans le HTML pour éviter qu'un clic passe pendant
-  // le chargement. L'API ne l'active qu'après publication des 6 rubriques.
-  var statusTimer = null;
-  function refreshEclairagesAvailability() {
-    fetch('/api/eclairages/status', { cache: 'no-store' })
-      .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('status')); })
-      .then(function (data) {
-        if (!data || data.available !== true) return;
-        ["home-eclairages-btn", "home-topbar-eclairages-link"].forEach(function (id) {
-          var link = document.getElementById(id);
-          if (!link) return;
-          link.classList.remove('eclairages-link-unavailable');
-          link.setAttribute('aria-disabled', 'false');
-          link.removeAttribute('tabindex');
-        });
-        if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
-      })
-      .catch(function () {});
-  }
-  refreshEclairagesAvailability();
-  // Si l'accueil reste ouvert pendant la génération, le bouton s'active
-  // automatiquement sans demander de rechargement manuel de la page.
-  statusTimer = setInterval(refreshEclairagesAvailability, 60 * 1000);
-})();
-</script>
-<section id="debates-list" class="debates-list"></section>
+<section id="debates-list" class="debates-list">
+  <section class="theme-row-section theme-row-section--a-la-une index-initial-theme-row" data-theme="À la une" aria-hidden="true">
+    <h2 class="theme-row-title">
+      <button type="button" class="theme-row-jump-start is-hidden" tabindex="-1" aria-label="Aller à la première carte">«</button>
+      <button type="button" class="theme-row-swipe-button theme-row-swipe-button-prev is-hidden" tabindex="-1" aria-label="Voir les cartes précédentes">‹</button>
+      <span class="theme-row-title-text">À la une</span>
+      <button type="button" class="theme-row-swipe-button theme-row-swipe-button-next is-hidden" tabindex="-1" aria-label="Voir les cartes suivantes">›</button>
+    </h2>
+  </section>
+</section>
 
   </section>
 
@@ -2003,13 +1983,7 @@ window.addEventListener("pageshow", function() {
     // après le premier rendu : syncMobileCloudFrameHeight révélera la section
     // seulement après sa seconde mesure fiable.
     var sizedSection = document.getElementById('mnoria-tag-trends-section');
-    if (sizedSection && window.innerWidth > 768) sizedSection.style.visibility = 'visible';
-    if (sizedSection && window.innerWidth <= 768) {
-      // Filet de sécurité uniquement si le script principal ne démarre pas.
-      window.setTimeout(function () {
-        if (sizedSection.style.visibility === 'hidden') sizedSection.style.visibility = 'visible';
-      }, 2000);
-    }
+    if (sizedSection) sizedSection.style.visibility = 'visible';
   }
 })();
 
@@ -2408,7 +2382,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260909-memory-top-level-v29" defer></script>
+<script src="/script.min.js?v=20260909-generate-confirm-modal" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

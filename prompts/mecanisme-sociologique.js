@@ -101,6 +101,7 @@ function buildMecanismeSociologiquePrompt(topics, recentConcepts) {
     `=== IMPORTANT — UN SEUL mécanisme, le plus pertinent ===`,
     "Choisis un seul sujet parmi ceux fournis : celui pour lequel le rapprochement sociologique est le plus solide et le plus précis, d'après les critères ci-dessus (en particulier le test de spécificité). Ne publie JAMAIS plusieurs mécanismes le même jour, même si plusieurs sujets te semblent s'y prêter — s'il y a plusieurs bons candidats, tranche et ne retiens que le meilleur.",
     "\"insufficient\" doit rester rare : ne l'utilise que si, après avoir vraiment cherché sur chacun des sujets, aucun ne présente de concept que tu connais avec confiance — pas par défaut ou par prudence excessive.",
+    "Mais ne force jamais un rapprochement faible ou générique uniquement pour publier quelque chose : applique le test de spécificité en pratique, pas seulement en apparence — si le meilleur candidat du jour reste un lien vague, ou qu'un autre mécanisme collerait presque aussi bien, choisis \"insufficient\" plutôt qu'un rapprochement médiocre.",
     "",
     "=== ÉTAPE 2 — Produire le mécanisme retenu ===",
     "Pour le sujet retenu, rédige un mécanisme contenant : un résumé très bref de l'actualité, le nom du concept sociologique, le sociologue ou courant/école qui lui est associé, le contexte ou l'époque d'apparition du concept, une explication claire du concept, ce qui dans l'actualité y fait écho, la limite de l'analogie, une conclusion prudente, et les sources disponibles.",

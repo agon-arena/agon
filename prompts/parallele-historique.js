@@ -100,6 +100,7 @@ function buildParalleleHistoriquePrompt(topics, recentEvents) {
     `=== IMPORTANT — UN SEUL parallèle, le plus pertinent ===`,
     "Choisis un seul sujet parmi ceux fournis : celui pour lequel le précédent historique est le plus solide et le plus précis, d'après les critères ci-dessus (en particulier le test de spécificité). Ne publie JAMAIS plusieurs parallèles le même jour, même si plusieurs sujets te semblent s'y prêter — s'il y a plusieurs bons candidats, tranche et ne retiens que le meilleur.",
     "\"insufficient\" doit rester rare : ne l'utilise que si, après avoir vraiment cherché sur chacun des sujets, aucun ne présente de précédent que tu connais avec confiance — pas par défaut ou par prudence excessive.",
+    "Mais ne force jamais un rapprochement faible ou générique uniquement pour publier quelque chose : applique le test de spécificité en pratique, pas seulement en apparence — si le meilleur candidat du jour reste un lien vague, ou qu'un autre précédent collerait presque aussi bien, choisis \"insufficient\" plutôt qu'une comparaison médiocre.",
     "",
     "=== ÉTAPE 2 — Produire le parallèle retenu ===",
     "Pour le sujet retenu, rédige un parallèle contenant : un résumé très bref de l'actualité, un précédent historique précis, sa date ou période, son contexte, le mécanisme commun, la différence essentielle, une conclusion prudente, et les sources historiques disponibles.",

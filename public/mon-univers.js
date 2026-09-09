@@ -835,6 +835,21 @@ function createUniverseMinimap() {
   minimapZoomControlsEl.setAttribute("role", "group");
   minimapZoomControlsEl.setAttribute("aria-label", "Contrôles de zoom de Ma mémoire");
 
+  // Appui long sur "−" (demande du 09/09/2026) : dézoome directement au minimum au lieu
+  // d'attendre plusieurs clics successifs. Seul le "−" est concerné (pas de demande côté "+").
+  // pointerdown/up plutôt que juste "click" : fonctionne aussi bien au doigt (mobile) qu'à la
+  // souris. longPressFired sert à empêcher le "click" qui suit le relâchement de refaire EN PLUS
+  // un cran de zoom normal une fois l'appui long déjà déclenché.
+  const ZOOM_OUT_LONG_PRESS_MS = 500;
+  let zoomOutLongPressTimer = null;
+  let zoomOutLongPressFired = false;
+  const clearZoomOutLongPressTimer = () => {
+    if (zoomOutLongPressTimer) {
+      clearTimeout(zoomOutLongPressTimer);
+      zoomOutLongPressTimer = null;
+    }
+  };
+
   const createZoomButton = (direction) => {
     const isZoomIn = direction === "in";
     const button = document.createElement("button");
@@ -843,9 +858,30 @@ function createUniverseMinimap() {
     button.setAttribute("aria-label", isZoomIn ? "Zoomer dans Ma mémoire" : "Dézoomer dans Ma mémoire");
     button.title = isZoomIn ? "Zoomer" : "Dézoomer";
     button.textContent = isZoomIn ? "+" : "−";
+    if (!isZoomIn) {
+      button.addEventListener("pointerdown", (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        zoomOutLongPressFired = false;
+        clearZoomOutLongPressTimer();
+        zoomOutLongPressTimer = setTimeout(() => {
+          zoomOutLongPressTimer = null;
+          zoomOutLongPressFired = true;
+          const limits = camera?.getScaleLimits?.();
+          const state = camera?.getState?.();
+          if (limits && state) camera.setState({ x: state.x, y: state.y, scale: limits.minScale }, true);
+        }, ZOOM_OUT_LONG_PRESS_MS);
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
+        button.addEventListener(eventName, clearZoomOutLongPressTimer);
+      });
+    }
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (!isZoomIn && zoomOutLongPressFired) {
+        zoomOutLongPressFired = false;
+        return;
+      }
       camera?.zoomBy(isZoomIn ? 1.45 : 1 / 1.45, true);
     });
     return button;

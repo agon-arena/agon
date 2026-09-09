@@ -620,10 +620,18 @@ mnoriaStartupGongAudio.volume = 0.85;
 try { mnoriaStartupGongAudio.load(); } catch (error) {}
 
 function playMnoriaStartupGongSound() {
-  try {
-    mnoriaStartupGongAudio.currentTime = 0;
-    mnoriaStartupGongAudio.play().catch(() => {});
-  } catch (error) {}
+  // Remise à zéro et lecture isolées dans deux try/catch distincts (correctif
+  // du 09/09/2026, "gong silencieux au clic sur Actualiser") : si les
+  // métadonnées du .wav (405 Ko, non compressé) ne sont pas encore chargées
+  // au moment du clic (readyState insuffisant, plausible sur réseau mobile),
+  // fixer `currentTime` peut lever une exception sur Safari/WebKit — dans un
+  // bloc try unique, cette exception empêchait alors `.play()` de s'exécuter
+  // DU TOUT, sans aucune erreur visible (silence total, indiscernable d'un
+  // simple blocage d'autoplay). `.play()` doit toujours être tenté, même si
+  // la remise à zéro échoue (le son démarre alors depuis sa position
+  // précédente au lieu du début — un défaut mineur, jamais un silence total).
+  try { mnoriaStartupGongAudio.currentTime = 0; } catch (error) {}
+  try { mnoriaStartupGongAudio.play().catch(() => {}); } catch (error) {}
 }
 
 // Grise le bouton cliqué le temps que la navigation se lance réellement (retardée
@@ -839,22 +847,22 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   let contentReady = false;
   let fontsReady = false;
   let hidden = false;
-  // Condition standalone mobile (demande du 30/08/2026, "la page de chargement apparaît
-  // trop tard, elle doit apparaître immédiatement") : le cadre "Ma mémoire" (accueil, mode
-  // par défaut) peut mettre un instant à se stabiliser au lancement PWA à froid (cf.
-  // syncMnoriaHomeTrendsSectionMinHeight/mountUniverseAndHideSpinnerWhenReady, bien plus bas
-  // dans ce fichier — son propre flag window.__mnoriaHomeTrendsSectionTopReady n'existe pas
-  // encore à cet instant précoce, donc même vérification refaite ici plutôt que de dépendre
-  // d'un ordre d'exécution fragile entre deux zones du fichier). Ce loader de démarrage,
-  // déjà peint dans le HTML avant tout JS, reste donc affiché jusqu'à ce que CE cadre soit
-  // prêt lui aussi — jamais de fenêtre où il aurait déjà disparu pendant que le cadre bouge
-  // encore en dessous.
-  let memoireFrameReady = !(
-    document.body &&
-    document.body.classList.contains('is-standalone') &&
-    document.body.classList.contains('page-home-mobile') &&
-    window.innerWidth <= 768
-  );
+  // Élargi le 09/09/2026 ("je veux que tu laisses la page avec logo Mnoria/gong jusqu'à ce
+  // que le cadre de Ma mémoire soit bien en place") : cette condition ne couvrait avant que le
+  // lancement standalone mobile à froid (demande du 30/08/2026, "la page de chargement
+  // apparaît trop tard, elle doit apparaître immédiatement") — le cadre "Ma mémoire" (accueil,
+  // mode par défaut) peut pourtant mettre un instant à se stabiliser sur N'IMPORTE QUEL
+  // appareil/contexte, pas seulement celui-là (cf. syncMnoriaHomeTrendsSectionMinHeight/
+  // mountUniverseAndHideSpinnerWhenReady, bien plus bas dans ce fichier — son propre flag
+  // window.__mnoriaHomeTrendsSectionTopReady n'existe pas encore à cet instant précoce, donc
+  // même vérification refaite ici plutôt que de dépendre d'un ordre d'exécution fragile entre
+  // deux zones du fichier). Toujours false au départ désormais : ce loader de démarrage, déjà
+  // peint dans le HTML avant tout JS, reste donc affiché (logo + gong lors d'un clic sur
+  // "Actualiser") jusqu'à ce que CE cadre soit prêt lui aussi, quel que soit l'appareil —
+  // jamais de fenêtre où il aurait déjà disparu pendant que le cadre bouge encore en dessous.
+  // Hors de l'accueil, `loader` est absent (retour anticipé en tête de fonction) : ce
+  // changement ne peut donc jamais bloquer une autre page.
+  let memoireFrameReady = false;
   if (!memoireFrameReady) {
     window.addEventListener('mnoria:memoire-frame-ready', function() {
       memoireFrameReady = true;
@@ -3114,6 +3122,46 @@ function ensurePageArrivalLoadingOverlayStyles() {
       text-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
     }
 
+    /* Garde-fou anti-blocage (09/09/2026), même langage visuel que
+       .debate-iframe-parent-loading-retry (chargement d'une page via l'iframe modal) — repris
+       ici pour le chargement top-level de /, /debate et /apprentissage : passé le délai de
+       secours sans signal "prêt" réel, le sablier s'arrête et un bouton Réessayer apparaît au
+       lieu de révéler silencieusement une page à moitié chargée. */
+    .page-arrival-loading-overlay-stuck .page-arrival-loading-hourglass img {
+      animation: none;
+      opacity: 0.5;
+    }
+
+    .page-arrival-loading-actions:not([hidden]) {
+      display: flex;
+      justify-content: center;
+      margin-top: 14px;
+    }
+
+    .page-arrival-loading-retry {
+      appearance: none;
+      -webkit-appearance: none;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-family: 'Oswald', Impact, 'Arial Narrow', sans-serif;
+      letter-spacing: 0.04em;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      background: #2c3e50;
+      color: #ffffff;
+      transition: background 0.15s ease;
+    }
+
+    .page-arrival-loading-retry:hover { background: #1f2d3d; }
+    .page-arrival-loading-retry:active { background: #16212c; }
+    .page-arrival-loading-retry:focus-visible {
+      outline: 2px solid rgba(44, 62, 80, 0.5);
+      outline-offset: 2px;
+    }
+
     @keyframes pageArrivalLogoSpin {
       from { transform: translate3d(0, 0, 0) rotate(0deg); }
       to   { transform: translate3d(0, 0, 0) rotate(360deg); }
@@ -3381,10 +3429,20 @@ function showPageArrivalLoadingOverlay(message = "Chargement en cours") {
       <div class="page-arrival-loading-box" role="status" aria-live="polite" aria-busy="true">
         <div class="page-arrival-loading-hourglass" aria-hidden="true"><img src="/sablier-96.png" alt=""></div>
         <div class="page-arrival-loading-title" id="page-arrival-loading-title"></div>
+        <div class="page-arrival-loading-actions" id="page-arrival-loading-actions" hidden>
+          <button type="button" class="page-arrival-loading-retry" id="page-arrival-loading-retry">Réessayer</button>
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
   }
+
+  // Toute (re)mise en route d'un chargement repart d'un état propre (même logique que
+  // showDebateIframeParentLoadingOverlay) : efface un éventuel état "bloqué" laissé par un
+  // chargement précédent sur cette même page (ex: clic Réessayer qui relance un fetch).
+  overlay.classList.remove("page-arrival-loading-overlay-stuck");
+  const arrivalActions = document.getElementById("page-arrival-loading-actions");
+  if (arrivalActions) arrivalActions.hidden = true;
 
   applyPageArrivalLoadingVisuals();
 
@@ -3450,6 +3508,28 @@ function hidePageArrivalLoadingOverlay() {
   if (location.pathname === "/debate") {
     setPageArrivalControlsLocked(false);
   }
+}
+
+// Garde-fou anti-blocage (09/09/2026, même principe que markDebateIframeParentLoadingStuck pour
+// le chargement d'une page via l'iframe modal) : pour le chargement top-level de /, /debate et
+// /apprentissage (window.self === window.top, aucun parent/iframe pour afficher CE bandeau-là),
+// si le signal "prêt" réel n'arrive jamais avant le délai de secours, on n'efface plus
+// silencieusement le voile — le sablier s'arrête et un bouton Réessayer apparaît, qui recharge la
+// page (pas de re-navigation en place possible ici comme dans l'iframe, on est déjà tout en haut).
+function markPageArrivalLoadingOverlayStuck() {
+  const overlay = document.getElementById("page-arrival-loading-overlay");
+  if (!overlay || !overlay.classList.contains("page-arrival-loading-overlay-visible")) return;
+
+  overlay.classList.add("page-arrival-loading-overlay-stuck");
+
+  const title = document.getElementById("page-arrival-loading-title");
+  if (title) title.textContent = "Le chargement prend plus de temps que prévu";
+
+  const actions = document.getElementById("page-arrival-loading-actions");
+  if (actions) actions.hidden = false;
+
+  const retryButton = document.getElementById("page-arrival-loading-retry");
+  if (retryButton) retryButton.onclick = () => { window.location.reload(); };
 }
 
 function markPageArrivalLoadingOverlayReady() {
@@ -3656,9 +3736,22 @@ function initPageArrivalLoadingOverlay() {
   }
 
   if (!waitForHomeMemoryReturn) {
+    // /debate, / et /apprentissage attendent un vrai signal "prêt" (markPageArrivalLoadingOverlayReady,
+    // cf. pageArrivalLoadingOverlayReady plus haut) — si le délai de secours expire alors qu'il
+    // n'est toujours pas arrivé, on n'efface plus le voile en silence (finish(true) révélait une
+    // page à moitié chargée) : bouton Réessayer à la place (cf. markPageArrivalLoadingOverlayStuck,
+    // même principe que markDebateIframeParentLoadingStuck pour le chargement via l'iframe modal).
+    // Les autres pages n'ont pas ce garde (pageArrivalLoadingOverlayReady déjà true dès le départ
+    // pour elles) : ce délai n'y sert que de filet de courtoisie si l'événement "load" a manqué.
+    const isExplicitReadyPage = location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/apprentissage";
     pageArrivalLoadingOverlayFallbackTimer = setTimeout(() => {
+      pageArrivalLoadingOverlayFallbackTimer = null;
+      if (isExplicitReadyPage && !pageArrivalLoadingOverlayReady) {
+        markPageArrivalLoadingOverlayStuck();
+        return;
+      }
       finish(true);
-    }, location.pathname === "/debate" || location.pathname === "/" || location.pathname === "/apprentissage" ? 5000 : 2200);
+    }, isExplicitReadyPage ? 5000 : 2200);
   }
 }
 
@@ -7554,6 +7647,16 @@ function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
     closeDebateIframeModal({ skipReturnLoader: true });
     return;
   }
+  // Préchauffe la connexion vers "/" pendant que le voile s'anime (demande du
+  // 09/09/2026, "réduire le temps de chargement Apprentissage -> Accueil") :
+  // le mode "navigate" ci-dessus force le service worker à attendre le réseau
+  // pour CE retour précis, donc tout délai avant que le navigateur commence à
+  // parler au serveur s'ajoute intégralement au temps perçu. Ce fetch ignoré
+  // (mode "cors", jamais intercepté par la branche navigate du service worker)
+  // n'affiche rien et ne remplace aucune logique de fraîcheur existante — il
+  // ouvre juste la connexion TCP/TLS en avance pendant les ~2 frames + 80 ms
+  // que le voile met de toute façon à s'établir avant la vraie navigation.
+  try { fetch(homeNavigationUrl, { credentials: "same-origin" }).catch(() => {}); } catch (error) {}
   // Ce verrou ne doit exister que lors d'un vrai retour depuis Ma mémoire.
   // Posé auparavant pour Débat/Notifications/Apprentissage également, il
   // faisait attendre à l'accueil un événement `mnoria:memoire-content-ready`
@@ -9258,7 +9361,7 @@ function buildXIndexSourceCardHtml(sourceUrl, preview = null, debateId = "") {
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.onerror=null; this.src='/logovisuelchargement.png';"
+            onerror="this.onerror=null; this.style.display='none';"
           >
         </div>
       ` : ""}
@@ -10319,13 +10422,10 @@ function renderIndexOpenGraphImageShell(shell) {
       return;
     }
 
+    // Plus de logo générique de secours (fichier supprimé le 09/09/2026) :
+    // on s'arrête ici, l'image reste masquée (opacité 0 posée plus haut) et
+    // le placeholder [data-index-og-image-loading] reste affiché à la place.
     img.onerror = null;
-    img.onload = finish;
-    if (img.getAttribute('src') !== '/logovisuelchargement.png') {
-      img.src = '/logovisuelchargement.png';
-    } else {
-      finish();
-    }
   };
 
   img.onload = finish;
@@ -10556,7 +10656,7 @@ function buildIndexInstagramFallbackHtml(sourceUrl, preview = null, debateId = "
             loading="lazy"
             decoding="async"
             style="display:block; width:100%; height:100%; object-fit:cover;"
-            onerror="this.onerror=null; this.src='/logovisuelchargement.png';"
+            onerror="this.onerror=null; this.style.display='none';"
           >
         </div>
       ` : ""}
@@ -20781,7 +20881,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260904-desktop-dpr-floor').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260909-minimap-longpress-zoomout').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
@@ -26782,6 +26882,49 @@ function showNotionQuizLevelPicker(onSelect) {
   closeBtn.addEventListener("click", close);
 }
 
+// Récapitule sujet + niveau choisis avant de lancer la génération IA (demande du 09/09/2026,
+// "exactement la même [fenêtre de confirmation] que lorsqu'on génère un master avec IA sur la
+// page apprentissage" — répliquée ici depuis showGenerateConfirmModal, views/qcm-du-jour.html,
+// pour être réutilisable aussi bien depuis une notion d'arène qu'un "Mémoriser" Éclairages).
+// Coûte un appel IA (et, pour le niveau Expert, jusqu'à plusieurs minutes) impossible à
+// annuler une fois lancé — jamais de génération partie par erreur. `onConfirm` n'est appelé
+// que sur confirmation explicite, jamais sur fermeture/Escape/clic extérieur. Même famille
+// visuelle que showNotionQuizLevelPicker ci-dessus (styles partagés, cf. style.css).
+function showNotionGenerateConfirmModal(topic, level, onConfirm) {
+  const levelMeta = NOTION_QUIZ_LEVEL_OPTIONS.find((o) => o.level === level);
+  const levelName = levelMeta ? levelMeta.name : level;
+
+  const overlay = document.createElement("div");
+  overlay.className = "notion-level-picker-overlay";
+  overlay.innerHTML = `
+    <div class="notion-level-picker-modal">
+      <button type="button" class="notion-level-picker-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+      <p class="notion-level-picker-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Confirmer la génération</p>
+      <p class="notion-generate-confirm-text">${escapeHtml(topic)}, niveau ${escapeHtml(levelName)}. Tu confirmes ?</p>
+      <p class="notion-level-picker-hint">La génération peut prendre plusieurs minutes. Nous te préviendrons lorsque le parcours d'apprentissage sera prêt.</p>
+      <div class="notion-generate-confirm-actions">
+        <button type="button" class="notion-generate-confirm-cancel">Annuler</button>
+        <button type="button" class="notion-generate-confirm-ok">Confirmer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeydown);
+  }
+  function onKeydown(e) { if (e.key === "Escape") close(); }
+  document.addEventListener("keydown", onKeydown);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector(".notion-level-picker-close").addEventListener("click", close);
+  overlay.querySelector(".notion-generate-confirm-cancel").addEventListener("click", close);
+  overlay.querySelector(".notion-generate-confirm-ok").addEventListener("click", () => {
+    close();
+    onConfirm();
+  });
+}
+
 // Enrobage pour les notions affichées sur une carte accueil (demande du
 // 31/08/2026, "aussi dans les cartes page index, même visuel que les
 // arènes") : le débat/date/id sont lus depuis des data-attributes plutôt
@@ -26864,48 +27007,54 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
   if (!voterKey || !notionName) return;
 
   showNotionQuizLevelPicker((level) => {
-    computeCustomTopicKey(notionName).then((key) => {
-      const pendingSlot = key ? `notion:custom:${key}:${level}` : "";
-      btn.setAttribute("data-memorized", "true");
-      btn.classList.add("is-active");
-      if (pendingSlot) startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
-      const explainer = showDebateNotionMemorizeExplainer(notionName, true);
+    // Confirmation avant de lancer l'appel IA (demande du 09/09/2026, "exactement la même
+    // [fenêtre] que sur la page apprentissage") : jamais de génération partie par erreur sur un
+    // simple clic de niveau — coûte un appel IA (jusqu'à plusieurs minutes pour Expert)
+    // impossible à annuler une fois lancé.
+    showNotionGenerateConfirmModal(notionName, level, () => {
+      computeCustomTopicKey(notionName).then((key) => {
+        const pendingSlot = key ? `notion:custom:${key}:${level}` : "";
+        btn.setAttribute("data-memorized", "true");
+        btn.classList.add("is-active");
+        if (pendingSlot) startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
+        const explainer = showDebateNotionMemorizeExplainer(notionName, true);
 
-      const progressiveEndpoint = `${API}/users/notion-quizzes/custom/progressive`;
-      const progressivePayload = { legacyKey: voterKey, topic: notionName, level };
-      const disarmBeaconFallback = armNotionQuizGenerationBeaconFallback(progressiveEndpoint, progressivePayload);
-      fetchJSON(progressiveEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify(progressivePayload)
-      })
-        .then(() => {
-          disarmBeaconFallback();
-          if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
-          explainer.ready();
+        const progressiveEndpoint = `${API}/users/notion-quizzes/custom/progressive`;
+        const progressivePayload = { legacyKey: voterKey, topic: notionName, level };
+        const disarmBeaconFallback = armNotionQuizGenerationBeaconFallback(progressiveEndpoint, progressivePayload);
+        fetchJSON(progressiveEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify(progressivePayload)
         })
-        .catch((error) => {
-          disarmBeaconFallback();
-          // Distingue un échec réellement confirmé par le backend (réponse HTTP non-2xx
-          // avec un vrai corps JSON de notre serveur, cf. fetchJSON plus haut : error.status
-          // ET error.code sont alors renseignés) d'un cas ambigu — AbortError (fetchJSON
-          // applique par défaut un timeout client de 12s, bien plus court qu'une génération
-          // IA de plusieurs minutes), coupure réseau, ou une réponse non-JSON d'un
-          // intermédiaire externe (proxy) où error.status est défini mais error.code ne
-          // l'est pas. Même principe que startCustomTopicGeneration (views/qcm-du-jour.html,
-          // correctifs UX "Marxisme" 01/09/2026 et "Maoïsme" 02/09/2026) : un cas ambigu ne
-          // prouve jamais que la génération a échoué — le marqueur persistant et le bouton
-          // restent en l'état, le sondage global déjà existant (checkPendingNotionQuizzesReadiness,
-          // plus haut dans ce fichier) reste seul en charge jusqu'à ready (ou, si un jour
-          // ajouté côté serveur pour cette route, failed).
-          const confirmedFailure = !!error && typeof error.status === "number" && !!error.code;
-          if (!confirmedFailure) return;
-          if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
-          explainer.failed();
-          btn.setAttribute("data-memorized", "false");
-          btn.classList.remove("is-active");
-        });
+          .then(() => {
+            disarmBeaconFallback();
+            if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
+            explainer.ready();
+          })
+          .catch((error) => {
+            disarmBeaconFallback();
+            // Distingue un échec réellement confirmé par le backend (réponse HTTP non-2xx
+            // avec un vrai corps JSON de notre serveur, cf. fetchJSON plus haut : error.status
+            // ET error.code sont alors renseignés) d'un cas ambigu — AbortError (fetchJSON
+            // applique par défaut un timeout client de 12s, bien plus court qu'une génération
+            // IA de plusieurs minutes), coupure réseau, ou une réponse non-JSON d'un
+            // intermédiaire externe (proxy) où error.status est défini mais error.code ne
+            // l'est pas. Même principe que startCustomTopicGeneration (views/qcm-du-jour.html,
+            // correctifs UX "Marxisme" 01/09/2026 et "Maoïsme" 02/09/2026) : un cas ambigu ne
+            // prouve jamais que la génération a échoué — le marqueur persistant et le bouton
+            // restent en l'état, le sondage global déjà existant (checkPendingNotionQuizzesReadiness,
+            // plus haut dans ce fichier) reste seul en charge jusqu'à ready (ou, si un jour
+            // ajouté côté serveur pour cette route, failed).
+            const confirmedFailure = !!error && typeof error.status === "number" && !!error.code;
+            if (!confirmedFailure) return;
+            if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
+            explainer.failed();
+            btn.setAttribute("data-memorized", "false");
+            btn.classList.remove("is-active");
+          });
+      });
     });
   });
 }
@@ -36758,17 +36907,19 @@ let __mnoriaTrendsSectionTopPending = null;
 // intermédiaire avec sablier... le temps que le cadre se mette bien" — le sablier
 // "Ma mémoire" ne doit disparaître (et les bulles se monter) qu'une fois la hauteur
 // standalone RÉELLEMENT commitée, jamais avant, sans quoi les bulles se plaçaient sur
-// un cadre encore à sa taille provisoire. Calculé une première fois ici (script.js est
-// chargé en defer, donc après que index.html ait déjà posé is-standalone/page-home-mobile
-// sur <body> via son script inline précoce) : false UNIQUEMENT dans le contexte concerné
-// (standalone mobile), true partout ailleurs pour ne jamais bloquer desktop/mobile
-// classique — la fonction ci-dessous garde ensuite cette valeur synchronisée.
-window.__mnoriaHomeTrendsSectionTopReady = !(
-  document.body &&
-  document.body.classList.contains('is-standalone') &&
-  document.body.classList.contains('page-home-mobile') &&
-  window.innerWidth <= 768
-);
+// un cadre encore à sa taille provisoire.
+// Élargi le 09/09/2026 ("logo Mnoria/gong affichés jusqu'à ce que le cadre de Ma
+// mémoire soit prêt") : démarre désormais TOUJOURS à false, plus seulement en
+// standalone mobile — initMnoriaStartupLoader (tout en haut de ce fichier) attend
+// maintenant cet événement sur tout appareil pour garder son loader de démarrage
+// affiché. Sans risque pour les autres consommateurs (mountUniverseAndHideSpinnerWhenReady,
+// finishHomeReturnPrepaint, #mnoria-memoire-loading-veil…) : tous pollent déjà cette
+// valeur avec leur propre filet de temps plutôt que de supposer une résolution
+// instantanée, et syncMnoriaHomeTrendsSectionMinHeight (juste plus bas) appelle
+// markMnoriaHomeTrendsSectionTopReady() dès sa toute première passe (quelques ms,
+// cf. bindMnoriaMobileViewportBottomFillSync) hors du contexte standalone mobile —
+// jamais d'attente perceptible ajoutée sur desktop/mobile classique.
+window.__mnoriaHomeTrendsSectionTopReady = false;
 // Événement (plutôt qu'un simple flag lu une fois) : initMnoriaStartupLoader (tout en
 // haut de ce fichier, exécuté bien avant que ce flag n'existe) s'abonne dessus pour
 // garder SON PROPRE loader plein écran affiché — déjà peint dès le tout premier rendu,

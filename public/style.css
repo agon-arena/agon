@@ -3611,6 +3611,16 @@ body.page-debate #score-b {
   transition: opacity 0.2s ease;
   z-index: 500;
 }
+/* Remonte le dégradé et son bouton "Suite ↓" au-dessus du bandeau du bas
+   (demande du 09/09/2026, "organiser le bandeau du bas") : à bottom:0 avec un
+   z-index supérieur au sien (145), ce bouton recouvrait les icônes/libellés
+   du bandeau sur toute page assez longue pour dépasser du viewport (constaté
+   sur Citation du jour, Ce jour dans l'Histoire une fois une catégorie
+   dépliée...). Même hauteur de réserve que .mnoria-global-bottom-nav-spacer
+   (76px + l'encoche), pour rester pile au-dessus quel que soit l'appareil. */
+body.mnoria-global-bottom-nav-enabled .page-scroll-fade-hint {
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
 .page-scroll-fade-hint.is-hidden { opacity: 0; pointer-events: none; }
 .scroll-fade-hint-text {
   display: inline-flex;
@@ -5434,6 +5444,51 @@ body.page-debate .debate-notions-section {
 }
 .notion-level-picker-cancel:hover{
   color:#243038;
+}
+
+/* Modale de confirmation avant génération (showNotionGenerateConfirmModal, script.js) : réutilise
+   .notion-level-picker-overlay/-modal/-close/-title/-hint ci-dessus, seuls le corps du texte et
+   la rangée de boutons (Annuler/Confirmer côte à côte, contrairement au bouton Annuler seul et
+   pleine largeur du sélecteur de niveau) sont propres à cette modale. */
+.notion-generate-confirm-text{
+  margin:0 0 14px;
+  color:#243038;
+  font-size:14px;
+  line-height:1.5;
+}
+.notion-generate-confirm-actions{
+  display:flex;
+  gap:10px;
+  margin-top:4px;
+}
+.notion-generate-confirm-cancel,
+.notion-generate-confirm-ok{
+  flex:1;
+  padding:10px 16px;
+  border-radius:999px;
+  font-family:var(--font-heading-condensed);
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:0.02em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.notion-generate-confirm-cancel{
+  border:1px solid #e5e7eb;
+  background:#f9fafb;
+  color:#6b7280;
+}
+.notion-generate-confirm-cancel:hover{
+  background:#f3f4f6;
+  color:#243038;
+}
+.notion-generate-confirm-ok{
+  border:none;
+  background:#243038;
+  color:#ffffff;
+}
+.notion-generate-confirm-ok:hover{
+  background:#111827;
 }
 
 /* Vue liste */
@@ -7806,6 +7861,12 @@ body.page-home-mobile .home-secondary-actions {
 body.page-home #debates-list,
 body.page-home-mobile #debates-list {
   order: 4;
+}
+
+body.page-home #debates-list:has(.index-initial-theme-row),
+body.page-home-mobile #debates-list:has(.index-initial-theme-row) {
+  display: block;
+  grid-template-columns: none;
 }
 
 /* Page "Autres actus" : le bouton Trier/Rechercher est juste sous le switch
@@ -20382,7 +20443,7 @@ body.page-home-mobile .debate-card-mnoria-badge {
      avant/sans JS : à -80px le bandeau (z-index 2, au-dessus de la section)
      recouvrait la légende au scroll. */
   body.is-standalone.page-home-mobile #debates-list .theme-row-section:first-child {
-    margin-top: var(--mnoria-home-first-row-mt, -4px);
+    margin-top: var(--mnoria-home-first-row-mt, 21px);
     position: relative;
     z-index: 2;
   }
@@ -20397,7 +20458,7 @@ body.page-home-mobile .debate-card-mnoria-badge {
      le :has() sur le conteneur des bulles. */
   body.is-standalone.page-home-mobile.mnoria-memoire-cloud-mode .index-explorer-topbar,
   body.is-standalone.page-home-mobile:has(#mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria) .index-explorer-topbar {
-    margin-top: var(--mnoria-home-sort-btn-mt, -4px) !important;
+    margin-top: var(--mnoria-home-sort-btn-mt, 24px) !important;
   }
 
   /* Emporte sur le margin-top:0 !important générique posé dans index.html
@@ -20406,7 +20467,7 @@ body.page-home-mobile .debate-card-mnoria-badge {
      Sélecteur volontairement plus spécifique (4 classes) pour gagner. */
   body.is-standalone.page-home-mobile.mnoria-memoire-cloud-mode #debates-list .theme-row-section:first-child,
   body.is-standalone.page-home-mobile:has(#mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria) #debates-list .theme-row-section:first-child {
-    margin-top: var(--mnoria-home-first-row-mt, -4px) !important;
+    margin-top: var(--mnoria-home-first-row-mt, 21px) !important;
   }
 
   /* Mode "Actualités" (Bulles Actu) : même calage symétrique 24px que Ma
@@ -20419,10 +20480,10 @@ body.page-home-mobile .debate-card-mnoria-badge {
      l'ordre de la cascade — jamais un simple retrait de la restriction de mode
      sur les règles ci-dessus, qui retomberait à égalité de spécificité. */
   body.is-standalone.page-home-mobile:not(.mnoria-memoire-cloud-mode):not(:has(#mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria)) .index-explorer-topbar {
-    margin-top: var(--mnoria-home-sort-btn-mt, -4px) !important;
+    margin-top: var(--mnoria-home-sort-btn-mt, 24px) !important;
   }
   body.is-standalone.page-home-mobile:not(.mnoria-memoire-cloud-mode):not(:has(#mnoria-tag-trends-cloud.mnoria-cloud-mode-mnoria)) #debates-list .theme-row-section:first-child {
-    margin-top: var(--mnoria-home-first-row-mt, -4px) !important;
+    margin-top: var(--mnoria-home-first-row-mt, 21px) !important;
   }
 
   /* Mobile navigateur (hors standalone), mode "Ma mémoire" : 24px avant le
@@ -26454,20 +26515,7 @@ body.page-mon-univers .topbar-inner > :not(.home-brand-block) {
 body.is-standalone.page-home-mobile #mnoria-tag-trends-cloud.mnoria-memoire-frame {
   height: max(636px, calc(100dvh - var(--mnoria-home-trends-section-top, 110px) - 73px - env(safe-area-inset-bottom, 0px) - 148px));
   min-height: max(636px, calc(100dvh - var(--mnoria-home-trends-section-top, 110px) - 73px - env(safe-area-inset-bottom, 0px) - 148px));
-  /* Au lancement PWA à froid, --mnoria-home-trends-section-top (et 100dvh
-     lui-même) mettent un instant à se stabiliser (cf. le commentaire détaillé
-     de syncMnoriaHomeTrendsSectionMinHeight, script.js — mesures provisoires
-     documentées le 12/08/2026, déjà atténuées par un double-passage stable
-     avant application, jamais éliminées : la mesure OS elle-même reste
-     transitoire quelques instants). Plutôt que de risquer d'accélérer cette
-     mesure (déjà ajustée une fois après un souci de valeurs aberrantes),
-     transition sur la hauteur elle-même : le cadre grandit/rétrécit en
-     douceur vers sa taille finale au lieu d'un saut brut (demande du
-     30/08/2026, "trop court puis se corrige"). Portée à ce seul contexte
-     (standalone mobile) — jamais sur .mnoria-memoire-frame en général, qui
-     n'a pas ce souci de mesure asynchrone.
-  */
-  transition: height 0.35s ease, min-height 0.35s ease;
+  transition: none;
 }
 
 /* Standalone : Bulles Actu/Mnoria rapprochent leur cadre du bandeau du haut via

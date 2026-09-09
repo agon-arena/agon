@@ -50,10 +50,23 @@
     var nav = document.createElement('nav');
     nav.className = 'home-bottom-nav';
     nav.setAttribute('aria-label', 'Navigation principale');
-    nav.appendChild(makeItem('fa-regular fa-compass', 'Explorer', goHome));
+    // Page Éclairages (demande du 09/09/2026) : "Explorer" remplacé par "Accueil" (1ère place),
+    // et "Apprentissages" (même icône/cible que partout ailleurs sur le site, cf. views/index.html
+    // bottom-nav-item "Apprentissages" → /apprentissage) prend la place habituelle d'"Accueil"
+    // plus loin dans la barre — les deux permutés, jamais dupliqués. Les 13 autres pages qui
+    // chargent ce même script gardent "Explorer"/"Accueil" inchangés.
+    if (pathname === '/eclairages') {
+      nav.appendChild(makeItem('fa-solid fa-house', 'Accueil', goHome));
+    } else {
+      nav.appendChild(makeItem('fa-regular fa-compass', 'Explorer', goHome));
+    }
     nav.appendChild(makeItem('fa-solid fa-plus', 'Ouvrir', function () { openPage('/create'); }));
     nav.appendChild(makeItem('fa-solid fa-rotate-right', 'Actualiser', function () { window.location.reload(); }));
-    nav.appendChild(makeItem('fa-solid fa-house', 'Accueil', goHome));
+    if (pathname === '/eclairages') {
+      nav.appendChild(makeItem('fa-solid fa-list-check', 'Apprentissages', function () { openPage('/apprentissage'); }));
+    } else {
+      nav.appendChild(makeItem('fa-solid fa-house', 'Accueil', goHome));
+    }
     nav.appendChild(makeItem('fa-regular fa-bell', 'Alertes', function () { openPage('/notifications'); }));
 
     document.body.classList.add('mnoria-global-bottom-nav-enabled');

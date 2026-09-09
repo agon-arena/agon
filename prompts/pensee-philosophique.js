@@ -101,6 +101,7 @@ function buildPenseePhilosophiquePrompt(topics, recentConcepts) {
     `=== IMPORTANT — UNE SEULE pensée, la plus pertinente ===`,
     "Choisis un seul sujet parmi ceux fournis : celui pour lequel le rapprochement philosophique est le plus solide et le plus précis, d'après les critères ci-dessus (en particulier le test de spécificité). Ne publie JAMAIS plusieurs pensées le même jour, même si plusieurs sujets te semblent s'y prêter — s'il y a plusieurs bons candidats, tranche et ne retiens que le meilleur.",
     "\"insufficient\" doit rester rare : ne l'utilise que si, après avoir vraiment cherché sur chacun des sujets, aucun ne présente de concept que tu connais avec confiance — pas par défaut ou par prudence excessive.",
+    "Mais ne force jamais un rapprochement faible ou générique uniquement pour publier quelque chose : applique le test de spécificité en pratique, pas seulement en apparence — si le meilleur candidat du jour reste un lien vague, ou qu'une autre pensée collerait presque aussi bien, choisis \"insufficient\" plutôt qu'un rapprochement médiocre.",
     "",
     "=== ÉTAPE 2 — Produire la pensée retenue ===",
     "Pour le sujet retenu, rédige une pensée contenant : un résumé très bref de l'actualité, le nom du concept philosophique, le philosophe ou courant qui lui est associé, le contexte ou l'époque d'apparition du concept, une explication claire du concept, ce qui dans l'actualité y fait écho, la limite de l'analogie, une conclusion prudente, et les sources disponibles.",

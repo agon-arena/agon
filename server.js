@@ -5792,11 +5792,13 @@ if (TOP5_NOTIFY_SCHEDULER_ENABLED) {
   console.log("[top5-notify] scheduler désactivé hors Render (forcer avec MNORIA_TOP5_NOTIFY_SCHEDULER=on).");
 }
 
-// Notification push "Ancrer/Relier" (demande du 01/09/2026) : un rappel quotidien
-// unique, seulement s'il y a réellement au moins un élément disponible (jamais de
-// rappel "rien à faire") — mêmes critères de disponibilité que le bandeau/bouton de
-// la page Apprentissage (GET /api/daily-quiz/status), pour ne jamais notifier un
-// état que l'utilisateur ne verrait pas en ouvrant la page.
+// Notification push "Ancrer/Relier" (demande du 01/09/2026) : un rappel quotidien,
+// seulement s'il y a réellement au moins un élément disponible (jamais de rappel "rien
+// à faire") — mêmes critères de disponibilité que le bandeau/bouton de la page
+// Apprentissage (GET /api/daily-quiz/status), pour ne jamais notifier un état que
+// l'utilisateur ne verrait pas en ouvrant la page. Une notification PAR type disponible
+// (jamais un message combiné "ancrer et relier", demande du 09/09/2026) — jusqu'à 2 push
+// distincts le même jour si les deux sont disponibles.
 const LEARNING_DIGEST_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const LEARNING_DIGEST_HOUR = 9; // heure de Paris, cf. parisHour()
 const LEARNING_DIGEST_SCHEDULER_ENABLED = isRenderScopedTaskEnabled("MNORIA_LEARNING_DIGEST_SCHEDULER");
@@ -5823,6 +5825,7 @@ async function sendLearningDigestNotifications() {
 
   const todayKey = parisDateKey();
   let notified = 0;
+  let pushesSent = 0;
   for (let i = 0; i < legacyKeys.length; i += LEARNING_DIGEST_BATCH_SIZE) {
     const batch = legacyKeys.slice(i, i + LEARNING_DIGEST_BATCH_SIZE);
     await Promise.all(batch.map(async (legacyKey) => {
@@ -5834,25 +5837,33 @@ async function sendLearningDigestNotifications() {
         const ancrerAvailable = reinforcementQuestions.length > 0;
         if (!ancrerAvailable && !comprehensionAvailable) return;
 
-        const parts = [];
-        if (ancrerAvailable) parts.push("ancrer");
-        if (comprehensionAvailable) parts.push("relier");
-        const message = parts.length === 2
-          ? "Tu as des connaissances à ancrer et à relier aujourd'hui."
-          : `Tu as des connaissances à ${parts[0]} aujourd'hui.`;
-
-        await createNotification({
-          user_key: legacyKey,
-          type: "learning_digest",
-          message
-        });
+        // Deux notifications push distinctes plutôt qu'un message combiné (demande du
+        // 09/09/2026, "je ne veux pas de cette notification qui m'informe des deux en même
+        // temps") : createNotification déclenche son propre push par appel (_sendPushNow),
+        // donc les appeler séparément suffit — jamais de fusion à faire soi-même.
+        if (ancrerAvailable) {
+          await createNotification({
+            user_key: legacyKey,
+            type: "learning_digest",
+            message: "Tu as des connaissances à ancrer aujourd'hui."
+          });
+          pushesSent += 1;
+        }
+        if (comprehensionAvailable) {
+          await createNotification({
+            user_key: legacyKey,
+            type: "learning_digest",
+            message: "Tu as des connaissances à relier aujourd'hui."
+          });
+          pushesSent += 1;
+        }
         notified += 1;
       } catch (error) {
         console.error(`[learning-digest] Erreur pour ${legacyKey}:`, error.message);
       }
     }));
   }
-  console.log(`[learning-digest] rappel envoyé à ${notified}/${legacyKeys.length} abonnés push.`);
+  console.log(`[learning-digest] rappel envoyé à ${notified}/${legacyKeys.length} abonnés push (${pushesSent} notification(s) au total).`);
 }
 
 async function checkLearningDigestSchedule() {
@@ -18709,9 +18720,20 @@ async function getDailyEclairagesPublicationStatus(date = new Date()) {
             return { name, status: result?.status || "not_found" };
           })
         );
+        // "insufficient"/"failed" comptent comme résolues au même titre que "published"
+        // (demande du 09/09/2026, "pourquoi éclairages ne fonctionne plus") : une rubrique
+        // peut légitimement conclure qu'aucun contenu ne convient (ex. latin_du_jour, "aucune
+        // expression latine attestée ne convient à ces actualités") sans que ce soit une
+        // erreur ni un état transitoire — seuls "generating"/"not_found" signalent encore un
+        // travail en cours. Avant ce correctif, une seule rubrique "insufficient" bloquait
+        // `available` en permanence pour toute la journée, même les 6 autres rubriques et les
+        // débats du jour bel et bien publiés — visible comme le bouton "Éclairages" de
+        // l'accueil resté grisé indéfiniment, et bloquait aussi le push quotidien qu'on vient
+        // de fiabiliser (checkDailyPushBroadcastReady).
+        const RESOLVED_ECLAIRAGE_STATUSES = new Set(["published", "insufficient", "failed"]);
         const value = {
           date: dateKey,
-          available: results.every((item) => item.status === "published"),
+          available: results.every((item) => RESOLVED_ECLAIRAGE_STATUSES.has(item.status)),
           sections: results
         };
         // Une fois "available", le statut ne peut plus redevenir faux avant demain (les

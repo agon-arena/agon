@@ -3863,6 +3863,13 @@
   <div class="page-arrival-loading-box" role="status" aria-live="polite" aria-busy="true">
     <div class="page-arrival-loading-hourglass" aria-hidden="true"><img src="/sablier-96.png" alt=""></div>
     <div class="page-arrival-loading-title" id="page-arrival-loading-title">Chargement de mes apprentissages en cours</div>
+    <!-- Garde-fou anti-blocage (09/09/2026, cf. markPageArrivalLoadingOverlayStuck, script.js) :
+         ce voile est prépeint ici en statique (contrairement aux autres pages, construit à la
+         volée par showPageArrivalLoadingOverlay) pour couvrir la toute première peinture, donc
+         doit porter les mêmes boutons de secours dès le départ. -->
+    <div class="page-arrival-loading-actions" id="page-arrival-loading-actions" hidden>
+      <button type="button" class="page-arrival-loading-retry" id="page-arrival-loading-retry">Réessayer</button>
+    </div>
   </div>
 </div>
 <header class="topbar topbar--mnoria-uniform">
@@ -4004,7 +4011,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260909-memory-top-level-v29" defer></script>
+<script src="/script.min.js?v=20260909-memory-top-level-v29-gong-fix-memoire-wait" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -6780,6 +6787,15 @@
         '</div>' +
         '<input type="text" class="qcm-explore-search-input" id="qcm-explore-search-input" placeholder="Filtrer par sujet…">' +
         '<div class="qcm-explore-list-wrap"><div class="qcm-explore-list" id="qcm-explore-list"></div></div>' +
+        // Même bouton/style qu'en bas de "Commencer un nouvel apprentissage" (cf.
+        // .qcm-learning-return-bottom, openKnowledgeAddWindow) — accès direct à la liste "Mes
+        // apprentissages" sans repasser par la croix (demande du 09/09/2026).
+        '<div class="qcm-learning-return-bottom">' +
+          '<button type="button" class="qcm-learning-return-btn" data-action="return">' +
+            '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>' +
+            '<span>Retourner aux apprentissages</span>' +
+          '</button>' +
+        '</div>' +
       '</div>';
 
     var overlay = document.createElement('div');
@@ -6806,6 +6822,10 @@
     });
     document.addEventListener('keydown', onKeydown);
     overlay.querySelector('.qcm-fiche-close').addEventListener('click', closeMesQcmExploreModal);
+    overlay.querySelector('[data-action="return"]').addEventListener('click', function () {
+      closeMesQcmExploreModal();
+      returnToLearningOverview();
+    });
     mesQcmExploreModalEls = { overlay: overlay, onKeydown: onKeydown, closeResizeObserver: exploreCloseResizeObserver };
 
     var searchInput = overlay.querySelector('#qcm-explore-search-input');

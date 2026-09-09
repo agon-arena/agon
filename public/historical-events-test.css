@@ -686,6 +686,12 @@ html {
   transition: opacity 0.2s ease;
   z-index: 500;
 }
+/* Même correctif que .page-scroll-fade-hint dans style.css (demande du
+   09/09/2026, "organiser le bandeau du bas") : remonte le dégradé/bouton
+   "Suite ↓" au-dessus du bandeau du bas plutôt que de le recouvrir. */
+body.mnoria-global-bottom-nav-enabled .het-scroll-fade-hint {
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
 .het-scroll-fade-hint.is-hidden {
   opacity: 0;
   pointer-events: none;

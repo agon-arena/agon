@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
-<link rel="stylesheet" href="/style.min.css?v=20260908-actu-sortbtn-gap">
+<link rel="stylesheet" href="/style.min.css?v=20260909-generate-confirm-modal">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -785,7 +785,7 @@
       padding-top: 24px;
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
+  <script src="/header-score-widget.min.js?v=20260909-anti-heat-hidden-pause" defer></script>
 </head>
 <body class="page-eclairages">
 <header class="topbar topbar--mnoria-uniform">
@@ -1071,7 +1071,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260909-debate-home-cache-unblock-v16" defer></script>
+<script src="/script.min.js?v=20260909-generate-confirm-modal" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1191,14 +1191,20 @@
     });
   };
 
-  // Clic sur "Mémoriser" (cf. server.js POST /api/users/notion-quizzes) :
-  // crée un QCM indépendant et nommé sur cette seule notion (ou rejoint celui
-  // déjà généré par un autre visiteur), qui apparaît dans "Mes QCM" sur
-  // /qcm-du-jour. `data-item` (JSON de l'objet brut de la notion, posé par
-  // chaque rubrique au rendu, cf. plus bas) et `data-rubric` (déjà présent
-  // dans le HTML statique) portent tout ce dont ce bloc partagé a besoin —
-  // chaque rubrique reste une IIFE indépendante (cf. escapeHtml dupliqué
-  // partout ailleurs dans ce fichier), aucune variable JS partagée entre elles.
+  // Clic sur "Mémoriser" : deux comportements distincts selon ECL_MASTER_TOPIC_FIELD
+  // (demande du 09/09/2026, "créer un master complet sur l'auteur"). Rubriques listées
+  // (citation/œuvre/pensée/mécanisme/concept/parallèle) : POST .../notion-quizzes/custom, le
+  // pipeline officiel de la recherche libre (validation du sujet, grounding, fiche complète,
+  // niveau Expert direct) sur l'entité associée — l'auteur/artiste/philosophe/sociologue pour
+  // citation/œuvre/pensée/mécanisme (l'item n'est qu'un exemple de son œuvre plus large), le
+  // concept/précédent lui-même pour concept/parallèle. Latin du jour (seule rubrique absente
+  // de cette table) : comportement historique inchangé, POST .../notion-quizzes — QCM étroit
+  // sur cet item précis (ou rejoint celui déjà généré par un autre visiteur), qui apparaît
+  // dans "Mes QCM" sur /qcm-du-jour. `data-item` (JSON de l'objet brut de la notion, posé par
+  // chaque rubrique au rendu, cf. plus bas) et `data-rubric` (déjà présent dans le HTML
+  // statique) portent tout ce dont ce bloc partagé a besoin — chaque rubrique reste une IIFE
+  // indépendante (cf. escapeHtml dupliqué partout ailleurs dans ce fichier), aucune variable
+  // JS partagée entre elles.
   function setMemorizeButtonState(btn, active) {
     btn.classList.toggle('is-active', active);
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -1278,6 +1284,22 @@
     };
   }
 
+  // Rubriques où "Mémoriser" doit créer un master complet (pipeline officiel de la
+  // recherche libre, POST /api/users/notion-quizzes/custom) sur l'ENTITÉ associée plutôt
+  // qu'un QCM étroit sur cet item précis (demande du 09/09/2026) : le champ ci-dessous
+  // fournit le sujet à rechercher — la personne citée pour citation/œuvre/pensée/mécanisme
+  // (l'item n'est qu'un exemple de son œuvre plus large), le concept/précédent lui-même pour
+  // concept/parallèle (déjà l'unité de connaissance visée). Latin du jour reste hors
+  // dispositif : une expression grammaticale n'est pas un sujet de connaissance à approfondir.
+  var ECL_MASTER_TOPIC_FIELD = {
+    citation: 'quote_author',
+    oeuvre: 'artist_name',
+    pensee: 'philosopher_name',
+    mecanisme: 'sociologist_name',
+    concept: 'concept_name',
+    parallele: 'historical_event_title'
+  };
+
   function memorizeNotion(btn, voterKey) {
     var notionName = btn.getAttribute('data-notion-name') || 'cette notion';
     var rubric = btn.getAttribute('data-rubric');
@@ -1286,44 +1308,81 @@
     try { item = rawItem ? JSON.parse(rawItem) : null; } catch (e) { item = null; }
     var sourceDebateId = item && item.current_topic_id;
     if (!item || !sourceDebateId) return;
-    var pendingSlot = 'notion:' + rubric + ':' + String(sourceDebateId);
 
-    // Optimiste : le bouton passe actif et le message nommé s'affiche
-    // immédiatement. La page Apprentissage reprend ensuite ce même état et
-    // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
-    setMemorizeButtonState(btn, true);
-    if (typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
-      window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName });
-    }
-    var explainer = showMemorizeExplainerModal(notionName);
+    var topicField = ECL_MASTER_TOPIC_FIELD[rubric];
+    var masterTopic = topicField ? String(item[topicField] || '').trim() : '';
+    // Sujet trop court/absent (donnée inattendue) : repli sur l'ancien comportement étroit
+    // plutôt que d'échouer silencieusement — jamais de requête /custom avec un sujet invalide
+    // (contrainte serveur : 3 à 150 caractères).
+    var useOfficialPipeline = !!topicField && masterTopic.length >= 3 && masterTopic.length <= 150;
 
-    fetch('/api/users/notion-quizzes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      keepalive: true,
-      body: JSON.stringify({ legacyKey: voterKey, sourceType: rubric, sourceDebateId: String(sourceDebateId), item: item })
-    })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-          window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
-        }
-        if (!data.ok) {
+    var pendingSlot = useOfficialPipeline
+      ? 'notion:custom:pending:' + rubric + ':' + String(sourceDebateId)
+      : 'notion:' + rubric + ':' + String(sourceDebateId);
+    var pendingLabel = useOfficialPipeline ? masterTopic : notionName;
+
+    function proceed() {
+      // Optimiste : le bouton passe actif et le message nommé s'affiche
+      // immédiatement. La page Apprentissage reprend ensuite ce même état et
+      // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
+      setMemorizeButtonState(btn, true);
+      if (typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
+        window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingSlot, label: pendingLabel });
+      }
+      var explainer = showMemorizeExplainerModal(pendingLabel);
+
+      var request = useOfficialPipeline
+        ? fetch('/api/users/notion-quizzes/custom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            // Niveau Expert directement (demande du 09/09/2026, "fiche complète, expert") :
+            // pas de montée progressive Élémentaire → Expert pour cette entrée-là — la
+            // profondeur de recherche du master est de toute façon toujours maximale
+            // (MASTER_GENERATION_DEPTH_CONFIG côté serveur), seul change ce qui est servi
+            // immédiatement.
+            body: JSON.stringify({ legacyKey: voterKey, topic: masterTopic, level: 'expert' })
+          })
+        : fetch('/api/users/notion-quizzes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: JSON.stringify({ legacyKey: voterKey, sourceType: rubric, sourceDebateId: String(sourceDebateId), item: item })
+          });
+
+      request
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+            window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
+          }
+          if (!data.ok) {
+            explainer.failed();
+            setMemorizeButtonState(btn, false);
+            return;
+          }
+          explainer.ready();
+          btn.setAttribute('data-quiz-slot', data.slot);
+          btn.setAttribute('data-quiz-date', data.quizDate);
+        })
+        .catch(function () {
+          if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+            window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
+          }
           explainer.failed();
           setMemorizeButtonState(btn, false);
-          return;
-        }
-        explainer.ready();
-        btn.setAttribute('data-quiz-slot', data.slot);
-        btn.setAttribute('data-quiz-date', data.quizDate);
-      })
-      .catch(function () {
-        if (typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-          window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
-        }
-        explainer.failed();
-        setMemorizeButtonState(btn, false);
-      });
+        });
+    }
+
+    // Confirmation avant de lancer l'appel IA (demande du 09/09/2026, "exactement la même
+    // [fenêtre] que sur la page apprentissage") : uniquement pour le pipeline officiel (coût
+    // réel, jusqu'à plusieurs minutes) — le chemin étroit historique (latin du jour) reste
+    // instantané, sans confirmation, comme avant.
+    if (useOfficialPipeline && typeof window.showNotionGenerateConfirmModal === 'function') {
+      showNotionGenerateConfirmModal(masterTopic, 'expert', proceed);
+    } else {
+      proceed();
+    }
   }
 
   // Décliquer ne retire que la ligne de la liste personnelle "Mes QCM" —
@@ -1349,13 +1408,41 @@
     var buttons = document.querySelectorAll('.ecl-rubric-memorize-btn[data-rubric]');
     if (!voterKey || !buttons.length) return;
 
+    // normalizeTopicForMatch : repli client, volontairement simple (minuscules, accents
+    // retirés) — n'a pas besoin d'être identique bit à bit à normalizeCustomTopicKey côté
+    // serveur (lib/custom-topic-identity.js). Sert uniquement à l'indicateur visuel "déjà
+    // mémorisé" au chargement de la page ; un faux négatif n'est jamais bloquant, le clic sur
+    // "Mémoriser" retrouve de toute façon le master existant côté serveur et rejoint la ligne
+    // sans jamais régénérer (cf. findExistingQuizMaster dans POST .../custom).
+    function normalizeTopicForMatch(value) {
+      return String(value || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+    }
     fetch('/api/users/notion-quizzes?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         var quizzes = Array.isArray(data.quizzes) ? data.quizzes : [];
         buttons.forEach(function (btn) {
-          var prefix = 'notion:' + btn.getAttribute('data-rubric') + ':';
-          var match = quizzes.filter(function (q) { return q.slot.indexOf(prefix) === 0; })[0];
+          var rubric = btn.getAttribute('data-rubric');
+          var topicField = ECL_MASTER_TOPIC_FIELD[rubric];
+          var match;
+          if (topicField) {
+            // Rubriques passées au pipeline officiel (demande du 09/09/2026) : le slot n'est
+            // plus notion:<rubric>:... mais notion:custom:... — on ne peut plus matcher par
+            // préfixe, on compare le nom du sujet (label, résolu par le master) à celui de
+            // CET item précis.
+            var rawItem = btn.getAttribute('data-item');
+            var item;
+            try { item = rawItem ? JSON.parse(rawItem) : null; } catch (e) { item = null; }
+            var itemTopic = item ? normalizeTopicForMatch(item[topicField]) : '';
+            if (itemTopic) {
+              match = quizzes.filter(function (q) {
+                return q.slot.indexOf('notion:custom:') === 0 && normalizeTopicForMatch(q.label) === itemTopic;
+              })[0];
+            }
+          } else {
+            var prefix = 'notion:' + rubric + ':';
+            match = quizzes.filter(function (q) { return q.slot.indexOf(prefix) === 0; })[0];
+          }
           if (!match) return;
           setMemorizeButtonState(btn, true);
           btn.setAttribute('data-quiz-slot', match.slot);
@@ -3567,6 +3654,6 @@
   loadToday();
 })();
 </script>
-<script src="/bottom-nav.js?v=20260830-no-nav-param"></script>
+<script src="/bottom-nav.js?v=20260909-eclairages-nav-swap-v2"></script>
 </body>
 </html>

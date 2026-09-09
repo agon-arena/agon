@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260908-actu-sortbtn-gap" />
+<link rel="stylesheet" href="/style.min.css?v=20260908-actu-sortbtn-gap-antiheat" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -908,7 +908,7 @@
       justify-content: center;
     }
   </style>
-  <script src="/header-score-widget.min.js?v=20260830-standalone-top-21px-final" defer></script>
+  <script src="/header-score-widget.min.js?v=20260909-anti-heat-hidden-pause" defer></script>
 </head>
 <body class="page-mon-univers page-notifications page-notifications-mobile page-contributions">
 <script>
@@ -1619,7 +1619,7 @@
   <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
     <i class="fa-solid fa-rotate-right"></i><span>Actualiser</span>
   </button>
-  <button type="button" class="home-bottom-nav-item" aria-label="Explorer" onclick="contributionsBottomNavHome()">
+  <button type="button" id="mon-univers-bottom-nav-explorer" class="home-bottom-nav-item" aria-label="Explorer" onclick="contributionsBottomNavHome()">
     <i class="fa-regular fa-compass"></i><span>Explorer</span>
   </button>
   <a href="/notifications" class="home-bottom-nav-item" aria-label="Notifications">
@@ -1637,12 +1637,33 @@ function contributionsBottomNavHome() {
   if (typeof openHomePageWithArenaLoading === 'function') openHomePageWithArenaLoading('/?skipStartup=1');
   else window.location.href = '/?skipStartup=1';
 }
+// Page /contributions uniquement (demande du 09/09/2026, "idem sur page scores et
+// contributions" — même résultat que /eclairages : Accueil en 1ère place, Apprentissages là où
+// se trouvait "Explorer"). Ce même template sert aussi /mon-univers (cf. contributionsOnly plus
+// haut), qui garde "Explorer" inchangé — jamais touché ici.
+if (location.pathname === "/contributions") {
+  var monUniversExplorerBtn = document.getElementById("mon-univers-bottom-nav-explorer");
+  if (monUniversExplorerBtn) {
+    monUniversExplorerBtn.setAttribute("aria-label", "Apprentissages");
+    monUniversExplorerBtn.removeAttribute("onclick");
+    monUniversExplorerBtn.innerHTML = '<i class="fa-solid fa-list-check"></i><span>Apprentissages</span>';
+    monUniversExplorerBtn.addEventListener("click", function () {
+      try {
+        if (window.parent && window.parent !== window && typeof window.parent.openDebateIframeModal === 'function') {
+          window.parent.openDebateIframeModal('/apprentissage');
+          return;
+        }
+      } catch (error) {}
+      window.location.href = '/apprentissage';
+    });
+  }
+}
 </script>
 
-<script src="/script.min.js?v=20260909-memory-fullscreen-iframe-v19" defer></script>
+<script src="/script.min.js?v=20260909-memory-fullscreen-iframe-v19-antiheat-gong-fix-memoire-wait" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
-    import("/mon-univers.js?v=20260908-galaxy-cluster-gap-2");
+    import("/mon-univers.js?v=20260909-minimap-longpress-zoomout");
   }
 </script>
 </body>
