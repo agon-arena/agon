@@ -611,6 +611,16 @@ test("buildCurriculumPrompt : la sélection est guidée par la VALEUR PÉDAGOGIQ
   assert.match(prompt, /la population exacte d'un empire à une date donnée l'est rarement/);
 });
 
+test("buildCurriculumPrompt : impose un test d'admission pour retenir seulement les connaissances centrales, autonomes et questionnables", () => {
+  const prompt = buildCurriculumPrompt("Van Gogh", null, null);
+  assert.match(prompt, /TEST D'ADMISSION AVANT CHAQUE knowledgeTarget/);
+  assert.match(prompt, /centrale ou vraiment éclairante pour comprendre CE sujet précis/);
+  assert.match(prompt, /connaissance autonome, spécifique et durable/);
+  assert.match(prompt, /permettra-t-elle de créer ensuite une question utile/);
+  assert.match(prompt, /Écarte donc les connaissances trop périphériques ou trop génériques/);
+  assert.match(prompt, /titre, source, auteur, date de publication/);
+});
+
 test("buildCurriculumPrompt : liste la hiérarchie structurante (définition, origine, mécanismes, causes/conséquences...) sans l'imposer comme grille obligatoire", () => {
   const prompt = buildCurriculumPrompt("Sujet", null, null);
   assert.match(prompt, /définition\/identité du sujet/);
@@ -647,6 +657,15 @@ test("buildCurriculumPrompt : dès qu'un grounding (texte ou sources identifiée
   assert.doesNotMatch(withText, /Aucune source web n'a pu être vérifiée/);
   const withSources = buildCurriculumPrompt("Sujet", null, "ignoré", SOURCES_BLOCK);
   assert.doesNotMatch(withSources, /Aucune source web n'a pu être vérifiée/);
+});
+
+test("buildCurriculumRepairPrompt : applique aussi le test d'admission aux connaissances de réparation", () => {
+  const prompt = buildCurriculumRepairPrompt("Van Gogh", null, 2, [{ knowledgeTarget: "Van Gogh peint Les Tournesols." }]);
+  assert.match(prompt, /même TEST D'ADMISSION que pour le curriculum initial/);
+  assert.match(prompt, /central ou vraiment éclairant pour CE sujet précis/);
+  assert.match(prompt, /mémorisable comme connaissance autonome/);
+  assert.match(prompt, /capable de produire ensuite une question utile/);
+  assert.match(prompt, /N'ajoute jamais un titre, une source, une date de publication/);
 });
 
 test("buildCurriculumRepairPrompt : les ajouts de réparation suivent la même priorité éditoriale (cause/conséquence/mécanisme plutôt que statistique) et la même prudence historiographique", () => {

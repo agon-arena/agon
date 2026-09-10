@@ -27971,6 +27971,36 @@ span.universe-star-panel__item {
   font-weight: 700;
   white-space: nowrap;
 }
+.universe-star-panel__knowledge-sheet .qcm-fiche-level-info {
+  margin: 0 0 8px;
+  color: #516776;
+  font-size: 12px;
+  font-weight: 700;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-level-marker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 7px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-level-marker::before,
+.universe-star-panel__knowledge-sheet .qcm-fiche-level-marker::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-level-marker span {
+  white-space: nowrap;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-question-level-marker {
+  margin-top: 18px;
+}
 .universe-star-panel__knowledge-sheet .qcm-fiche-meta {
   margin: 0 0 12px;
   color: #516776;
@@ -28012,6 +28042,91 @@ span.universe-star-panel__item {
   line-height: 1.5;
   white-space: pre-line;
 }
+.universe-star-panel__knowledge-sheet .qcm-fiche-explanation strong {
+  color: #1f2937;
+  font-weight: 700;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-links {
+  display: grid;
+  gap: 7px;
+  margin: 6px 0 4px;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-link-item {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #243038;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-link-label,
+.universe-star-panel__knowledge-sheet .qcm-fiche-link-name {
+  display: block;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-link-label {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-link-name {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-sources {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-sources-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-sources-list li {
+  margin: 2px 0;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-sources-list a {
+  color: #6b7280;
+  text-decoration: underline;
+  text-decoration-color: #d1d5db;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-memorization-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-memorization-item {
+  margin: 4px 0;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-memorization-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #e2e6e9;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #384852;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-memorization-toggle.is-memorized i {
+  color: #2f9e5c;
+}
+.universe-star-panel__knowledge-sheet .qcm-fiche-memorization-toggle.is-unmemorized {
+  color: #9aa5ac;
+}
 .universe-star-panel__knowledge-sheet .qcm-fiche-corrige-item {
   margin-top: 18px;
   padding-top: 14px;
@@ -28031,6 +28146,14 @@ span.universe-star-panel__item {
   font-size: 15px;
   font-weight: 600;
   line-height: 1.35;
+}
+.universe-star-panel__knowledge-sheet .qcm-blank {
+  display: inline-block;
+  min-width: 34px;
+  padding: 0 4px;
+  border-bottom: 2px solid #94a3b8;
+  color: #64748b;
+  text-align: center;
 }
 .universe-star-panel__knowledge-sheet .qcm-fiche-corrige-list {
   margin: 0 0 8px;

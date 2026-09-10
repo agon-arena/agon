@@ -20648,6 +20648,20 @@ function computeNextUnlockedProgressiveLevel(currentLevel, targetLevel, progress
   return nextLevel && isProgressiveLevelReady(nextLevel, progressiveStatus) ? nextLevel : null;
 }
 
+function computeHighestCompletedProgressiveLevel(rawQuestions, progressiveStatus, isQuestionComplete) {
+  if (!progressiveStatus || typeof isQuestionComplete !== "function") return null;
+  let completedLevel = null;
+  for (const level of PROGRESSIVE_LEVEL_ORDER) {
+    if (!isProgressiveLevelReady(level, progressiveStatus)) break;
+    const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, level, progressiveStatus);
+    const levelQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[level]?.target);
+    if (!levelQuestions.length) continue;
+    if (!levelQuestions.every((q) => isQuestionComplete(q))) break;
+    completedLevel = level;
+  }
+  return completedLevel;
+}
+
 // resolveUserProgressiveLevel : fonction centrale UNIQUE décidant si CET
 // utilisateur doit être promu au niveau suivant — jamais dupliquée dans les
 // différents appelants (GET /api/users/notion-quizzes,
@@ -22213,8 +22227,11 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // mais ne compte plus non plus dans le total sur lequel ce crédit est
       // rapporté.
       let progressDenominator = 0;
+      const quizKey = `${link.quiz_date}:${link.slot}`;
+      const isQuestionCompleteForThisQuiz = (q) =>
+        stateByQuestionKey.has(`${quizKey}:${q.id}`) || excludedQuestionIds.has(q.id);
       for (const q of questions) {
-        const row = stateByQuestionKey.get(`${link.quiz_date}:${link.slot}:${q.id}`);
+        const row = stateByQuestionKey.get(`${quizKey}:${q.id}`);
         if (row) {
           creditSum += computeRetrievability(
             { state: row.state, stability: row.stability, lastReviewAt: row.last_review_at },
@@ -22250,6 +22267,18 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       // visible et repris depuis "Mes apprentissages en cours" (Découvrir),
       // pas disparaître prématurément dans "Mes acquis".
       const blockFullyAnswered = answeredCount >= questions.length;
+      // completedLevel (10/09/2026, "Mes acquis doit permettre de continuer") :
+      // distingue le niveau MAXIMAL réellement terminé par CET utilisateur du
+      // niveau courant servi/persisté (`effectiveLevel`). Après promotion, un
+      // visiteur peut être servi en Avancé alors que seul Élémentaire est
+      // terminé ; Mes acquis doit alors afficher "Niveau atteint :
+      // Élémentaire" et proposer "Continuer en Avancé", pas prétendre que le
+      // parcours est déjà fini.
+      const completedLevel = progressiveStatus
+        ? computeHighestCompletedProgressiveLevel(rawQuestions, progressiveStatus, isQuestionCompleteForThisQuiz)
+        : (blockFullyAnswered ? effectiveLevel : null);
+      const nextLevel = completedLevel ? getNextProgressiveLevel(completedLevel) : null;
+      const nextLevelReady = !!(nextLevel && isProgressiveLevelReady(nextLevel, progressiveStatus));
       // targetReached (demande du 07/09/2026, "même si je fais les questions
       // élémentaires, on doit laisser ce qcm dans... 'en cours' si j'avais
       // choisi approfondi ou expert") : un bloc entièrement répondu ne suffit
@@ -22272,6 +22301,12 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         // Niveau effectivement choisi pour cette adoption, utilisé dans la
         // colonne « Niveau » de la page Apprentissage.
         level: effectiveLevel,
+        servedLevel: effectiveLevel,
+        completedLevel,
+        completedLevelLabel: completedLevel ? (NOTION_QUIZ_LEVELS[completedLevel]?.label || completedLevel) : null,
+        nextLevel,
+        nextLevelLabel: nextLevel ? (NOTION_QUIZ_LEVELS[nextLevel]?.label || nextLevel) : null,
+        nextLevelReady,
         questionCount: questions.length,
         answeredCount,
         trueAnsweredCount,

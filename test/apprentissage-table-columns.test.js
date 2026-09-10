@@ -23,9 +23,8 @@ test('le tableau horizontal affiche Apprentissage, État et Niveau sans ancrage 
   assert.match(source, /En attente de<br>réalisation/);
   assert.match(source, /En cours<br>/);
   assert.doesNotMatch(source, /En cours \(/);
-  assert.match(source, /elementaire: 'Élémentaire'/);
-  assert.match(source, /avance: 'Approfondi'/);
-  assert.match(source, /expert: 'Expert'/);
+  assert.match(page, /function formatMesQcmLevelLabel\(level\) \{\s*\n\s*var tableLevelLabels = \{ elementaire: 'Élémentaire', avance: 'Approfondi', expert: 'Expert' \};/);
+  assert.match(source, /formatMesQcmLevelLabel\(displayLevel\)/);
   assert.match(source, /qcm-mesqcm-level-count/);
   assert.match(page, /th:nth-child\(1\),[\s\S]*?td:nth-child\(1\)\s*\{\s*width: 45%;/);
   assert.match(page, /th:nth-child\(2\),[\s\S]*?td:nth-child\(2\)\s*\{\s*width: 30%;/);
@@ -52,12 +51,12 @@ test('les rubriques de Mes acquis reprennent les icônes thématiques d’Explor
 });
 
 test('les anciens libellés Culture et Arts sont réunis dans une seule rubrique', () => {
-  const normalizer = functionSource('normalizeMesAcquisThemeLabel', 'renderMesAcquisList');
+  const normalizer = functionSource('normalizeKnowledgeThemeLabel', 'renderMesAcquisList');
   const renderer = functionSource('renderMesAcquisList', 'loadMesAcquis');
-  assert.match(normalizer, /key === 'culture'/);
-  assert.match(normalizer, /key === 'arts et culture'/);
-  assert.match(normalizer, /return 'Culture - arts'/);
-  assert.match(renderer, /primaryTheme = normalizeMesAcquisThemeLabel\(primaryTheme\)/);
+  assert.match(page, /'culture arts': 'Culture'/);
+  assert.match(page, /'arts et culture': 'Culture'/);
+  assert.match(normalizer, /return LEGACY_HYBRID_THEME_KEY_TO_GALAXY\[key\] \|\| raw;/);
+  assert.match(renderer, /primaryTheme = normalizeKnowledgeThemeLabel\(primaryTheme\)/);
 });
 
 test('le serveur transmet le niveau effectif de chaque apprentissage', () => {

@@ -2277,6 +2277,42 @@
       color: #6b7280;
       font-weight: 500;
     }
+    .qcm-mesqcm-level-caption {
+      color: #6b7280;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .qcm-mesqcm-continue-level-btn,
+    .qcm-mesqcm-next-level-waiting {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 100%;
+      margin-top: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1.08;
+      font-weight: 800;
+      white-space: normal;
+    }
+    .qcm-mesqcm-continue-level-btn {
+      border: 1px solid #f2c94c;
+      background: #fff7cc;
+      color: #4a3a00;
+      cursor: pointer;
+    }
+    .qcm-mesqcm-continue-level-btn:hover,
+    .qcm-mesqcm-continue-level-btn:focus-visible {
+      background: #ffe98a;
+    }
+    .qcm-mesqcm-next-level-waiting {
+      border: 1px solid #d9e2ea;
+      background: #f3f6f9;
+      color: #6b7280;
+    }
     .qcm-mesqcm-name-btn {
       display: flex;
       align-items: center;
@@ -7931,6 +7967,22 @@
     return q.slot + '|' + q.quizDate;
   }
 
+  function formatMesQcmLevelLabel(level) {
+    var tableLevelLabels = { elementaire: 'Élémentaire', avance: 'Approfondi', expert: 'Expert' };
+    return tableLevelLabels[level] || '';
+  }
+
+  function renderMesQcmContinuationHtml(q, index) {
+    if (!q || !q.completedLevel || !q.nextLevel) return '';
+    var nextLabel = q.nextLevelLabel || formatMesQcmLevelLabel(q.nextLevel) || q.nextLevel;
+    if (!q.nextLevelReady) {
+      return '<span class="qcm-mesqcm-next-level-waiting">' + escapeHtml(nextLabel) + ' en préparation</span>';
+    }
+    return '<button type="button" class="qcm-mesqcm-continue-level-btn" data-mesqcm-continue-index="' + index + '">' +
+      'Continuer en ' + escapeHtml(nextLabel) +
+      '</button>';
+  }
+
   function renderMesQcmTableHtml(list, allQuizzes) {
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
@@ -7940,12 +7992,14 @@
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
       var questionCount = Number(q.questionCount) || 0;
-      var tableLevelLabels = { elementaire: 'Élémentaire', avance: 'Approfondi', expert: 'Expert' };
-      var levelLabel = tableLevelLabels[q.level] || '';
+      var displayLevel = q.completedLevel || q.level;
+      var levelLabel = formatMesQcmLevelLabel(displayLevel);
       var levelHtml = '<span class="qcm-mesqcm-level">' +
+        (q.completedLevel ? '<span class="qcm-mesqcm-level-caption">Niveau atteint</span>' : '') +
         (levelLabel ? '<span class="qcm-mesqcm-level-name">' + escapeHtml(levelLabel) + '</span>' : '') +
-        (questionCount ? '<span class="qcm-mesqcm-level-count">' + questionCount + (questionCount > 1 ? ' questions' : ' question') + '</span>' : '') +
+        (!q.completedLevel && questionCount ? '<span class="qcm-mesqcm-level-count">' + questionCount + (questionCount > 1 ? ' questions' : ' question') + '</span>' : '') +
         '</span>';
+      var continueHtml = renderMesQcmContinuationHtml(q, index);
       // "Réalisé (X/Y)" (demande du 30/08/2026) : X = trueAnsweredCount,
       // les questions VRAIMENT répondues (jamais les passées, cf. serveur
       // GET /api/users/notion-quizzes) — distingue un QCM entièrement
@@ -7954,15 +8008,17 @@
       // answeredCount, qui lui inclut les questions passées, atteint Y).
       var stateHtml = q.realized
         ? '<span class="qcm-mesqcm-state is-realized">Réalisé<br>(' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
-        : (q.inProgress
-          ? '<span class="qcm-mesqcm-state is-inprogress">En cours<br>' + (Number(q.answeredCount) || 0) + '/' + questionCount + '</span>'
-          : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>');
+        : (q.completedLevel
+          ? '<span class="qcm-mesqcm-state is-realized">Acquis<br>' + escapeHtml(formatMesQcmLevelLabel(q.completedLevel) || q.completedLevel) + '</span>'
+          : (q.inProgress
+            ? '<span class="qcm-mesqcm-state is-inprogress">En cours<br>' + (Number(q.answeredCount) || 0) + '/' + questionCount + '</span>'
+            : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>'));
       html += '<tr>';
       html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
       html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
       html += '</button></td>';
       html += '<td>' + stateHtml + '</td>';
-      html += '<td>' + levelHtml + '</td>';
+      html += '<td>' + levelHtml + continueHtml + '</td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
@@ -8121,6 +8177,14 @@
       btn.addEventListener('click', function () {
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
         openMesQcmActionMenu(btn, q, quizzes);
+      });
+    });
+    body.querySelectorAll('[data-mesqcm-continue-index]').forEach(function (btn) {
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-continue-index'))];
+        if (!q || !q.nextLevel || !q.nextLevelReady) return;
+        loadSlot(q.slot, q.quizDate, q.label, q.nextLevel);
       });
     });
     body.querySelectorAll('[data-mesqcm-delete-index]').forEach(function (btn) {
@@ -8884,15 +8948,21 @@
     mesQcmActionMenuLoadingOverlay = { overlay: loadingOverlay, onKeydown: onLoadingKeydown };
 
     var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
-    var doLabel = q.realized ? 'Refaire le parcours d\'apprentissage' : (q.inProgress ? 'Continuer le parcours d\'apprentissage' : 'Commencer le parcours d\'apprentissage');
+    var continuationLevel = q.nextLevel && q.nextLevelReady ? q.nextLevel : null;
+    var continuationLabel = continuationLevel ? (q.nextLevelLabel || formatMesQcmLevelLabel(continuationLevel) || continuationLevel) : '';
+    var doLabel = continuationLevel
+      ? 'Continuer en ' + continuationLabel
+      : (q.realized ? 'Refaire le parcours d\'apprentissage' : (q.inProgress ? 'Continuer le parcours d\'apprentissage' : 'Commencer le parcours d\'apprentissage'));
     // Phrase d'explication par action (demande du 30/08/2026) : celle du QCM
     // dépend de l'état déjà connu de ce visiteur sur cet apprentissage, même
     // logique que doLabel juste au-dessus.
-    var doDesc = q.realized
-      ? 'Retente ce QCM depuis le début pour renforcer ta mémorisation.'
-      : (q.inProgress
-        ? 'Reprends ce QCM là où tu t’étais arrêté.'
-        : 'Réponds aux questions pour la première fois sur cet apprentissage.');
+    var doDesc = continuationLevel
+      ? 'Poursuis le même apprentissage au niveau supérieur, sans recréer de sujet.'
+      : (q.realized
+        ? 'Retente ce QCM depuis le début pour renforcer ta mémorisation.'
+        : (q.inProgress
+          ? 'Reprends ce QCM là où tu t’étais arrêté.'
+          : 'Réponds aux questions pour la première fois sur cet apprentissage.'));
     var progressPct = Math.max(0, Math.min(100, Number(q.progressPct) || 0));
     var ancrageBadgeHtml = q.validated
       ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
@@ -8984,7 +9054,7 @@
         });
         overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
           closeMesQcmActionModal();
-          loadSlot(q.slot, q.quizDate, q.label, q.level);
+          loadSlot(q.slot, q.quizDate, q.label, continuationLevel || q.level);
         });
         overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
           closeMesQcmActionModal();

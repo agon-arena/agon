@@ -2032,6 +2032,8 @@ const QCM_FICHE_LEVEL_LABELS = {
   expert: "Expert"
 };
 
+const FILL_BLANK_MARKER = "___";
+
 // Sur l'accueil, le panneau est déclaré dans #mnoria-tag-trends-section, qui crée son
 // propre contexte d'empilement (z-index:1). Le dock blanc peut alors passer devant
 // malgré le z-index du panneau. Le rattacher au body lui rend un vrai calque plein
@@ -2234,7 +2236,7 @@ function renderFicheQuestionCorrige(question, index) {
   let html = `<div class="qcm-fiche-corrige-item">`;
   html += `<p class="qcm-fiche-corrige-num">Question ${index + 1}</p>`;
   const questionText = type === "texte_a_trous"
-    ? escapeHtml(question.question).split("___").join('<span class="qcm-blank">___</span>')
+    ? escapeHtml(question.question).split(FILL_BLANK_MARKER).join(`<span class="qcm-blank">${FILL_BLANK_MARKER}</span>`)
     : escapeHtml(question.question);
   html += `<p class="qcm-fiche-corrige-question">${questionText}</p>`;
   if (type === "association") {
@@ -2347,6 +2349,34 @@ function setKnowledgeMemorization(subjectType, subjectSourceId, knowledgeTargetI
     .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
     .then((result) => onDone?.(!!(result.ok && result.data?.ok)))
     .catch(() => onDone?.(false));
+}
+
+function wireKnowledgeMemorizationToggles(root, data) {
+  const section = root.querySelector("#qcm-fiche-memorization-section");
+  if (!section || !data?.sourceType || !data?.subjectSourceId) return;
+  section.querySelectorAll(".qcm-fiche-memorization-toggle").forEach((btn) => {
+    const knowledgeTargetId = btn.getAttribute("data-knowledge-target-id");
+    let requestToken = 0;
+    function renderState(enabled) {
+      btn.classList.toggle("is-memorized", enabled);
+      btn.classList.toggle("is-unmemorized", !enabled);
+      btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+      const icon = btn.querySelector("i");
+      if (icon) icon.className = `fa-solid ${enabled ? "fa-square-check" : "fa-square"}`;
+    }
+    btn.addEventListener("click", () => {
+      const nextEnabled = btn.getAttribute("aria-pressed") !== "true";
+      const myToken = ++requestToken;
+      renderState(nextEnabled);
+      setKnowledgeMemorization(data.sourceType, data.subjectSourceId, knowledgeTargetId, nextEnabled, (ok) => {
+        if (myToken !== requestToken) return;
+        if (!ok) {
+          renderState(!nextEnabled);
+          console.warn("[mon-univers] préférence de mémorisation non enregistrée.");
+        }
+      });
+    });
+  });
 }
 
 // Relations très pertinentes détectées au moment de la première bonne
