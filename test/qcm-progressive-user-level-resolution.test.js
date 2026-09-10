@@ -8,18 +8,11 @@
 // dépendance Supabase (fonctions pures, aucun accès base).
 //
 // Chantier "démarrage toujours Élémentaire + avancement automatique"
-// (06/09/2026), complété par le chantier "rétablir un vrai choix
-// utilisateur" (07/09/2026, targetLevel) : ces fonctions décident, pour un
-// utilisateur donné, du prochain niveau à servir SANS jamais dépasser son
-// propre plafond personnel (targetLevel) — jamais du contenu à générer
-// (progressive_status du master, inchangé, cf. continueProgressiveGeneration,
-// dont le paramètre `targetLevel` désigne autre chose : jusqu'où le MASTER
-// doit être généré, toujours "expert", cf. server.js) ni directement du
-// niveau cliqué dans le picker (cf. POST /custom/progressive, qui ne les
-// appelle jamais à la création/réouverture pour décider du niveau SERVI —
-// seulement resolveTargetLevelOnRequest pour décider du targetLevel
-// persisté ; la promotion elle-même reste appelée uniquement en avancement,
-// via GET /notion-quizzes et POST /answer).
+// (06/09/2026), complété par la continuation volontaire (10/09/2026) : ces
+// fonctions séparent deux décisions. A) le prochain niveau existe selon le
+// niveau réellement terminé, jamais selon le choix initial ; B) la promotion
+// effective attend encore progressive_status, donc jamais de service d'un
+// niveau non généré.
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -45,9 +38,16 @@ function makeSandbox() {
   return sandbox;
 }
 
-// ── computeNextUnlockedProgressiveLevel : un seul palier à la fois ────────
-// targetLevel = "expert" dans ces tests historiques : aucun plafond, mêmes
-// valeurs qu'avant l'introduction de targetLevel (07/09/2026).
+// ── getNextProgressiveLevel : existence du prochain palier ────────────────
+
+test("getNextProgressiveLevel : Élémentaire -> Approfondi -> Expert, puis plus rien", () => {
+  const sandbox = makeSandbox();
+  assert.equal(sandbox.getNextProgressiveLevel("elementaire"), "avance");
+  assert.equal(sandbox.getNextProgressiveLevel("avance"), "expert");
+  assert.equal(sandbox.getNextProgressiveLevel("expert"), null);
+});
+
+// ── computeNextUnlockedProgressiveLevel : disponibilité du palier suivant ─
 
 test("computeNextUnlockedProgressiveLevel : Élémentaire -> Approfondi dès deepening_ready OU ready, jamais avant", () => {
   const sandbox = makeSandbox();
@@ -67,19 +67,19 @@ test("computeNextUnlockedProgressiveLevel : Expert n'a jamais de niveau suivant,
   assert.equal(sandbox.computeNextUnlockedProgressiveLevel("expert", "expert", "ready"), null);
 });
 
-// ── computeNextUnlockedProgressiveLevel : plafond targetLevel (07/09/2026) ─
+// ── computeNextUnlockedProgressiveLevel : targetLevel ne bloque plus la continuation volontaire ─
 
-test("computeNextUnlockedProgressiveLevel : targetLevel=elementaire bloque toute promotion, même master ready", () => {
+test("computeNextUnlockedProgressiveLevel : targetLevel=elementaire ne bloque plus Élémentaire -> Approfondi si le master est prêt", () => {
   const sandbox = makeSandbox();
-  assert.equal(sandbox.computeNextUnlockedProgressiveLevel("elementaire", "elementaire", "deepening_ready"), null);
-  assert.equal(sandbox.computeNextUnlockedProgressiveLevel("elementaire", "elementaire", "ready"), null);
+  assert.equal(sandbox.computeNextUnlockedProgressiveLevel("elementaire", "elementaire", "deepening_ready"), "avance");
+  assert.equal(sandbox.computeNextUnlockedProgressiveLevel("elementaire", "elementaire", "ready"), "avance");
 });
 
-test("computeNextUnlockedProgressiveLevel : targetLevel=avance autorise Élémentaire->Approfondi mais jamais Approfondi->Expert", () => {
+test("computeNextUnlockedProgressiveLevel : targetLevel=avance ne bloque plus Approfondi -> Expert si le master est prêt", () => {
   const sandbox = makeSandbox();
   assert.equal(sandbox.computeNextUnlockedProgressiveLevel("elementaire", "avance", "deepening_ready"), "avance");
   assert.equal(sandbox.computeNextUnlockedProgressiveLevel("elementaire", "avance", "ready"), "avance");
-  assert.equal(sandbox.computeNextUnlockedProgressiveLevel("avance", "avance", "ready"), null, "targetLevel=avance : Expert reste hors de portée même si le master l'a déjà généré");
+  assert.equal(sandbox.computeNextUnlockedProgressiveLevel("avance", "avance", "ready"), "expert");
 });
 
 test("computeNextUnlockedProgressiveLevel : targetLevel=expert autorise la progression complète, un seul palier à la fois", () => {
@@ -164,13 +164,13 @@ test("resolveUserProgressiveLevel est une fonction PURE : deux utilisateurs diff
   assert.equal(userBNewJourney.level, "elementaire");
 });
 
-test("resolveUserProgressiveLevel : targetLevel=avance plafonne B à Approfondi même si le master est ready et B a fini son bloc courant, tandis qu'A (targetLevel=expert) continue normalement", () => {
+test("resolveUserProgressiveLevel : targetLevel=avance ne bloque plus la continuation volontaire vers Expert si B a fini son bloc courant", () => {
   const sandbox = makeSandbox();
   const userA = sandbox.resolveUserProgressiveLevel({ persistedLevel: "avance", targetLevel: "expert", progressiveStatus: "ready", isCurrentBlockComplete: true });
   const userB = sandbox.resolveUserProgressiveLevel({ persistedLevel: "avance", targetLevel: "avance", progressiveStatus: "ready", isCurrentBlockComplete: true });
   assert.equal(userA.level, "expert");
-  assert.equal(userB.level, "avance", "B ne dépasse jamais son targetLevel, quel que soit l'état du master");
-  assert.equal(userB.promotion, null);
+  assert.equal(userB.level, "expert", "le targetLevel initial ne bloque plus la continuation demandée");
+  assert.equal(JSON.stringify(userB.promotion), JSON.stringify({ from: "avance", to: "expert" }));
 });
 
 // ── resolveUserProgressiveLevel : targetLevel absent (legacy) -> repli "expert" ─

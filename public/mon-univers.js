@@ -2016,12 +2016,20 @@ const STAR_KNOWLEDGE_SOURCE_META = {
   citation: { icon: "fa-quote-left", label: "Citation du jour" },
   oeuvre: { icon: "fa-palette", label: "Œuvre d'art du jour" },
   latin: { icon: "fa-scroll", label: "Mot latin du jour" },
+  custom: { icon: "fa-magnifying-glass", label: "Sujet recherché" },
   photo_import: { icon: "fa-camera", label: "Document importé" },
   manual_import: { icon: "fa-pen", label: "Ajout manuel" },
   pdf_import: { icon: "fa-file-pdf", label: "Document PDF" },
   text_import: { icon: "fa-align-left", label: "Texte importé" },
   url_import: { icon: "fa-link", label: "Page web" },
-  youtube_import: { icon: "fa-brands fa-youtube", label: "Vidéo YouTube" }
+  youtube_import: { icon: "fa-brands fa-youtube", label: "Vidéo YouTube" },
+  comprendre: { icon: "fa-link", label: "Comprendre les liens" }
+};
+
+const QCM_FICHE_LEVEL_LABELS = {
+  elementaire: "Élémentaire",
+  avance: "Avancé",
+  expert: "Expert"
 };
 
 // Sur l'accueil, le panneau est déclaré dans #mnoria-tag-trends-section, qui crée son
@@ -2128,46 +2136,217 @@ function appendKnowledgeSheetText(parent, className, text) {
   parent.appendChild(el);
 }
 
-function appendKnowledgeCorrectedQuestion(parent, question, index) {
-  const item = document.createElement("div");
-  item.className = "qcm-fiche-corrige-item";
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = String(str == null ? "" : str);
+  return div.innerHTML;
+}
 
-  appendKnowledgeSheetText(item, "qcm-fiche-corrige-num", `Question ${index + 1}`);
-  appendKnowledgeSheetText(item, "qcm-fiche-corrige-question", question.question);
+function normalizeFicheDisplayLevel(level) {
+  return QCM_FICHE_LEVEL_LABELS[level] ? level : null;
+}
 
+function renderFicheLevelMarkerHtml(level, prefix, extraClass) {
+  const normalized = normalizeFicheDisplayLevel(level);
+  if (!normalized) return "";
+  const label = `${prefix || "Niveau"} ${QCM_FICHE_LEVEL_LABELS[normalized]}`;
+  return `<div class="qcm-fiche-level-marker${extraClass ? ` ${extraClass}` : ""}"><span>${escapeHtml(label)}</span></div>`;
+}
+
+function renderFicheLevelInfo(themes, level, questionCount) {
+  const themeName = Array.isArray(themes) && themes.length ? themes[0] : null;
+  const levelLabel = QCM_FICHE_LEVEL_LABELS[level] || null;
+  const count = Number(questionCount) || 0;
+  const countText = count ? `${count} question${count > 1 ? "s" : ""}` : "";
+  const leadParts = [themeName, levelLabel ? `Niveau ${levelLabel}` : null].filter(Boolean);
+  const text = [leadParts.join(" / "), countText].filter(Boolean).join(" - ");
+  return text ? `<p class="qcm-fiche-level-info">${escapeHtml(text)}</p>` : "";
+}
+
+function renderFicheSectionText(text, highlights) {
+  const str = String(text == null ? "" : text);
+  if (!Array.isArray(highlights) || !highlights.length) return escapeHtml(str);
+  const ranges = highlights
+    .filter((item) => item && Number.isInteger(item.start) && Number.isInteger(item.end)
+      && item.start >= 0 && item.end > item.start && item.end <= str.length)
+    .sort((a, b) => a.start - b.start);
+  const accepted = [];
+  ranges.forEach((range) => {
+    const last = accepted[accepted.length - 1];
+    if (last && range.start < last.end) return;
+    accepted.push(range);
+  });
+  if (!accepted.length) return escapeHtml(str);
+  let html = "";
+  let cursor = 0;
+  accepted.forEach((range) => {
+    html += escapeHtml(str.slice(cursor, range.start));
+    html += `<strong>${escapeHtml(str.slice(range.start, range.end))}</strong>`;
+    cursor = range.end;
+  });
+  html += escapeHtml(str.slice(cursor));
+  return html;
+}
+
+function renderFicheSectionsHtml(sections) {
+  let html = "";
+  let currentLevel = null;
+  (Array.isArray(sections) ? sections : []).forEach((section) => {
+    const sectionLevel = normalizeFicheDisplayLevel(section?.level);
+    if (sectionLevel && sectionLevel !== currentLevel) {
+      html += renderFicheLevelMarkerHtml(sectionLevel, "Niveau");
+    }
+    currentLevel = sectionLevel || null;
+    if (section?.label) html += `<h3 class="qcm-fiche-section-label">${escapeHtml(section.label)}</h3>`;
+    html += `<p class="qcm-fiche-explanation">${renderFicheSectionText(section?.text, section?.highlights)}</p>`;
+  });
+  return html;
+}
+
+function buildFicheImageFigureHtml(img, altText) {
+  if (!img || !img.url) return "";
+  const attributionLabel = img.credit || (img.source === "press" ? "source de l'actualité" : (img.source === "wikimedia-commons" ? "Wikimedia Commons" : "Wikipedia"));
+  const attributionHtml = img.pageUrl
+    ? `<a href="${escapeHtml(img.pageUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(attributionLabel)}</a>`
+    : escapeHtml(attributionLabel);
+  const captionHtml = img.caption ? `${escapeHtml(img.caption)} — ${attributionHtml}` : `Image : ${attributionHtml}`;
+  return `<figure class="qcm-fiche-image">` +
+    `<img src="${escapeHtml(img.url)}" alt="${escapeHtml(altText || "")}" loading="lazy">` +
+    `<figcaption>${captionHtml}</figcaption>` +
+    `</figure>`;
+}
+
+function renderLinksSection(links) {
+  if (!Array.isArray(links) || !links.length) return "";
+  return `<h3 class="qcm-fiche-section-label">Les liens</h3>` +
+    `<div class="qcm-fiche-links">` +
+    links.map((link) =>
+      `<button type="button" class="qcm-fiche-link-item" data-link-type="${escapeHtml(link.type)}" data-link-source-id="${escapeHtml(link.sourceId)}" data-link-name="${escapeHtml(link.name)}">` +
+        `<span class="qcm-fiche-link-label">${escapeHtml(link.label)}</span>` +
+        `<span class="qcm-fiche-link-name">${escapeHtml(link.name)}</span>` +
+      `</button>`
+    ).join("") +
+    `</div>`;
+}
+
+function renderFicheQuestionCorrige(question, index) {
   const type = question.type || "qcm";
-  const ordered = type === "ordre";
-  const list = document.createElement(ordered ? "ol" : "ul");
-  list.className = `qcm-fiche-corrige-list${ordered ? " qcm-fiche-corrige-ordered" : ""}`;
-
+  let html = `<div class="qcm-fiche-corrige-item">`;
+  html += `<p class="qcm-fiche-corrige-num">Question ${index + 1}</p>`;
+  const questionText = type === "texte_a_trous"
+    ? escapeHtml(question.question).split("___").join('<span class="qcm-blank">___</span>')
+    : escapeHtml(question.question);
+  html += `<p class="qcm-fiche-corrige-question">${questionText}</p>`;
   if (type === "association") {
+    html += `<ul class="qcm-fiche-corrige-list">`;
     (question.pairs || []).forEach((pair) => {
-      const li = document.createElement("li");
-      li.className = "is-correct";
-      li.textContent = `${pair.left || ""} → ${pair.right || ""}`;
-      list.appendChild(li);
+      html += `<li class="is-correct">${escapeHtml(pair.left)} → ${escapeHtml(pair.right)}</li>`;
     });
-  } else if (ordered) {
+    html += `</ul>`;
+  } else if (type === "ordre") {
+    html += `<ol class="qcm-fiche-corrige-list qcm-fiche-corrige-ordered">`;
     (question.items || []).forEach((value) => {
-      const li = document.createElement("li");
-      li.className = "is-correct";
-      li.textContent = value;
-      list.appendChild(li);
+      html += `<li class="is-correct">${escapeHtml(value)}</li>`;
     });
-  } else {
-    const correctIndexes = type === "qcm_multi"
-      ? new Set(question.correctIndexes || [])
-      : new Set([Number(question.correctIndex)]);
+    html += `</ol>`;
+  } else if (type === "qcm_multi") {
+    const correctIndexes = new Set(question.correctIndexes || []);
+    html += `<ul class="qcm-fiche-corrige-list">`;
     (question.options || []).forEach((value, optionIndex) => {
-      const li = document.createElement("li");
-      if (correctIndexes.has(optionIndex)) li.className = "is-correct";
-      li.textContent = value;
-      list.appendChild(li);
+      html += `<li${correctIndexes.has(optionIndex) ? ' class="is-correct"' : ""}>${escapeHtml(value)}</li>`;
     });
+    html += `</ul>`;
+  } else {
+    html += `<ul class="qcm-fiche-corrige-list">`;
+    (question.options || []).forEach((value, optionIndex) => {
+      html += `<li${optionIndex === question.correctIndex ? ' class="is-correct"' : ""}>${escapeHtml(value)}</li>`;
+    });
+    html += `</ul>`;
   }
-  if (list.children.length) item.appendChild(list);
-  appendKnowledgeSheetText(item, "qcm-fiche-corrige-explanation", question.explanation);
-  parent.appendChild(item);
+  if (question.explanation) html += `<p class="qcm-fiche-corrige-explanation">${escapeHtml(question.explanation)}</p>`;
+  html += `</div>`;
+  return html;
+}
+
+function groupFicheQuestionsByLevel(questions) {
+  const groups = [];
+  const byLevel = {};
+  ["elementaire", "avance", "expert"].forEach((level) => {
+    byLevel[level] = { level, items: [] };
+    groups.push(byLevel[level]);
+  });
+  const unknown = { level: null, items: [] };
+  (Array.isArray(questions) ? questions : []).forEach((question, index) => {
+    const level = normalizeFicheDisplayLevel(question?.level);
+    (level ? byLevel[level].items : unknown.items).push({ question, index });
+  });
+  if (unknown.items.length) groups.push(unknown);
+  return groups.filter((group) => group.items.length);
+}
+
+function buildFicheQuestionsSectionInnerHtml(data) {
+  if (!Array.isArray(data?.questions) || !data.questions.length) return "";
+  let html = `<div class="qcm-fiche-questions-section" id="qcm-fiche-questions-section">` +
+    `<h3 class="qcm-fiche-section-label">Questions et réponses</h3>`;
+  groupFicheQuestionsByLevel(data.questions).forEach((group) => {
+    if (group.level) html += renderFicheLevelMarkerHtml(group.level, "Questions — Niveau", "qcm-fiche-question-level-marker");
+    group.items.forEach((item) => { html += renderFicheQuestionCorrige(item.question, item.index); });
+  });
+  html += `</div>`;
+  return html;
+}
+
+function buildKnowledgeMemorizationSectionHtml(data) {
+  const targets = Array.isArray(data?.knowledgeTargets) ? data.knowledgeTargets : [];
+  if (!targets.length || !data.sourceType || !data.subjectSourceId) return "";
+  return `<div class="qcm-fiche-memorization-section" id="qcm-fiche-memorization-section">` +
+    `<h3 class="qcm-fiche-section-label">Connaissances à mémoriser</h3>` +
+    `<ul class="qcm-fiche-memorization-list">` +
+    targets.map((k) => {
+      const enabled = k.memorizationEnabled !== false;
+      return `<li class="qcm-fiche-memorization-item">` +
+        `<button type="button" class="qcm-fiche-memorization-toggle${enabled ? " is-memorized" : " is-unmemorized"}" data-knowledge-target-id="${escapeHtml(k.id)}" aria-pressed="${enabled ? "true" : "false"}">` +
+        `<i class="fa-solid ${enabled ? "fa-square-check" : "fa-square"}" aria-hidden="true"></i>` +
+        `<span>${escapeHtml(k.knowledgeTarget)}</span>` +
+        `</button>` +
+        `</li>`;
+    }).join("") +
+    `</ul>` +
+    `</div>`;
+}
+
+function buildFicheSourcesHtml(detail, groundingSources) {
+  const seenUrls = new Set();
+  const sources = []
+    .concat(Array.isArray(detail?.sources) ? detail.sources : [])
+    .concat(Array.isArray(groundingSources) ? groundingSources : [])
+    .filter((source) => {
+      const url = String(source?.url || "");
+      if (!url || !/^https?:\/\//i.test(url) || seenUrls.has(url)) return false;
+      seenUrls.add(url);
+      return true;
+    });
+  if (!sources.length) return "";
+  return `<div class="qcm-fiche-sources">` +
+    `<h3 class="qcm-fiche-section-label">Sources</h3>` +
+    `<ul class="qcm-fiche-sources-list">` +
+    sources.map((source) =>
+      `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title || source.domain || source.url)}</a></li>`
+    ).join("") +
+    `</ul>` +
+    `</div>`;
+}
+
+function setKnowledgeMemorization(subjectType, subjectSourceId, knowledgeTargetId, enabled, onDone) {
+  fetch("/api/users/knowledge-memorization", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ legacyKey: getKey(), subjectType, subjectSourceId, knowledgeTargetId, enabled }),
+    keepalive: true
+  })
+    .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+    .then((result) => onDone?.(!!(result.ok && result.data?.ok)))
+    .catch(() => onDone?.(false));
 }
 
 // Relations très pertinentes détectées au moment de la première bonne
@@ -2209,7 +2388,8 @@ function appendKnowledgeLinks(parent, links, star) {
 
 function renderKnowledgeSheet(article, star, fullFiche, loading = false, hideBackButton = false) {
   const detail = fullFiche?.sourceDetail || article.sourceDetail || {};
-  starPanelTitleEl.textContent = fullFiche?.label || article.title || "Fiche connaissance";
+  const name = fullFiche?.label || article.title || "Fiche connaissance";
+  starPanelTitleEl.textContent = name;
   starPanelListEl.innerHTML = "";
 
   const sheet = document.createElement("li");
@@ -2233,93 +2413,31 @@ function renderKnowledgeSheet(article, star, fullFiche, loading = false, hideBac
     icon: "fa-book-open",
     label: article.source || "Culture générale"
   };
-  const rubric = document.createElement("p");
-  rubric.className = "qcm-fiche-rubric";
-  rubric.innerHTML = `<i class="fa-solid ${sourceMeta.icon}" aria-hidden="true"></i>`;
-  rubric.appendChild(document.createTextNode(` ${sourceMeta.label}`));
-  sheet.appendChild(rubric);
-
   const themes = Array.isArray(fullFiche?.themes) ? fullFiche.themes.filter(Boolean) : [];
-  if (themes.length) {
-    const themeList = document.createElement("div");
-    themeList.className = "qcm-mesqcm-themes";
-    themes.forEach((theme) => {
-      const tag = document.createElement("span");
-      tag.className = "qcm-mesqcm-theme-tag";
-      tag.textContent = theme;
-      themeList.appendChild(tag);
-    });
-    sheet.appendChild(themeList);
-  }
-
-  appendKnowledgeSheetText(sheet, "qcm-fiche-meta", detail.meta);
-
+  let html = "";
+  html += renderFicheLevelInfo(themes, fullFiche?.level, Array.isArray(fullFiche?.questions) ? fullFiche.questions.length : 0);
+  html += `<p class="qcm-fiche-rubric qcm-fiche-rubric-below"><i class="fa-solid ${sourceMeta.icon}"></i> ${escapeHtml(sourceMeta.label)}</p>`;
+  if (detail.meta) html += `<p class="qcm-fiche-meta">${escapeHtml(detail.meta)}</p>`;
   if (/^https?:\/\//i.test(String(detail.sourceUrl || ""))) {
-    const sourceLink = document.createElement("a");
-    sourceLink.className = "qcm-fiche-meta";
-    sourceLink.href = detail.sourceUrl;
-    sourceLink.target = "_blank";
-    sourceLink.rel = "noopener noreferrer";
-    sourceLink.textContent = "Voir la page source";
-    sheet.appendChild(sourceLink);
+    html += `<p class="qcm-fiche-meta"><a href="${escapeHtml(detail.sourceUrl)}" target="_blank" rel="noopener noreferrer">Voir la page source</a></p>`;
   }
   if (detail.sourceAuthor) {
-    const sourceAuthor = document.createElement("p");
-    sourceAuthor.className = "qcm-fiche-meta";
-    sourceAuthor.textContent = `Chaîne : ${detail.sourceAuthor}${detail.durationSeconds ? ` · ${Math.ceil(Number(detail.durationSeconds) / 60)} min` : ""}`;
-    sheet.appendChild(sourceAuthor);
+    html += `<p class="qcm-fiche-meta">Chaîne : ${escapeHtml(detail.sourceAuthor)}${detail.durationSeconds ? ` · ${Math.ceil(Number(detail.durationSeconds) / 60)} min` : ""}</p>`;
   }
-
-  if (detail.image?.url) {
-    const figure = document.createElement("figure");
-    figure.className = "qcm-fiche-image";
-    const image = document.createElement("img");
-    image.src = detail.image.url;
-    image.alt = article.title || "Illustration de la connaissance";
-    image.loading = "lazy";
-    image.addEventListener("load", refreshStarPanelScrollHint, { once: true });
-    image.addEventListener("error", () => {
-      figure.remove();
-      refreshStarPanelScrollHint();
-    }, { once: true });
-    figure.appendChild(image);
-    const caption = document.createElement("figcaption");
-    const captionText = `Image : ${detail.image.credit || (detail.image.source === "press" ? "source de l'actualité" : "Wikipedia")}`;
-    if (detail.image.pageUrl) {
-      const link = document.createElement("a");
-      link.href = detail.image.pageUrl;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.textContent = captionText;
-      caption.appendChild(link);
-    } else {
-      caption.textContent = captionText;
-    }
-    figure.appendChild(caption);
-    sheet.appendChild(figure);
-  }
-
-  (detail.sections || []).forEach((section) => {
-    if (section.label) {
-      const heading = document.createElement("h3");
-      heading.className = "qcm-fiche-section-label";
-      heading.textContent = section.label;
-      sheet.appendChild(heading);
-    }
-    appendKnowledgeSheetText(sheet, "qcm-fiche-explanation", section.text);
-  });
-
-  appendKnowledgeLinks(sheet, fullFiche?.links, star);
-
+  html += buildFicheImageFigureHtml(detail.image, name);
+  html += renderFicheSectionsHtml(detail.sections);
+  html += renderLinksSection(fullFiche?.links);
   if (loading) {
-    appendKnowledgeSheetText(sheet, "universe-star-panel__knowledge-loading", "Chargement de l’image et du QCM…");
-  } else if (Array.isArray(fullFiche?.questions) && fullFiche.questions.length) {
-    const questionsTitle = document.createElement("h3");
-    questionsTitle.className = "qcm-fiche-section-label";
-    questionsTitle.textContent = "Questions et réponses";
-    sheet.appendChild(questionsTitle);
-    fullFiche.questions.forEach((question, index) => appendKnowledgeCorrectedQuestion(sheet, question, index));
+    html += `<p class="universe-star-panel__knowledge-loading">Chargement de l’image et du QCM…</p>`;
+  } else {
+    html += buildKnowledgeMemorizationSectionHtml(fullFiche);
+    html += buildFicheQuestionsSectionInnerHtml(fullFiche);
+    html += buildFicheSourcesHtml(detail, fullFiche?.groundingSources);
   }
+  const content = document.createElement("div");
+  content.className = "universe-star-panel__knowledge-content";
+  content.innerHTML = html;
+  sheet.appendChild(content);
 
   const close = document.createElement("button");
   close.type = "button";
@@ -2329,6 +2447,23 @@ function renderKnowledgeSheet(article, star, fullFiche, loading = false, hideBac
   sheet.appendChild(close);
 
   starPanelListEl.appendChild(sheet);
+  sheet.querySelectorAll(".qcm-fiche-image img").forEach((image) => {
+    image.addEventListener("load", refreshStarPanelScrollHint, { once: true });
+    image.addEventListener("error", () => {
+      image.closest(".qcm-fiche-image")?.remove();
+      refreshStarPanelScrollHint();
+    }, { once: true });
+  });
+  sheet.querySelectorAll(".qcm-fiche-link-item").forEach((button) => {
+    button.addEventListener("click", () => {
+      showLinkedKnowledgeSheet({
+        type: button.getAttribute("data-link-type"),
+        sourceId: button.getAttribute("data-link-source-id"),
+        name: button.getAttribute("data-link-name")
+      }, star);
+    });
+  });
+  wireKnowledgeMemorizationToggles(sheet, fullFiche);
   starPanelListEl.scrollTop = 0;
   refreshStarPanelScrollHint();
 }

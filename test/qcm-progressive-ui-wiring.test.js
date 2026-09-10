@@ -169,3 +169,37 @@ test("la route progressive ne lit plus `req.body.level` pour décider du niveau 
   assert.match(progressiveRouteSource, /requested_level: userLevel/);
   assert.doesNotMatch(progressiveRouteSource, /requested_level: "elementaire" \}/, "la valeur littérale reste toujours dérivée d'une variable, jamais figée en dur");
 });
+
+test("level-status calcule la suite depuis completedLevel, pas depuis le niveau déjà promu ni depuis target_level", () => {
+  const routeStart = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/level-status"');
+  const routeEnd = SERVER_SOURCE.indexOf("\n});", routeStart) + 4;
+  const routeSource = SERVER_SOURCE.slice(routeStart, routeEnd);
+  assert.match(routeSource, /const completedLevel = resolveNotionQuizLevel\(req\.query\.completedLevel\)\.level \|\| currentLevel;/);
+  assert.match(routeSource, /const nextLevel = getNextProgressiveLevel\(completedLevel\);/);
+  assert.match(routeSource, /nextLevelReady: isProgressiveLevelReady\(nextLevel, quizRow\.progressive_status\)/);
+  assert.doesNotMatch(routeSource, /currentRank < targetRank/, "target_level ne doit plus décider si le bouton de suite existe");
+});
+
+test("l'écran final affiche toujours le bouton Continuer dès qu'un nextLevel existe, même si nextLevelReady=false", () => {
+  const fnStart = VIEW_SOURCE.indexOf("function applyProgressiveNextLevelHint");
+  const fnEnd = VIEW_SOURCE.indexOf("var progressiveNextLevelPollTimer", fnStart);
+  const fnSource = VIEW_SOURCE.slice(fnStart, fnEnd);
+  assert.match(fnSource, /continueBtn\.textContent = 'Continuer en ' \+ \(data\.nextLevelLabel \|\| data\.nextLevel\);/);
+  assert.match(fnSource, /continueBtn\.hidden = false;/);
+  assert.match(fnSource, /if \(data\.nextLevelReady\) \{/);
+  assert.ok(
+    fnSource.indexOf("continueBtn.hidden = false;") < fnSource.indexOf("if (data.nextLevelReady) {"),
+    "le bouton doit être révélé avant le branchement nextLevelReady"
+  );
+  assert.match(fnSource, /startProgressiveNextLevelPoll\(hintEl, continueBtn, currentSlot, currentQuizDate, data\.completedLevel \|\| currentServedLevel\);/);
+});
+
+test("Continuer en niveau suivant attend level-status puis appelle /today avec le niveau visé, sans nouvelle route de génération", () => {
+  const fnStart = VIEW_SOURCE.indexOf("function continueToNextProgressiveLevel");
+  const fnEnd = VIEW_SOURCE.indexOf("// Défilement automatique", fnStart);
+  const fnSource = VIEW_SOURCE.slice(fnStart, fnEnd);
+  assert.match(fnSource, /fetch\(progressiveLevelStatusUrl\(slotAtCall, dateAtCall, currentServedLevel\), \{ cache: 'no-store' \}\)/);
+  assert.match(fnSource, /!statusData\.nextLevelReady && attempt < 45/);
+  assert.match(fnSource, /'&level=' \+ encodeURIComponent\(nextLevel \|\| statusData\.nextLevel\)/);
+  assert.doesNotMatch(fnSource, /custom\/progressive|customTopic|generation-status/, "le clic Continuer ne doit pas relancer le pipeline de création");
+});

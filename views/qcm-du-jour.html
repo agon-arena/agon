@@ -4197,6 +4197,7 @@
   var currentSlot = null;
   var currentQuizDate = null;
   var currentQuizLabel = null;
+  var currentServedLevel = null;
   var currentCategory = null;
   var qcmSessionReady = false;
   // "Refaire" (demande du 13/08/2026) : rejoue le même QCM depuis le début
@@ -5180,6 +5181,13 @@
   // avec maybeShowProgressiveNextLevelHint. practiceMode ("Refaire") exclu :
   // ne compte jamais pour la progression réelle, cf. POST
   // /api/daily-quiz/practice-answer.
+  function progressiveLevelStatusUrl(slot, quizDate, completedLevel) {
+    return '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(slot) +
+      '&quizDate=' + encodeURIComponent(quizDate) +
+      '&legacyKey=' + encodeURIComponent(voterKey) +
+      (completedLevel ? '&completedLevel=' + encodeURIComponent(completedLevel) : '');
+  }
+
   function finishCurrentBlockOrContinue() {
     if (practiceMode || !voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) {
       renderFinalScore();
@@ -5187,10 +5195,9 @@
     }
     var slotAtCall = currentSlot;
     var dateAtCall = currentQuizDate;
+    var completedLevelAtCall = currentServedLevel;
     fetch(
-      '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(slotAtCall) +
-      '&quizDate=' + encodeURIComponent(dateAtCall) +
-      '&legacyKey=' + encodeURIComponent(voterKey),
+      progressiveLevelStatusUrl(slotAtCall, dateAtCall, completedLevelAtCall),
       { cache: 'no-store' }
     )
       .then(function (res) { return res.json(); })
@@ -5217,25 +5224,41 @@
   // rapprochées ici avant d'abandonner sur l'écran de score (jamais un délai
   // fixe avant le premier essai : la promotion est déjà là la plupart du
   // temps, inutile de ralentir ce cas courant).
-  function continueToNextProgressiveLevel(slotAtCall, dateAtCall, attempt) {
+  function continueToNextProgressiveLevel(slotAtCall, dateAtCall, nextLevel, attempt) {
     attempt = attempt || 0;
     renderMessage('Chargement de la suite…');
-    fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotAtCall) + '&date=' + encodeURIComponent(dateAtCall) + '&voterKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+    fetch(progressiveLevelStatusUrl(slotAtCall, dateAtCall, currentServedLevel), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
+      .then(function (statusData) {
+        if (currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) return null;
+        if (statusData && statusData.progressive && statusData.nextLevel && !statusData.nextLevelReady && attempt < 45) {
+          setTimeout(function () { continueToNextProgressiveLevel(slotAtCall, dateAtCall, nextLevel || statusData.nextLevel, attempt + 1); }, 2000);
+          return null;
+        }
+        return fetch(
+          '/api/daily-quiz/today?slot=' + encodeURIComponent(slotAtCall) +
+          '&date=' + encodeURIComponent(dateAtCall) +
+          '&voterKey=' + encodeURIComponent(voterKey) +
+          (nextLevel || statusData?.nextLevel ? '&level=' + encodeURIComponent(nextLevel || statusData.nextLevel) : ''),
+          { cache: 'no-store' }
+        ).then(function (res) { return res.json(); });
+      })
       .then(function (data) {
+        if (!data) return;
         if (currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) return;
         var nextQuestions = Array.isArray(data.questions) ? data.questions : [];
         var nextIndex = nextQuestions.findIndex(function (q) { return !answeredByQuestionId[q.id]; });
         if (nextQuestions.length && nextIndex !== -1) {
           questions = nextQuestions;
           originalQuestions = questions.slice();
+          currentServedLevel = data.level || nextLevel || currentServedLevel;
           preloadQuestionImages(questions);
           currentIndex = nextIndex;
           renderQuestion();
           return;
         }
         if (attempt < 3) {
-          setTimeout(function () { continueToNextProgressiveLevel(slotAtCall, dateAtCall, attempt + 1); }, 400 * (attempt + 1));
+          setTimeout(function () { continueToNextProgressiveLevel(slotAtCall, dateAtCall, nextLevel, attempt + 1); }, 400 * (attempt + 1));
         } else {
           renderFinalScore();
         }
@@ -5746,9 +5769,7 @@
     }
     if (!voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) return;
     fetch(
-      '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(currentSlot) +
-      '&quizDate=' + encodeURIComponent(currentQuizDate) +
-      '&legacyKey=' + encodeURIComponent(voterKey),
+      progressiveLevelStatusUrl(currentSlot, currentQuizDate, currentServedLevel),
       { cache: 'no-store' }
     )
       .then(function (res) { return res.json(); })
@@ -5765,21 +5786,24 @@
       })
       .catch(function () {});
   }
-  // Deux affichages exclusifs selon l'état RÉEL du niveau suivant (demande du
-  // 09/09/2026, "proposer de poursuivre plutôt qu'enchaîner tout seul") :
-  // - prêt (nextLevelReady) : bouton "Continuer en {label}" cliquable, posé
-  //   juste au-dessus de "Terminé" (cf. .qcm-final-actions) — au clic,
-  //   continueToNextProgressiveLevel réutilise TEL QUEL le même mécanisme
-  //   que l'ancien enchaînement automatique (GET /today sur le MÊME (slot,
-  //   date), jamais une nouvelle génération) ;
-  // - pas encore prêt : même sablier tournant que "En cours de création"
-  //   dans Mes apprentissages (cf. renderCreatingNotionQuizzesHtml, classe
-  //   .qcm-loading-hourglass + /sablier-96.png) plutôt qu'un second
-  //   composant visuel pour la même idée — le passage au niveau suivant reste
-  //   automatique dès qu'il devient prêt (polling ci-dessous, comportement
-  //   inchangé depuis le 07/09/2026), aucun second clic requis.
+  // Le bouton "Continuer en {label}" existe dès qu'il y a un palier suivant :
+  // nextLevelReady ne décide plus de son affichage, seulement de la présence
+  // du message sablier. Au clic, continueToNextProgressiveLevel attend le
+  // même master jusqu'à disponibilité puis appelle /today sur le même slot,
+  // jamais une nouvelle génération.
   function applyProgressiveNextLevelHint(hintEl, continueBtn, data) {
     if (!data || !data.progressive || !data.nextLevel) return;
+    continueBtn.textContent = 'Continuer en ' + (data.nextLevelLabel || data.nextLevel);
+    continueBtn.hidden = false;
+    continueBtn.disabled = false;
+    var slotAtClick = currentSlot;
+    var dateAtClick = currentQuizDate;
+    var nextLevelAtClick = data.nextLevel;
+    continueBtn.onclick = function () {
+      stopProgressiveNextLevelPoll();
+      continueBtn.disabled = true;
+      continueToNextProgressiveLevel(slotAtClick, dateAtClick, nextLevelAtClick);
+    };
     if (data.nextLevelReady) {
       // hintEl explicitement masqué (pas seulement laissé tel quel) : cette branche est aussi
       // atteinte depuis le polling, une fois le sablier "en cours de création" déjà affiché
@@ -5787,14 +5811,6 @@
       // visible en même temps que le bouton "Continuer" (demande du 09/09/2026, "le sablier
       // disparaît et le bouton continuer apparaît ?").
       hintEl.hidden = true;
-      continueBtn.textContent = 'Continuer en ' + (data.nextLevelLabel || data.nextLevel);
-      continueBtn.hidden = false;
-      var slotAtClick = currentSlot;
-      var dateAtClick = currentQuizDate;
-      continueBtn.onclick = function () {
-        continueBtn.disabled = true;
-        continueToNextProgressiveLevel(slotAtClick, dateAtClick);
-      };
       return;
     }
     hintEl.innerHTML = '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">' +
@@ -5810,13 +5826,13 @@
     // devenue disponible sans quitter puis rouvrir le sujet — même cadence
     // (8s) que checkPendingNotionQuizzesReadiness (script.js), qui fait déjà
     // ça pour "Mes apprentissages en cours de création" ailleurs sur le site.
-    startProgressiveNextLevelPoll(hintEl, continueBtn, currentSlot, currentQuizDate);
+    startProgressiveNextLevelPoll(hintEl, continueBtn, currentSlot, currentQuizDate, data.completedLevel || currentServedLevel);
   }
   var progressiveNextLevelPollTimer = null;
   function stopProgressiveNextLevelPoll() {
     if (progressiveNextLevelPollTimer) { clearInterval(progressiveNextLevelPollTimer); progressiveNextLevelPollTimer = null; }
   }
-  function startProgressiveNextLevelPoll(hintEl, continueBtn, slotAtCall, dateAtCall) {
+  function startProgressiveNextLevelPoll(hintEl, continueBtn, slotAtCall, dateAtCall, completedLevelAtCall) {
     stopProgressiveNextLevelPoll();
     progressiveNextLevelPollTimer = setInterval(function () {
       // hintEl.isConnected : l'écran de score a pu être quitté ("Terminé",
@@ -5825,9 +5841,7 @@
       // continuerait à interroger le serveur indéfiniment.
       if (!hintEl.isConnected || currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) { stopProgressiveNextLevelPoll(); return; }
       fetch(
-        '/api/users/notion-quizzes/level-status?slot=' + encodeURIComponent(slotAtCall) +
-        '&quizDate=' + encodeURIComponent(dateAtCall) +
-        '&legacyKey=' + encodeURIComponent(voterKey),
+        progressiveLevelStatusUrl(slotAtCall, dateAtCall, completedLevelAtCall),
         { cache: 'no-store' }
       )
         .then(function (res) { return res.json(); })
@@ -6787,7 +6801,7 @@
             customTopicGenerationLabel = '';
             customSearchInput.value = '';
             setCustomSearchStatus('', false);
-            loadSlot(result.data.slot, result.data.quizDate, result.data.label);
+            loadSlot(result.data.slot, result.data.quizDate, result.data.label, result.data.level);
             showNotionQuizReadyModal(result.data.label || topic, result.data.questionCount);
             if (typeof onCreated === 'function') onCreated(result.data);
           })
@@ -7775,6 +7789,7 @@
     currentSlot = null;
     qcmSessionReady = false;
     currentQuizDate = null;
+    currentServedLevel = null;
     titleText.textContent = CATEGORY_LABELS.mesqcm;
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY.mesqcm;
     renderCategorySwitcher();
@@ -8362,6 +8377,7 @@
     currentSlot = null;
     qcmSessionReady = false;
     currentQuizDate = null;
+    currentServedLevel = null;
     titleText.textContent = 'Mes acquis';
     if (subtitleText) subtitleText.textContent = 'Tout ce que tu as déjà appris, classé par thématique.';
     renderCategorySwitcher();
@@ -8968,7 +8984,7 @@
         });
         overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
           closeMesQcmActionModal();
-          loadSlot(q.slot, q.quizDate, q.label);
+          loadSlot(q.slot, q.quizDate, q.label, q.level);
         });
         overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
           closeMesQcmActionModal();
@@ -9299,7 +9315,7 @@
   // pour "renforcement", toujours calculé sur aujourd'hui côté serveur.
   // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
   // la place de "Connaissances" générique.
-  function loadSlot(slotKey, quizDate, label) {
+  function loadSlot(slotKey, quizDate, label, servedLevelHint) {
     // Un nouveau QCM chargé rend obsolète tout polling "suite en cours de
     // création" du précédent (cf. startProgressiveNextLevelPoll) — jamais
     // laissé tourner jusqu'à sa propre détection isConnected/slot (jusqu'à
@@ -9321,6 +9337,7 @@
     currentSlot = slotKey;
     currentQuizDate = quizDate || null;
     currentQuizLabel = label || null;
+    currentServedLevel = servedLevelHint || null;
     currentCategory = slotKey === 'renforcement'
       ? 'renforcement'
       : (slotKey === 'comprendre' ? 'comprendre' : 'mesqcm');
@@ -9352,6 +9369,7 @@
         if (myToken !== loadToken) return;
         questions = Array.isArray(data.questions) ? data.questions : [];
         originalQuestions = questions.slice();
+        currentServedLevel = data.level || currentServedLevel;
         preloadQuestionImages(questions);
         if (data.label && !label) titleText.textContent = data.label;
         if (!questions.length) {

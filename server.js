@@ -19082,7 +19082,7 @@ async function resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot) {
 // repli strict sur le comportement V4.0 (niveau lu sur
 // `rawQuestions[0]?.level`), jamais une régression pour un appelant qui ne
 // fournit ni l'un ni l'autre.
-async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel, { includeDisabledKnowledgeTargets = false } = {}) {
+async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel, { includeDisabledKnowledgeTargets = false, persistedLevelOverride } = {}) {
   // "Renforcement des connaissances" : jamais de ligne daily_quiz à lire,
   // uniquement les repasses de répétition espacée dues aujourd'hui pour ce
   // visiteur (cf. fetchCultureGeneraleReviewInjectionForToday) — pas de
@@ -19110,7 +19110,9 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel, {
   // (cf. commentaires ci-dessus) — TOUJOURS résolu à neuf (jamais mis en
   // cache lui-même), pour que la clé de cache ci-dessous reflète
   // immédiatement tout changement de niveau.
-  const persistedLevel = await resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot);
+  const persistedLevel = persistedLevelOverride !== undefined
+    ? persistedLevelOverride
+    : await resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot);
   const effectiveRequestedLevel = persistedLevel || requestedLevel || null;
 
   // V4.1 : clé de cache incluant le niveau EFFECTIF (cf. commentaire de
@@ -19385,7 +19387,9 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     // le connaît (cf. commentaire de requestedLevel dans getDailyQuizQuestions)
     // — absent, comportement V4.0 inchangé.
     const requestedLevel = resolveNotionQuizLevel(req.query.level).level;
-    const questions = await getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel);
+    const persistedRequestedLevel = await resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot);
+    const effectiveRequestedLevel = persistedRequestedLevel || requestedLevel || null;
+    const questions = await getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel, { persistedLevelOverride: persistedRequestedLevel });
     // memorizationEnabled (chantier "Mémoriser/Non mémorisée") : uniquement
     // pour "mesqcm" — "renforcement" l'a déjà (fetchCultureGeneraleReviewInjectionForToday
     // enrichit ses propres items), "comprendre" n'a jamais de knowledgeTargetId
@@ -19395,7 +19399,7 @@ app.get("/api/daily-quiz/today", async (req, res) => {
     const enrichedQuestions = (slot === DAILY_QUIZ_REINFORCEMENT_SLOT || slot === DAILY_QUIZ_COMPREHENSION_SLOT)
       ? questions
       : await attachMemorizationPreferenceToQuestions(questions, voterKey);
-    res.json({ date: quizDate, slot, label: getDailyQuizSlotLabel(slot), questions: enrichedQuestions.map(stripQuestionForClient) });
+    res.json({ date: quizDate, slot, label: getDailyQuizSlotLabel(slot), level: effectiveRequestedLevel || questions[0]?.level || null, questions: enrichedQuestions.map(stripQuestionForClient) });
   } catch (error) {
     res.status(500).json({ date: null, questions: [], error: error.message });
   }
@@ -20617,24 +20621,31 @@ function progressiveLevelRank(level) {
 // concepts : progressive_status (état du CONTENU mutualisé, ci-dessus) et le
 // `targetLevel` passé à continueProgressiveGeneration (toujours "expert",
 // jusqu'où le MASTER doit être généré — jamais changé par ce chantier).
-// Ici, `targetLevel` désigne autre chose : le plafond PERSONNEL choisi par
-// CET utilisateur dans le picker (elementaire/avance/expert, persisté dans
-// user_notion_quizzes.target_level) — jamais confondu avec `currentLevel`
-// (le niveau qu'il a RÉELLEMENT atteint, persisté dans .requested_level, nom
-// de colonne historique conservé tel quel pour éviter une migration).
+// Ici, `targetLevel` reste le niveau choisi au picker et affiché dans la
+// liste, mais il ne peut plus bloquer la continuation volontaire : finir
+// Élémentaire doit toujours pouvoir proposer Approfondi, puis Expert, même si
+// le parcours avait été lancé en Élémentaire. La disponibilité réelle reste
+// décidée séparément par progressive_status.
+function getNextProgressiveLevel(currentLevel) {
+  const currentRank = progressiveLevelRank(currentLevel);
+  return currentRank >= 0 && currentRank < PROGRESSIVE_LEVEL_ORDER.length - 1
+    ? PROGRESSIVE_LEVEL_ORDER[currentRank + 1]
+    : null;
+}
+
+function isProgressiveLevelReady(level, progressiveStatus) {
+  const levelRank = progressiveLevelRank(level);
+  const statusRank = PROGRESSIVE_STATUS_RANK[progressiveStatus];
+  return levelRank >= 0 && Number.isInteger(statusRank) && statusRank >= levelRank;
+}
+
 // Un seul palier à la fois (jamais un saut direct Élémentaire -> Expert,
 // même si le master est déjà `ready`) — l'utilisateur doit effectivement
-// traverser Approfondi — ET jamais au-delà de son propre targetLevel, même
-// si le master est plus avancé.
+// traverser Approfondi. `targetLevel` est conservé dans la signature pour les
+// appelants historiques, mais n'est plus un plafond de continuation.
 function computeNextUnlockedProgressiveLevel(currentLevel, targetLevel, progressiveStatus) {
-  const nextLevel = currentLevel === "elementaire" && (progressiveStatus === "deepening_ready" || progressiveStatus === "ready")
-    ? "avance"
-    : currentLevel === "avance" && progressiveStatus === "ready"
-      ? "expert"
-      : null;
-  if (!nextLevel) return null;
-  if (PROGRESSIVE_LEVEL_ORDER.indexOf(nextLevel) > PROGRESSIVE_LEVEL_ORDER.indexOf(targetLevel)) return null;
-  return nextLevel;
+  const nextLevel = getNextProgressiveLevel(currentLevel);
+  return nextLevel && isProgressiveLevelReady(nextLevel, progressiveStatus) ? nextLevel : null;
 }
 
 // resolveUserProgressiveLevel : fonction centrale UNIQUE décidant si CET
@@ -21623,38 +21634,25 @@ app.get("/api/users/notion-quizzes/level-status", rateLimit("users", 60), async 
     }
 
     const currentLevel = resolveNotionQuizLevel(linkRow.requested_level).level || "elementaire";
+    const completedLevel = resolveNotionQuizLevel(req.query.completedLevel).level || currentLevel;
     const targetLevel = resolveNotionQuizLevel(linkRow.target_level).level || "expert";
-    const currentRank = progressiveLevelRank(currentLevel);
-    const targetRank = progressiveLevelRank(targetLevel);
-    // nextLevel : le palier que CET utilisateur vise encore, indépendamment
-    // de sa disponibilité actuelle dans le master — jamais calculé via
-    // computeNextUnlockedProgressiveLevel (qui répond null tant que le
-    // master n'a pas rattrapé, ce qui est précisément le cas qu'on veut
-    // pouvoir signaler ici : "vise Approfondi, pas encore prêt").
-    const nextLevel = currentRank < targetRank ? PROGRESSIVE_LEVEL_ORDER[currentRank + 1] : null;
+    // nextLevel : le palier qui suit le niveau RÉELLEMENT terminé par l'écran
+    // courant. Il ne dépend jamais de target_level ni d'une éventuelle promotion
+    // déjà écrite en base entre la dernière réponse et cet appel.
+    const nextLevel = getNextProgressiveLevel(completedLevel);
     if (!nextLevel) {
-      return res.json({ ok: true, progressive: true, currentLevel, targetLevel, nextLevel: null });
+      return res.json({ ok: true, progressive: true, currentLevel, completedLevel, targetLevel, nextLevel: null });
     }
 
-    const resolved = resolveUserProgressiveLevel({
-      persistedLevel: currentLevel,
-      targetLevel,
-      progressiveStatus: quizRow.progressive_status,
-      // true : cette route n'est appelée par le frontend qu'une fois le
-      // bloc courant réellement terminé (cf. renderFinalScore) — la
-      // promotion RÉELLE (écriture en base) reste de la responsabilité
-      // exclusive de maybeAdvanceProgressiveLevelAfterAnswer/GET
-      // .../notion-quizzes, jamais de cette route en lecture seule.
-      isCurrentBlockComplete: true
-    });
     res.json({
       ok: true,
       progressive: true,
       currentLevel,
+      completedLevel,
       targetLevel,
       nextLevel,
       nextLevelLabel: NOTION_QUIZ_LEVELS[nextLevel]?.label || null,
-      nextLevelReady: resolved.level !== currentLevel
+      nextLevelReady: isProgressiveLevelReady(nextLevel, quizRow.progressive_status)
     });
   } catch (error) {
     console.error("[notion-quizzes:level-status] :", error.message);
@@ -22310,9 +22308,10 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         isCurrentBlockComplete: blockFullyAnswered
       });
       if (progressionResolution.promotion) {
+        const promotedTargetLevel = resolveTargetLevelOnRequest(targetLevel, progressionResolution.promotion.to);
         supabase
           .from("user_notion_quizzes")
-          .update({ requested_level: progressionResolution.promotion.to })
+          .update({ requested_level: progressionResolution.promotion.to, target_level: promotedTargetLevel })
           .eq("user_id", userRow.id).eq("quiz_date", link.quiz_date).eq("slot", link.slot)
           .then(({ error }) => {
             if (error) console.warn(`[qcm-progressive-promotion] liste ${link.slot} :`, error.message);
@@ -25662,9 +25661,10 @@ async function maybeAdvanceProgressiveLevelAfterAnswer({ voterKey, quizDate, slo
     });
     if (!resolved.promotion) return;
 
+    const promotedTargetLevel = resolveTargetLevelOnRequest(targetLevel, resolved.promotion.to);
     const { error: promoteError } = await supabase
       .from("user_notion_quizzes")
-      .update({ requested_level: resolved.promotion.to })
+      .update({ requested_level: resolved.promotion.to, target_level: promotedTargetLevel })
       .eq("user_id", user.id).eq("quiz_date", quizDate).eq("slot", slot);
     if (promoteError) console.warn(`[qcm-progressive-promotion] ${slot} :`, promoteError.message);
   } catch (error) {
