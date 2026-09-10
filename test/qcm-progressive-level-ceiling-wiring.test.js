@@ -28,13 +28,13 @@ test("restrictQuestionsToProgressiveLevelCeiling est importée depuis lib/questi
 // ── Site 1/6 : getDailyQuizQuestions ───────────────────────────────────────
 
 test("Site 1/6 — getDailyQuizQuestions sélectionne progressive_status et applique le plafond de niveau AVANT selectQuestionsForRequestedLevel", () => {
-  const fnIndex = SERVER_SOURCE.indexOf("async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel) {");
+  const fnIndex = SERVER_SOURCE.indexOf("async function getDailyQuizQuestions(");
   assert.ok(fnIndex > 0);
   const nextFnIndex = SERVER_SOURCE.indexOf("\nasync function ", fnIndex + 10);
   const fnBody = SERVER_SOURCE.slice(fnIndex, nextFnIndex > 0 ? nextFnIndex : fnIndex + 3000);
-  assert.match(fnBody, /\.select\("questions, progressive_status"\)/);
+  assert.match(fnBody, /\.select\("questions, progressive_status, curriculum"\)/);
   const ceilingIndex = fnBody.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, effectiveServingLevel, data?.progressive_status);");
-  const selectQuestionsIndex = fnBody.indexOf("const baseQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveServingLevel]?.target);");
+  const selectQuestionsIndex = fnBody.indexOf("const baseQuestions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveServingLevel]?.target)");
   assert.ok(ceilingIndex > 0, "le plafond doit être calculé dans getDailyQuizQuestions");
   assert.ok(selectQuestionsIndex > ceilingIndex, "selectQuestionsForRequestedLevel doit consommer levelCeiledQuestions, jamais rawQuestions directement");
 });
@@ -81,7 +81,9 @@ test("findExistingQuizMaster et findEquivalentGeneratedCustomTopic renvoient pro
   const findEquivIndex = SERVER_SOURCE.indexOf("async function findEquivalentGeneratedCustomTopic(topic, level) {");
   assert.ok(findEquivIndex > 0);
   const findEquivBody = SERVER_SOURCE.slice(findEquivIndex, findEquivIndex + 1400);
-  assert.match(findEquivBody, /\.select\("slot, quiz_date, questions, progressive_status"\)/);
+  assert.match(findEquivBody, /progressiveStatus: row\.progressive_status,/);
+  assert.match(findEquivBody, /curriculum: row\.curriculum,/);
+  assert.match(findEquivBody, /\.select\("questions"\)/);
   assert.match(findEquivBody, /progressiveStatus: row\.progressive_status,/);
 });
 
@@ -128,17 +130,17 @@ test("Site 5/6 — GET /api/users/notion-quizzes sélectionne progressive_status
 
 // ── Site 6/6 : GET /api/users/notion-quizzes/fiche ─────────────────────────
 
-test("Site 6/6 — GET /api/users/notion-quizzes/fiche sélectionne progressive_status dans les DEUX branches (match par lien, slot+quizDate direct) et plafonne avant selectQuestionsForRequestedLevel", () => {
+test("Site 6/6 — GET /api/users/notion-quizzes/fiche sélectionne progressive_status dans les DEUX branches et plafonne les questions avant selectQuestionsForRequestedLevel", () => {
   const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"');
   assert.ok(routeIndex > 0);
   const nextRouteIndex = SERVER_SOURCE.indexOf("\napp.get(", routeIndex + 10);
   const routeBody = SERVER_SOURCE.slice(routeIndex, nextRouteIndex > 0 ? nextRouteIndex : routeIndex + 6000);
-  assert.match(routeBody, /\.select\("questions, grounding_sources, progressive_status"\)\s*\n\s*\.eq\("slot", match\.slot\)/);
+  assert.match(routeBody, /\.select\("questions, grounding_sources, progressive_status, curriculum"\)\s*\n\s*\.eq\("slot", match\.slot\)/);
   assert.match(routeBody, /progressiveStatus = fullRow\?\.progressive_status \|\| null;/);
-  assert.match(routeBody, /\.select\("questions, grounding_sources, progressive_status"\)\.eq\("quiz_date", quizDate\)/);
+  assert.match(routeBody, /\.select\("questions, grounding_sources, progressive_status, curriculum"\)\.eq\("quiz_date", quizDate\)/);
   assert.match(routeBody, /progressiveStatus = data\?\.progressive_status \|\| null;/);
-  const ceilingIndex = routeBody.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, effectiveLevel, progressiveStatus);");
-  const selectQuestionsIndex = routeBody.indexOf("questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);");
+  const ceilingIndex = routeBody.indexOf("const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, questionServingLevel, progressiveStatus);");
+  const selectQuestionsIndex = routeBody.indexOf("questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[questionServingLevel]?.target);");
   assert.ok(ceilingIndex > 0 && selectQuestionsIndex > ceilingIndex, "le plafond doit précéder immédiatement le tranchage par rang+compte");
 });
 

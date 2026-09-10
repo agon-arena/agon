@@ -53,13 +53,14 @@ test("le plafond de niveau progressif et le tranchage par rang restent appliqué
   const routeIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes"');
   const nextRouteIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"', routeIndex);
   const routeBody = SERVER_SOURCE.slice(routeIndex, nextRouteIndex);
-  assert.match(routeBody, /const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling\(rawQuestions, effectiveLevel, progressiveStatusByKey\.get\(`\$\{link\.quiz_date\}:\$\{link\.slot\}`\)\);/);
+  assert.match(routeBody, /const progressiveStatus = progressiveStatusByKey\.get\(`\$\{link\.quiz_date\}:\$\{link\.slot\}`\);/);
+  assert.match(routeBody, /const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling\(rawQuestions, effectiveLevel, progressiveStatus\);/);
   assert.match(routeBody, /const questions = selectQuestionsForRequestedLevel\(levelCeiledQuestions, NOTION_QUIZ_LEVELS\[effectiveLevel\]\?\.target\);/);
 });
 
 test("aucune autre route (fiche, getDailyQuizQuestions, génération) n'est touchée par ce correctif : elles continuent de sélectionner `questions` intégralement", () => {
-  assert.match(SERVER_SOURCE, /\.select\("questions, progressive_status"\)/, "getDailyQuizQuestions inchangée");
-  assert.match(SERVER_SOURCE, /\.select\("questions, grounding_sources, progressive_status"\)/, "la route fiche inchangée");
+  assert.match(SERVER_SOURCE, /\.select\("questions, progressive_status, curriculum"\)/, "getDailyQuizQuestions lit toujours les questions intégrales, avec le curriculum nécessaire aux knowledgeTargets legacy");
+  assert.match(SERVER_SOURCE, /\.select\("questions, grounding_sources, progressive_status, curriculum"\)/, "la route fiche lit toujours les questions intégrales, avec le curriculum nécessaire à la fiche complète");
 });
 
 // ── Second correctif du même diagnostic (04/09/2026) : memory_item_fsrs_states

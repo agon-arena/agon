@@ -133,8 +133,8 @@ test("GET .../fiche sélectionne grounding_sources dans les DEUX chemins (linkTy
   // (plafond de niveau progressif des questions, cf.
   // test/qcm-progressive-level-ceiling-wiring.test.js), grounding_sources
   // inchangée.
-  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources, progressive_status"\)\s*\n\s*\.eq\("slot", match\.slot\)\.eq\("quiz_date", match\.quiz_date\)\.maybeSingle\(\);/);
-  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources, progressive_status"\)\.eq\("quiz_date", quizDate\)\.eq\("slot", slot\)\.maybeSingle\(\);/);
+  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources, progressive_status, curriculum"\)\s*\n\s*\.eq\("slot", match\.slot\)\.eq\("quiz_date", match\.quiz_date\)\.maybeSingle\(\);/);
+  assert.match(SERVER_SOURCE, /\.from\("daily_quiz"\)\.select\("questions, grounding_sources, progressive_status, curriculum"\)\.eq\("quiz_date", quizDate\)\.eq\("slot", slot\)\.maybeSingle\(\);/);
 });
 
 // Réécrit (Phase 2.1, item 8 — fiche scopée au niveau réellement servi,
@@ -205,13 +205,13 @@ test("le call site openMesQcmFicheFromUrl transmet bien data.groundingSources à
 
 test("source image indépendante côté UI : le bloc Sources et la figure image (captionText 'Image : ...') restent deux blocs de code totalement séparés, jamais fusionnés", () => {
   const sourcesBlockIndex = VIEW_SOURCE.indexOf("var ficheSourcesSeenUrls = {};");
-  const imageBlockIndex = VIEW_SOURCE.lastIndexOf("if (detail.image && detail.image.url) {", sourcesBlockIndex);
-  const imageBlockEnd = VIEW_SOURCE.indexOf("</figure>';\n    }", imageBlockIndex);
-  assert.ok(imageBlockIndex >= 0 && imageBlockIndex < sourcesBlockIndex && imageBlockEnd > imageBlockIndex && imageBlockEnd < sourcesBlockIndex, "l'image est traitée avant, dans un bloc distinct");
-  // Fenêtre limitée au CORPS du bloc image lui-même (jamais les commentaires
-  // qui le suivent, qui documentent légitimement la fusion à venir).
-  const imageBlockBody = VIEW_SOURCE.slice(imageBlockIndex, imageBlockEnd);
-  assert.doesNotMatch(imageBlockBody, /groundingSources/, "le corps du bloc image ne référence jamais groundingSources");
+  const imageCallIndex = VIEW_SOURCE.lastIndexOf("html += buildFicheImageFigureHtml(detail.image, name);", sourcesBlockIndex);
+  assert.ok(imageCallIndex >= 0 && imageCallIndex < sourcesBlockIndex, "l'image est traitée avant les sources, via un helper distinct");
+  const helperIndex = VIEW_SOURCE.indexOf("function buildFicheImageFigureHtml(img, altText) {");
+  const helperEnd = VIEW_SOURCE.indexOf("\n  function ", helperIndex + 10);
+  assert.ok(helperIndex >= 0 && helperEnd > helperIndex, "le helper image doit rester isolé");
+  const imageHelperBody = VIEW_SOURCE.slice(helperIndex, helperEnd);
+  assert.doesNotMatch(imageHelperBody, /groundingSources/, "le helper image ne référence jamais groundingSources");
 });
 
 // ── Aucune modification du grounding/validator ───────────────────────────

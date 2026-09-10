@@ -103,13 +103,13 @@ test("getDailyQuizQuestions applique selectQuestionsForRequestedLevel avant la m
   // restrictQuestionsToProgressiveLevelCeiling (levelCeiledQuestions) avant
   // selectQuestionsForRequestedLevel — no-op strict en legacy, cf.
   // lib/question-formats.js.
-  assert.match(SERVER_SOURCE, /const baseQuestions = selectQuestionsForRequestedLevel\(levelCeiledQuestions, NOTION_QUIZ_LEVELS\[effectiveServingLevel\]\?\.target\);/);
+  assert.match(SERVER_SOURCE, /const baseQuestions = selectQuestionsForRequestedLevel\(levelCeiledQuestions, NOTION_QUIZ_LEVELS\[effectiveServingLevel\]\?\.target\)\s*\.map/);
 });
 
 test("GET /api/users/notion-quizzes/fiche applique selectQuestionsForRequestedLevel avant questionCount/first", () => {
   const ficheRouteIndex = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"');
-  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);", ficheRouteIndex);
-  const firstIndex = SERVER_SOURCE.indexOf("const first = questions[0];", ficheRouteIndex);
+  const selectIndex = SERVER_SOURCE.indexOf("questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[questionServingLevel]?.target);", ficheRouteIndex);
+  const firstIndex = SERVER_SOURCE.indexOf("const first = questions[0] || rawQuestions[0];", ficheRouteIndex);
   assert.ok(ficheRouteIndex > 0);
   assert.ok(selectIndex > ficheRouteIndex, "le filtrage doit être appliqué dans la route fiche");
   assert.ok(firstIndex > selectIndex, "`first`/questionCount doivent être dérivés APRÈS le filtrage, jamais avant");
@@ -182,5 +182,5 @@ test("les fonctions V4.0/V4.1 et le plancher master sont bien importés depuis l
   // restrictQuestionsToProgressiveLevelCeiling (Phase 2.2, 04/09/2026) :
   // import additif juste après selectQuestionsForRequestedLevel, jamais un
   // remplacement.
-  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*selectQuestionsForRequestedLevel,\s*\n\s*restrictQuestionsToProgressiveLevelCeiling,\s*\n\s*isMasterEligibleQuiz,\s*\n\s*MIN_MASTER_QUESTIONS,\s*\n\s*MIN_ELEMENTARY_READY_QUESTIONS,\s*\n\s*ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE,\s*\n\s*computeElementaryCandidateDistribution,\s*\n\s*selectOneQuestionPerKnowledgeTarget\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
+  assert.match(SERVER_SOURCE, /rankAdmittedKnowledge,\s*\n\s*attachPedagogicalRanks,\s*\n\s*resolveLegacyQuestionKnowledgeTargetId,\s*\n\s*selectQuestionsForRequestedLevel,\s*\n\s*restrictQuestionsToProgressiveLevelCeiling,\s*\n\s*isMasterEligibleQuiz,\s*\n\s*MIN_MASTER_QUESTIONS,\s*\n\s*MIN_ELEMENTARY_READY_QUESTIONS,\s*\n\s*ELEMENTARY_INITIAL_CANDIDATE_POOL_SIZE,\s*\n\s*computeElementaryCandidateDistribution,\s*\n\s*selectOneQuestionPerKnowledgeTarget\s*\n\}\s*=\s*require\("\.\/lib\/question-formats"\);/);
 });

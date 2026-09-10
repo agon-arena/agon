@@ -20605,6 +20605,7 @@ const CURRICULUM_LEVEL_FOR_QUIZ_LEVEL = { elementaire: "elementary", avance: "de
 const QUIZ_LEVEL_FOR_CURRICULUM_LEVEL = { elementary: "elementaire", deepening: "avance", expert: "expert" };
 const PROGRESSIVE_STATUS_FOR_QUIZ_LEVEL = { elementaire: "elementary_ready", avance: "deepening_ready", expert: "ready" };
 const PROGRESSIVE_STATUS_RANK = { elementary_ready: 0, deepening_ready: 1, ready: 2 };
+const FICHE_LEVEL_FOR_PROGRESSIVE_STATUS = { elementary_ready: "elementaire", deepening_ready: "avance", ready: "expert" };
 
 function progressiveLevelRank(level) {
   return PROGRESSIVE_LEVEL_ORDER.indexOf(level);
@@ -22481,13 +22482,13 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       persistedLevel = resolveNotionQuizLevel(linkRows?.[0]?.requested_level).level;
     }
 
-    // Serving par niveau (V4.0, 01/09/2026, section 10 de la demande) : la
-    // fiche ne renvoie désormais que le sous-ensemble réellement servi à ce
-    // niveau — no-op strict pour tout quiz sans pedagogicalRank (cf.
-    // commentaire complet dans getDailyQuizQuestions). `questionCount`
-    // ci-dessous reflète donc ce sous-ensemble, jamais le corpus maître
-    // complet stocké en base.
-    const effectiveLevel = persistedLevel || requestedLevel || questions[0]?.level || null;
+    // Découplage fiche/QCM (10/09/2026) : le niveau utilisateur ne filtre
+    // plus que les QUESTIONS/corrigés du parcours. La fiche pédagogique
+    // (sections + knowledgeTargets) suit uniquement le contenu déjà disponible
+    // dans le master partagé, via progressive_status plus bas — jamais
+    // requested_level/target_level.
+    const rawQuestions = questions;
+    const questionServingLevel = persistedLevel || requestedLevel || rawQuestions[0]?.level || null;
     // canonicalSourceDetail (correctif egress du 04/09/2026, cf.
     // slimSourceDetailForDuplicateQuestion/findCanonicalSourceDetail) : capturé
     // sur le tableau BRUT, AVANT le tri par pedagogicalRank ci-dessous — sur
@@ -22496,31 +22497,26 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // complète (sections/meta). Sur toute ligne non concernée (legacy,
     // imports, culture générale), retombe naturellement sur la première
     // question trouvée — comportement strictement inchangé.
-    const canonicalSourceDetail = findCanonicalSourceDetail(questions);
+    const canonicalSourceDetail = findCanonicalSourceDetail(rawQuestions);
     // Plafond de niveau progressif (Phase 2.2, 04/09/2026) : no-op strict si
     // progressiveStatus est NULL (legacy) — cf. lib/question-formats.js pour
-    // le détail complet. Applique la même règle que la fiche de chaque
-    // section (déjà filtrée par niveau plus bas via sourceDetail), pour que
-    // les questions renvoyées par cette route restent cohérentes avec elle.
-    const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(questions, effectiveLevel, progressiveStatus);
-    questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[effectiveLevel]?.target);
+    // le détail complet. Ce plafond concerne les questions servies et leur
+    // corrigé, jamais les sections de fiche ni les knowledgeTargets.
+    const levelCeiledQuestions = restrictQuestionsToProgressiveLevelCeiling(rawQuestions, questionServingLevel, progressiveStatus);
+    questions = selectQuestionsForRequestedLevel(levelCeiledQuestions, NOTION_QUIZ_LEVELS[questionServingLevel]?.target);
 
-    const first = questions[0];
+    const first = questions[0] || rawQuestions[0];
     const links = first.sourceType && first.sourceDebateId
       ? await fetchCultureGeneraleNotionLinks(first.sourceType, String(first.sourceDebateId), linkOwnerUserId)
       : [];
     const primaryTheme = getPrimaryNotionQuizTheme(first);
-    // Sections filtrées au niveau réellement servi (Phase 2.1, item 8, audit
-    // réel du 04/09/2026 — "affichage des paragraphes corrects") : un lecteur
-    // Élémentaire ne doit jamais voir les sections Approfondi/Expert déjà
-    // préparées en arrière-plan (découvert par test réel : la fiche
-    // Élémentaire d'un master "ready" affichait les 9 sections cumulées,
-    // Pluton/Kuiper/Oort inclus, pour une demande "elementaire"). `level`
-    // absent sur une section = comportement legacy inchangé (aucune fiche
-    // antérieure à ce correctif ne porte ce champ, jamais filtrée à tort) ;
-    // `effectiveLevel` non reconnu (rang < 0) = aucun filtrage (repli sûr,
-    // jamais un risque de tout masquer par excès de prudence).
-    const effectiveLevelRank = progressiveLevelRank(effectiveLevel);
+    // Niveau maximal de FICHE réellement disponible dans le master partagé :
+    // dérivé exclusivement de progressive_status. Les sections sont déjà
+    // fusionnées au fil de continueProgressiveGeneration ; le filtre ci-dessous
+    // n'est qu'un garde-fou contre un état incohérent, jamais une
+    // personnalisation par utilisateur.
+    const ficheAvailableLevel = FICHE_LEVEL_FOR_PROGRESSIVE_STATUS[progressiveStatus] || null;
+    const ficheAvailableLevelRank = progressiveLevelRank(ficheAvailableLevel);
     // fullSourceDetail : la fiche complète de CETTE ligne, quelle que soit la
     // question qui la porte réellement (canonicalSourceDetail, capturé plus
     // haut) — repli sur first.sourceDetail pour rester inchangé si jamais
@@ -22529,16 +22525,18 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     const fullSourceDetail = canonicalSourceDetail || first.sourceDetail || null;
     const sourceDetailForResponse = fullSourceDetail ? {
       ...fullSourceDetail,
-      sections: effectiveLevelRank < 0
-        ? fullSourceDetail.sections
-        : (fullSourceDetail.sections || []).filter((s) => !s.level || progressiveLevelRank(s.level) <= effectiveLevelRank)
+      sections: (fullSourceDetail.sections || []).filter((s) => {
+        if (!progressiveStatus || ficheAvailableLevelRank < 0) return true;
+        const sectionRank = progressiveLevelRank(s?.level);
+        return sectionRank < 0 || sectionRank <= ficheAvailableLevelRank;
+      })
     } : null;
 
     // knowledgeTargets (chantier "Mémoriser/Non mémorisée", 06/09/2026,
-    // étendu le 07/09/2026) : source de réactivation depuis la fiche — liste
-    // EXHAUSTIVE des knowledgeTargets visibles au niveau couramment servi,
-    // avec la MÊME cumulativité que sourceDetail.sections ci-dessus
-    // (Élémentaire ne révèle jamais Approfondi/Expert).
+    // étendu le 07/09/2026) : source de réactivation depuis la fiche. Depuis
+    // le découplage fiche/QCM, cette liste suit le niveau de fiche disponible
+    // dans le master (elementary_ready/deepening_ready/ready), pas le niveau
+    // personnel du parcours QCM.
     //
     // Deux origines (audit du 07/09/2026, "92% du contenu réel n'a pas de
     // curriculum, le contrôle n'apparaissait presque jamais") :
@@ -22554,14 +22552,14 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     const hasCurriculum = Array.isArray(curriculum) && curriculum.length > 0;
     const visibleCurriculum = hasCurriculum
       ? curriculum.filter((k) => {
-          if (effectiveLevelRank < 0) return true;
+          if (!progressiveStatus || ficheAvailableLevelRank < 0) return true;
           const servingLevel = QUIZ_LEVEL_FOR_CURRICULUM_LEVEL[k?.level] || k?.level;
           const rank = progressiveLevelRank(servingLevel);
-          return rank < 0 || rank <= effectiveLevelRank;
+          return rank < 0 || rank <= ficheAvailableLevelRank;
         })
       : [];
     const legacyKnowledgeTargetsSeen = new Set();
-    const legacyKnowledgeTargets = hasCurriculum ? [] : questions.reduce((acc, q) => {
+    const legacyKnowledgeTargets = hasCurriculum ? [] : rawQuestions.reduce((acc, q) => {
       // resolveLegacyQuestionKnowledgeTargetId (jamais deriveLegacyKnowledgeTargetId
       // seule) : couvre aussi le contenu très ancien sans champ
       // question.knowledgeTarget du tout (repli sur question.question), cf.
@@ -22574,6 +22572,13 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       return acc;
     }, []);
     const rawKnowledgeTargets = hasCurriculum ? visibleCurriculum : legacyKnowledgeTargets;
+    const normalizeCurriculumQuestionLevel = (level) => {
+      const servingLevel = QUIZ_LEVEL_FOR_CURRICULUM_LEVEL[level] || level;
+      return progressiveLevelRank(servingLevel) >= 0 ? servingLevel : null;
+    };
+    const curriculumQuestionLevelById = new Map((Array.isArray(curriculum) ? curriculum : [])
+      .map((k) => [k?.id, normalizeCurriculumQuestionLevel(k?.level)])
+      .filter(([id, level]) => id && level));
     let disabledKnowledgeTargetKeys = new Set();
     if (linkOwnerUserId && first.sourceType && first.sourceDebateId != null && rawKnowledgeTargets.length) {
       disabledKnowledgeTargetKeys = await fetchDisabledKnowledgeTargetKeys(linkOwnerUserId);
@@ -22601,14 +22606,16 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       // jamais exposé avant ce chantier.
       subjectSourceId: first.sourceDebateId != null ? String(first.sourceDebateId) : null,
       knowledgeTargets,
-      // Niveau réellement servi (elementaire/avance/expert, cf.
+      // Niveau QCM réellement servi (elementaire/avance/expert, cf.
       // NOTION_QUIZ_LEVELS) — `requestedLevel` (V4.1) quand fourni, sinon le
       // niveau stocké sur les questions (comportement V4.0 inchangé) ; absent
       // (null) pour le flux historique Éclairages/Ce jour dans l'Histoire, qui
       // n'a jamais proposé ce choix (cf. NOTION_QUIZ_LEGACY_LEVEL_CONFIG).
       // Affiché sous le titre de la fiche avec questionCount, cf.
       // views/qcm-du-jour.html.
-      level: effectiveLevel,
+      level: questionServingLevel,
+      ficheLevel: ficheAvailableLevel,
+      progressiveStatus,
       questionCount: questions.length,
       themes: primaryTheme ? [primaryTheme] : [],
       sourceDetail: sourceDetailForResponse,
@@ -22621,7 +22628,17 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
       links,
       questions: questions.map((q) => {
         const type = q.type || "qcm";
-        const base = { id: q.id, type, question: q.question, explanation: q.explanation || "" };
+        const curriculumLevel = q.knowledgeTargetId ? curriculumQuestionLevelById.get(q.knowledgeTargetId) : null;
+        const explicitQuestionLevel = progressiveLevelRank(q.level) >= 0 ? q.level : null;
+        const displayLevel = curriculumLevel || explicitQuestionLevel || null;
+        const base = {
+          id: q.id,
+          type,
+          question: q.question,
+          explanation: q.explanation || "",
+          level: displayLevel,
+          knowledgeTargetId: q.knowledgeTargetId || null
+        };
         if (type === "association") return { ...base, pairs: q.pairs || [] };
         if (type === "qcm_multi") return { ...base, options: q.options || [], correctIndexes: q.correctIndexes || [] };
         if (type === "ordre") return { ...base, items: q.items || [] };

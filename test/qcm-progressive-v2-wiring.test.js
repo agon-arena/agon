@@ -160,7 +160,8 @@ test("ensureProgressiveElementaryGenerated applique la même règle dès la tout
 });
 
 test("GET .../fiche retrouve la fiche complète via findCanonicalSourceDetail sur le tableau BRUT, jamais en supposant que questions[0] la porte après le tri par pedagogicalRank", () => {
-  assert.match(SERVER_SOURCE, /const canonicalSourceDetail = findCanonicalSourceDetail\(questions\);/);
+  assert.match(SERVER_SOURCE, /const rawQuestions = questions;/);
+  assert.match(SERVER_SOURCE, /const canonicalSourceDetail = findCanonicalSourceDetail\(rawQuestions\);/);
   assert.match(SERVER_SOURCE, /const fullSourceDetail = canonicalSourceDetail \|\| first\.sourceDetail \|\| null;/);
 });
 
@@ -326,18 +327,21 @@ test("generateProgressiveLevelBlock tague chaque section de sourceDetail avec so
   assert.match(body, /sourceDetail\.sections = \(sourceDetail\.sections \|\| \[\]\)\.map\(\(s\) => \(\{\s*\n\s*\.\.\.s,\s*\n\s*level: levelKey,/);
 });
 
-// `fullSourceDetail` (correctif egress du 04/09/2026, cf.
-// findCanonicalSourceDetail) a remplacé `first.sourceDetail` comme base de
-// ce filtre — même filtrage, la fiche complète n'étant plus forcément
-// portée par `first` depuis que sourceDetail n'est plus dupliqué sur chaque
-// question (cf. slimSourceDetailForDuplicateQuestion).
-test("GET .../fiche filtre sourceDetail.sections au niveau demandé (cumulatif jusqu'à effectiveLevel) — sections sans `level` (legacy) jamais filtrées, effectiveLevel non reconnu = aucun filtrage (repli sûr)", () => {
+// Découplage fiche/QCM (10/09/2026) : `fullSourceDetail` reste la source
+// canonique de la fiche, mais le niveau utilisateur ne plafonne plus les
+// sections. Seul progressive_status peut servir de garde-fou de disponibilité
+// réelle du master.
+test("GET .../fiche filtre sourceDetail.sections selon progressive_status/ficheAvailableLevel, jamais selon le niveau QCM utilisateur", () => {
   const idx = SERVER_SOURCE.indexOf('app.get("/api/users/notion-quizzes/fiche"');
   assert.ok(idx > 0);
   const routeBody = SERVER_SOURCE.slice(idx, idx + 10000);
-  assert.match(routeBody, /const effectiveLevelRank = progressiveLevelRank\(effectiveLevel\);/);
+  assert.match(routeBody, /const ficheAvailableLevel = FICHE_LEVEL_FOR_PROGRESSIVE_STATUS\[progressiveStatus\] \|\| null;/);
+  assert.match(routeBody, /const ficheAvailableLevelRank = progressiveLevelRank\(ficheAvailableLevel\);/);
   assert.match(routeBody, /const fullSourceDetail = canonicalSourceDetail \|\| first\.sourceDetail \|\| null;/);
-  assert.match(routeBody, /sections: effectiveLevelRank < 0\s*\n\s*\? fullSourceDetail\.sections\s*\n\s*: \(fullSourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => !s\.level \|\| progressiveLevelRank\(s\.level\) <= effectiveLevelRank\)/);
+  assert.match(routeBody, /sections: \(fullSourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => \{/);
+  assert.match(routeBody, /return sectionRank < 0 \|\| sectionRank <= ficheAvailableLevelRank;/);
+  assert.doesNotMatch(routeBody, /effectiveLevelRank/);
+  assert.doesNotMatch(routeBody, /questionServingLevelRank/);
 });
 
 // ── GROUNDING_ANSWER_NOT_IN_CLAIM : correctif ciblé (diagnostic réel du

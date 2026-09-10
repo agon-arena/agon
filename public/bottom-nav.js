@@ -77,7 +77,7 @@
       nav.appendChild(makeItem('fa-regular fa-compass', 'Explorer', goHome));
     }
     if (usesStaticMonFile) {
-      nav.appendChild(makeStaticItem('fa-solid fa-user', 'Mon fil'));
+      nav.appendChild(makeStaticItem('fa-solid fa-user', 'Mon file'));
     } else {
       nav.appendChild(makeItem('fa-solid fa-plus', 'Ouvrir', function () { openPage('/create'); }));
     }

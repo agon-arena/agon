@@ -72,20 +72,20 @@ test("9. GET /api/users/notion-quizzes/fiche ne re-tronque jamais section.text (
   const nextRouteIndex = SERVER_SOURCE.indexOf("\napp.get(", routeIndex + 10);
   const routeBody = SERVER_SOURCE.slice(routeIndex, nextRouteIndex > 0 ? nextRouteIndex : routeIndex + 6000);
   assert.doesNotMatch(routeBody, /\.text\.(slice|substring|substr)\(/, "la route fiche ne doit jamais re-tronquer le texte déjà finalisé à la génération");
-  // Le filtrage par niveau des sections (déjà en place, cf. §8 du chantier
-  // précédent) porte sur le TABLEAU sections lui-même (garde/retire des
-  // sections entières), jamais sur le contenu textuel d'une section gardée.
-  // `fullSourceDetail` (correctif egress du 04/09/2026, cf.
-  // findCanonicalSourceDetail) a remplacé `first.sourceDetail` comme base de
-  // ce filtre — même principe, la source n'est plus forcément portée par
-  // `first` depuis que sourceDetail n'est plus dupliqué sur chaque question.
-  assert.match(routeBody, /\(fullSourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => !s\.level \|\| progressiveLevelRank\(s\.level\) <= effectiveLevelRank\)/);
+  // Le garde-fou éventuel par niveau de fiche porte sur le TABLEAU sections
+  // lui-même (garde/retire des sections entières), jamais sur le contenu
+  // textuel d'une section gardée. Depuis le découplage fiche/QCM, ce garde-fou
+  // dépend de ficheAvailableLevelRank (progressive_status), jamais du niveau
+  // utilisateur.
+  assert.match(routeBody, /\(fullSourceDetail\.sections \|\| \[\]\)\.filter\(\(s\) => \{/);
+  assert.match(routeBody, /const sectionRank = progressiveLevelRank\(s\?\.level\);/);
+  assert.doesNotMatch(routeBody, /section\.text\.(slice|substring|substr)\(/, "la route fiche ne doit jamais re-tronquer le texte des sections gardées");
 });
 
 // ── 10. Frontend : rendu direct, aucune troncature JS du texte affiché. ───
 
 test("10. le frontend (qcm-du-jour.html) affiche section.text intégralement (via renderFicheSectionText, échappement complet, cf. Phase 2.4), sans slice/substring/ellipsis appliqué au texte pédagogique", () => {
-  const renderIndex = QCM_FRONTEND_SOURCE.indexOf('html += \'<p class="qcm-fiche-explanation">\' + renderFicheSectionText(section.text, section.highlights) + \'</p>\';');
+  const renderIndex = QCM_FRONTEND_SOURCE.indexOf("renderFicheSectionText(section && section.text, section && section.highlights)");
   assert.ok(renderIndex > 0, "le rendu direct doit exister tel quel");
   assert.doesNotMatch(QCM_FRONTEND_SOURCE, /section\.text\.(slice|substring|substr)\(/, "le frontend ne doit jamais tronquer le texte pédagogique côté client");
   // renderFicheSectionText elle-même : le texte complet (str) est toujours

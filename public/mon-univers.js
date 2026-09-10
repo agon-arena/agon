@@ -1467,14 +1467,26 @@ function waitForUniverseRootPaint(modeToken) {
       });
 
       const section = document.getElementById("mnoria-tag-trends-section");
-      const frameIsVisible = Boolean(
+      const deferredStandaloneReveal = Boolean(
+        section &&
+        document.body?.classList?.contains("is-standalone") &&
+        document.body?.classList?.contains("page-home-mobile") &&
+        document.body?.classList?.contains("mnoria-memoire-cloud-mode") &&
+        window.innerWidth <= 768
+      );
+      const frameHasLayout = Boolean(
         cloudEl && !cloudEl.hidden &&
-        (!section || (!section.hidden && getComputedStyle(section).visibility !== "hidden")) &&
+        (!section || !section.hidden) &&
         cloudEl.getBoundingClientRect().width > 0 &&
         cloudEl.getBoundingClientRect().height > 0
       );
+      const frameIsVisibleEnough = frameHasLayout && (
+        deferredStandaloneReveal ||
+        !section ||
+        getComputedStyle(section).visibility !== "hidden"
+      );
 
-      if (rootIsPainted && textureSettled && frameIsVisible) {
+      if (rootIsPainted && textureSettled && frameIsVisibleEnough) {
         finishAfterPaint();
         return;
       }
@@ -1545,6 +1557,18 @@ function waitForHomeTrendsSectionTopReady(maxWaitMs = 800) {
   });
 }
 
+async function dispatchMemoireContentReadyAfterPaint(modeToken, maxWaitMs = 900) {
+  await waitForHomeTrendsSectionTopReady();
+  if (modeToken !== window._mnoriaCloudModeToken) return;
+  await ensureMnoriaTextureReady();
+  if (modeToken !== window._mnoriaCloudModeToken) return;
+  await waitForContainerSizeStable(cloudEl, maxWaitMs);
+  if (modeToken !== window._mnoriaCloudModeToken) return;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  if (modeToken !== window._mnoriaCloudModeToken) return;
+  window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+}
+
 async function mountUniverseAndHideSpinnerWhenReady(modeToken) {
   await waitForHomeTrendsSectionTopReady();
   if (modeToken !== window._mnoriaCloudModeToken) return;
@@ -1555,7 +1579,7 @@ async function mountUniverseAndHideSpinnerWhenReady(modeToken) {
   const ready = await waitForUniverseRootPaint(modeToken);
   if (!ready || modeToken !== window._mnoriaCloudModeToken || !isMemoireEmbedActive()) return;
   window.__mnoriaHideBubbleCloudLoadingSpinner();
-  window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+  await dispatchMemoireContentReadyAfterPaint(modeToken);
 }
 
 function getGalaxyNameFromId(galaxyId) {
@@ -2686,7 +2710,7 @@ async function loadUniverse() {
     const emptyUniverse = isUniverseEmpty(universeData);
     if (emptyUniverse) {
       showStatus("empty");
-      window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+      await dispatchMemoireContentReadyAfterPaint(modeToken);
     } else {
       showStatus("none");
       await mountUniverseAndHideSpinnerWhenReady(modeToken);
@@ -2700,7 +2724,7 @@ async function loadUniverse() {
   const showedCachedEmpty = hasFreshEmptyUniverseCache();
   if (showedCachedEmpty) {
     showStatus("empty");
-    window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+    await dispatchMemoireContentReadyAfterPaint(modeToken);
     return;
   }
   showStatus("loading");
@@ -2715,7 +2739,7 @@ async function loadUniverse() {
     // remplacer par une erreur ni faire réapparaître un chargement long. La prochaine entrée
     // relancera de toute façon une vérification fraîche.
     if (!showedCachedEmpty) showStatus("error");
-    window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+    await dispatchMemoireContentReadyAfterPaint(modeToken);
     return;
   }
 
@@ -2725,7 +2749,7 @@ async function loadUniverse() {
   cacheUniverseEmptyState(emptyUniverse);
   if (emptyUniverse) {
     showStatus("empty");
-    window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
+    await dispatchMemoireContentReadyAfterPaint(modeToken);
     return;
   }
 

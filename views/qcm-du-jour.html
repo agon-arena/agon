@@ -2661,6 +2661,29 @@
       padding-top: 14px;
       border-top: 1px solid #eef1f3;
     }
+    .qcm-fiche-level-marker {
+      display: flex;
+      justify-content: center;
+      margin: 22px 0 10px;
+    }
+    .qcm-fiche-level-marker span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 12px;
+      border: 1px solid #d7dde2;
+      border-radius: 999px;
+      background: #f8fafb;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .qcm-fiche-question-level-marker {
+      margin-top: 20px;
+      margin-bottom: 0;
+    }
     .qcm-fiche-corrige-num {
       margin: 0 0 4px;
       font-size: 12px;
@@ -3824,6 +3847,12 @@
     text-align: center;
     transform: translate(-50%, -50%) translateZ(0);
   }
+  @media (display-mode: standalone) and (max-width: 768px) {
+    #page-arrival-loading-overlay.qcm-initial-arrival-loading .page-arrival-loading-box {
+      top: 50vh;
+      top: 50lvh;
+    }
+  }
   #page-arrival-loading-overlay.qcm-initial-arrival-loading .page-arrival-loading-hourglass {
     width: 64px;
     height: 64px;
@@ -4024,7 +4053,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260909-memory-top-level-v29-gong-fix-memoire-wait-antiblock-retry" defer></script>
+<script src="/script.min.js?v=20260910-hide-frame-until-memory-v1" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -4665,6 +4694,32 @@
       cursor = range.end;
     });
     html += escapeHtml(str.slice(cursor));
+    return html;
+  }
+
+  function normalizeFicheDisplayLevel(level) {
+    return QCM_FICHE_LEVEL_LABELS[level] ? level : null;
+  }
+
+  function renderFicheLevelMarkerHtml(level, prefix, extraClass) {
+    var normalized = normalizeFicheDisplayLevel(level);
+    if (!normalized) return '';
+    var label = (prefix || 'Niveau') + ' ' + QCM_FICHE_LEVEL_LABELS[normalized];
+    return '<div class="qcm-fiche-level-marker' + (extraClass ? ' ' + extraClass : '') + '"><span>' + escapeHtml(label) + '</span></div>';
+  }
+
+  function renderFicheSectionsHtml(sections) {
+    var html = '';
+    var currentLevel = null;
+    (Array.isArray(sections) ? sections : []).forEach(function (section) {
+      var sectionLevel = normalizeFicheDisplayLevel(section && section.level);
+      if (sectionLevel && sectionLevel !== currentLevel) {
+        html += renderFicheLevelMarkerHtml(sectionLevel, 'Niveau');
+      }
+      currentLevel = sectionLevel || null;
+      if (section && section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
+      html += '<p class="qcm-fiche-explanation">' + renderFicheSectionText(section && section.text, section && section.highlights) + '</p>';
+    });
     return html;
   }
 
@@ -5948,10 +6003,7 @@
     if (detail.image && detail.image.url) {
       html += buildFicheImageFigureHtml(detail.image, name);
     }
-    (detail.sections || []).forEach(function (section) {
-      if (section.label) html += '<h3 class="qcm-fiche-section-label">' + escapeHtml(section.label) + '</h3>';
-      html += '<p class="qcm-fiche-explanation">' + renderFicheSectionText(section.text, section.highlights) + '</p>';
-    });
+    html += renderFicheSectionsHtml(detail.sections);
     html += renderLinksSection(links);
     if (extraHtml) html += extraHtml;
     // Sources web réelles ayant fondé cette fiche (cf. server.js
@@ -8487,6 +8539,23 @@
     return html;
   }
 
+  function groupFicheQuestionsByLevel(questions) {
+    var source = Array.isArray(questions) ? questions : [];
+    var groups = [];
+    var byLevel = {};
+    ['elementaire', 'avance', 'expert'].forEach(function (level) {
+      byLevel[level] = { level: level, items: [] };
+      groups.push(byLevel[level]);
+    });
+    var unknown = { level: null, items: [] };
+    source.forEach(function (q, index) {
+      var level = normalizeFicheDisplayLevel(q && q.level);
+      (level ? byLevel[level].items : unknown.items).push({ question: q, index: index });
+    });
+    if (unknown.items.length) groups.push(unknown);
+    return groups.filter(function (group) { return group.items.length; });
+  }
+
   var QUESTION_TYPE_EDIT_LABELS = {
     qcm: 'QCM', texte_a_trous: 'Texte à trous', association: 'Association',
     intrus: "Trouve l'intrus", qcm_multi: 'Plusieurs réponses', ordre: "Remets dans l'ordre",
@@ -8506,7 +8575,10 @@
       ? '<button type="button" class="qcm-fiche-edit-toggle-btn" data-action="edit-questions"><i class="fa-solid fa-pen" aria-hidden="true"></i> Modifier ces questions</button>'
       : '';
     html += '<h3 class="qcm-fiche-section-label">Questions et réponses</h3>';
-    (data.questions || []).forEach(function (q, i) { html += renderFicheQuestionCorrige(q, i); });
+    groupFicheQuestionsByLevel(data.questions).forEach(function (group) {
+      if (group.level) html += renderFicheLevelMarkerHtml(group.level, 'Questions — Niveau', 'qcm-fiche-question-level-marker');
+      group.items.forEach(function (item) { html += renderFicheQuestionCorrige(item.question, item.index); });
+    });
     return html;
   }
 
@@ -9429,8 +9501,8 @@
   <a href="/?skipStartup=1" class="home-bottom-nav-item" aria-label="Revenir à l'accueil" onclick="event.preventDefault(); openHomePageWithArenaLoading('/?skipStartup=1')">
     <i class="fa-solid fa-house" aria-hidden="true"></i><span>Accueil</span>
   </a>
-  <button type="button" class="home-bottom-nav-item" aria-label="Mon fil" aria-disabled="true" tabindex="-1" style="pointer-events:none;cursor:default">
-    <i class="fa-solid fa-user" aria-hidden="true"></i><span>Mon fil</span>
+  <button type="button" class="home-bottom-nav-item" aria-label="Mon file" aria-disabled="true" tabindex="-1" style="pointer-events:none;cursor:default">
+    <i class="fa-solid fa-user" aria-hidden="true"></i><span>Mon file</span>
   </button>
   <button type="button" class="home-bottom-nav-item index-bottom-refresh-btn" aria-label="Actualiser la page" onclick="window.location.reload()">
     <i class="fa-solid fa-rotate-right" aria-hidden="true"></i><span>Actualiser</span>

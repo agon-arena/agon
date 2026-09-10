@@ -109,8 +109,9 @@ test("aucun nouvel appel _callOpenAI introduit pour les highlights : generatePro
 
 // ── Frontend : le renderer est bien appelé à la place de escapeHtml(section.text) ──
 
-test("buildFicheModalHtml appelle renderFicheSectionText(section.text, section.highlights), plus escapeHtml(section.text) seul", () => {
+test("buildFicheModalHtml passe par renderFicheSectionsHtml, qui appelle renderFicheSectionText(section.text, section.highlights), plus escapeHtml(section.text) seul", () => {
   const QCM_FRONTEND_SOURCE = fs.readFileSync(path.join(__dirname, "../views/qcm-du-jour.html"), "utf8");
-  assert.match(QCM_FRONTEND_SOURCE, /html \+= '<p class="qcm-fiche-explanation">' \+ renderFicheSectionText\(section\.text, section\.highlights\) \+ '<\/p>';/);
+  assert.match(QCM_FRONTEND_SOURCE, /html \+= renderFicheSectionsHtml\(detail\.sections\);/);
+  assert.match(QCM_FRONTEND_SOURCE, /renderFicheSectionText\(section && section\.text, section && section\.highlights\)/);
   assert.doesNotMatch(QCM_FRONTEND_SOURCE, /'<p class="qcm-fiche-explanation">' \+ escapeHtml\(section\.text\) \+/);
 });

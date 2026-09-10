@@ -595,6 +595,19 @@ function showMnoriaStartupBeforeRefresh() {
   loader.classList.add("is-ready");
   loader.style.removeProperty("opacity");
   loader.style.removeProperty("visibility");
+  const startupLogo = loader.querySelector(".mnoria-startup-logo-img");
+  if (startupLogo && startupLogo.complete) startupLogo.classList.add("is-loaded");
+  const startupLine = loader.querySelector(".mnoria-startup-line-1");
+  if (startupLine) {
+    startupLine.classList.remove("is-playing");
+    startupLine.style.removeProperty("opacity");
+    void startupLine.offsetWidth;
+    setTimeout(function() {
+      if (!loader.parentNode || loader.classList.contains("is-hiding")) return;
+      window.__mnoriaStartupLineStartedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
+      startupLine.classList.add("is-playing");
+    }, 500);
+  }
   // Force le calcul avant de rendre la main : le logo est prêt pour la toute
   // prochaine frame, sans attendre le parsing du nouveau document.
   void loader.offsetHeight;
@@ -869,6 +882,35 @@ window.forceFullPageRefresh = forceFullPageRefresh;
       tryHide();
     }, { once: true });
   }
+  let mobileCloudFrameReady = !(
+    document.body &&
+    document.body.classList.contains('is-standalone') &&
+    document.body.classList.contains('page-home-mobile') &&
+    window.innerWidth <= 768
+  );
+  if (!mobileCloudFrameReady) {
+    window.addEventListener('mnoria:mobile-cloud-frame-settled', function() {
+      mobileCloudFrameReady = true;
+      tryHide();
+    }, { once: true });
+  }
+  let memoireContentReady = !(
+    document.body &&
+    document.body.classList.contains('is-standalone') &&
+    document.body.classList.contains('page-home-mobile') &&
+    document.body.classList.contains('mnoria-memoire-cloud-mode') &&
+    window.innerWidth <= 768
+  );
+  if (!memoireContentReady) {
+    window.addEventListener('mnoria:memoire-content-ready', function() {
+      memoireContentReady = true;
+      tryHide();
+    }, { once: true });
+    setTimeout(function() {
+      memoireContentReady = true;
+      tryHide();
+    }, 14000);
+  }
   const loaderShownAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   // Plancher de durée d'affichage garanti, quelle que soit la raison pour laquelle
   // les trois conditions ci-dessus sont devenues vraies plus vite que prévu (cache
@@ -879,7 +921,7 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   const MNORIA_STARTUP_MIN_DISPLAY_MS = 2200;
 
   function tryHide() {
-    if (hidden || !introSequenceDone || !contentReady || !fontsReady || !memoireFrameReady) return;
+    if (hidden || !introSequenceDone || !contentReady || !fontsReady || !memoireFrameReady || !mobileCloudFrameReady || !memoireContentReady) return;
     const now = window.performance && window.performance.now ? window.performance.now() : Date.now();
     const elapsedSinceShown = now - loaderShownAt;
     if (elapsedSinceShown < MNORIA_STARTUP_MIN_DISPLAY_MS) {
@@ -919,13 +961,17 @@ window.forceFullPageRefresh = forceFullPageRefresh;
     setTimeout(markFontsReady, 500);
   }
 
-  // Filet de sécurité absolu
+  // Filet de sécurité absolu. En standalone mobile "Ma mémoire", il doit
+  // rester plus long que le délai normal de rendu de l'univers, sinon on
+  // révèle exactement le cadre vide/court que les garde-fous ci-dessus
+  // cherchent à masquer.
+  const startupAbsoluteFailsafeMs = memoireContentReady ? 10000 : 18000;
   setTimeout(function() {
     if (hidden) return;
     hidden = true;
     document.documentElement.classList.remove('mnoria-startup-active');
     if (loader.parentNode) loader.parentNode.removeChild(loader);
-  }, 10000);
+  }, startupAbsoluteFailsafeMs);
 
   async function runIntroSequence() {
     // Continuité d'un refresh utilisateur (bouton "Actualiser", cf. forceFullPageRefresh —
@@ -2980,6 +3026,12 @@ function ensurePageArrivalLoadingOverlayStyles() {
         top: 50dvh;
         width: min(90vw, 220px);
         transform: translate(-50%, -50%) translateZ(0);
+      }
+    }
+    @media (display-mode: standalone) and (max-width: 768px) {
+      .page-arrival-loading-overlay.page-arrival-loading-overlay-learning .page-arrival-loading-box {
+        top: 50vh;
+        top: 50lvh;
       }
     }
 
@@ -5675,6 +5727,12 @@ function ensureDebateIframeParentLoadingStyles() {
         transform: translate(-50%, -50%) translateZ(0) !important;
       }
     }
+    @media (display-mode: standalone) and (max-width: 768px) {
+      #debate-iframe-parent-loading-overlay.debate-iframe-parent-loading-learning-page .debate-iframe-parent-loading-box {
+        top: 50vh;
+        top: 50lvh;
+      }
+    }
   `;
 
   document.head.appendChild(style);
@@ -5730,7 +5788,9 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours", o
 
   const normalizedLoadingMessage = String(message || "");
   const isHomeReturnLoading = normalizedLoadingMessage.includes("Chargement de l'accueil");
-  const needsFullPagePaintUnderlay = isHomeReturnLoading || /apprentissage/i.test(normalizedLoadingMessage);
+  const isLearningLoading = /apprentissage/i.test(normalizedLoadingMessage);
+  const isStableFullscreenLoading = isHomeReturnLoading || isLearningLoading;
+  const needsFullPagePaintUnderlay = isHomeReturnLoading || isLearningLoading;
   let homeReturnPaintUnderlay = document.getElementById("mnoria-home-return-paint-underlay");
   if (needsFullPagePaintUnderlay && !homeReturnPaintUnderlay) {
     homeReturnPaintUnderlay = document.createElement("div");
@@ -5748,6 +5808,9 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours", o
   // par un chargement précédent.
 	  overlay.classList.remove("debate-iframe-parent-loading-stuck");
 	  overlay.classList.remove("debate-iframe-parent-loading-learning-page");
+	  if (isStableFullscreenLoading) {
+	    overlay.classList.add("debate-iframe-parent-loading-learning-page");
+	  }
 	  overlay.classList.toggle(
 	    "debate-iframe-parent-loading-enter-debate",
 	    String(message || "").includes("Entrée dans l'arène")
@@ -5776,7 +5839,7 @@ function showDebateIframeParentLoadingOverlay(message = "Chargement en cours", o
     image.src = getDebateIframeParentLoadingImageSrc();
     /* Phase fondée sur l'horloge réelle : le sablier du document Accueil peut
        reprendre au même angle au lieu de recommencer à zéro. */
-    image.style.animationDelay = (isHomeReturnLoading || /apprentissage/i.test(normalizedLoadingMessage))
+    image.style.animationDelay = (isHomeReturnLoading || isLearningLoading)
       ? `-${Date.now() % 1000}ms`
       : "";
   }
@@ -7521,8 +7584,6 @@ function openLearningPageWithArenaLoading(url = "/apprentissage") {
   // bouton ne répond pas immédiatement.
   closeHomeTopbarMenu();
   showDebateIframeParentLoadingOverlay("Chargement de mes apprentissages en cours", { instant: true });
-  document.getElementById("debate-iframe-parent-loading-overlay")
-    ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
 
   requestAnimationFrame(() => {
     _learningPageNavigationPending = false;
@@ -7541,7 +7602,7 @@ function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
   try {
     const parsedHomeUrl = new URL(String(url || "/?skipStartup=1"), window.location.origin);
     if (parsedHomeUrl.origin === window.location.origin && parsedHomeUrl.pathname === "/") {
-      parsedHomeUrl.searchParams.set("mnoriaHomeReturn", "20260909-smooth-spinner-v7");
+      parsedHomeUrl.searchParams.set("mnoriaHomeReturn", "20260910-hide-frame-until-memory-v1");
       homeNavigationUrl = `${parsedHomeUrl.pathname}${parsedHomeUrl.search}${parsedHomeUrl.hash}`;
     }
   } catch (error) {}
@@ -7602,8 +7663,6 @@ function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
     }
   } catch (error) {}
   showDebateIframeParentLoadingOverlay("Chargement de l'accueil en cours");
-  document.getElementById("debate-iframe-parent-loading-overlay")
-    ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -7667,8 +7726,6 @@ function openDebateIframeModal(url, options = {}) {
          laissées à WebKit pour le peindre avant la navigation top-level. */
       if (isStandaloneTopLevelPage && parsedModalUrl.pathname === "/apprentissage" && !targetsTop) {
         showDebateIframeParentLoadingOverlay("Chargement de mes apprentissages en cours", { instant: true });
-        document.getElementById("debate-iframe-parent-loading-overlay")
-          ?.classList.add("debate-iframe-parent-loading-learning-page", "debate-iframe-parent-loading-overlay-visible");
         requestAnimationFrame(() => requestAnimationFrame(navigate));
         return;
       }
@@ -7784,10 +7841,6 @@ function openDebateIframeModal(url, options = {}) {
     // loading-top — inutile d'attendre 2 requestAnimationFrame pour ce cas.
     { instant: iframeUrlPathname === "/apprentissage" }
   );
-  if (iframeUrlPathname === "/apprentissage") {
-    document.getElementById("debate-iframe-parent-loading-overlay")
-      ?.classList.add("debate-iframe-parent-loading-learning-page");
-  }
   modal.classList.add("open");
   if (useNativeParentScroll) {
     setDebateIframeNativeParentScrollMode(true);
@@ -20745,7 +20798,12 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // bascule. "Ma mémoire" dispose de son propre chargement et ne doit jamais hériter de
     // cet état vide du flux Actu : la rendre explicitement visible à chaque entrée.
     const trendsSection = document.getElementById('mnoria-tag-trends-section');
-    if (trendsSection) trendsSection.hidden = false;
+    if (trendsSection) {
+      trendsSection.hidden = false;
+      if (shouldDeferMobileMemoireFrameReveal()) {
+        trendsSection.style.visibility = 'hidden';
+      }
+    }
     if (beforeEl) beforeEl.hidden = false;
     if (afterEl) afterEl.hidden = false;
     if (politicalSwitch) politicalSwitch.hidden = true;
@@ -20813,7 +20871,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
       }
     }
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260909-societe-education-split').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260910-hide-frame-until-memory-v1').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
         window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
@@ -38005,6 +38063,26 @@ var MNORIA_MOBILE_FRAME_BOTTOM_INSET = 78;
 // verrouillé : les appels suivants (resize, changement de mode Actu/Mnoria/Ma mémoire) ne
 // recalculent plus rien — demande du 16/08/2026, "il bouge plus" après ce premier calage.
 var _mobileCloudFrameLocked = false;
+// Signal distinct de mnoria:memoire-frame-ready (demande du 09/09/2026, "je vois encore le
+// cadre trop court puis il se met bien") : le loader de démarrage attendait déjà que
+// markMnoriaHomeTrendsSectionTopReady confirme --mnoria-home-trends-section-top, mais ignorait
+// totalement ce système-ci (syncMobileCloudFrameHeight, plus bas) — un système SÉPARÉ qui
+// dimensionne le cloud lui-même et peut encore corriger sa hauteur (revérification à 400ms en
+// standalone, cf. son commentaire) APRÈS que le loader se soit déjà caché. Même condition
+// exacte que window.__mnoriaHomeTrendsSectionTopReady ci-dessus (même contexte concerné) : prêt
+// immédiatement partout ailleurs, où syncMobileCloudFrameHeight ne fait de toute façon rien
+// (son propre garde `page-home-mobile`).
+window.__mnoriaMobileCloudFrameSettled = !(
+  document.body &&
+  document.body.classList.contains('is-standalone') &&
+  document.body.classList.contains('page-home-mobile') &&
+  window.innerWidth <= 768
+);
+function markMnoriaMobileCloudFrameSettled() {
+  if (window.__mnoriaMobileCloudFrameSettled === true) return;
+  window.__mnoriaMobileCloudFrameSettled = true;
+  window.dispatchEvent(new Event('mnoria:mobile-cloud-frame-settled'));
+}
 // Hauteur "de confiance" : celle du tout premier calage réussi avec scrollY proche de 0 (barre
 // d'adresse Safari garantie dépliée, donc window.innerHeight/visualViewport.height représentent
 // la vraie hauteur "au repos", pas une valeur agrandie par un scroll en cours). Un changement de
@@ -38054,9 +38132,24 @@ function observeMobileCloudModeSwitchAlignment(cloud) {
   _mobileCloudSwitchResizeObserver.observe(cloud);
 }
 
-function revealStableMobileCloudFrame() {
+function shouldDeferMobileMemoireFrameReveal() {
+  return document.body &&
+    document.body.classList.contains('is-standalone') &&
+    document.body.classList.contains('page-home-mobile') &&
+    document.body.classList.contains('mnoria-memoire-cloud-mode') &&
+    window.innerWidth <= 768;
+}
+
+window.addEventListener('mnoria:memoire-content-ready', function() {
+  if (!shouldDeferMobileMemoireFrameReveal()) return;
   var section = document.getElementById('mnoria-tag-trends-section');
   if (section) section.style.visibility = 'visible';
+});
+
+function revealStableMobileCloudFrame() {
+  var section = document.getElementById('mnoria-tag-trends-section');
+  if (section && !shouldDeferMobileMemoireFrameReveal()) section.style.visibility = 'visible';
+  markMnoriaMobileCloudFrameSettled();
 }
 function syncMobileCloudFrameHeight(recheckToken) {
   if (_mobileCloudFrameLocked) {

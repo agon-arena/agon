@@ -703,6 +703,12 @@
       body { background-color: #0c1218; }
     }
 
+    @media (display-mode: standalone) and (max-width: 768px) {
+      body.page-home-mobile #mnoria-tag-trends-section {
+        visibility: hidden;
+      }
+    }
+
     /* Réserve le gabarit mobile définitif avant le premier rendu. Sans ce
        verrou précoce, le conteneur flex peut brièvement comprimer le cadre
        Bulles Actu avant que la classe mnoria-mobile-cloud-viewport soit prise
@@ -831,8 +837,21 @@
   var finished = false;
   var feedReady = false;
   var frameReady = false;
+  var mobileFrameReady = !(
+    document.body &&
+    document.body.classList.contains('is-standalone') &&
+    document.body.classList.contains('page-home-mobile') &&
+    window.innerWidth <= 768
+  );
+  var memoireContentReady = !(
+    document.body &&
+    document.body.classList.contains('is-standalone') &&
+    document.body.classList.contains('page-home-mobile') &&
+    document.body.classList.contains('mnoria-memoire-cloud-mode') &&
+    window.innerWidth <= 768
+  );
   function finishHomeReturnPrepaint() {
-    if (finished || !feedReady || !frameReady) return;
+    if (finished || !feedReady || !frameReady || !mobileFrameReady || !memoireContentReady) return;
     finished = true;
     // Les deux événements ci-dessus signalent que le cadre "Ma mémoire" est stabilisé et que
     // les cartes existent, mais pas que le liseret/bouton Trier-Rechercher/bande "À la une"
@@ -866,7 +885,9 @@
   }
   window.addEventListener('mnoria:feed-ready', function () { feedReady = true; finishHomeReturnPrepaint(); }, { once: true });
   window.addEventListener('mnoria:memoire-frame-ready', function () { frameReady = true; finishHomeReturnPrepaint(); }, { once: true });
-  setTimeout(function () { feedReady = true; frameReady = true; finishHomeReturnPrepaint(); }, 10000);
+  window.addEventListener('mnoria:mobile-cloud-frame-settled', function () { mobileFrameReady = true; finishHomeReturnPrepaint(); }, { once: true });
+  window.addEventListener('mnoria:memoire-content-ready', function () { memoireContentReady = true; finishHomeReturnPrepaint(); }, { once: true });
+  setTimeout(function () { feedReady = true; frameReady = true; mobileFrameReady = true; memoireContentReady = true; finishHomeReturnPrepaint(); }, 10000);
 })();
 </script>
 <script>if(navigator.standalone||window.matchMedia("(display-mode:standalone)").matches)document.body.classList.add("is-standalone");</script>
@@ -1072,18 +1093,26 @@
     return;
   }
   var removed = false;
+  var frameReady = false;
+  var mobileFrameReady = !(
+    document.body &&
+    document.body.classList.contains('is-standalone') &&
+    document.body.classList.contains('page-home-mobile') &&
+    window.innerWidth <= 768
+  );
   function removeVeil() {
-    if (removed) return;
+    if (removed || !frameReady || !mobileFrameReady) return;
     removed = true;
     veil.classList.add('is-hiding');
     setTimeout(function () { if (veil.parentNode) veil.parentNode.removeChild(veil); }, 260);
   }
   // Posé par script.js (markMnoriaHomeTrendsSectionTopReady), chargé en defer — l'écouteur
   // ci-dessous est sans risque d'ordre : il fonctionne même posé avant que ce code n'existe.
-  window.addEventListener('mnoria:memoire-frame-ready', removeVeil, { once: true });
+  window.addEventListener('mnoria:memoire-frame-ready', function () { frameReady = true; removeVeil(); }, { once: true });
+  window.addEventListener('mnoria:mobile-cloud-frame-settled', function () { mobileFrameReady = true; removeVeil(); }, { once: true });
   // Filet de sécurité si cet événement ne survient jamais (ex. desktop élargi après coup,
   // page hors du flux "Ma mémoire" par défaut).
-  setTimeout(removeVeil, 3000);
+  setTimeout(function () { frameReady = true; mobileFrameReady = true; removeVeil(); }, 3000);
 })();
 </script>
 
@@ -1990,7 +2019,12 @@ window.addEventListener("pageshow", function() {
     // après le premier rendu : syncMobileCloudFrameHeight révélera la section
     // seulement après sa seconde mesure fiable.
     var sizedSection = document.getElementById('mnoria-tag-trends-section');
-    if (sizedSection) sizedSection.style.visibility = 'visible';
+    var shouldWaitForMobileFrame =
+      document.body &&
+      document.body.classList.contains('is-standalone') &&
+      document.body.classList.contains('page-home-mobile') &&
+      window.innerWidth <= 768;
+    if (sizedSection && !shouldWaitForMobileFrame) sizedSection.style.visibility = 'visible';
   }
 })();
 
@@ -2088,20 +2122,20 @@ window.addEventListener("pageshow", function() {
     </div>
   </div>
 
-  <!-- Mon fil : réservé pour une future fonctionnalité (demande du
+  <!-- Mon file : réservé pour une future fonctionnalité (demande du
        04/09/2026, "remplace Ouvrir par Explorer" — Explorer prend
-       maintenant la 1re place ci-dessus, Mon fil garde la sienne mais sort
+       maintenant la 1re place ci-dessus, Mon file garde la sienne mais sort
        du wrap qui portait le menu déroulant Explorer). -->
   <button
     type="button"
     class="home-bottom-nav-item index-mon-fil-preview"
-    aria-label="Mon fil"
+    aria-label="Mon file"
     aria-disabled="true"
     tabindex="-1"
     style="pointer-events:none;cursor:default"
   >
     <i class="fa-solid fa-user"></i>
-    <span>Mon fil</span>
+    <span>Mon file</span>
   </button>
 
   <!-- forceFullPageRefresh recrée immédiatement le véritable loader (logo +
@@ -2149,6 +2183,32 @@ window.addEventListener("pageshow", function() {
       var header = document.querySelector('.topbar.topbar--mnoria-uniform');
       var headerBottom = header ? header.offsetHeight : 0;
       var bottomBarTop = bottomNav.getBoundingClientRect().top;
+
+      if (isStandaloneMobile) {
+        try {
+          var mobileCacheRaw = localStorage.getItem('mnoriaMobileFrame:' + location.pathname);
+          var mobileCache = mobileCacheRaw ? JSON.parse(mobileCacheRaw) : null;
+          var mobileCacheSig = window.innerWidth + 'x' + window.innerHeight + 'x1';
+          if (
+            mobileCache &&
+            mobileCache.sig === mobileCacheSig &&
+            typeof mobileCache.marginTop === 'number' &&
+            typeof mobileCache.boxHeight === 'number'
+          ) {
+            section.style.setProperty('margin-top', mobileCache.marginTop + 'px', 'important');
+            section.style.setProperty('min-height', 'auto', 'important');
+            cloud.style.height = mobileCache.boxHeight + 'px';
+            cloud.style.minHeight = mobileCache.boxHeight + 'px';
+            cloud.style.setProperty('margin-top', '0px', 'important');
+            cloud.dataset.prepaintHeight = String(mobileCache.boxHeight);
+            window.__mnoriaInitialMobileCloudFrameHeight = mobileCache.boxHeight;
+            window.__mnoriaInitialMobileCloudFrameMarginTop = mobileCache.marginTop;
+            window.__mnoriaInitialMobileCloudFrameFromCache = true;
+            return;
+          }
+        } catch (cacheError) {}
+      }
+
       var desiredFrameTop = headerBottom - 8;
       var desiredFrameBottom = bottomBarTop - 25;
 
@@ -2394,7 +2454,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260909-mobile-frame-cache-validate" defer></script>
+<script src="/script.min.js?v=20260910-hide-frame-until-memory-v1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
