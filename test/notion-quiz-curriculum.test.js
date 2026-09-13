@@ -171,7 +171,33 @@ test("parseCurriculumItems : ne conserve jamais de champ level (dérivé plus ta
   const items = parseCurriculumItems(raw);
   assert.equal(items.length, 1);
   assert.equal(items[0].level, undefined);
-  assert.deepEqual(Object.keys(items[0]).sort(), ["id", "knowledgeTarget", "order"]);
+  assert.deepEqual(Object.keys(items[0]).sort(), ["id", "importance", "knowledgeTarget", "order"]);
+});
+
+// ── parseCurriculumItems : champ "importance" (correction E2, 13/09/2026) ─
+
+test("parseCurriculumItems : capture l'importance déclarée (high/medium/low), toujours présente sur l'item parsé", () => {
+  const raw = [
+    { id: "k1", knowledgeTarget: "Fait fondamental.", order: 1, importance: "high" },
+    { id: "k2", knowledgeTarget: "Fait secondaire.", order: 2, importance: "low" }
+  ];
+  const items = parseCurriculumItems(raw);
+  assert.equal(items[0].importance, "high");
+  assert.equal(items[1].importance, "low");
+});
+
+test("parseCurriculumItems : importance absente, invalide ou mal orthographiée -> retombe sur \"medium\", jamais un rejet de l'item", () => {
+  const raw = [
+    { id: "k1", knowledgeTarget: "Sans champ importance.", order: 1 },
+    { id: "k2", knowledgeTarget: "Valeur invalide.", order: 2, importance: "critique" },
+    { id: "k3", knowledgeTarget: "Casse différente.", order: 3, importance: "HIGH" }
+  ];
+  const items = parseCurriculumItems(raw);
+  assert.equal(items.length, 3, "un champ importance malformé ne doit jamais faire rejeter l'item entier");
+  assert.equal(items[0].importance, "medium");
+  assert.equal(items[1].importance, "medium");
+  // Casse insensible : "HIGH" doit être reconnu comme "high", jamais retombé sur "medium" par excès de sévérité.
+  assert.equal(items[2].importance, "high");
 });
 
 test("parseCurriculumItems : rejette silencieusement les entrées malformées (knowledgeTarget vide, order hors [1,20], id manquant)", () => {
@@ -296,6 +322,84 @@ test("assignCurriculumLevels : aucune connaissance n'appartient à deux niveaux 
     + curriculum.filter((k) => k.level === "deepening").length
     + curriculum.filter((k) => k.level === "expert").length;
   assert.equal(total, curriculum.length);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// E2 — importance pédagogique dans la répartition par niveau (correction du
+// 13/09/2026, diagnostic qualité pédagogique "Charlemagne" — la POSITION
+// brute dans la liste du modèle ne reflétait pas fiablement l'importance
+// réelle : des mécanismes précis atterrissaient en Élémentaire tandis que
+// des fondamentaux structurants n'étaient jamais choisis, ou reléguaient
+// vers Expert simplement parce qu'ils apparaissaient tard dans la liste).
+// Vérifie le comportement de bout en bout normalizeCurriculumOrder ->
+// assignCurriculumLevels, exactement le pipeline réel (server.js
+// resolveProgressiveCurriculum). Aucun terme spécifique à un domaine —
+// curriculum entièrement synthétique.
+// ══════════════════════════════════════════════════════════════════════
+
+// 20 items dont l'IMPORTANCE est délibérément INVERSÉE par rapport à
+// l'ordre brut du modèle : les 5 premiers de la liste sont "low", les 5
+// derniers sont "high" — reproduit exactement le défaut observé (un
+// fondamental "high" mais tardif dans la liste, un détail "low" mais
+// précoce).
+function makeInvertedImportanceCurriculum(total = 20) {
+  return Array.from({ length: total }, (_, i) => {
+    const order = i + 1;
+    let importance = "medium";
+    if (order <= 5) importance = "low";
+    if (order > total - 5) importance = "high";
+    return { id: `raw-${order}`, knowledgeTarget: DISTINCT_FACTS[i], order, importance };
+  });
+}
+
+test("E2 — un item \"high\" mais TARDIF dans l'ordre brut du modèle n'est plus relégué en Expert : il passe désormais en Élémentaire", () => {
+  const leveled = assignCurriculumLevels(normalizeCurriculumOrder(makeInvertedImportanceCurriculum(20)));
+  const byRawOrder = new Map(makeInvertedImportanceCurriculum(20).map((k) => [k.knowledgeTarget, k.order]));
+  const elementaryRawOrders = leveled.filter((k) => k.level === "elementary").map((k) => byRawOrder.get(k.knowledgeTarget));
+  // Les 5 items "high" avaient tous un order BRUT > 15 (les 5 derniers de la liste du modèle).
+  for (const rawOrder of elementaryRawOrders) assert.ok(rawOrder > 15, `un item d'order brut ${rawOrder} ne devrait pas être en élémentaire sauf s'il était "high"`);
+});
+
+test("E2 — les items \"low\" mais PRÉCOCES dans l'ordre brut du modèle ne dominent plus Élémentaire : ils passent désormais en Expert", () => {
+  const leveled = assignCurriculumLevels(normalizeCurriculumOrder(makeInvertedImportanceCurriculum(20)));
+  const elementaryTargets = new Set(leveled.filter((k) => k.level === "elementary").map((k) => k.knowledgeTarget));
+  const lowTargets = new Set(makeInvertedImportanceCurriculum(20).filter((k) => k.importance === "low").map((k) => k.knowledgeTarget));
+  const lowInElementary = [...elementaryTargets].filter((t) => lowTargets.has(t));
+  assert.deepEqual(lowInElementary, [], "aucun item \"low\" ne doit se retrouver en élémentaire quand des items \"high\" existent par ailleurs");
+});
+
+test("E2 — les tailles de niveaux restent EXACTEMENT celles de computeCurriculumSplit, importance ou non (aucune régression de répartition)", () => {
+  const leveled = assignCurriculumLevels(normalizeCurriculumOrder(makeInvertedImportanceCurriculum(20)));
+  const split = computeCurriculumSplit(20);
+  assert.equal(leveled.filter((k) => k.level === "elementary").length, split.elementary);
+  assert.equal(leveled.filter((k) => k.level === "deepening").length, split.deepening);
+  assert.equal(leveled.filter((k) => k.level === "expert").length, split.expert);
+});
+
+test("E2 — garde-fou : si le modèle marque TOUT \"high\", la répartition ne casse pas — repli gracieux sur l'ordre seul (comportement identique à avant ce correctif)", () => {
+  const items = Array.from({ length: 20 }, (_, i) => ({ id: `raw-${i}`, knowledgeTarget: DISTINCT_FACTS[i], order: i + 1, importance: "high" }));
+  const leveled = assignCurriculumLevels(normalizeCurriculumOrder(items));
+  const split = computeCurriculumSplit(20);
+  assert.equal(leveled.filter((k) => k.level === "elementary").length, split.elementary);
+  assert.equal(leveled.filter((k) => k.level === "deepening").length, split.deepening);
+  assert.equal(leveled.filter((k) => k.level === "expert").length, split.expert);
+  // Repli sur l'ordre seul : le premier item du modèle reste le premier élémentaire.
+  assert.equal(leveled.find((k) => k.level === "elementary").knowledgeTarget, DISTINCT_FACTS[0]);
+});
+
+test("E2 — déterminisme : deux appels sur le même curriculum produisent exactement le même résultat (aucun aléa)", () => {
+  const runOnce = () => assignCurriculumLevels(normalizeCurriculumOrder(makeInvertedImportanceCurriculum(18))).map((k) => `${k.id}:${k.level}:${k.knowledgeTarget}`);
+  assert.deepEqual(runOnce(), runOnce());
+});
+
+test("E2 — normalizeCurriculumOrder : items sans champ importance (tout appelant antérieur à ce correctif) trient exactement comme avant, par ordre seul", () => {
+  const items = [
+    { id: "k9", knowledgeTarget: "Dernier à l'origine", order: 9 },
+    { id: "k2", knowledgeTarget: "Premier à l'origine", order: 2 }
+  ];
+  const normalized = normalizeCurriculumOrder(items);
+  assert.equal(normalized[0].knowledgeTarget, "Premier à l'origine");
+  assert.equal(normalized[1].knowledgeTarget, "Dernier à l'origine");
 });
 
 // ── validateCurriculumComplete ───────────────────────────────────────────
@@ -508,15 +612,15 @@ test("selectCurriculumLevel : retourne exactement les connaissances \"expert\" a
 
 const SOURCES_BLOCK = 'SOURCE_1\ntitle: Charlemagne\nurl: https://fr.wikipedia.org/wiki/Charlemagne\ncontent: Charlemagne est couronné empereur d\'Occident par le pape Léon III le 25 décembre 800.';
 
-test("buildCurriculumPrompt : sans identifiedSourcesBlock, le prompt reste IDENTIQUE au caractère près à avant ce paramètre (legacy inchangé) hors ajout du champ topicValidation", () => {
+test("buildCurriculumPrompt : sans identifiedSourcesBlock, le prompt reste IDENTIQUE au caractère près à avant ce paramètre (legacy inchangé) hors ajout du champ topicValidation et du champ importance (correction E2)", () => {
   const prompt = buildCurriculumPrompt("Charlemagne", null, "Un texte de grounding brut, sans identifiant de source.");
   assert.match(prompt, /Un texte de grounding brut, sans identifiant de source\./);
   assert.doesNotMatch(prompt, /source_id/);
   assert.doesNotMatch(prompt, /evidence_text/);
-  assert.match(prompt, /"topicValidation":\{"status":"valid","normalizedTopic":"\.\.\."\|null\},"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1\}, \.\.\.\]\}/);
+  assert.match(prompt, /"topicValidation":\{"status":"valid","normalizedTopic":"\.\.\."\|null\},"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1,"importance":"high\|medium\|low"\}, \.\.\.\]\}/);
 });
 
-test("buildCurriculumPrompt : avec identifiedSourcesBlock, exige source_id + evidence_text par connaissance et injecte le bloc SOURCE_N (jamais groundingText en plus, même contenu sous une autre forme)", () => {
+test("buildCurriculumPrompt : avec identifiedSourcesBlock, exige source_id + evidence_text + importance par connaissance et injecte le bloc SOURCE_N (jamais groundingText en plus, même contenu sous une autre forme)", () => {
   const prompt = buildCurriculumPrompt("Charlemagne", null, "texte de grounding ignoré dans ce mode", SOURCES_BLOCK);
   assert.match(prompt, /SOURCE_1/);
   assert.match(prompt, /Charlemagne est couronné empereur d'Occident/);
@@ -525,7 +629,7 @@ test("buildCurriculumPrompt : avec identifiedSourcesBlock, exige source_id + evi
   assert.match(prompt, /"evidence_text"/);
   assert.match(prompt, /COPIÉ TEXTUELLEMENT/);
   assert.match(prompt, /N'invente jamais une citation/);
-  assert.match(prompt, /"topicValidation":\{"status":"valid","normalizedTopic":"\.\.\."\|null\},"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1,"source_id":"SOURCE_1","evidence_text":"extrait exact copié depuis SOURCE_1"\}, \.\.\.\]\}/);
+  assert.match(prompt, /"topicValidation":\{"status":"valid","normalizedTopic":"\.\.\."\|null\},"curriculum":\[\{"id":"k1","knowledgeTarget":"phrase factuelle courte et autonome","order":1,"importance":"high\|medium\|low","source_id":"SOURCE_1","evidence_text":"extrait exact copié depuis SOURCE_1"\}, \.\.\.\]\}/);
 });
 
 // ── topicValidation (demande du 06/09/2026, incident "Baudouin de Hainaut")
@@ -571,12 +675,12 @@ test("parseCurriculumItems : capture source_id/evidence_text UNIQUEMENT quand le
     { id: "k4", knowledgeTarget: "evidence_text seul, sans source_id.", order: 4, evidence_text: "Un extrait." }
   ];
   const items = parseCurriculumItems(raw);
-  assert.deepEqual(Object.keys(items[0]).sort(), ["evidence_text", "id", "knowledgeTarget", "order", "source_id"]);
+  assert.deepEqual(Object.keys(items[0]).sort(), ["evidence_text", "id", "importance", "knowledgeTarget", "order", "source_id"]);
   assert.equal(items[0].source_id, "SOURCE_1");
   assert.equal(items[0].evidence_text, "Un extrait suffisamment long et réel.");
-  assert.deepEqual(Object.keys(items[1]).sort(), ["id", "knowledgeTarget", "order"]);
-  assert.deepEqual(Object.keys(items[2]).sort(), ["id", "knowledgeTarget", "order"]);
-  assert.deepEqual(Object.keys(items[3]).sort(), ["id", "knowledgeTarget", "order"]);
+  assert.deepEqual(Object.keys(items[1]).sort(), ["id", "importance", "knowledgeTarget", "order"]);
+  assert.deepEqual(Object.keys(items[2]).sort(), ["id", "importance", "knowledgeTarget", "order"]);
+  assert.deepEqual(Object.keys(items[3]).sort(), ["id", "importance", "knowledgeTarget", "order"]);
 });
 
 test("normalizeCurriculumOrder : préserve source_id/evidence_text quand présents, sans jamais les ajouter à un item qui n'en avait pas", () => {

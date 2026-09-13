@@ -1846,12 +1846,39 @@
       position: relative;
       z-index: 0;
       margin: 0 -24px 8px;
-      padding: 9px 24px;
+      padding: 9px 44px 9px 24px;
       background: #ffffff;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 20px;
       font-weight: 700;
       color: #111827;
+      /* Rubriques ouvrables/fermables (demande du 13/09/2026) : ce titre est
+         désormais toujours un <summary> dans un <details open> — display:block
+         plutôt que le display:list-item par défaut d'un <summary> (marqueur
+         natif retiré ci-dessous, remplacé par le chevron ::after). */
+      display: block;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+    .qcm-mesqcm-group-title::-webkit-details-marker {
+      display: none;
+    }
+    .qcm-mesqcm-group-title::after {
+      content: '\f078';
+      font-family: "Font Awesome 6 Free";
+      font-weight: 900;
+      position: absolute;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 14px;
+      color: #6b7280;
+      transition: transform 0.2s ease;
+      z-index: 1;
+    }
+    details[open] > .qcm-mesqcm-group-title::after {
+      transform: translateY(-50%) rotate(180deg);
     }
     /* Bandes horizontales dégradées au-dessus et en dessous (demande du
        30/08/2026, "comme sur thématiques page index") : même recette que
@@ -1873,7 +1900,7 @@
        même espace, prévu pour ce contenu intermédiaire absent ici (demande
        du 30/08/2026). Scopé à .qcm-mesqcm-group--all (le conteneur de ce
        titre précis) pour ne pas toucher aux autres bandeaux de rubrique. */
-    .qcm-mesqcm-group--all > .qcm-mesqcm-group-title {
+    .qcm-mesqcm-group--all .qcm-mesqcm-group-title {
       margin-top: -14px;
     }
     .qcm-mesqcm-theme-group + .qcm-mesqcm-theme-group {
@@ -2036,13 +2063,13 @@
        padding du grand cadre. On élargit ici la vraie zone scrollable — et
        non seulement son titre — afin qu'elle rejoigne les deux bords du
        cadre principal. */
-    .qcm-mesqcm-group--inprogress > .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
-    .qcm-mesqcm-group--pending > .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell {
+    .qcm-mesqcm-group--inprogress .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
+    .qcm-mesqcm-group--pending .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell {
       width: calc(100% + 48px);
       margin-left: -24px;
       margin-right: -24px;
     }
-    .qcm-mesqcm-group--creating > .qcm-mesqcm-table-shell {
+    .qcm-mesqcm-group--creating .qcm-mesqcm-table-shell {
       width: calc(100% + 48px);
       margin-left: -24px;
       margin-right: -24px;
@@ -3811,15 +3838,18 @@
       }
       .qcm-mesqcm-group-title {
         margin: 0 -16px 8px;
-        padding: 9px 16px;
+        padding: 9px 36px 9px 16px;
       }
-      .qcm-mesqcm-group--creating > .qcm-mesqcm-table-shell {
+      .qcm-mesqcm-group-title::after {
+        right: 16px;
+      }
+      .qcm-mesqcm-group--creating .qcm-mesqcm-table-shell {
         width: calc(100% + 32px);
         margin-left: -16px;
         margin-right: -16px;
       }
-      .qcm-mesqcm-group--inprogress > .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
-      .qcm-mesqcm-group--pending > .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell {
+      .qcm-mesqcm-group--inprogress .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
+      .qcm-mesqcm-group--pending .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell {
         width: calc(100% + 32px);
         margin-left: -16px;
         margin-right: -16px;
@@ -4077,8 +4107,23 @@
          loadMemorizedToday, appelée depuis loadMesQcm) et seulement si la
          liste n'est pas vide. -->
     <div class="qcm-memorized-today" id="qcm-memorized-today" hidden>
-      <p class="qcm-mesqcm-group-title">Connaissances mémorisées ce jour</p>
-      <ul class="qcm-fiche-memorization-list" id="qcm-memorized-today-list"></ul>
+      <details open>
+        <summary class="qcm-mesqcm-group-title">Connaissances mémorisées ce jour</summary>
+        <!-- Deux sous-groupes distincts (demande du 13/09/2026, "distinguer les
+             connaissances volontairement mémorisées des connaissances préconisées à
+             mémoriser") : un vrai clic "Mémoriser" (voluntary) d'une préconisation
+             automatique de fin de bloc (suggested, cf. applyMemorizationSuggestionsForQuiz).
+             Chaque sous-groupe masqué individuellement si sa liste est vide, cf.
+             renderMemorizedToday. -->
+        <details open id="qcm-memorized-today-voluntary" hidden>
+          <summary class="qcm-mesqcm-group-title">Mémorisées volontairement</summary>
+          <ul class="qcm-fiche-memorization-list" id="qcm-memorized-today-voluntary-list"></ul>
+        </details>
+        <details open id="qcm-memorized-today-suggested" hidden>
+          <summary class="qcm-mesqcm-group-title">Préconisées à mémoriser</summary>
+          <ul class="qcm-fiche-memorization-list" id="qcm-memorized-today-suggested-list"></ul>
+        </details>
+      </details>
     </div>
     <!-- Le suivi d'une génération lancée reste immédiatement sous le bouton
          principal, avant les sujets proposés. Le statut et son indicateur
@@ -4099,8 +4144,10 @@
          ci-dessus, cf. refreshLearnNextInlineVisibility) ET seulement une fois
          un contenu réel obtenu (jamais un état vide/erreur affiché ici). -->
     <div class="qcm-learn-next-inline" id="qcm-learn-next-inline">
-      <p class="qcm-mesqcm-group-title">Apprentissages proposés</p>
-      <div class="qcm-learn-next-inline-list" id="qcm-learn-next-inline-list"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass qcm-learn-next-inline-hourglass" role="status" aria-label="Chargement des apprentissages proposés"></div>
+      <details open>
+        <summary class="qcm-mesqcm-group-title">Apprentissages proposés</summary>
+        <div class="qcm-learn-next-inline-list" id="qcm-learn-next-inline-list"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass qcm-learn-next-inline-hourglass" role="status" aria-label="Chargement des apprentissages proposés"></div>
+      </details>
     </div>
     <!-- Emplacement d'origine du formulaire IA (cf. openAiGenerateModal) : le
          <form> y revient (reparenté) à la fermeture de la modale, jamais recréé
@@ -4163,7 +4210,10 @@
   var loadGaugeCaption = document.getElementById('qcm-load-gauge-caption');
   var loadGaugeToken = 0;
   var memorizedTodayEl = document.getElementById('qcm-memorized-today');
-  var memorizedTodayList = document.getElementById('qcm-memorized-today-list');
+  var memorizedTodayVoluntaryEl = document.getElementById('qcm-memorized-today-voluntary');
+  var memorizedTodayVoluntaryList = document.getElementById('qcm-memorized-today-voluntary-list');
+  var memorizedTodaySuggestedEl = document.getElementById('qcm-memorized-today-suggested');
+  var memorizedTodaySuggestedList = document.getElementById('qcm-memorized-today-suggested-list');
   var memorizedTodayToken = 0;
   var learnNextInline = document.getElementById('qcm-learn-next-inline');
   var learnNextInlineList = document.getElementById('qcm-learn-next-inline-list');
@@ -6366,8 +6416,8 @@
   function renderCreatingNotionQuizzesHtml() {
     var pending = getVisiblePendingNotionQuizGenerations();
     if (!pending.length) return '';
-    return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating">' +
-      '<h2 class="qcm-mesqcm-group-title">En cours de création</h2>' +
+    return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating"><details open>' +
+      '<summary class="qcm-mesqcm-group-title">En cours de création</summary>' +
       '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
       // Colonne "Niveau" supprimée dans cette rubrique uniquement (demande du 09/09/2026) —
       // "État" (badge "En cours de création") gardée. Ne reste que 2 colonnes ici (contre 3
@@ -6379,7 +6429,7 @@
         return '<tr><td><span class="qcm-mesqcm-name-btn is-static">' +
           '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span></span></td>' +
           '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td></tr>';
-      }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></section>';
+      }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></details></section>';
   }
 
   function pendingNotionQuizMessage(pending) {
@@ -7450,21 +7500,29 @@
   // pas d'une charge générale de l'appli.
   // shortLabel (demande du 27/08/2026, nouveau composant barre) : juste le
   // qualificatif, affiché séparément du titre "Charge de mémorisation" dans
-  // le nouveau design compact — même 4 niveaux, mêmes seuils (minRatio/
-  // maxRatio) et même label complet qu'avant, rien de métier n'a changé ici.
+  // le nouveau design compact. minRatio/maxRatio ci-dessous ne sont que de la
+  // documentation (jamais lus par le code : seul gauge.level, déjà calculé
+  // côté serveur, sert à choisir l'entrée) — recalés le 13/09/2026 sur les
+  // nouveaux seuils en nombre brut de connaissances (cf. GAUGE_DISPLAY_PEAK_THRESHOLDS,
+  // lib/spaced-repetition/learning-load.js) rapportés à l'idéal de 6 ci-dessous :
+  // moderate dès 3 (ratio 0.5), busy dès 6 = l'idéal (ratio 1.0), overloaded dès 9 (ratio 1.5).
   var LOAD_GAUGE_LEVEL_META = {
     calm: { label: 'Charge de mémorisation calme', shortLabel: 'Calme', minRatio: 0, maxRatio: 0.5 },
     moderate: { label: 'Charge de mémorisation modérée', shortLabel: 'Modérée', minRatio: 0.5, maxRatio: 1.0 },
-    busy: { label: 'Charge de mémorisation élevée', shortLabel: 'Élevée', minRatio: 1.0, maxRatio: 1.75 },
-    overloaded: { label: 'Surcharge de mémorisation', shortLabel: 'Surchargée', minRatio: 1.75, maxRatio: 2.75 }
+    busy: { label: 'Charge de mémorisation élevée', shortLabel: 'Élevée', minRatio: 1.0, maxRatio: 1.5 },
+    overloaded: { label: 'Surcharge de mémorisation', shortLabel: 'Surchargée', minRatio: 1.5, maxRatio: 2.25 }
   };
   var LOAD_GAUGE_LEVEL_ORDER = ['calm', 'moderate', 'busy', 'overloaded'];
 
-  // Repère "Idéal" : un rythme confortable de 12 repasses/jour, pas un seuil
-  // d'alerte. Les niveaux calme/modéré/élevé/surchargé continuent d'utiliser
-  // le plafond technique de 20 côté serveur ; seule l'échelle visuelle du
-  // pourcentage est recalée ici sur le rythme idéal demandé.
-  var LOAD_GAUGE_IDEAL_QUESTIONS = 12;
+  // Repère "Idéal" (demande du 13/09/2026, "idéal doit se situer pour 6 connaissances
+  // mémorisées ce jour, contre 12 actuellement ; surcharge à partir de 9 questions") :
+  // rythme confortable de 6 repasses/jour, pas un seuil d'alerte. Le plafond technique
+  // de 20 côté serveur (DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY) continue de servir UNIQUEMENT
+  // à simuler un report de charge réaliste jour après jour (computeLearningLoadGauge) —
+  // jamais changé, sans rapport avec ce repère "Idéal" ; seuls le niveau affiché
+  // (calme/modéré/élevé/surchargé, désormais basé sur le nombre brut de connaissances via
+  // levelFromPeakLoad) et l'échelle visuelle du pourcentage ici sont recalés sur 6/9.
+  var LOAD_GAUGE_IDEAL_QUESTIONS = 6;
 
   // Repère "Idéal" placé aux 2/3 de la piste (demande du 30/08/2026) : le
   // dernier tiers de la barre reste disponible pour visualiser la surcharge
@@ -7580,28 +7638,51 @@
   // décochables aussi") : la ligne n'est JAMAIS retirée du DOM au décochage,
   // contrairement à une première version — même principe que
   // wireKnowledgeMemorizationToggles de la fiche.
-  function renderMemorizedToday(items) {
-    if (!memorizedTodayEl || !memorizedTodayList) return;
-    if (!items || !items.length) { memorizedTodayEl.hidden = true; return; }
-    memorizedTodayList.innerHTML = items.map(function (item, i) {
+  // Un seul sous-groupe (voluntary OU suggested, cf. renderMemorizedToday) : masqué
+  // individuellement si sa liste est vide, indépendamment de l'autre sous-groupe.
+  // `defaultChecked` (13/09/2026, "les préconisées ne doivent pas être cochées par
+  // défaut... état réel") : reflète memorization_enabled réel de chaque connaissance —
+  // true pour voluntary (un vrai clic a déjà activé "Mémoriser"), toujours false pour
+  // suggested (posée inactive par applyMemorizationSuggestionsForQuiz, cf. son
+  // commentaire) — jamais un simple habillage visuel déconnecté de l'état serveur.
+  function renderMemorizedTodayGroup(groupEl, listEl, items, defaultChecked) {
+    if (!groupEl || !listEl) return;
+    if (!items || !items.length) { groupEl.hidden = true; return; }
+    listEl.innerHTML = items.map(function (item, i) {
       return '<li class="qcm-fiche-memorization-item">' +
-        '<button type="button" class="qcm-fiche-memorization-toggle is-memorized" data-memorized-today-index="' + i + '" aria-pressed="true">' +
-        '<i class="fa-solid fa-square-check" aria-hidden="true"></i>' +
+        '<button type="button" class="qcm-fiche-memorization-toggle ' + (defaultChecked ? 'is-memorized' : 'is-unmemorized') + '" data-memorized-today-index="' + i + '" aria-pressed="' + (defaultChecked ? 'true' : 'false') + '">' +
+        '<i class="fa-solid ' + (defaultChecked ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i>' +
         '<span>' + escapeHtml(item.label || '') + '</span>' +
         '</button>' +
         '</li>';
     }).join('');
-    wireMemorizedTodayToggles(items);
+    wireMemorizedTodayToggles(listEl, items);
+    groupEl.hidden = false;
+  }
+  // Deux sous-groupes distincts (demande du 13/09/2026, "distinguer les
+  // connaissances volontairement mémorisées des connaissances préconisées à
+  // mémoriser", cf. server.js GET /api/users/memorized-today) : le conteneur
+  // global n'est visible que si AU MOINS l'un des deux a du contenu.
+  function renderMemorizedToday(voluntary, suggested) {
+    if (!memorizedTodayEl) return;
+    if ((!voluntary || !voluntary.length) && (!suggested || !suggested.length)) {
+      memorizedTodayEl.hidden = true;
+      return;
+    }
+    renderMemorizedTodayGroup(memorizedTodayVoluntaryEl, memorizedTodayVoluntaryList, voluntary, true);
+    renderMemorizedTodayGroup(memorizedTodaySuggestedEl, memorizedTodaySuggestedList, suggested, false);
     memorizedTodayEl.hidden = false;
   }
   // Même API/mêmes principes que wireKnowledgeMemorizationToggles (fiche) :
   // optimistic UI immédiate, requestToken par bouton (ignore une réponse
   // réseau devenue obsolète si un second clic est déjà parti), restauration
   // de l'état précédent en cas d'échec réseau — jamais de ligne retirée du
-  // DOM, cocher/décocher reste possible autant de fois que voulu.
-  function wireMemorizedTodayToggles(items) {
-    if (!memorizedTodayList) return;
-    memorizedTodayList.querySelectorAll('[data-memorized-today-index]').forEach(function (btn) {
+  // DOM, cocher/décocher reste possible autant de fois que voulu. `listEl`
+  // paramétré depuis le 13/09/2026 : appelée une fois par sous-groupe
+  // (voluntary/suggested), jamais sur les deux mélangés.
+  function wireMemorizedTodayToggles(listEl, items) {
+    if (!listEl) return;
+    listEl.querySelectorAll('[data-memorized-today-index]').forEach(function (btn) {
       var item = items[Number(btn.getAttribute('data-memorized-today-index'))];
       if (!item) return;
       var requestToken = 0;
@@ -7633,10 +7714,14 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (myToken !== memorizedTodayToken) return;
-        renderMemorizedToday(data && !data.error && Array.isArray(data.items) ? data.items : []);
+        var ok = data && !data.error;
+        renderMemorizedToday(
+          ok && Array.isArray(data.voluntary) ? data.voluntary : [],
+          ok && Array.isArray(data.suggested) ? data.suggested : []
+        );
       })
       .catch(function () {
-        if (myToken === memorizedTodayToken) renderMemorizedToday([]);
+        if (myToken === memorizedTodayToken) renderMemorizedToday([], []);
       });
   }
 
@@ -8193,6 +8278,12 @@
     }
     if (pageCount > 1) {
       html += '<nav class="qcm-mesqcm-pagination" aria-label="Pages des connaissances">';
+      // Retour direct page 1 (13/09/2026, même visuel que .qcm-explore-pagination-btn.is-first
+      // plus bas dans ce fichier) : utile dès qu'il y a plus de deux pages, sinon "page
+      // précédente" suffit déjà à y revenir.
+      if (pageCount > 2) {
+        html += '<button type="button" class="qcm-mesqcm-pagination-btn is-first" aria-label="Première page" disabled><i class="fa-solid fa-angles-left" aria-hidden="true"></i></button>';
+      }
       html += '<button type="button" class="qcm-mesqcm-pagination-btn is-previous" aria-label="Page précédente" disabled><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>';
       html += '<span class="qcm-mesqcm-pagination-label"><span class="qcm-mesqcm-current-page">1</span> / ' + pageCount + '</span>';
       html += '<button type="button" class="qcm-mesqcm-pagination-btn is-next" aria-label="Page suivante"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>';
@@ -8234,6 +8325,7 @@
   function initMesQcmPagination() {
     body.querySelectorAll('.qcm-mesqcm-paged-list').forEach(function (pagedList) {
       var pageCount = Number(pagedList.getAttribute('data-page-count')) || 1;
+      var firstBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-first');
       var previousBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-previous');
       var nextBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-next');
       var pageLabel = pagedList.querySelector('.qcm-mesqcm-current-page');
@@ -8244,6 +8336,7 @@
         pagedList.querySelectorAll('.qcm-mesqcm-page').forEach(function (page) {
           page.hidden = Number(page.getAttribute('data-page-index')) !== pageIndex;
         });
+        if (firstBtn) firstBtn.disabled = pageIndex === 0;
         if (previousBtn) previousBtn.disabled = pageIndex === 0;
         if (nextBtn) nextBtn.disabled = pageIndex === pageCount - 1;
         if (pageLabel) pageLabel.textContent = String(pageIndex + 1);
@@ -8253,6 +8346,9 @@
         });
       }
 
+      if (firstBtn) firstBtn.addEventListener('click', function () {
+        showPage(0, true);
+      });
       if (previousBtn) previousBtn.addEventListener('click', function () {
         showPage((Number(pagedList.getAttribute('data-current-page')) || 0) - 1, true);
       });
@@ -8385,22 +8481,22 @@
     // individuelle (icône corbeille par ligne) reste disponible.
     var html = '<div class="qcm-mesqcm-groups">' + creatingHtml;
     if (todayQuizzes.length) {
-      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--today">';
-      html += '<h2 class="qcm-mesqcm-group-title">Apprentissages du jour</h2>';
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--today"><details open>';
+      html += '<summary class="qcm-mesqcm-group-title">Apprentissages du jour</summary>';
       html += renderMesQcmPaginatedTablesHtml(todayQuizzes, quizzes, false);
-      html += '</section>';
+      html += '</details></section>';
     }
     if (notStartedQuizzes.length) {
-      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
-      html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending"><details open>';
+      html += '<summary class="qcm-mesqcm-group-title">En attente de réalisation</summary>';
       html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes, false);
-      html += '</section>';
+      html += '</details></section>';
     }
     if (inProgressRestQuizzes.length) {
-      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--inprogress">';
-      html += '<h2 class="qcm-mesqcm-group-title">Apprentissages commencés</h2>';
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--inprogress"><details open>';
+      html += '<summary class="qcm-mesqcm-group-title">Apprentissages commencés</summary>';
       html += renderMesQcmPaginatedTablesHtml(inProgressRestQuizzes, quizzes, false);
-      html += '</section>';
+      html += '</details></section>';
     }
     if (!pendingQuizzes.length && !creatingHtml) {
       html += '<p class="qcm-state-message">Rien en attente — retrouve tes apprentissages déjà réalisés dans « Mes acquis ».</p>';
@@ -8435,9 +8531,11 @@
       pagedList.querySelectorAll('.qcm-mesqcm-page').forEach(function (p) {
         p.hidden = (p !== page);
       });
+      var firstBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-first');
       var previousBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-previous');
       var nextBtn = pagedList.querySelector('.qcm-mesqcm-pagination-btn.is-next');
       var pageLabel = pagedList.querySelector('.qcm-mesqcm-current-page');
+      if (firstBtn) firstBtn.disabled = pageIndex === 0;
       if (previousBtn) previousBtn.disabled = pageIndex === 0;
       if (nextBtn) nextBtn.disabled = pageIndex === pageCount - 1;
       if (pageLabel) pageLabel.textContent = String(pageIndex + 1);
@@ -8562,8 +8660,8 @@
     // disponible sur chaque apprentissage, sans cases de sélection inutiles.
     var html = '<div class="qcm-mesqcm-groups">';
     if (themeNames.length) {
-      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all">';
-      html += '<h2 class="qcm-mesqcm-group-title">Tous mes apprentissages</h2>';
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all"><details open>';
+      html += '<summary class="qcm-mesqcm-group-title">Tous mes apprentissages</summary>';
       themeNames.forEach(function (theme) {
         var themeQuizzes = byTheme[theme].slice().sort(compareMesQcmByStateThenName);
         html += '<section class="qcm-mesqcm-theme-group">';
@@ -8580,13 +8678,13 @@
         html += '</div>';
         html += '</section>';
       });
-      html += '</section>';
+      html += '</details></section>';
     }
     if (comprehensionQuizzes.length) {
-      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--comprehension' + (themeNames.length ? '' : ' qcm-mesqcm-group--all') + '">';
-      html += '<h2 class="qcm-mesqcm-group-title">Comprendre les liens</h2>';
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--comprehension' + (themeNames.length ? '' : ' qcm-mesqcm-group--all') + '"><details open>';
+      html += '<summary class="qcm-mesqcm-group-title">Comprendre les liens</summary>';
       html += renderMesQcmPaginatedTablesHtml(comprehensionQuizzes.slice().sort(compareMesQcmByStateThenName), quizzes, false);
-      html += '</section>';
+      html += '</details></section>';
     }
     html += '</div>';
     body.innerHTML = html;

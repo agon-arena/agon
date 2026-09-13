@@ -56,26 +56,28 @@ test("1 Élémentaire pertinente + 1 Approfondi pertinente -> 2 propositions (un
   assert.deepEqual(result, ["k1", "k3"]);
 });
 
-test("aucune Élémentaire/Approfondi pertinente + 1 Expert pertinente -> 1 Expert (jamais une 2e inventée)", () => {
+test("aucune Élémentaire/Approfondi ratée/difficile + 1 Approfondi moyen + 1 Expert ratée -> Approfondi avant Expert (ordre par niveau prime sur le palier)", () => {
   const result = selectMemorizationSuggestions([
     entry("k1", "elementaire", true, "facile"),
     entry("k2", "avance", true, "moyen"),
     entry("k3", "expert", false, null)
   ]);
-  assert.deepEqual(result, ["k3"]);
+  assert.deepEqual(result, ["k2", "k3"]);
 });
 
-test("utilisateur n'ayant jamais fait Expert -> aucune connaissance Expert possible même si un test essaie d'en injecter une hors périmètre", () => {
+test("utilisateur n'ayant jamais fait Expert -> le seul signal moyen d'Approfondi suffit désormais à être proposé (spec du 13/09/2026)", () => {
   // Seules des entrées Élémentaire/Approfondi sont fournies ici : aucune
   // entrée "expert" n'existe dans l'historique réel de cet utilisateur, donc
   // aucune ne peut apparaître dans le résultat — la fonction ne va jamais
-  // chercher plus loin que ce qui lui est donné.
+  // chercher plus loin que ce qui lui est donné. "moyen" est depuis le
+  // 13/09/2026 un vrai palier de fragilité (après ratée/difficile), donc k2
+  // est désormais proposée.
   const result = selectMemorizationSuggestions([
     entry("k1", "elementaire", true, "facile"),
     entry("k2", "avance", true, "moyen")
   ]);
   assert.ok(!result.includes("expert"));
-  assert.deepEqual(result, []);
+  assert.deepEqual(result, ["k2"]);
 });
 
 test("question non répondue -> sa connaissance n'est jamais proposée", () => {
@@ -99,12 +101,21 @@ test("deux questions correspondant à la même connaissance -> une seule proposi
   assert.deepEqual(result, ["k1"]);
 });
 
-test("aucune connaissance pertinente sur tout le parcours -> 0 proposition", () => {
+test("aucune ratée/facile nulle part, mais 2 moyens (Élémentaire puis Expert) -> les 2 sont proposées, dans l'ordre des niveaux", () => {
   const result = selectMemorizationSuggestions([
     entry("k1", "elementaire", true, "facile"),
     entry("k2", "elementaire", true, "moyen"),
     entry("k3", "avance", true, "facile"),
     entry("k4", "expert", true, "moyen")
+  ]);
+  assert.deepEqual(result, ["k2", "k4"]);
+});
+
+test("aucune connaissance pertinente (tout facile) sur tout le parcours -> 0 proposition", () => {
+  const result = selectMemorizationSuggestions([
+    entry("k1", "elementaire", true, "facile"),
+    entry("k3", "avance", true, "facile"),
+    entry("k4", "expert", true, "facile")
   ]);
   assert.deepEqual(result, []);
 });
@@ -131,11 +142,32 @@ test("2 pertinentes en Élémentaire -> on ne descend jamais aux niveaux suivant
   assert.deepEqual(result, ["k1", "k2"]);
 });
 
-test("réussie + ressenti 'moyen' n'est jamais proposée (traitée comme facile, décision explicite)", () => {
+test("réussie + ressenti 'moyen' est proposée depuis le 13/09/2026 (3e palier de fragilité)", () => {
   const result = selectMemorizationSuggestions([
     entry("k1", "elementaire", true, "moyen")
   ]);
-  assert.deepEqual(result, []);
+  assert.deepEqual(result, ["k1"]);
+});
+
+test("dans un même niveau, ratée avant difficile avant moyen (ordre strict des 3 paliers)", () => {
+  const result = selectMemorizationSuggestions([
+    entry("k1", "elementaire", true, "moyen"),
+    entry("k2", "elementaire", true, "difficile"),
+    entry("k3", "elementaire", false, null)
+  ]);
+  assert.deepEqual(result, ["k3", "k2"]);
+});
+
+test("ordre strict en 9 paliers : Élémentaire ratée/difficile/moyen -> Approfondi -> Expert, jamais mélangés", () => {
+  const result = selectMemorizationSuggestions([
+    entry("k-el-moyen", "elementaire", true, "moyen"),
+    entry("k-av-ratee", "avance", false, null),
+    entry("k-ex-ratee", "expert", false, null)
+  ]);
+  // Élémentaire moyen (seul candidat de son niveau) prend la 1ère place avant
+  // même une ratée d'un niveau ultérieur : l'ordre par NIVEAU prime toujours
+  // sur le palier à l'intérieur d'un autre niveau.
+  assert.deepEqual(result, ["k-el-moyen", "k-av-ratee"]);
 });
 
 test("réussie + difficulté absente (null, réponse antérieure à la fonctionnalité) n'est jamais proposée", () => {

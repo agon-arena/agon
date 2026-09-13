@@ -340,3 +340,65 @@ test("selectRepresentativeExcerpt : sur un document composé de plusieurs grande
   const coveredSections = sectionLabels.filter((label) => excerpt.includes(label));
   assert.ok(coveredSections.length >= 4, `au moins 4 des 6 sections doivent être représentées, obtenu : ${coveredSections.join(", ") || "(aucune)"}`);
 });
+
+// ══════════════════════════════════════════════════════════════════════
+// E1 — squelette d'ouverture (correction du 13/09/2026, diagnostic qualité
+// pédagogique "Charlemagne"). Reproduit sur le vrai article : l'infobox+
+// intro (identité, dates de règne, couronnement, conquêtes) contient
+// PLUSIEURS phrases individuellement bien notées par scoreChunk, mais qui se
+// neutralisaient entre elles dès qu'elles tombaient dans le même bucket
+// positionnel — un budget de 8000 caractères ne conservait alors qu'UNE
+// seule d'entre elles (souvent la moins informative). Ci-dessous : mêmes
+// scénarios avec un document 100 % synthétique et générique (aucun
+// vocabulaire d'histoire/biographie) — la fenêtre d'ouverture doit avoir une
+// CHANCE RÉELLE d'être représentée par PLUSIEURS de ses phrases, jamais un
+// forçage aveugle du tout premier chunk quel que soit son contenu.
+// ══════════════════════════════════════════════════════════════════════
+
+test("selectRepresentativeExcerpt (E1) : plusieurs faits distincts de l'ouverture survivent désormais, là où un seul survivait avant ce correctif", () => {
+  // Quatre phrases d'ouverture DISTINCTES (chacune assez longue pour former
+  // son propre chunk), chacune dense en chiffres/dates (comme une identité/
+  // des dates structurantes réelles) — chacune individuellement bien notée
+  // par scoreChunk, mais en compétition avec un large corps secondaire pour
+  // le même budget serré.
+  const openingFacts = [
+    "OpeningFactAlpha est fondé en 1204 par un groupe de pionniers venus de plusieurs régions voisines, à la suite d'une longue période de troubles qui avait fragilisé les structures existantes et poussé ces populations à rechercher un cadre commun plus stable pour organiser durablement leurs échanges et leur défense collective.",
+    "OpeningFactBeta devient la référence dominante dès 1250, sous l'autorité d'un conseil élu chaque année par les représentants des grandes familles locales, qui se réunit régulièrement pour arbitrer les différends commerciaux et fixer les règles communes applicables à l'ensemble des cités affiliées à cette organisation.",
+    "OpeningFactGamma, sa capitale historique, concentre les échanges depuis 1230 et abrite un grand marché central où se croisent chaque semaine des marchands venus de contrées lointaines, faisant de cette ville un carrefour économique et culturel de première importance pour toute la région environnante.",
+    "OpeningFactDelta demeure l'événement fondateur retenu par les historiens, signé en 1204 après plusieurs décennies de conflits successifs entre les principales puissances rivales de l'époque, mettant fin à une instabilité prolongée qui avait considérablement freiné le développement économique de la région entière."
+  ];
+  const bodySentence = (n) => `Cette partie du corps développe longuement des considérations secondaires liées au sous-thème BodyTopic${n}, avec une prose fluide et bien construite qui ne porte cependant aucune information réellement centrale pour comprendre le sujet dans son ensemble, mais qui reste rédigée de façon parfaitement soignée et cohérente.`;
+  const body = Array.from({ length: 40 }, (_, i) => bodySentence(i)).join(" ");
+  const doc = `${openingFacts.join(" ")} ${body}`;
+
+  const { excerpt } = selectRepresentativeExcerpt(doc, { budgetChars: 1500 });
+  const covered = ["Alpha", "Beta", "Gamma", "Delta"].filter((m) => excerpt.includes(`OpeningFact${m}`));
+  assert.ok(covered.length >= 2, `au moins 2 des 4 faits d'ouverture doivent survivre, obtenu : ${covered.join(", ") || "(aucun)"}`);
+});
+
+test("selectRepresentativeExcerpt (E1) : une ouverture réellement mauvaise (infobox pur bruit) n'est JAMAIS forcée dans l'extrait", () => {
+  const badOpeningInfobox = "Sultan • c. 1299–1323/4 (first) Osman I Government Absolute monarchy (1299–1876; 1878–1908; 1920–1922) Religion Sunni Islam (state) Currency Akçe Kuruş Lira Area 1914 estimate 1,800,000 km2 Population 1856 estimate 35,350,000 Established 1299 Disestablished 1922 Capital Söğüt Nicaea Bursa Edirne Constantinople";
+  const goodSentence = (n) => `Cette section développe une analyse approfondie du sous-thème GoodTopic${n}, avec des explications claires sur les mécanismes en jeu et leurs conséquences principales pour la compréhension globale du sujet traité ici.`;
+  const body = Array.from({ length: 40 }, (_, i) => goodSentence(i)).join(" ");
+  const doc = `${badOpeningInfobox} ${body}`;
+
+  const { excerpt } = selectRepresentativeExcerpt(doc, { budgetChars: 2000 });
+  assert.doesNotMatch(excerpt, /Sultan •/, "un bloc d'ouverture purement infobox ne doit jamais être forcé dans l'extrait");
+  assert.doesNotMatch(excerpt, /Disestablished 1922/);
+});
+
+test("selectRepresentativeExcerpt (E1) : la réservation d'ouverture reste plafonnée à OPENING_RESERVATION_MAX_SHARE — ne domine jamais un petit budget quand le début du document n'a rien de spécial", () => {
+  // Six sections homogènes (même profil de score partout, aucune ouverture
+  // structurellement différente du reste) — la réservation d'ouverture ne
+  // doit jamais, à elle seule, empêcher les sections suivantes d'apparaître
+  // sur un petit budget (cf. régression constatée pendant le développement
+  // de ce correctif, corrigée par OPENING_RESERVATION_MAX_SHARE).
+  const sectionLabels = ["SectionAlpha", "SectionBeta", "SectionGamma", "SectionDelta", "SectionEpsilon", "SectionZeta"];
+  const sentenceFor = (label) => `Cette partie du document développe longuement des considérations spécifiques à ${label}, avec plusieurs phrases construites de façon habituelle pour représenter une prose normale et cohérente.`;
+  const sections = sectionLabels.map((label) => Array.from({ length: 8 }, () => sentenceFor(label)).join(" "));
+  const doc = sections.join(" ");
+
+  const { excerpt } = selectRepresentativeExcerpt(doc, { budgetChars: 2500 });
+  const coveredSections = sectionLabels.filter((label) => excerpt.includes(label));
+  assert.ok(coveredSections.length >= 4, `la réservation d'ouverture ne doit pas empêcher une bonne couverture globale, obtenu : ${coveredSections.join(", ") || "(aucune)"}`);
+});

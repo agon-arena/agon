@@ -30,7 +30,7 @@ const { reviewMemoryItem, computeRetrievability } = require("./lib/spaced-repeti
 const { mapMnoriaReviewToFsrsRating } = require("./lib/spaced-repetition/rating-mapper");
 const { resolveQuestionVariantLabel, resolveActiveQuestionVariant } = require("./lib/spaced-repetition/question-variant");
 const { HELP_LEVELS, deriveHelpLevel } = require("./lib/spaced-repetition/help-level");
-const { DEFAULT_PROJECTION_DAYS, computeLearningLoadGauge } = require("./lib/spaced-repetition/learning-load");
+const { DEFAULT_PROJECTION_DAYS, computeLearningLoadGauge, levelFromPeakLoad } = require("./lib/spaced-repetition/learning-load");
 const {
   buildCultureGeneraleReviewQuestionId,
   parseCultureGeneraleReviewRef
@@ -18003,7 +18003,12 @@ async function fetchLearningLoadGaugeForUser(voterKey) {
   }
 
   const gauge = computeLearningLoadGauge(dueCountsByDay, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY);
-  return { ...gauge, dueCountsByDay };
+  // level recalculé (demande du 13/09/2026, "idéal pour 6 connaissances, surcharge à partir
+  // de 9") : computeLearningLoadGauge garde son cap=20 pour la simulation de report en
+  // cascade, réaliste et inchangée — seul le NIVEAU affiché à l'utilisateur (couleur/libellé)
+  // est recalculé ici sur les nouveaux seuils, directement à partir du peakLoad déjà simulé
+  // (cf. levelFromPeakLoad, lib/spaced-repetition/learning-load.js).
+  return { ...gauge, level: levelFromPeakLoad(gauge.peakLoad), dueCountsByDay };
 }
 
 // Rubrique Éclairages -> service de lecture + clé du tableau de contenu
@@ -19298,7 +19303,7 @@ async function attachMemorizationPreferenceToQuestions(questions, voterKey) {
   return questions.map((q) => {
     if (!q.knowledgeTargetId) return q;
     const prefKey = knowledgeTargetPreferenceKey(subjectType, String(subjectSourceId), q.knowledgeTargetId);
-    const enabled = preferenceMap.has(prefKey) ? preferenceMap.get(prefKey) : false;
+    const enabled = preferenceMap.has(prefKey) ? preferenceMap.get(prefKey).enabled : false;
     return { ...q, memorizationEnabled: enabled };
   });
 }
@@ -26422,6 +26427,10 @@ app.post("/api/users/knowledge-memorization", rateLimit("users", 30), async (req
       subject_source_id: subjectSourceId,
       knowledge_target_id: knowledgeTargetId,
       memorization_enabled: enabled,
+      // Un vrai clic reste 'manual' même s'il reproduit une valeur déjà posée par une
+      // préconisation automatique (demande du 13/09/2026, distinguer les deux listes) :
+      // l'action explicite de l'utilisateur prime toujours sur sa provenance précédente.
+      source: "manual",
       updated_at: new Date().toISOString()
     }, { onConflict: "user_id,subject_type,subject_source_id,knowledge_target_id" });
     if (error) throw new Error(error.message);
@@ -26505,11 +26514,28 @@ app.get("/api/users/memorized-today", rateLimit("users", 30), async (req, res) =
     // cochée n'a pas sa place ici, même si elle a bien reçu une review
     // aujourd'hui (répondre à une question ne coche jamais "Mémoriser" tout
     // seul, cf. wireExcludeButton).
+    //
+    // Deux listes distinctes (demande du 13/09/2026, "distinguer les connaissances
+    // volontairement mémorisées des connaissances préconisées à mémoriser", revu le
+    // même jour "pas cochées par défaut... état réel") : `voluntary` garde le filtre
+    // enabled===true (un vrai clic explicite) ; `suggested` n'exige PAS enabled===true
+    // — applyMemorizationSuggestionsForQuiz écrit désormais source:"suggested" avec
+    // enabled:false (jamais encore confirmée), donc n'apparaîtrait jamais ici sinon.
+    // Un clic sur une connaissance "suggested" passe par POST .../knowledge-memorization,
+    // qui pose source:"manual" — elle sort alors définitivement de ce groupe au
+    // prochain chargement, jamais mélangée avec `voluntary` entre-temps. `items`
+    // conservé (fusion des deux, ordre voluntary puis suggested) pour ne rien casser
+    // côté rétrocompatibilité.
     const preferenceMap = await fetchKnowledgeTargetMemorizationPreferenceMap(userRow.id);
-    const items = [...itemsByKey.entries()]
-      .filter(([key]) => preferenceMap.get(key) === true)
-      .map(([, item]) => item);
-    res.json({ items });
+    const voluntary = [];
+    const suggested = [];
+    for (const [key, item] of itemsByKey.entries()) {
+      const pref = preferenceMap.get(key);
+      if (!pref) continue;
+      if (pref.source === "suggested") suggested.push(item);
+      else if (pref.enabled === true) voluntary.push(item);
+    }
+    res.json({ items: [...voluntary, ...suggested], voluntary, suggested });
   } catch (error) {
     console.error("[memorized-today] :", error.message);
     return sendServerError(res, "Erreur chargement des connaissances mémorisées du jour.");
@@ -26607,21 +26633,24 @@ app.get("/api/users/notion-quizzes/memorization-suggestions", rateLimit("users",
   }
 });
 
-// Applique automatiquement les propositions de fin de bloc (demande du
+// Surface automatiquement les propositions de fin de bloc (demande du
 // 12/09/2026, "je veux que ces connaissances apparaissent dans la nouvelle
-// rubrique Connaissances mémorisées ce jour") : active "Mémoriser" pour
-// chaque connaissance choisie par computeMemorizationSuggestionsForQuiz,
-// SAUF si une préférence EXPLICITE existe déjà pour elle (true OU false,
-// cf. fetchKnowledgeTargetMemorizationPreferenceMap) — jamais d'écrasement
-// d'un choix déjà posé par l'utilisateur (ex. un décochage manuel antérieur
-// depuis cette même rubrique ou la fiche). Idempotent par construction :
-// peut être rappelée sans risque à chaque transition de niveau
-// (Élémentaire -> Avancé -> Expert) du même parcours, cf. son appel côté
-// client (finishCurrentBlockOrContinue). Une fois la préférence posée, la
-// connaissance apparaît d'elle-même dans GET /api/users/memorized-today
-// (déjà filtré sur memorizationEnabled===true) dès qu'elle a aussi reçu une
-// review aujourd'hui — toujours le cas ici puisque la suggestion vient
-// d'une question réellement répondue dans cette même session.
+// rubrique Connaissances mémorisées ce jour", revu le 13/09/2026 "pas cochées
+// par défaut... état réel") : pose une ligne source="suggested" ENCORE
+// INACTIVE (memorization_enabled=false) pour chaque connaissance choisie par
+// computeMemorizationSuggestionsForQuiz — jamais "Mémoriser" tant que
+// l'utilisateur n'a pas cliqué lui-même — SAUF si une préférence EXPLICITE
+// existe déjà pour elle (true OU false, cf. fetchKnowledgeTargetMemorization
+// PreferenceMap) — jamais d'écrasement d'un choix déjà posé (ex. un clic
+// manuel antérieur depuis cette même rubrique ou la fiche, qui pose toujours
+// source="manual"). Idempotent par construction : peut être rappelée sans
+// risque à chaque transition de niveau (Élémentaire -> Avancé -> Expert) du
+// même parcours, cf. son appel côté client (finishCurrentBlockOrContinue).
+// Une fois la ligne posée, la connaissance apparaît d'elle-même dans le
+// groupe "suggested" de GET /api/users/memorized-today (jamais dans
+// "voluntary", qui exige enabled===true) dès qu'elle a aussi reçu une review
+// aujourd'hui — toujours le cas ici puisque la suggestion vient d'une
+// question réellement répondue dans cette même session.
 async function applyMemorizationSuggestionsForQuiz(quizDate, slot, voterKey) {
   const key = String(voterKey || "").trim();
   const suggestions = await computeMemorizationSuggestionsForQuiz(quizDate, slot, key);
@@ -26642,7 +26671,20 @@ async function applyMemorizationSuggestionsForQuiz(quizDate, slot, voterKey) {
       subject_type: suggestion.subjectType,
       subject_source_id: suggestion.subjectSourceId,
       knowledge_target_id: suggestion.knowledgeTargetId,
-      memorization_enabled: true,
+      // FALSE, pas true (revu le 13/09/2026, "les préconisées ne doivent pas être
+      // cochées par défaut... état réel, inactive tant que je ne clique pas") : une
+      // préconisation surfacée automatiquement ne compte PAS encore comme mémorisée
+      // (jamais prise par Ancrer/la répétition espacée, cf. fetchDisabledKnowledgeTargetKeys/
+      // attachMemorizationPreferenceToQuestions, qui lisent cette même valeur) tant que
+      // l'utilisateur ne l'a pas confirmée d'un vrai clic — lequel passe alors par POST
+      // /api/users/knowledge-memorization (source devient "manual", enabled true), donc
+      // ne repasse plus jamais par cette fonction pour cette connaissance.
+      memorization_enabled: false,
+      // Distingue cette écriture automatique d'un vrai clic (demande du 13/09/2026,
+      // "distinguer volontairement mémorisées / préconisées à mémoriser") — jamais
+      // écrite si une préférence existait déjà (cf. "continue" juste au-dessus), donc
+      // toujours une VRAIE première préconisation, jamais un choix utilisateur écrasé.
+      source: "suggested",
       updated_at: new Date().toISOString()
     }, { onConflict: "user_id,subject_type,subject_source_id,knowledge_target_id" });
     if (error) throw new Error(error.message);
@@ -26651,10 +26693,6 @@ async function applyMemorizationSuggestionsForQuiz(quizDate, slot, voterKey) {
 }
 
 app.post("/api/users/notion-quizzes/memorization-suggestions/apply", rateLimit("users", 30), async (req, res) => {
-  // TEMPORAIRE (diagnostic du 13/09/2026, "les préconisations ne s'appliquent
-  // jamais") : log inconditionnel de chaque appel, avant tout autre chose — à
-  // retirer une fois la cause confirmée.
-  console.log("[DIAG memorization-apply] hit", JSON.stringify({ slot: req.body?.slot, quizDate: req.body?.quizDate, legacyKey: req.body?.legacyKey }));
   try {
     const validation = validateLegacyKey(req.body?.legacyKey);
     if (validation.error) return res.status(400).json({ ok: false, error: validation.error });
@@ -26663,7 +26701,6 @@ app.post("/api/users/notion-quizzes/memorization-suggestions/apply", rateLimit("
     if (!slot || !quizDate) return res.status(400).json({ ok: false, error: "Requête invalide." });
 
     const suggestions = await applyMemorizationSuggestionsForQuiz(quizDate, slot, validation.legacyKey);
-    console.log("[DIAG memorization-apply] suggestions computed:", JSON.stringify(suggestions));
     res.json({ ok: true, suggestions });
   } catch (error) {
     console.error("[memorization-suggestions:apply] :", error.message);
@@ -26704,11 +26741,18 @@ async function fetchDisabledKnowledgeTargetKeys(userId) {
 // "explicitement recoché" (true) après un défaut décoché. Jamais utilisée
 // par Ancrer/la jauge/la fiche, qui continuent de lire
 // fetchDisabledKnowledgeTargetKeys (défaut coché, inchangé).
+// Valeur de la Map : { enabled, source } depuis le 13/09/2026 (chantier
+// "distinguer volontairement mémorisées / préconisées à mémoriser",
+// cf. migration-knowledge-target-memorization-preference-source.sql) —
+// source vaut 'manual' (vrai clic, POST /api/users/knowledge-memorization)
+// ou 'suggested' (appliqué automatiquement, applyMemorizationSuggestionsForQuiz).
+// attachMemorizationPreferenceToQuestions ne lit que .enabled, inchangé ;
+// GET /api/users/memorized-today lit aussi .source pour ses deux listes.
 async function fetchKnowledgeTargetMemorizationPreferenceMap(userId) {
   if (!userId) return new Map();
   const { data, error } = await supabase
     .from("user_knowledge_target_memorization_preferences")
-    .select("subject_type, subject_source_id, knowledge_target_id, memorization_enabled")
+    .select("subject_type, subject_source_id, knowledge_target_id, memorization_enabled, source")
     .eq("user_id", userId);
   if (error) {
     console.warn("[knowledge-memorization] lecture préférences échouée :", error.message);
@@ -26716,7 +26760,7 @@ async function fetchKnowledgeTargetMemorizationPreferenceMap(userId) {
   }
   return new Map((data || []).map((r) => [
     knowledgeTargetPreferenceKey(r.subject_type, r.subject_source_id, r.knowledge_target_id),
-    r.memorization_enabled === true
+    { enabled: r.memorization_enabled === true, source: r.source === "suggested" ? "suggested" : "manual" }
   ]));
 }
 

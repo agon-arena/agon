@@ -20086,11 +20086,6 @@ function ensureCategoryFilterVisualStyles() {
         height: 22px;
         font-size: 10px;
       }
-
-      body.page-home-mobile #index-active-filters,
-      body.page-home-mobile .index-active-filters {
-        margin-top: 8px !important;
-      }
     }
   `;
 
@@ -20278,6 +20273,20 @@ function alignStandaloneBubbleFrameToActiveFilter() {
     if (!cloud || !activeTag) return;
     if (!cloud.getClientRects().length || !activeTag.getClientRects().length) return;
 
+    // Le tag peut être actuellement épinglé (#index-sort-search-wrap en
+    // position:fixed, cf. indexSortSearchSetPinned) : sa position à l'écran ne
+    // reflète alors plus du tout sa position naturelle dans la page, faussant
+    // complètement le calcul ci-dessous (constaté le 13/09/2026, "le
+    // comportement n'est pas bon en standalone mobile" — le nuage se
+    // retrouvait tiré vers le haut n'importe où une fois scrollé). On
+    // dépingle temporairement le temps de cette mesure synchrone (même
+    // principe que indexSortSearchRecalcTrigger), puis on restaure l'état
+    // réel juste après — jamais de scroll ni de re-render déclenché entre
+    // les deux, donc jamais de saut visible pour l'utilisateur.
+    const wrap = document.getElementById('index-sort-search-wrap');
+    const wasPinned = !!(wrap && wrap.classList.contains('index-sort-search-pinned'));
+    if (wasPinned) indexSortSearchSetPinned(false);
+
     const frameTop = parseFloat(getComputedStyle(cloud).getPropertyValue('--bubble-frame-top')) || 55;
     const cloudRect = cloud.getBoundingClientRect();
     const tagRect = activeTag.getBoundingClientRect();
@@ -20287,6 +20296,8 @@ function alignStandaloneBubbleFrameToActiveFilter() {
     const nextMarginTop = currentMarginTop + delta;
 
     cloud.style.marginTop = nextMarginTop + 'px';
+
+    if (wasPinned) indexSortSearchSetPinned(true);
     // Mémorise la marge finale pour que le script inline d'index.html la repose
     // avant le premier rendu à la visite suivante (retour Autres actus, reprise) :
     // le cadre apparaît directement à sa position définitive, sans saut.

@@ -19870,21 +19870,11 @@ html.thematic-scroll body.page-home-mobile #debates-list {
   }
 }
 
-body.page-home #index-active-filters,
-body.page-home .index-active-filters {
-  margin-top: 6px !important;
-}
-
 @media (min-width: 769px) {
   body.page-home #index-active-filters,
   body.page-home .index-active-filters {
     transform: none !important;
   }
-}
-
-body.page-home-mobile #index-active-filters,
-body.page-home-mobile .index-active-filters {
-  margin-top: 8px !important;
 }
 
 body.page-home-mobile .debate-card-context-text {

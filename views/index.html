@@ -224,7 +224,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260913-sort-search-panel-gap">
+  <link rel="stylesheet" href="/style.min.css?v=20260913-tags-gap-only">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -759,7 +759,6 @@
       align-items: center;
       gap: 4px 5px !important;
       min-height: 26px;
-      margin-top: 6px !important;
       margin-bottom: 6px !important;
     }
     .index-active-filters > * {
@@ -2456,7 +2455,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260913-sort-search-pin-fix" defer></script>
+<script src="/script.min.js?v=20260913-standalone-align-pin-fix" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
