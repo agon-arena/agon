@@ -2,8 +2,9 @@
 -- /api/users/notion-quizzes (liste "Mes QCM") lisait la colonne `questions`
 -- COMPLÈTE (options, explications, variantes, sourceDetail avec sections/
 -- highlights/image...) pour chaque QCM adopté, alors que cette route
--- n'utilise en réalité que 5 champs du premier élément (sourceName,
--- sourceType, sourceDebateId, sourcePlacement.category, sourceThemes) et 3
+-- n'utilise en réalité que quelques champs du premier élément (sourceName,
+-- sourceType, sourceDebateId, sourcePlacement.category, sourceThemes,
+-- sourceDetail.image) et 3
 -- champs par question (id, level, pedagogicalRank). Mesuré sur un
 -- utilisateur réel avec 25 QCM adoptés : 330 Ko transférés pour ~1 Ko
 -- réellement exploité en aval.
@@ -34,6 +35,19 @@ LANGUAGE sql STABLE AS $$
     'sourceDebateId', dq.questions->0->>'sourceDebateId',
     'sourcePlacementCategory', dq.questions->0->'sourcePlacement'->>'category',
     'sourceThemes', dq.questions->0->'sourceThemes',
+    'sourceImage', (
+      SELECT image_candidate
+      FROM (
+        SELECT COALESCE(
+          CASE WHEN NULLIF(q->'sourceDetail'->'image'->>'url', '') IS NOT NULL THEN q->'sourceDetail'->'image' END,
+          CASE WHEN NULLIF(q->'image'->>'url', '') IS NOT NULL THEN q->'image' END,
+          CASE WHEN NULLIF(q->>'image_url', '') IS NOT NULL THEN jsonb_build_object('url', q->>'image_url') END
+        ) AS image_candidate
+        FROM jsonb_array_elements(dq.questions) AS q
+      ) AS image_candidates
+      WHERE image_candidate->>'url' IS NOT NULL
+      LIMIT 1
+    ),
     'questions', (
       SELECT jsonb_agg(jsonb_build_object(
         'id', q->>'id',

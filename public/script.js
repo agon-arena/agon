@@ -20273,7 +20273,7 @@ function alignStandaloneBubbleFrameToActiveFilter() {
     if (!cloud || !activeTag) return;
     if (!cloud.getClientRects().length || !activeTag.getClientRects().length) return;
 
-    // Le tag peut être actuellement épinglé (#index-sort-search-wrap en
+    // Le tag peut être actuellement épinglé (#index-active-filters en
     // position:fixed, cf. indexSortSearchSetPinned) : sa position à l'écran ne
     // reflète alors plus du tout sa position naturelle dans la page, faussant
     // complètement le calcul ci-dessous (constaté le 13/09/2026, "le
@@ -20283,8 +20283,8 @@ function alignStandaloneBubbleFrameToActiveFilter() {
     // principe que indexSortSearchRecalcTrigger), puis on restaure l'état
     // réel juste après — jamais de scroll ni de re-render déclenché entre
     // les deux, donc jamais de saut visible pour l'utilisateur.
-    const wrap = document.getElementById('index-sort-search-wrap');
-    const wasPinned = !!(wrap && wrap.classList.contains('index-sort-search-pinned'));
+    const tagsContainer = document.getElementById('index-active-filters');
+    const wasPinned = !!(tagsContainer && tagsContainer.classList.contains('index-sort-search-pinned'));
     if (wasPinned) indexSortSearchSetPinned(false);
 
     const frameTop = parseFloat(getComputedStyle(cloud).getPropertyValue('--bubble-frame-top')) || 55;
@@ -20361,10 +20361,11 @@ function renderIndexActiveFilterTags() {
   container.classList.toggle("index-active-filters-empty", !hasActiveTags);
   container.style.display = "flex";
   alignStandaloneBubbleFrameToActiveFilter();
-  // Le nombre de tags change la hauteur de #index-sort-search-wrap : si le
-  // bloc est actuellement épinglé, son spacer doit suivre (cf.
-  // initIndexSortSearchPinning).
-  if (typeof indexSortSearchRefreshSpacer === "function") indexSortSearchRefreshSpacer();
+  // Un filtre vient peut-être d'apparaître/disparaître : engage ou retire
+  // l'épinglage des tags en conséquence (cf. initIndexSortSearchPinning,
+  // "je veux juste que ... les filtres actifs restent accrochés SI UN
+  // FILTRE EST ACTIF").
+  if (typeof indexSortSearchUpdate === "function") indexSortSearchUpdate();
 }
 
 function clearActiveBubbles() {
@@ -21525,10 +21526,25 @@ function setIndexExplorerControlsOpen(forceOpen) {
   controls.style.display = shouldOpen ? "grid" : "none";
 
   syncIndexExplorerControlButtons(shouldOpen);
-  // Le panneau ouvert/fermé change la hauteur de #index-sort-search-wrap :
-  // si le bloc est actuellement épinglé (cf. indexSortSearchSetPinned), son
-  // spacer doit suivre, sinon le contenu en dessous saute au dépinglage.
-  if (typeof indexSortSearchRefreshSpacer === "function") indexSortSearchRefreshSpacer();
+  // Le panneau (#index-explorer-controls) n'est jamais épinglé (demande du
+  // 13/09/2026, "le menu ... doit être fixe, pas flottant : il s'ouvre vers
+  // le bas") : indépendant du bouton/des tags depuis ce chantier, l'ouvrir/
+  // le fermer n'affecte donc plus leur épinglage éventuel.
+  //
+  // En standalone mobile en revanche, ouvrir le panneau change bien la
+  // hauteur réelle du bloc bouton+panneau, alors que
+  // --mnoria-home-first-row-mt (cf. syncMnoriaHomeTrendsCaptionAnchor) est
+  // calculée uniquement à partir de la hauteur du BOUTON seul (jamais du
+  // panneau, qui n'existait pas quand ce calage a été écrit) — sans ce
+  // recalcul, la première carte sous le bouton reste figée à sa position
+  // "panneau fermé" et se retrouve superposée par le panneau une fois ouvert
+  // (constaté le 13/09/2026, priorité). scheduleHomeBottomNavViewportOffsetUpdate
+  // est le déclencheur debounced déjà utilisé pour resize/changements de
+  // mode — jamais un recalcul direct ici, pour rester cohérent avec son
+  // garde-fou anti double-passe rapprochée.
+  if (typeof scheduleHomeBottomNavViewportOffsetUpdate === "function") {
+    scheduleHomeBottomNavViewportOffsetUpdate();
+  }
 }
 
 function toggleIndexSortControls(event) {
@@ -21574,56 +21590,95 @@ function initIndexExplorerControls() {
   initIndexSortSearchPinning();
 }
 
-// Épinglage manuel du bouton Trier/Rechercher + tags actifs au scroll
-// (demande du 13/09/2026, "le bouton trier/rechercher ainsi que les tags
-// doivent rester accrochés en haut" — puis confirmé en usage réel : le
-// position:sticky natif ne tient pas, même bug d'overflow que
-// #tribunes-sort-search-wrap sur /autres-sources, cf. son propre
-// commentaire de tête). position:fixed appliquée seulement une fois le
-// point d'ancrage (position de repos) dépassé, jamais avant — la position
-// de repos déjà validée ne bouge donc pas tant qu'on n'a pas scrollé
-// jusque-là. Contrairement à Tribunes : bouton/panneau/tags vivent TOUJOURS
-// ensemble dans #index-sort-search-wrap (jamais de reparentage au
-// pin/dépin ici) — un simple spacer compense la hauteur retirée du flux
-// pendant l'épinglage.
+// Épinglage manuel du bouton Trier/Rechercher + tags de filtres actifs au
+// scroll (demande du 13/09/2026, précisée ensuite : "je veux juste que le
+// bouton trier rechercher ainsi que les filtres actifs restent accrochés SI
+// UN FILTRE EST ACTIF" — jamais le panneau de filtres lui-même, qui doit
+// rester un menu normal ouvert dans le flux de la page, jamais flottant/
+// fixe). position:sticky natif confirmé cassé en usage réel (même souci
+// d'overflow que #tribunes-sort-search-wrap sur /autres-sources) — remplacé
+// par un polyfill JS. Le bouton et les tags sont épinglés INDÉPENDAMMENT
+// (le panneau, #index-explorer-controls, entre les deux dans le DOM, n'est
+// jamais concerné) : chacun son spacer pour compenser la hauteur retirée du
+// flux, jamais de reparentage.
 let indexSortSearchTriggerY = null;
 
+function indexActiveFiltersHasTags() {
+  const tags = document.getElementById("index-active-filters");
+  return !!(tags && !tags.classList.contains("index-active-filters-empty") && tags.children.length);
+}
+
+// pinned=true n'épingle les TAGS que si un filtre est réellement actif à cet
+// instant (réévalué à chaque appel, jamais mémorisé) — le bouton, lui,
+// s'épingle dès que le point d'ancrage est dépassé ET qu'un filtre est actif
+// (cf. indexSortSearchUpdate, qui force pinned=false tant qu'aucun tag
+// n'existe : sans filtre actif, le bouton scrolle normalement, comme avant
+// ce chantier).
 function indexSortSearchSetPinned(pinned) {
-  const wrap = document.getElementById("index-sort-search-wrap");
-  if (!wrap) return;
-  const isPinned = wrap.classList.contains("index-sort-search-pinned");
-  if (pinned === isPinned) return;
-  let spacer = document.getElementById("index-sort-search-spacer");
-  if (pinned) {
-    const height = Math.ceil(wrap.getBoundingClientRect().height);
-    if (!spacer) {
-      spacer = document.createElement("div");
-      spacer.id = "index-sort-search-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      wrap.insertAdjacentElement("afterend", spacer);
+  const topbar = document.querySelector(".index-explorer-topbar");
+  if (!topbar) return;
+  const tags = document.getElementById("index-active-filters");
+  const shouldPinTags = pinned && indexActiveFiltersHasTags();
+
+  const topbarWasPinned = topbar.classList.contains("index-sort-search-pinned");
+  if (pinned !== topbarWasPinned) {
+    if (pinned) {
+      const height = Math.ceil(topbar.getBoundingClientRect().height);
+      let spacer = document.getElementById("index-sort-search-spacer");
+      if (!spacer) {
+        spacer = document.createElement("div");
+        spacer.id = "index-sort-search-spacer";
+        spacer.setAttribute("aria-hidden", "true");
+        topbar.insertAdjacentElement("afterend", spacer);
+      }
+      spacer.style.height = height + "px";
+      topbar.classList.add("index-sort-search-pinned");
+    } else {
+      topbar.classList.remove("index-sort-search-pinned");
+      const spacer = document.getElementById("index-sort-search-spacer");
+      if (spacer) spacer.remove();
     }
-    spacer.style.height = height + "px";
-    wrap.classList.add("index-sort-search-pinned");
-  } else {
-    wrap.classList.remove("index-sort-search-pinned");
-    if (spacer) spacer.remove();
+  }
+
+  if (!tags) return;
+  const tagsWasPinned = tags.classList.contains("index-sort-search-pinned");
+  if (shouldPinTags !== tagsWasPinned) {
+    if (shouldPinTags) {
+      const tagsHeight = Math.ceil(tags.getBoundingClientRect().height);
+      let tagsSpacer = document.getElementById("index-active-filters-spacer");
+      if (!tagsSpacer) {
+        tagsSpacer = document.createElement("div");
+        tagsSpacer.id = "index-active-filters-spacer";
+        tagsSpacer.setAttribute("aria-hidden", "true");
+        tags.insertAdjacentElement("afterend", tagsSpacer);
+      }
+      tagsSpacer.style.height = tagsHeight + "px";
+      tags.classList.add("index-sort-search-pinned");
+    } else {
+      tags.classList.remove("index-sort-search-pinned");
+      tags.style.top = "";
+      const tagsSpacer = document.getElementById("index-active-filters-spacer");
+      if (tagsSpacer) tagsSpacer.remove();
+    }
+  }
+  if (shouldPinTags) {
+    // Resynchronise systématiquement top/hauteur, même si déjà épinglés : le
+    // nombre de tags (donc leur propre hauteur) peut changer pendant que
+    // c'est épinglé, cf. son appel depuis renderIndexActiveFilterTags.
+    tags.style.top = topbar.getBoundingClientRect().bottom + "px";
+    const tagsSpacer = document.getElementById("index-active-filters-spacer");
+    if (tagsSpacer) tagsSpacer.style.height = Math.ceil(tags.getBoundingClientRect().height) + "px";
   }
 }
 
-// Rappelée après tout changement de hauteur du bloc épinglé (ouverture/
-// fermeture du panneau, cf. setIndexExplorerControlsOpen ; changement des
-// tags actifs, cf. renderIndexActiveFilterTags) : le spacer doit continuer à
-// réserver exactement la bonne place, sinon le contenu sous le bloc saute
-// d'autant au dépinglage.
-function indexSortSearchRefreshSpacer() {
-  const wrap = document.getElementById("index-sort-search-wrap");
-  const spacer = document.getElementById("index-sort-search-spacer");
-  if (!wrap || !spacer || !wrap.classList.contains("index-sort-search-pinned")) return;
-  spacer.style.height = Math.ceil(wrap.getBoundingClientRect().height) + "px";
-}
-
+// Rappelée à chaque scroll ET à chaque rendu des tags (cf.
+// renderIndexActiveFilterTags) : force le dépinglage tant qu'aucun filtre
+// n'est actif, sinon applique l'état attendu selon le scroll courant —
+// couvre aussi bien "un filtre vient d'apparaître alors qu'on est déjà
+// scrollé" que "le dernier filtre vient d'être retiré alors qu'on est
+// épinglé".
 function indexSortSearchUpdate() {
-  if (indexSortSearchTriggerY === null) {
+  if (indexSortSearchTriggerY === null || !indexActiveFiltersHasTags()) {
     indexSortSearchSetPinned(false);
     return;
   }
@@ -21631,25 +21686,26 @@ function indexSortSearchUpdate() {
 }
 
 // Recalcule le point de déclenchement (position naturelle, non épinglée, du
-// bloc par rapport à la page) — à refaire à chaque fois que la mise en page
-// peut changer (resize, orientation, chargement initial). Même technique que
+// BOUTON par rapport à la page — jamais les tags, qui peuvent être absents à
+// cet instant) : à refaire à chaque fois que la mise en page peut changer
+// (resize, orientation, chargement initial). Même technique que
 // tribunesSortSearchRecalcTrigger : mesure le "top" réellement appliqué une
 // fois épinglé depuis le rendu plutôt que dupliqué en JS, pour rester juste
 // même si la valeur CSS (env(safe-area-inset-top)...) change plus tard.
 function indexSortSearchRecalcTrigger() {
-  const wrap = document.getElementById("index-sort-search-wrap");
-  if (!wrap) return;
+  const topbar = document.querySelector(".index-explorer-topbar");
+  if (!topbar) return;
   indexSortSearchSetPinned(false);
-  const naturalTop = window.scrollY + wrap.getBoundingClientRect().top;
-  indexSortSearchSetPinned(true);
-  const pinnedTop = wrap.getBoundingClientRect().top;
-  indexSortSearchSetPinned(false);
+  const naturalTop = window.scrollY + topbar.getBoundingClientRect().top;
+  topbar.classList.add("index-sort-search-pinned");
+  const pinnedTop = topbar.getBoundingClientRect().top;
+  topbar.classList.remove("index-sort-search-pinned");
   indexSortSearchTriggerY = Math.max(0, naturalTop - pinnedTop);
   indexSortSearchUpdate();
 }
 
 function initIndexSortSearchPinning() {
-  if (!document.getElementById("index-sort-search-wrap")) return;
+  if (!document.querySelector(".index-explorer-topbar")) return;
   indexSortSearchRecalcTrigger();
   let ticking = false;
   window.addEventListener("scroll", () => {
@@ -36944,6 +37000,18 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
   const sortBar = document.querySelector('.index-explorer-topbar');
   const firstRowForSort = document.querySelector('#debates-list .theme-row-section');
   if (isSortBarSymmetricMode && sortBar && firstRowForSort) {
+    // Épinglé au scroll (cf. indexSortSearchSetPinned, chantier du
+    // 13/09/2026) : sortBar est alors position:fixed, sa position viewport ne
+    // reflète plus du tout sa position naturelle dans le document — mesurer
+    // tel quel (delta sur sortRect.top + scrollY, qui suppose un flux normal)
+    // produisait une marge fausse, y compris pour un seul recalcul ponctuel
+    // (ex. ouverture du panneau pendant qu'on est épinglé, pas seulement en
+    // continu au scroll). On dépingle temporairement le temps de cette
+    // mesure synchrone (même principe que alignStandaloneBubbleFrameToActiveFilter),
+    // puis on restaure l'état réel juste après.
+    const sortBarWasPinned = sortBar.classList.contains('index-sort-search-pinned');
+    if (sortBarWasPinned) indexSortSearchSetPinned(false);
+
     const MNORIA_SORT_BTN_GAP = 36;
     const MNORIA_SORT_BTN_BOTTOM_GAP = 21;
     // En Actualités, "Ce jour dans l'Histoire / Éclairages" (.home-secondary-actions)
@@ -36964,15 +37032,30 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
     if (Number.isFinite(nextSortMarginTop)) {
       root.style.setProperty('--mnoria-home-sort-btn-mt', `${nextSortMarginTop}px`);
     }
+    // Panneau de filtres ouvert (#index-explorer-controls, display:grid) :
+    // ajoute sa vraie hauteur rendue (+ l'écart réel bouton->panneau, lu en
+    // direct plutôt que dupliqué en dur) à la position de la première carte —
+    // sortRect.height ci-dessus ne mesure QUE le bouton, jamais le panneau
+    // (constaté le 13/09/2026 : rouvrir le panneau ne changeait donc rien au
+    // calcul, la carte restait recouverte quelle que soit la fréquence du
+    // recalcul déclenché).
+    const controlsElForSort = document.getElementById('index-explorer-controls');
+    const controlsOpenForSort = !!(controlsElForSort && controlsElForSort.style.display !== 'none');
+    const controlsExtraHeight = controlsOpenForSort
+      ? Math.max(0, controlsElForSort.getBoundingClientRect().bottom - sortRect.bottom)
+      : 0;
+
     const bandElForSort = firstRowForSort.querySelector('.theme-row-title') || firstRowForSort;
     const bandDocTopForSort = bandElForSort.getBoundingClientRect().top + scrollY;
     const currentBandMarginTop = parseFloat(window.getComputedStyle(firstRowForSort).marginTop) || 0;
-    const sortBottomDocAfterFix = sectionBottomDoc + MNORIA_SORT_BTN_GAP + sortRect.height;
+    const sortBottomDocAfterFix = sectionBottomDoc + MNORIA_SORT_BTN_GAP + sortRect.height + controlsExtraHeight;
     const bandTargetTopFromSort = sortBottomDocAfterFix + MNORIA_SORT_BTN_BOTTOM_GAP;
     const nextBandMarginTop = Math.round(currentBandMarginTop + (bandTargetTopFromSort - bandDocTopForSort));
     if (Number.isFinite(nextBandMarginTop)) {
       root.style.setProperty('--mnoria-home-first-row-mt', `${nextBandMarginTop}px`);
     }
+
+    if (sortBarWasPinned) indexSortSearchSetPinned(true);
   }
 
   // Position document voulue = position viewport du bandeau au repos (+6px

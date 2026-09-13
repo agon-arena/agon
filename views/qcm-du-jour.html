@@ -1834,8 +1834,10 @@
        une vraie rubrique titrée par thématique plutôt qu'un simple tableau
        plat — une connaissance à plusieurs thématiques apparaît sous
        chacune. */
+    /* 20px (13/09/2026, "harmonise l'espace entre les rubriques") : aligné sur
+       #qcm-memorized-today/.qcm-learn-next-inline ci-dessous, plutôt que 22px. */
     .qcm-mesqcm-group + .qcm-mesqcm-group {
-      margin-top: 22px;
+      margin-top: 20px;
     }
     /* Bandeau blanc plein cadre (demande du 30/08/2026) : marges négatives
        égales au padding horizontal de .qcm-panel (24px desktop, cf. override
@@ -1878,6 +1880,44 @@
       z-index: 1;
     }
     details[open] > .qcm-mesqcm-group-title::after {
+      transform: translateY(-50%) rotate(180deg);
+    }
+    /* Sous-rubrique (demande du 13/09/2026, "mémorisées volontairement"/"préconisées à
+       mémoriser" sont des sous-rubriques de "Connaissances mémorisées ce jour" — ne
+       doivent pas partager le même bandeau plein cadre que les vraies rubriques de
+       premier niveau) : pas de bande blanche/dégradés hors-cadre, juste un petit
+       intitulé en majuscules avec son propre chevron, plus discret. */
+    .qcm-mesqcm-subgroup-title {
+      display: block;
+      position: relative;
+      margin: 10px 0 6px;
+      padding: 2px 26px 2px 0;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: #516776;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+    .qcm-mesqcm-subgroup-title::-webkit-details-marker {
+      display: none;
+    }
+    .qcm-mesqcm-subgroup-title::after {
+      content: '\f078';
+      font-family: "Font Awesome 6 Free";
+      font-weight: 900;
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      color: #9ca3af;
+      transition: transform 0.2s ease;
+    }
+    details[open] > .qcm-mesqcm-subgroup-title::after {
       transform: translateY(-50%) rotate(180deg);
     }
     /* Bandes horizontales dégradées au-dessus et en dessous (demande du
@@ -2129,6 +2169,10 @@
     .qcm-mesqcm-table td:nth-child(1) {
       width: 45%;
     }
+    .qcm-mesqcm-table--inline-details th:nth-child(1),
+    .qcm-mesqcm-table--inline-details td:nth-child(1) {
+      width: 100%;
+    }
     /* État (demande du 04/09/2026, "décalée sur la gauche de 8 pixels" —
        après annulation d'un essai d'inversion avec la colonne Apprentissage,
        qui reste en 1re position ; puis "encore décaler sur la gauche" —
@@ -2362,7 +2406,7 @@
     .qcm-mesqcm-name-btn {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 11px;
       padding: 0;
       border: none;
       background: none;
@@ -2375,6 +2419,11 @@
       color: #243038;
       text-decoration: underline;
     }
+    .qcm-mesqcm-name-btn:focus,
+    .qcm-mesqcm-name-btn:focus-visible {
+      outline: none;
+      box-shadow: none;
+    }
     .qcm-mesqcm-name-btn.is-static {
       cursor: default;
     }
@@ -2385,6 +2434,145 @@
     .qcm-mesqcm-name-btn i {
       flex: 0 0 auto;
       color: #516776;
+    }
+    .qcm-mesqcm-name-thumb {
+      position: relative;
+      flex: 0 0 72px;
+      width: 72px;
+      height: 72px;
+      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid rgba(81, 103, 118, 0.22);
+      background: #eef3f6;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.38);
+    }
+    .qcm-mesqcm-name-thumb img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .qcm-mesqcm-name-thumb .qcm-mesqcm-name-thumb-fallback {
+      display: none;
+      position: absolute;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      font-size: 23px;
+      color: #516776;
+    }
+    .qcm-mesqcm-name-thumb.is-empty .qcm-mesqcm-name-thumb-fallback {
+      display: flex;
+    }
+    .qcm-mesqcm-name-label {
+      min-width: 0;
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+    .qcm-mesqcm-row-toggle {
+      width: 100%;
+      justify-content: flex-start;
+    }
+    .qcm-mesqcm-row-toggle-chevron {
+      margin-left: auto;
+      color: #9ca3af;
+      font-size: 12px;
+      transition: transform 0.15s ease;
+    }
+    .qcm-mesqcm-row-toggle[aria-expanded="true"] .qcm-mesqcm-row-toggle-chevron {
+      transform: rotate(90deg);
+    }
+    .qcm-learn-next-inline-item[aria-expanded="true"] .qcm-mesqcm-row-toggle-chevron {
+      transform: rotate(90deg);
+    }
+    .qcm-mesqcm-detail-row[hidden] {
+      display: none;
+    }
+    .qcm-mesqcm-detail-row,
+    .qcm-mesqcm-table .qcm-mesqcm-detail-row > td {
+      background: transparent !important;
+    }
+    .qcm-mesqcm-detail-cell {
+      padding-top: 0 !important;
+      background: transparent !important;
+    }
+    .qcm-mesqcm-inline-detail {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.10);
+    }
+    .qcm-mesqcm-detail-field {
+      min-width: 0;
+    }
+    .qcm-mesqcm-detail-label {
+      display: block;
+      margin: 0 0 5px;
+      color: #6b7280;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .qcm-mesqcm-detail-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      margin-top: 6px;
+    }
+    .qcm-mesqcm-detail-action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: min(100%, 220px);
+      min-height: 42px;
+      padding: 10px 22px;
+      border: 2px solid rgba(122, 72, 10, 0.42);
+      border-radius: 999px;
+      background: linear-gradient(135deg, #fff2a8 0%, #ffd447 42%, #f09a20 100%);
+      color: #1A1F24;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      text-transform: uppercase;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        inset 0 0 0 1px rgba(122, 72, 10, 0.22),
+        0 4px 0 rgba(122, 72, 10, 0.22),
+        0 0 15px rgba(255, 196, 55, 0.45);
+      cursor: pointer;
+    }
+    .qcm-mesqcm-detail-action-btn.is-secondary {
+      border-color: #cbd5df;
+      background: #ffffff;
+      color: #374151;
+      box-shadow: none;
+      font-size: 13px;
+    }
+    .qcm-mesqcm-detail-action-btn:not(.is-secondary):hover,
+    .qcm-mesqcm-detail-action-btn:not(.is-secondary):focus-visible {
+      background: linear-gradient(135deg, #fff7c7 0%, #ffe064 42%, #f6a934 100%);
+      border-color: rgba(122, 72, 10, 0.52);
+      transform: translateY(-1px);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        inset 0 0 0 1px rgba(122, 72, 10, 0.18),
+        0 5px 0 rgba(122, 72, 10, 0.22),
+        0 0 19px rgba(255, 202, 65, 0.56);
+    }
+    .qcm-mesqcm-detail-action-btn.is-secondary:hover,
+    .qcm-mesqcm-detail-action-btn.is-secondary:focus-visible {
+      background: #f8fafc;
+      border-color: #9ca3af;
+      transform: translateY(-1px);
     }
     /* Nombre de questions du QCM associé à cette connaissance (demande du
        13/08/2026) — texte simple entre parenthèses à côté du nom, jamais
@@ -2661,13 +2849,19 @@
        chevron, jamais un gros bloc — mêmes tokens de couleur/police que le
        reste de la page (.qcm-fiche-link-item, .qcm-knowledge-add-option),
        pas un style isolé. */
+    /* 20px, harmonisé avec #qcm-memorized-today (13/09/2026, "quand toutes les rubriques
+       sont fermées, harmonise l'espace entre les rubriques") : 30px auparavant, visible
+       seulement replié depuis l'ajout du repli (les 30px "aération autour du contenu
+       ouvert" ci-dessous restent, eux, scopés au seul état ouvert). */
     .qcm-learn-next-inline {
-      margin: 0 0 30px;
+      margin: 0 0 20px;
     }
     /* Même espace qu'en bas de la section (demande du 30/08/2026) : le titre
        partagé .qcm-mesqcm-group-title garde 8px partout ailleurs, override
-       scopé à ce seul conteneur plutôt que touché globalement. */
-    .qcm-learn-next-inline .qcm-mesqcm-group-title {
+       scopé à ce seul conteneur — et, depuis le 13/09/2026, au seul état
+       OUVERT (replié, ce surplus n'a plus lieu d'être : cf. commentaire
+       ci-dessus, "harmonise l'espace"). */
+    .qcm-learn-next-inline details[open] > .qcm-mesqcm-group-title {
       margin-bottom: 30px;
     }
     /* Juste le nom des sujets (demande du 30/08/2026) : flex-wrap +
@@ -4116,11 +4310,11 @@
              Chaque sous-groupe masqué individuellement si sa liste est vide, cf.
              renderMemorizedToday. -->
         <details open id="qcm-memorized-today-voluntary" hidden>
-          <summary class="qcm-mesqcm-group-title">Mémorisées volontairement</summary>
+          <summary class="qcm-mesqcm-subgroup-title">Mémorisées volontairement</summary>
           <ul class="qcm-fiche-memorization-list" id="qcm-memorized-today-voluntary-list"></ul>
         </details>
         <details open id="qcm-memorized-today-suggested" hidden>
-          <summary class="qcm-mesqcm-group-title">Préconisées à mémoriser</summary>
+          <summary class="qcm-mesqcm-subgroup-title">Préconisées à mémoriser</summary>
           <ul class="qcm-fiche-memorization-list" id="qcm-memorized-today-suggested-list"></ul>
         </details>
       </details>
@@ -4478,6 +4672,8 @@
   // qui ne passe jamais par loadMesQcm) invalide ce cache explicitement lui aussi.
   var mesQcmListCache = null; // { key: voterKey, data: {quizzes:[...]}, fetchedAt: timestamp }
   var MES_QCM_LIST_CACHE_TTL_MS = 45 * 1000;
+  var mesQcmThumbImageCache = {}; // getMesQcmRowKey(q) -> image|null
+  var mesQcmThumbImagePending = {}; // getMesQcmRowKey(q) -> Promise
   function invalidateMesQcmListCache() {
     mesQcmListCache = null;
   }
@@ -5121,8 +5317,33 @@
       keepalive: true
     })
       .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-      .then(function (result) { onDone(!!(result.ok && result.data && result.data.ok)); })
+      .then(function (result) {
+        var ok = !!(result.ok && result.data && result.data.ok);
+        // Charge de mémorisation mise à jour immédiatement (demande du 13/09/2026, "si je
+        // coche ou décoche une connaissance à mémoriser, la charge doit se mettre à jour
+        // immédiatement") : (dés)activer une connaissance change ce qui sera dû dans les
+        // prochains jours (cf. fetchLearningLoadGaugeForUser, server.js, qui exclut déjà les
+        // connaissances désactivées), donc le pic simulé par la jauge. Point d'entrée unique
+        // (setKnowledgeMemorization est le seul chemin d'écriture, cf. wireExcludeButton/
+        // wireMemorizedTodayToggles/wireKnowledgeMemorizationToggles) — un seul appel suffit
+        // à couvrir les trois interfaces qui peuvent déclencher ce changement.
+        if (ok) refreshLoadGaugeNow();
+        onDone(ok);
+      })
       .catch(function () { onDone(false); });
+  }
+
+  // cf. commentaire dans setKnowledgeMemorization ci-dessus. Ignoré hors de l'écran Découvrir
+  // (jauge non pertinente ailleurs, jamais affichée à tort) ; même filet anti-réponse-tardive
+  // (loadGaugeToken) que le chargement initial dans loadMesQcm.
+  function refreshLoadGaugeNow() {
+    if (currentCategory !== 'mesqcm' || currentSlot) return;
+    var myGaugeToken = ++loadGaugeToken;
+    fetchLoadGaugeData().then(function (gauge) {
+      if (myGaugeToken !== loadGaugeToken) return;
+      if (gauge) renderLoadGauge(gauge);
+      else hideLoadGauge();
+    });
   }
 
   // "Mémoriser"/"Non mémorisée" (cf. renderExcludeButtonHtml) : RÈGLE
@@ -6416,19 +6637,27 @@
   function renderCreatingNotionQuizzesHtml() {
     var pending = getVisiblePendingNotionQuizGenerations();
     if (!pending.length) return '';
+    function pendingCreationLevelHtml(item) {
+      var match = String(item && item.slot || '').match(/:(elementaire|avance|expert)$/);
+      var levelLabel = match ? formatMesQcmLevelLabel(match[1]) : '';
+      return '<span class="qcm-mesqcm-level">' +
+        (levelLabel ? '<span class="qcm-mesqcm-level-name">' + escapeHtml(levelLabel) + '</span>' : '<span class="qcm-mesqcm-level-count">Niveau en préparation</span>') +
+        '</span>';
+    }
     return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating"><details open>' +
       '<summary class="qcm-mesqcm-group-title">En cours de création</summary>' +
       '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
-      // Colonne "Niveau" supprimée dans cette rubrique uniquement (demande du 09/09/2026) —
-      // "État" (badge "En cours de création") gardée. Ne reste que 2 colonnes ici (contre 3
-      // pour "Mes apprentissages en cours" juste en dessous) : largeur de la colonne "État"
-      // réajustée ci-dessous (.qcm-mesqcm-group--creating) pour occuper l'espace laissé libre
-      // plutôt que de garder les 30% pensés pour 3 colonnes.
-      '<table class="qcm-mesqcm-table"><thead><tr><th>Apprentissage</th><th>État</th></tr></thead><tbody>' +
-      pending.map(function (item) {
-        return '<tr><td><span class="qcm-mesqcm-name-btn is-static">' +
-          '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span></span></td>' +
-          '<td><span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span></td></tr>';
+      '<table class="qcm-mesqcm-table qcm-mesqcm-table--inline-details"><thead><tr><th>Apprentissage</th></tr></thead><tbody>' +
+      pending.map(function (item, index) {
+        var detailId = 'qcm-creating-detail-' + index;
+        var stateHtml = '<span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span>';
+        return '<tr><td><button type="button" class="qcm-mesqcm-name-btn qcm-mesqcm-row-toggle" data-creating-toggle="' + index + '" aria-expanded="false" aria-controls="' + detailId + '">' +
+          '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>' + escapeHtml(item.label) + '</span><i class="fa-solid fa-chevron-right qcm-mesqcm-row-toggle-chevron" aria-hidden="true"></i></button></td></tr>' +
+          '<tr class="qcm-mesqcm-detail-row" id="' + detailId + '" hidden><td class="qcm-mesqcm-detail-cell">' +
+          '<div class="qcm-mesqcm-inline-detail">' +
+            '<div class="qcm-mesqcm-detail-field"><span class="qcm-mesqcm-detail-label">État</span>' + stateHtml + '</div>' +
+            '<div class="qcm-mesqcm-detail-field"><span class="qcm-mesqcm-detail-label">Niveau</span>' + pendingCreationLevelHtml(item) + '</div>' +
+          '</div></td></tr>';
       }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></details></section>';
   }
 
@@ -6442,7 +6671,10 @@
   }
 
   function mesQcmListSignature(quizzes) {
-    return (quizzes || []).map(function (quiz) { return quiz.slot + '|' + quiz.quizDate; }).sort().join('||');
+    return (quizzes || []).map(function (quiz) {
+      var imageUrl = quiz && quiz.image && quiz.image.url ? quiz.image.url : '';
+      return quiz.slot + '|' + quiz.quizDate + '|' + imageUrl;
+    }).sort().join('||');
   }
 
   function mesQcmTrackingSlotIdentity(slot) {
@@ -8219,43 +8451,85 @@
       '</button>';
   }
 
-  function renderMesQcmTableHtml(list, allQuizzes) {
+  function renderMesQcmStateHtml(q, questionCount) {
+    return q.realized
+      ? '<span class="qcm-mesqcm-state is-realized">Réalisé<br>(' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
+      : (q.completedLevel
+        ? '<span class="qcm-mesqcm-state is-realized">Acquis<br>' + escapeHtml(formatMesQcmLevelLabel(q.completedLevel) || q.completedLevel) + '</span>'
+        : (q.inProgress
+          ? '<span class="qcm-mesqcm-state is-inprogress">En cours<br>' + (Number(q.answeredCount) || 0) + '/' + questionCount + '</span>'
+          : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>'));
+  }
+
+  function renderMesQcmLevelHtml(q, questionCount) {
+    var displayLevel = q.completedLevel || q.level;
+    var levelLabel = formatMesQcmLevelLabel(displayLevel);
+    return '<span class="qcm-mesqcm-level">' +
+      (q.completedLevel ? '<span class="qcm-mesqcm-level-caption">Niveau atteint</span>' : '') +
+      (levelLabel ? '<span class="qcm-mesqcm-level-name">' + escapeHtml(levelLabel) + '</span>' : '') +
+      (!q.completedLevel && questionCount ? '<span class="qcm-mesqcm-level-count">' + questionCount + (questionCount > 1 ? ' questions' : ' question') + '</span>' : '') +
+      '</span>';
+  }
+
+  function renderMesQcmNameVisualHtml(q, meta, index) {
+    var img = q && q.image && q.image.url ? q.image : null;
+    var iconClass = (meta && meta.icon) || 'fa-book-open';
+    var altText = q.label || (meta && meta.label) || '';
+    return '<span class="qcm-mesqcm-name-thumb' + (img ? '' : ' is-empty') + '" data-mesqcm-thumb-index="' + index + '">' +
+      (img ? '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(altText) + '" loading="lazy" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
+      '<i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-thumb-fallback" aria-hidden="true"></i>' +
+      '</span>';
+  }
+
+  function renderMesQcmInlineDetailRowHtml(q, index, questionCount, rowIndex) {
+    var detailId = 'qcm-mesqcm-detail-' + index + '-' + rowIndex;
+    var actionLabel = q.inProgress ? 'Continuer' : 'Commencer';
+    return {
+      detailId: detailId,
+      html: '<tr class="qcm-mesqcm-detail-row" id="' + detailId + '" hidden><td class="qcm-mesqcm-detail-cell">' +
+        '<div class="qcm-mesqcm-inline-detail">' +
+          '<div class="qcm-mesqcm-detail-actions">' +
+            '<button type="button" class="qcm-mesqcm-detail-action-btn is-secondary" data-mesqcm-fiche-index="' + index + '"><i class="fa-solid fa-file-lines"></i> Consulter les connaissances</button>' +
+            '<button type="button" class="qcm-mesqcm-detail-action-btn" data-mesqcm-start-index="' + index + '"><i class="fa-solid fa-play"></i> ' + actionLabel + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</td></tr>'
+    };
+  }
+
+  function renderMesQcmTableHtml(list, allQuizzes, options) {
+    var inlineDetails = !!(options && options.inlineDetails);
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
-    html += '<table class="qcm-mesqcm-table">';
-    html += '<thead><tr><th>Apprentissage</th><th>État</th><th>Niveau</th></tr></thead><tbody>';
-    list.forEach(function (q) {
+    html += '<table class="qcm-mesqcm-table' + (inlineDetails ? ' qcm-mesqcm-table--inline-details' : '') + '">';
+    html += inlineDetails
+      ? '<thead><tr><th>Apprentissage</th></tr></thead><tbody>'
+      : '<thead><tr><th>Apprentissage</th><th>État</th><th>Niveau</th></tr></thead><tbody>';
+    list.forEach(function (q, rowIndex) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
       var questionCount = Number(q.questionCount) || 0;
-      var displayLevel = q.completedLevel || q.level;
-      var levelLabel = formatMesQcmLevelLabel(displayLevel);
-      var levelHtml = '<span class="qcm-mesqcm-level">' +
-        (q.completedLevel ? '<span class="qcm-mesqcm-level-caption">Niveau atteint</span>' : '') +
-        (levelLabel ? '<span class="qcm-mesqcm-level-name">' + escapeHtml(levelLabel) + '</span>' : '') +
-        (!q.completedLevel && questionCount ? '<span class="qcm-mesqcm-level-count">' + questionCount + (questionCount > 1 ? ' questions' : ' question') + '</span>' : '') +
-        '</span>';
-      var continueHtml = renderMesQcmContinuationHtml(q, index);
       // "Réalisé (X/Y)" (demande du 30/08/2026) : X = trueAnsweredCount,
       // les questions VRAIMENT répondues (jamais les passées, cf. serveur
       // GET /api/users/notion-quizzes) — distingue un QCM entièrement
       // répondu d'un QCM réalisé avec des questions passées en route, sans
       // pour autant repasser en "En cours" (realized reste vrai dès que
       // answeredCount, qui lui inclut les questions passées, atteint Y).
-      var stateHtml = q.realized
-        ? '<span class="qcm-mesqcm-state is-realized">Réalisé<br>(' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
-        : (q.completedLevel
-          ? '<span class="qcm-mesqcm-state is-realized">Acquis<br>' + escapeHtml(formatMesQcmLevelLabel(q.completedLevel) || q.completedLevel) + '</span>'
-          : (q.inProgress
-            ? '<span class="qcm-mesqcm-state is-inprogress">En cours<br>' + (Number(q.answeredCount) || 0) + '/' + questionCount + '</span>'
-            : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>'));
+      var stateHtml = renderMesQcmStateHtml(q, questionCount);
+      var levelHtml = renderMesQcmLevelHtml(q, questionCount);
+      var continueHtml = renderMesQcmContinuationHtml(q, index);
+      var detail = inlineDetails ? renderMesQcmInlineDetailRowHtml(q, index, questionCount, rowIndex) : null;
       html += '<tr>';
-      html += '<td><button type="button" class="qcm-mesqcm-name-btn" data-mesqcm-index="' + index + '">';
-      html += '<i class="fa-solid ' + meta.icon + '" aria-hidden="true"></i><span>' + escapeHtml(q.label || meta.label) + '</span>';
+      html += '<td><button type="button" class="qcm-mesqcm-name-btn' + (inlineDetails ? ' qcm-mesqcm-row-toggle' : '') + '" ' + (inlineDetails ? 'data-mesqcm-toggle-index="' + index + '" aria-expanded="false" aria-controls="' + detail.detailId + '"' : 'data-mesqcm-index="' + index + '"') + '>';
+      html += renderMesQcmNameVisualHtml(q, meta, index) + '<span class="qcm-mesqcm-name-label">' + escapeHtml(q.label || meta.label) + '</span>';
+      if (inlineDetails) html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-row-toggle-chevron" aria-hidden="true"></i>';
       html += '</button></td>';
-      html += '<td>' + stateHtml + '</td>';
-      html += '<td>' + levelHtml + continueHtml + '</td>';
+      if (!inlineDetails) {
+        html += '<td>' + stateHtml + '</td>';
+        html += '<td>' + levelHtml + continueHtml + '</td>';
+      }
       html += '</tr>';
+      if (detail) html += detail.html;
     });
     html += '</tbody></table></div>';
     html += '<div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div>';
@@ -8267,13 +8541,13 @@
   // Dix connaissances maximum à la fois dans chaque liste. Les autres
   // restent accessibles par les flèches et le numéro de page placés sous le
   // tableau, sans recharger la page ni perdre l'accordéon ouvert.
-  function renderMesQcmPaginatedTablesHtml(list, allQuizzes, showCheckbox) {
+  function renderMesQcmPaginatedTablesHtml(list, allQuizzes, showCheckbox, options) {
     var pageCount = Math.max(1, Math.ceil(list.length / MES_QCM_PAGE_SIZE));
     var html = '<div class="qcm-mesqcm-paged-list" data-page-count="' + pageCount + '" data-current-page="0">';
     for (var pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
       var pageItems = list.slice(pageIndex * MES_QCM_PAGE_SIZE, (pageIndex + 1) * MES_QCM_PAGE_SIZE);
       html += '<div class="qcm-mesqcm-page" data-page-index="' + pageIndex + '"' + (pageIndex ? ' hidden' : '') + '>';
-      html += renderMesQcmTableHtml(pageItems, allQuizzes);
+      html += renderMesQcmTableHtml(pageItems, allQuizzes, options);
       html += '</div>';
     }
     if (pageCount > 1) {
@@ -8341,6 +8615,7 @@
         if (nextBtn) nextBtn.disabled = pageIndex === pageCount - 1;
         if (pageLabel) pageLabel.textContent = String(pageIndex + 1);
         refreshMesQcmVisibleTableHints(pagedList);
+        hydrateVisibleMesQcmNameThumbs(currentMesQcmQuizzes);
         if (moveToTop) requestAnimationFrame(function () {
           pagedList.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
@@ -8364,7 +8639,10 @@
         var group = toggle.closest('.qcm-mesqcm-theme-group');
         var isOpen = group.classList.toggle('is-open');
         toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        if (isOpen) refreshMesQcmVisibleTableHints(group);
+        if (isOpen) {
+          refreshMesQcmVisibleTableHints(group);
+          hydrateVisibleMesQcmNameThumbs(currentMesQcmQuizzes);
+        }
       });
     });
     body.querySelectorAll('.qcm-mesqcm-theme-collapse').forEach(function (collapseBtn) {
@@ -8378,6 +8656,74 @@
           toggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
           try { toggle.focus({ preventScroll: true }); } catch (_) { toggle.focus(); }
         });
+      });
+    });
+  }
+
+  function initInlineLearningDetails(scope) {
+    (scope || body).querySelectorAll('[data-mesqcm-toggle-index], [data-creating-toggle]').forEach(function (toggle) {
+      toggle.addEventListener('click', function () {
+        var detailId = toggle.getAttribute('aria-controls');
+        var detail = detailId ? document.getElementById(detailId) : null;
+        if (!detail) return;
+        var willOpen = detail.hidden;
+        detail.hidden = !willOpen;
+        toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        refreshMesQcmVisibleTableHints(detail.closest('.qcm-mesqcm-paged-list') || detail.closest('.qcm-mesqcm-group') || body);
+      });
+    });
+  }
+
+  function applyMesQcmThumbImage(thumb, img, q) {
+    if (!thumb || !img || !img.url) return;
+    thumb.querySelectorAll('img').forEach(function (node) { node.remove(); });
+    var image = document.createElement('img');
+    image.loading = 'lazy';
+    image.alt = (q && q.label) || '';
+    image.onerror = function () {
+      image.remove();
+      thumb.classList.add('is-empty');
+    };
+    image.src = img.url;
+    thumb.insertBefore(image, thumb.firstChild);
+    thumb.classList.remove('is-empty');
+  }
+
+  function applyMesQcmThumbImageByIndex(index, img, q) {
+    body.querySelectorAll('[data-mesqcm-thumb-index="' + index + '"]').forEach(function (thumb) {
+      applyMesQcmThumbImage(thumb, img, q);
+    });
+  }
+
+  function hydrateVisibleMesQcmNameThumbs(quizzes) {
+    if (!Array.isArray(quizzes) || !quizzes.length) return;
+    var thumbs = Array.prototype.slice.call(body.querySelectorAll('.qcm-mesqcm-name-thumb.is-empty[data-mesqcm-thumb-index]'))
+      .filter(function (thumb) { return thumb.getClientRects().length > 0; })
+      .slice(0, 12);
+    thumbs.forEach(function (thumb) {
+      var index = Number(thumb.getAttribute('data-mesqcm-thumb-index'));
+      var q = quizzes[index];
+      if (!q || !q.slot || !q.quizDate) return;
+      var key = getMesQcmRowKey(q);
+      if (Object.prototype.hasOwnProperty.call(mesQcmThumbImageCache, key)) {
+        if (mesQcmThumbImageCache[key]) applyMesQcmThumbImageByIndex(index, mesQcmThumbImageCache[key], q);
+        return;
+      }
+      if (!mesQcmThumbImagePending[key]) {
+        mesQcmThumbImagePending[key] = fetchFicheImageForNoesFallback(q)
+          .then(function (img) {
+            mesQcmThumbImageCache[key] = img || null;
+            delete mesQcmThumbImagePending[key];
+            return img || null;
+          })
+          .catch(function () {
+            mesQcmThumbImageCache[key] = null;
+            delete mesQcmThumbImagePending[key];
+            return null;
+          });
+      }
+      mesQcmThumbImagePending[key].then(function (img) {
+        if (img) applyMesQcmThumbImageByIndex(index, img, q);
       });
     });
   }
@@ -8418,12 +8764,30 @@
     initMesQcmPagination();
     initMesQcmTableScrollHints();
     initMesQcmThemeMenus();
+    initInlineLearningDetails();
     initMesQcmBulkSelection(quizzes);
+    hydrateVisibleMesQcmNameThumbs(quizzes);
 
     body.querySelectorAll('[data-mesqcm-index]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-index'))];
         openMesQcmActionMenu(btn, q, quizzes);
+      });
+    });
+    body.querySelectorAll('[data-mesqcm-fiche-index]').forEach(function (btn) {
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-fiche-index'))];
+        if (!q || !q.slot) return;
+        openMesQcmFiche(q);
+      });
+    });
+    body.querySelectorAll('[data-mesqcm-start-index]').forEach(function (btn) {
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var q = quizzes[Number(btn.getAttribute('data-mesqcm-start-index'))];
+        if (!q || !q.slot) return;
+        loadSlot(q.slot, q.quizDate, q.label, q.level);
       });
     });
     body.querySelectorAll('[data-mesqcm-continue-index]').forEach(function (btn) {
@@ -8483,19 +8847,19 @@
     if (todayQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--today"><details open>';
       html += '<summary class="qcm-mesqcm-group-title">Apprentissages du jour</summary>';
-      html += renderMesQcmPaginatedTablesHtml(todayQuizzes, quizzes, false);
+      html += renderMesQcmPaginatedTablesHtml(todayQuizzes, quizzes, false, { inlineDetails: true });
       html += '</details></section>';
     }
     if (notStartedQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending"><details open>';
       html += '<summary class="qcm-mesqcm-group-title">En attente de réalisation</summary>';
-      html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes, false);
+      html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes, false, { inlineDetails: true });
       html += '</details></section>';
     }
     if (inProgressRestQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--inprogress"><details open>';
       html += '<summary class="qcm-mesqcm-group-title">Apprentissages commencés</summary>';
-      html += renderMesQcmPaginatedTablesHtml(inProgressRestQuizzes, quizzes, false);
+      html += renderMesQcmPaginatedTablesHtml(inProgressRestQuizzes, quizzes, false, { inlineDetails: true });
       html += '</details></section>';
     }
     if (!pendingQuizzes.length && !creatingHtml) {

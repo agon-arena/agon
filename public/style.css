@@ -7815,43 +7815,33 @@ body.page-debate .debate-source-carousel-dot {
    le bloc sans toucher au DOM (tout le JS qui référence ces éléments par id
    reste inchangé) ni à l'ordre de tabulation clavier. Les autres enfants de
    la grille gardent leur order:0 implicite, donc restent avant ce bloc dans
-   l'ordre visuel. Porté sur #index-sort-search-wrap (13/09/2026, chantier
-   "épinglage au scroll") plutôt que sur ses 3 enfants directement : ils ne
-   sont plus des enfants directs de la grille depuis leur mise en commun dans
-   ce conteneur (cf. son propre commentaire plus bas).  */
-body.page-home #index-sort-search-wrap,
-body.page-home-mobile #index-sort-search-wrap {
+   l'ordre visuel. */
+body.page-home .index-explorer-topbar,
+body.page-home #index-explorer-controls,
+body.page-home #index-active-filters,
+body.page-home-mobile .index-explorer-topbar,
+body.page-home-mobile #index-explorer-controls,
+body.page-home-mobile #index-active-filters {
   order: 3;
 }
 
-/* .debates-section (grid, gap:16px) espaçait auparavant le bouton/le panneau/
-   les tags en tant que 3 items de grille séparés — regroupés dans un seul
-   item (#index-sort-search-wrap) depuis le chantier "épinglage au scroll"
-   ci-dessus, ce gap ne s'applique donc plus entre eux : reproduit ici avec le
-   même 16px, sinon le panneau ouvert par le bouton (display:grid, cf.
-   setIndexExplorerControlsOpen) se retrouve collé/superposé au bouton
-   (constaté le 13/09/2026). */
-body.page-home #index-sort-search-wrap,
-body.page-home-mobile #index-sort-search-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* Épinglage en haut d'écran au scroll (demande du 13/09/2026, "le bouton
-   trier/rechercher ainsi que les tags doivent rester accrochés en haut") :
-   position:sticky natif confirmé cassé en usage réel (même souci d'overflow
-   que #tribunes-sort-search-wrap sur /autres-sources — body applique
-   overflow-x:clip sans overflow-y équivalent) — remplacé par le même
-   polyfill JS manuel (cf. indexSortSearchSetPinned dans script.js),
-   position:fixed appliquée uniquement via .index-sort-search-pinned, jamais
-   en position de repos (aucune règle ici tant que cette classe n'est pas
-   posée : le conteneur reste un bloc normal de la grille). Ni fond ni
+/* Épinglage en haut d'écran au scroll — UNIQUEMENT le bouton Trier/Rechercher
+   et les tags de filtres actifs (demande du 13/09/2026, "je veux juste que le
+   bouton trier rechercher ainsi que les filtres actifs restent accrochés si
+   un filtre est actif") : jamais le panneau de filtres lui-même
+   (#index-explorer-controls), qui doit rester un menu normal, non flottant,
+   s'ouvrant vers le bas dans le flux habituel de la page — jamais fixe.
+   Chaque élément est épinglé indépendamment via sa propre classe
+   .index-sort-search-pinned (cf. indexSortSearchSetPinned dans script.js,
+   qui ne l'applique QUE si des tags sont réellement affichés ET que le
+   scroll dépasse le point d'ancrage) — polyfill JS plutôt que
+   position:sticky natif (confirmé cassé en usage réel, même souci
+   d'overflow que #tribunes-sort-search-wrap sur /autres-sources). Ni fond ni
    bordure une fois épinglé (même choix que Tribunes) : seuls le bouton et
    les tags, déjà en pilules avec leur propre fond, doivent rester visibles —
    jamais une barre pleine largeur par-dessus les cartes qui défilent dessous. */
-body.page-home #index-sort-search-wrap.index-sort-search-pinned,
-body.page-home-mobile #index-sort-search-wrap.index-sort-search-pinned {
+body.page-home .index-explorer-topbar.index-sort-search-pinned,
+body.page-home-mobile .index-explorer-topbar.index-sort-search-pinned {
   position: fixed;
   top: max(0px, env(safe-area-inset-top, 0px));
   left: 0;
@@ -7859,11 +7849,19 @@ body.page-home-mobile #index-sort-search-wrap.index-sort-search-pinned {
   z-index: 150;
   width: auto;
   margin: 0;
-  pointer-events: none;
 }
-body.page-home #index-sort-search-wrap.index-sort-search-pinned > *,
-body.page-home-mobile #index-sort-search-wrap.index-sort-search-pinned > * {
-  pointer-events: auto;
+
+/* `top` posé dynamiquement en JS (hauteur réelle du bouton épinglé, cf.
+   indexSortSearchSetPinned) : jamais une valeur fixe ici, la hauteur du
+   bouton peut varier légèrement selon le viewport. */
+body.page-home #index-active-filters.index-sort-search-pinned,
+body.page-home-mobile #index-active-filters.index-sort-search-pinned {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 150;
+  width: auto;
+  margin: 0;
 }
 
 /* Équilibre l'espace sous le bouton Trier/Rechercher (vers le bandeau

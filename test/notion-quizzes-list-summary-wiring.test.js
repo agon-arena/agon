@@ -5,10 +5,11 @@
 // /api/users/notion-quizzes lisait `questions` COMPLET (options,
 // explications, variantes, sourceDetail avec sections/highlights/image...)
 // pour chaque QCM adopté, alors que la route n'utilise que 5 champs de la
-// première question + {id, level, pedagogicalRank} par question. Mesuré :
-// 330 Ko -> 17,5 Ko pour un utilisateur réel à 25 QCM adoptés, sortie HTTP
-// finale byte-for-byte identique (vérifié par comparaison directe avant/
-// après sur ce même utilisateur, cf. rapport). server.js ne peut pas être
+// première question + image de la notion + {id, level, pedagogicalRank} par
+// question. Mesuré : 330 Ko -> 17,5 Ko pour un utilisateur réel à 25 QCM
+// adoptés, sortie HTTP finale byte-for-byte identique avant l'ajout du champ
+// image esthétique (vérifié par comparaison directe avant/après sur ce même
+// utilisateur, cf. rapport). server.js ne peut pas être
 // `require()` en test — ce fichier vérifie donc, en lisant server.js comme
 // du TEXTE brut (jamais exécuté), que le câblage attendu est bien en place.
 
@@ -46,6 +47,7 @@ test("la boucle par lien lit le nom/type/sourceDebateId/thème depuis quizMeta (
   assert.match(routeBody, /getPrimaryNotionQuizTheme\(\{ sourcePlacement: \{ category: quizMeta\.sourcePlacementCategory \}, sourceThemes: quizMeta\.sourceThemes \}\)/);
   assert.match(routeBody, /label: quizMeta\.sourceName \|\| null,/);
   assert.match(routeBody, /sourceType: quizMeta\.sourceType \|\| null,/);
+  assert.match(routeBody, /image: quizMeta\.sourceImage \|\| null,/);
   assert.doesNotMatch(routeBody, /questions\[0\]\?\.(sourceName|sourceType|sourceDebateId)/, "plus aucune lecture de questions[0] pour ces champs — ils n'existent plus dans le résumé sous cette forme");
 });
 
@@ -77,7 +79,7 @@ test("fsrsStatesPromise restreint la jointure memory_items aux slots réellement
   assert.ok(routeIndex > 0 && nextRouteIndex > routeIndex);
   const routeBody = SERVER_SOURCE.slice(routeIndex, nextRouteIndex);
   assert.match(routeBody, /const linkSlots = \[\.\.\.new Set\(links\.map\(\(l\) => l\.slot\)\)\];/);
-  assert.match(routeBody, /\.select\("state, stability, last_review_at, memory_items!inner\(slot, quiz_date, question_id\)"\)/);
+  assert.match(routeBody, /\.select\("state, stability, last_review_at, created_at, memory_items!inner\(slot, quiz_date, question_id\)"\)/);
   assert.match(routeBody, /\.eq\("user_id", userRow\.id\)\s*\n\s*\.in\("memory_items\.slot", linkSlots\);/);
   // `!inner` est indispensable : un simple embed (sans lui) laisserait
   // `.in("memory_items.slot", ...)` sans effet réel sur la jointure côté
@@ -100,6 +102,10 @@ test("le fichier de migration documente la mesure réelle (330 Ko -> 17,5 Ko) et
   assert.ok(fs.existsSync(migrationPath), "le fichier de migration doit exister dans data/");
   const migrationSource = fs.readFileSync(migrationPath, "utf8");
   assert.match(migrationSource, /CREATE OR REPLACE FUNCTION daily_quiz_question_summaries\(dq daily_quiz\) RETURNS JSONB/);
+  assert.match(migrationSource, /'sourceImage'/);
+  assert.match(migrationSource, /q->'sourceDetail'->'image'/);
+  assert.match(migrationSource, /q->'image'/);
+  assert.match(migrationSource, /q->>'image_url'/);
   assert.match(migrationSource, /media_extras_list_preview/);
   assert.match(migrationSource, /330/);
 });

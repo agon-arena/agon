@@ -22214,7 +22214,7 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
     // compact (sourceName/sourceType/sourceDebateId/sourcePlacement.category/
     // sourceThemes + {id,level,pedagogicalRank} par question) et NE
     // TRANSFÈRE QUE ÇA sur le fil, jamais `questions` en entier (options,
-    // explications, variantes, sourceDetail avec sections/highlights/image...)
+    // explications, variantes, sourceDetail avec sections/highlights...)
     // — cette route n'a jamais eu besoin de rien d'autre. Mesuré : 330 Ko ->
     // 17,5 Ko pour un utilisateur réel à 25 QCM adoptés. Toute autre route
     // (fiche, getDailyQuizQuestions, génération...) continue de lire
@@ -22476,6 +22476,7 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
         quizDate: link.quiz_date,
         label: quizMeta.sourceName || null,
         sourceType: quizMeta.sourceType || null,
+        image: quizMeta.sourceImage || null,
         // Une connaissance ne doit apparaître que dans sa rubrique la plus
         // pertinente, y compris pour les anciens QCM stockés avec plusieurs
         // sourceThemes.
