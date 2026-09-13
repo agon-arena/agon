@@ -138,9 +138,9 @@ test("resolveWebSearchGrounding : télémétrie légère du corpus final (source
   assert.match(fnBody, /excerpts: summarizeExtractedSourcesForTelemetry\(extracted\)/);
 });
 
-test("WEB_SEARCH_EXCERPT_MAX_CHARS relevé à 4000 (jamais 10000) — budget raisonnable, jamais un budget massif pris naïvement", () => {
+test("WEB_SEARCH_EXCERPT_MAX_CHARS relevé à 8000 (diagnostic sujets gigantesques du 12/09/2026, jamais 16000+) — budget raisonnable, jamais un budget massif pris naïvement", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "lib", "web-search-grounding.js"), "utf8");
-  assert.match(source, /const WEB_SEARCH_EXCERPT_MAX_CHARS = 4000;/);
+  assert.match(source, /const WEB_SEARCH_EXCERPT_MAX_CHARS = 8000;/);
 });
 
 test("buildGroundingText/buildIdentifiedSources utilisent selectRepresentativeExcerpt, jamais un slice naïf des N premiers caractères", () => {

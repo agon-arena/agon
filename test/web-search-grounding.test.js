@@ -20,6 +20,8 @@ const {
   filterCandidateSources,
   buildSourceSelectionPrompt,
   parseSourceSelectionResponse,
+  buildSourceGuessPrompt,
+  parseGuessedSourcesResponse,
   buildGroundingText,
   buildIdentifiedSources,
   formatIdentifiedSourcesBlock,
@@ -99,11 +101,55 @@ test("filterCandidateSources : écarte les domaines exclus (réseaux sociaux/for
   assert.deepEqual(filtered.map((c) => c.domain), ["lemonde.fr"]);
 });
 
-test("filterCandidateSources : un seul résultat conservé par domaine (dédoublonnage)", () => {
-  const raw = [candidate("https://fr.wikipedia.org/wiki/A"), candidate("https://fr.wikipedia.org/wiki/B"), candidate("https://lemonde.fr/article")];
+test("filterCandidateSources : un domaine NON-Wikipédia est plafonné à 2 résultats par défaut (jamais 1, jamais illimité)", () => {
+  const raw = [candidate("https://lemonde.fr/a"), candidate("https://lemonde.fr/b"), candidate("https://lemonde.fr/c"), candidate("https://exemple.com/page")];
+  const filtered = filterCandidateSources(raw);
+  assert.equal(filtered.filter((c) => c.domain === "lemonde.fr").length, 2);
+  assert.equal(filtered.length, 3);
+});
+
+test("filterCandidateSources : maxPerDomain personnalisé (3e paramètre) reste ajustable pour les domaines non-Wikipédia", () => {
+  const raw = Array.from({ length: 4 }, (_, i) => candidate(`https://lemonde.fr/page${i}`));
+  assert.equal(filterCandidateSources(raw, 10, 1).length, 1);
+  assert.equal(filterCandidateSources(raw, 10, 4).length, 4);
+});
+
+// Wikipédia EXEMPTÉE du plafond par domaine (diagnostic qualité éditoriale
+// du 12/09/2026, cas réel "Débuts de l'islam" — même un plafond de 2
+// écartait toujours silencieusement "Expansion de l'islam", 5e page
+// fr.wikipedia.org distincte proposée par l'IA de repli, la plus
+// précisément centrée sur le sujet parmi les 5, avant même que l'IA de
+// sélection ne puisse la voir : aucun plafond de POSITION ne peut garantir
+// que le meilleur candidat survit s'il arrive tard dans une liste sans
+// ordre de pertinence garanti).
+test("filterCandidateSources : Wikipédia n'est jamais plafonnée par domaine, contrairement aux autres — 5 pages distinctes toutes conservées", () => {
+  const raw = [
+    candidate("https://fr.wikipedia.org/wiki/Islam"),
+    candidate("https://fr.wikipedia.org/wiki/Mahomet"),
+    candidate("https://fr.wikipedia.org/wiki/Hegire"),
+    candidate("https://fr.wikipedia.org/wiki/Arabie_preislamique"),
+    candidate("https://fr.wikipedia.org/wiki/Expansion_de_l_islam")
+  ];
+  const filtered = filterCandidateSources(raw, 10);
+  assert.equal(filtered.length, 5);
+  assert.ok(filtered.some((c) => c.url.includes("Expansion_de_l_islam")), "la page la plus précisément centrée sur le sujet, arrivée en dernier, doit survivre");
+});
+
+test("filterCandidateSources : Wikipédia reste borné par le plafond GLOBAL maxCandidates, même sans plafond par domaine", () => {
+  const raw = Array.from({ length: 10 }, (_, i) => candidate(`https://fr.wikipedia.org/wiki/Page${i}`));
+  const filtered = filterCandidateSources(raw, 4);
+  assert.equal(filtered.length, 4);
+});
+
+test("filterCandidateSources : déduplique par URL EXACTE (jamais par domaine seul) — une même page proposée deux fois ne compte qu'une fois", () => {
+  const raw = [
+    candidate("https://fr.wikipedia.org/wiki/A"),
+    candidate("https://fr.wikipedia.org/wiki/A"),
+    candidate("https://fr.wikipedia.org/wiki/B")
+  ];
   const filtered = filterCandidateSources(raw);
   assert.equal(filtered.length, 2);
-  assert.deepEqual(filtered.map((c) => c.domain), ["fr.wikipedia.org", "lemonde.fr"]);
+  assert.deepEqual(filtered.map((c) => c.url), ["https://fr.wikipedia.org/wiki/A", "https://fr.wikipedia.org/wiki/B"]);
 });
 
 test("filterCandidateSources : plafonne au nombre maximal de candidats demandé", () => {
@@ -218,6 +264,19 @@ test("buildSourceSelectionPrompt : la priorité Wikipédia reste intacte malgré
   assert.match(prompt, /choisis-la en premier\/en priorité parmi tes sources retenues/);
 });
 
+// Diagnostic qualité éditoriale du 12/09/2026, cas réel "Débuts de l'islam" —
+// à candidats égaux en pertinence/fiabilité, une source panoramique
+// (ex. "Histoire de l'islam", quatorze siècles) diluait le sujet demandé
+// face à une source dont le périmètre y correspond précisément (ex.
+// "Expansion de l'islam") sans que le prompt n'en dise jamais rien.
+test("buildSourceSelectionPrompt : demande de préférer une source dont le périmètre correspond à la précision du sujet plutôt qu'un article panoramique beaucoup plus large", () => {
+  const candidates = filterCandidateSources([candidate("https://lemonde.fr/article")]);
+  const prompt = buildSourceSelectionPrompt("Sujet", null, candidates);
+  assert.match(prompt, /PÉRIMÈTRE DU SUJET/);
+  assert.match(prompt, /préfère toujours une source dont le PÉRIMÈTRE correspond à la précision du sujet demandé/);
+  assert.match(prompt, /N'écarte cependant jamais une source par ailleurs pertinente et fiable simplement parce qu'elle est plus large que le sujet strict/);
+});
+
 // ---- parseSourceSelectionResponse ----
 
 test("parseSourceSelectionResponse : conserve les index valides dans l'ordre de la réponse", () => {
@@ -245,6 +304,58 @@ test("parseSourceSelectionResponse : plafonne au nombre maximal de sources reten
   const selection = { selected: candidates.map((_, i) => ({ index: i })) };
   const selected = parseSourceSelectionResponse(JSON.stringify(selection), candidates);
   assert.equal(selected.length, WEB_SEARCH_MAX_SELECTED_SOURCES);
+});
+
+// ---- buildSourceGuessPrompt (repli sans Brave) ----
+
+test("buildSourceGuessPrompt : demande explicitement des pages réelles et vérifiables, jamais une invention", () => {
+  const prompt = buildSourceGuessPrompt("Sujet");
+  assert.match(prompt, /pages web RÉELLES et vérifiables/);
+  assert.match(prompt, /jamais une URL inventée ou devinée au hasard/);
+});
+
+// Diagnostic qualité éditoriale du 12/09/2026, cas réel "Débuts de l'islam" —
+// ce chemin est le SEUL actif tant que Brave reste hors quota (constaté en
+// conditions réelles le même jour, HTTP 402) : au moins aussi important à
+// couvrir que buildSourceSelectionPrompt pour la même règle.
+test("buildSourceGuessPrompt : demande de proposer PRIORITAIREMENT la page dont le périmètre correspond le mieux au sujet quand plusieurs pages apparentées existent, jamais seulement la plus large par réflexe", () => {
+  const prompt = buildSourceGuessPrompt("Débuts de l'islam");
+  assert.match(prompt, /propose PRIORITAIREMENT celle dont le périmètre correspond le mieux à la précision du sujet demandé/);
+  assert.match(prompt, /jamais seulement la plus large ou la plus générale par réflexe/);
+  assert.match(prompt, /propose les deux si tu hésites vraiment, plutôt que d'omettre la plus précise/);
+});
+
+test("buildSourceGuessPrompt : plafonne explicitement à WEB_SEARCH_RAW_RESULTS_COUNT pages", () => {
+  const prompt = buildSourceGuessPrompt("Sujet");
+  assert.match(prompt, new RegExp(`Retourne au maximum ${require("../lib/web-search-grounding").WEB_SEARCH_RAW_RESULTS_COUNT} pages`));
+});
+
+// ---- parseGuessedSourcesResponse ----
+
+test("parseGuessedSourcesResponse : parse une liste de sources proposées, dans la même forme que normalizeBraveResults", () => {
+  const raw = JSON.stringify({ sources: [{ url: "https://fr.wikipedia.org/wiki/Sujet", title: "Sujet", description: "Résumé." }] });
+  const parsed = parseGuessedSourcesResponse(raw);
+  assert.equal(parsed.length, 1);
+  assert.deepEqual(Object.keys(parsed[0]).sort(), ["description", "extraSnippets", "pageAge", "title", "url"].sort());
+});
+
+test("parseGuessedSourcesResponse : JSON malformé ou vide -> tableau vide, jamais une exception", () => {
+  assert.deepEqual(parseGuessedSourcesResponse(""), []);
+  assert.deepEqual(parseGuessedSourcesResponse("pas du json"), []);
+  assert.deepEqual(parseGuessedSourcesResponse(JSON.stringify({})), []);
+});
+
+test("parseGuessedSourcesResponse : déduplique par URL et écarte les URL invalides", () => {
+  const raw = JSON.stringify({
+    sources: [
+      { url: "https://exemple.com/a", title: "A" },
+      { url: "https://exemple.com/a", title: "A doublon" },
+      { url: "pas une url", title: "Invalide" },
+      { url: "https://exemple.com/b", title: "B" }
+    ]
+  });
+  const parsed = parseGuessedSourcesResponse(raw);
+  assert.deepEqual(parsed.map((s) => s.url), ["https://exemple.com/a", "https://exemple.com/b"]);
 });
 
 // ---- buildGroundingText ----

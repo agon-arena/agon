@@ -7815,14 +7815,55 @@ body.page-debate .debate-source-carousel-dot {
    le bloc sans toucher au DOM (tout le JS qui référence ces éléments par id
    reste inchangé) ni à l'ordre de tabulation clavier. Les autres enfants de
    la grille gardent leur order:0 implicite, donc restent avant ce bloc dans
-   l'ordre visuel. */
-body.page-home .index-explorer-topbar,
-body.page-home #index-explorer-controls,
-body.page-home #index-active-filters,
-body.page-home-mobile .index-explorer-topbar,
-body.page-home-mobile #index-explorer-controls,
-body.page-home-mobile #index-active-filters {
+   l'ordre visuel. Porté sur #index-sort-search-wrap (13/09/2026, chantier
+   "épinglage au scroll") plutôt que sur ses 3 enfants directement : ils ne
+   sont plus des enfants directs de la grille depuis leur mise en commun dans
+   ce conteneur (cf. son propre commentaire plus bas).  */
+body.page-home #index-sort-search-wrap,
+body.page-home-mobile #index-sort-search-wrap {
   order: 3;
+}
+
+/* .debates-section (grid, gap:16px) espaçait auparavant le bouton/le panneau/
+   les tags en tant que 3 items de grille séparés — regroupés dans un seul
+   item (#index-sort-search-wrap) depuis le chantier "épinglage au scroll"
+   ci-dessus, ce gap ne s'applique donc plus entre eux : reproduit ici avec le
+   même 16px, sinon le panneau ouvert par le bouton (display:grid, cf.
+   setIndexExplorerControlsOpen) se retrouve collé/superposé au bouton
+   (constaté le 13/09/2026). */
+body.page-home #index-sort-search-wrap,
+body.page-home-mobile #index-sort-search-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Épinglage en haut d'écran au scroll (demande du 13/09/2026, "le bouton
+   trier/rechercher ainsi que les tags doivent rester accrochés en haut") :
+   position:sticky natif confirmé cassé en usage réel (même souci d'overflow
+   que #tribunes-sort-search-wrap sur /autres-sources — body applique
+   overflow-x:clip sans overflow-y équivalent) — remplacé par le même
+   polyfill JS manuel (cf. indexSortSearchSetPinned dans script.js),
+   position:fixed appliquée uniquement via .index-sort-search-pinned, jamais
+   en position de repos (aucune règle ici tant que cette classe n'est pas
+   posée : le conteneur reste un bloc normal de la grille). Ni fond ni
+   bordure une fois épinglé (même choix que Tribunes) : seuls le bouton et
+   les tags, déjà en pilules avec leur propre fond, doivent rester visibles —
+   jamais une barre pleine largeur par-dessus les cartes qui défilent dessous. */
+body.page-home #index-sort-search-wrap.index-sort-search-pinned,
+body.page-home-mobile #index-sort-search-wrap.index-sort-search-pinned {
+  position: fixed;
+  top: max(0px, env(safe-area-inset-top, 0px));
+  left: 0;
+  right: 0;
+  z-index: 150;
+  width: auto;
+  margin: 0;
+  pointer-events: none;
+}
+body.page-home #index-sort-search-wrap.index-sort-search-pinned > *,
+body.page-home-mobile #index-sort-search-wrap.index-sort-search-pinned > * {
+  pointer-events: auto;
 }
 
 /* Équilibre l'espace sous le bouton Trier/Rechercher (vers le bandeau
@@ -10190,9 +10231,11 @@ padding:4px 14px 12px 14px;
   gap: 4px;
   min-height: 23px;
   padding: 3px 7px;
-  border: 1px solid #1A1F24;
+  /* Même fond que le bouton Trier/Rechercher (.index-sort-toggle), demande
+     du 13/09/2026 : #111827/#000000, jamais une teinte proche mais distincte. */
+  border: 1px solid #000000;
   border-radius: 999px;
-  background: #1A1F24;
+  background: #111827;
   color: #ffffff;
   font: inherit;
   font-size: 10.5px;
@@ -10201,7 +10244,7 @@ padding:4px 14px 12px 14px;
 }
 
 .index-active-filter-tag-theme {
-  background: #1A1F24;
+  background: #111827;
 }
 
 .index-active-filter-tag-close {
@@ -16846,7 +16889,8 @@ body.page-debate .position-argument-button-b {
 }
 body.page-debate .debate-top-add-button:hover,
 body.page-debate .position-argument-button-a:hover,
-body.page-debate .position-argument-button-b:hover {
+body.page-debate .position-argument-button-b:hover,
+body.page-debate .position-argument-button:hover {
   background: #2e3d47 !important;
   color: #ffffff !important;
 }
@@ -19828,7 +19872,7 @@ html.thematic-scroll body.page-home-mobile #debates-list {
 
 body.page-home #index-active-filters,
 body.page-home .index-active-filters {
-  margin-top: -2px !important;
+  margin-top: 6px !important;
 }
 
 @media (min-width: 769px) {
@@ -19840,7 +19884,7 @@ body.page-home .index-active-filters {
 
 body.page-home-mobile #index-active-filters,
 body.page-home-mobile .index-active-filters {
-  margin-top: -14px !important;
+  margin-top: 8px !important;
 }
 
 body.page-home-mobile .debate-card-context-text {

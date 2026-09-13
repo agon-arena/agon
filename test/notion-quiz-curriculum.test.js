@@ -640,6 +640,13 @@ test("buildCurriculumPrompt : demande une couverture équilibrée des sous-thèm
   assert.match(prompt, /N'impose cependant jamais une structure artificielle/);
 });
 
+test("buildCurriculumPrompt : concept avant attribut — n'accumule jamais plusieurs propriétés/membres d'un même concept nommé sans retenir le concept lui-même (diagnostic qualité éditoriale du 12/09/2026, cas réel Girondins)", () => {
+  const prompt = buildCurriculumPrompt("Révolution française", null, null);
+  assert.match(prompt, /CONCEPT AVANT ATTRIBUT/);
+  assert.match(prompt, /CE concept lui-même doit être retenu comme connaissance à part entière — jamais seulement ses attributs épars/);
+  assert.match(prompt, /Ne t'interdis pas pour autant de retenir un attribut isolé et notable quand aucun concept nommé ne le chapeaute/);
+});
+
 test("buildCurriculumPrompt : impose une prudence historiographique — jamais une convention ou une interprétation présentée comme un fait absolu daté avec certitude", () => {
   const prompt = buildCurriculumPrompt("Empire ottoman", null, null);
   assert.match(prompt, /PRUDENCE FACTUELLE ET HISTORIOGRAPHIQUE/);

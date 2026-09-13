@@ -1071,7 +1071,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260910-hide-frame-until-memory-v1" defer></script>
+<script src="/script.min.js?v=20260912-progressive-ready-notification-fix" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,
@@ -1276,6 +1276,16 @@
         spinner.hidden = true;
         text.textContent = 'Le QCM « ' + notionName + ' » est prêt dans « Apprentissage ».';
       },
+      // partial (12/09/2026, "je ne reçois pas de message... seulement la notification push") :
+      // le premier palier (Élémentaire) vient de répondre, mais le pipeline officiel demande
+      // toujours Expert directement — la fiche complète continue de se générer en arrière-plan,
+      // jamais encore "prête" au sens de ce qui a été demandé. Spinner volontairement laissé
+      // actif : l'annonce cross-page (showNotionQuizReadyAnnouncement, via
+      // checkPendingNotionQuizzesReadiness côté script.js) prendra le relais dès que le niveau
+      // Expert sera réellement atteint, marqueur toujours suivi jusque-là.
+      partial: function () {
+        text.textContent = 'Le niveau Élémentaire de « ' + notionName + ' » est déjà disponible dans « Apprentissage ». La fiche complète continue de se générer, tu seras prévenu(e) dès que ce sera fait.';
+      },
       failed: function () {
         if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
         spinner.hidden = true;
@@ -1353,7 +1363,7 @@
         // son indicateur animé jusqu'à ce que le QCM soit réellement disponible.
         setMemorizeButtonState(btn, true);
         if (pendingSlot && typeof window.mnoriaStartPendingNotionQuizGeneration === 'function') {
-          window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingSlot, label: pendingLabel });
+          window.mnoriaStartPendingNotionQuizGeneration({ slot: pendingSlot, label: pendingLabel, awaitLevel: useOfficialPipeline ? 'expert' : null });
         }
         var explainer = showMemorizeExplainerModal(pendingLabel);
 
@@ -1382,10 +1392,21 @@
         .then(function (result) {
           if (result.invalidJson) return;
           if (result.ok && result.data && result.data.ok) {
-            if (pendingSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
-              window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
+            // Réponse rapide du pipeline officiel = seulement Élémentaire garanti (cf. server.js
+            // .../custom/progressive, "ne jamais attendre Approfondi/Expert avant d'ouvrir le
+            // premier QCM") : la fiche complète Expert demandée continue de se générer en
+            // arrière-plan — le marqueur reste suivi (checkPendingNotionQuizzesReadiness prendra
+            // le relais avec l'annonce cross-page dès qu'Expert sera réellement atteint, cf.
+            // awaitLevel ci-dessus). Le chemin étroit legacy (non useOfficialPipeline) répond, lui,
+            // seulement une fois réellement terminé : comportement immédiat inchangé.
+            if (useOfficialPipeline) {
+              explainer.partial();
+            } else {
+              if (pendingSlot && typeof window.mnoriaFinishPendingNotionQuizGeneration === 'function') {
+                window.mnoriaFinishPendingNotionQuizGeneration(pendingSlot);
+              }
+              explainer.ready();
             }
-            explainer.ready();
             btn.setAttribute('data-quiz-slot', result.data.slot);
             btn.setAttribute('data-quiz-date', result.data.quizDate);
             return;

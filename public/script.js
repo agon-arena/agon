@@ -1065,12 +1065,18 @@ function readPendingNotionQuizGenerations() {
   return fresh;
 }
 
-function startPendingNotionQuizGeneration({ slot, label, quizDate = null } = {}) {
+// awaitLevel (12/09/2026, "je ne reçois pas de message... seulement la notification push") :
+// niveau réellement demandé par CE parcours quand il dépasse Élémentaire (Éclairages
+// "Mémoriser"/arène "Approfondir" lancés directement à un niveau supérieur) — transmis tel quel
+// à checkPendingNotionQuizzesReadiness (cf. plus bas), qui l'envoie à GET .../generation-status
+// pour ne considérer "prêt" que quand ce niveau précis a fini de se générer en arrière-plan,
+// jamais seulement Élémentaire (comportement historique, `null`/absent inchangé).
+function startPendingNotionQuizGeneration({ slot, label, quizDate = null, awaitLevel = null } = {}) {
   const normalizedSlot = String(slot || "").trim();
   const normalizedLabel = String(label || "").trim().slice(0, 160);
   if (!normalizedSlot || !normalizedLabel) return;
   const rows = readPendingNotionQuizGenerations().filter((row) => row.slot !== normalizedSlot);
-  rows.push({ slot: normalizedSlot, label: normalizedLabel, quizDate, startedAt: Date.now() });
+  rows.push({ slot: normalizedSlot, label: normalizedLabel, quizDate, awaitLevel: awaitLevel || null, startedAt: Date.now() });
   lsSet(MNORIA_PENDING_NOTION_QUIZZES_KEY, JSON.stringify(rows));
 }
 
@@ -1225,7 +1231,8 @@ function checkPendingNotionQuizzesReadiness() {
   notionQuizReadinessCheckInFlight = true;
   const slotsParam = pending.map((item) => item.slot).join(",");
   const startedAtParam = pending.map((item) => Number(item.startedAt) || 0).join(",");
-  fetchJSON(`${API}/users/notion-quizzes/generation-status?legacyKey=${encodeURIComponent(voterKeyForReadinessCheck)}&slots=${encodeURIComponent(slotsParam)}&startedAt=${encodeURIComponent(startedAtParam)}`, { cache: "no-store" })
+  const awaitLevelParam = pending.map((item) => item.awaitLevel || "").join(",");
+  fetchJSON(`${API}/users/notion-quizzes/generation-status?legacyKey=${encodeURIComponent(voterKeyForReadinessCheck)}&slots=${encodeURIComponent(slotsParam)}&startedAt=${encodeURIComponent(startedAtParam)}&awaitLevel=${encodeURIComponent(awaitLevelParam)}`, { cache: "no-store" })
     .then((data) => {
       const readySlots = new Set((data.ready || []).map((row) => row.slot));
       const readyBySlot = new Map((data.ready || []).map((row) => [row.slot, row]));
@@ -5899,7 +5906,26 @@ function hideDebateIframeParentLoadingOverlay() {
   // faisait ici : une fois posée pour Apprentissages, le voile restait donc opaque pour
   // toujours, même après la fin réelle du chargement (learningContentReady, "loading" retirée) —
   // "page de chargement sans fin" reproduite en local le 09/09/2026.
-  overlay.classList.remove("debate-iframe-parent-loading-learning-page");
+  //
+  // Cette même classe verrouille AUSSI la mise en page (police du titre sur 2 lignes,
+  // boutons Réessayer/Fermer masqués) — la retirer la révélait donc en pleine mise à jour
+  // de mise en page, AVANT que le fondu ci-dessus n'ait eu le temps de masquer quoi que ce
+  // soit (opacity:1 !important bloquait justement toute transition tant qu'elle était là) :
+  // la boîte grandissait de 32px et le titre remontait de 16px en plein fondu visible
+  // (demande du 10/09/2026, "le message chargement en cours remonte puis redescend").
+  // On masque donc d'abord instantanément (opacity !important via JS, seule façon de
+  // battre celui de la classe qu'on s'apprête à retirer), on LAISSE le navigateur peindre
+  // cette image invisible (double requestAnimationFrame : la retirer dans le même tick ne
+  // laisserait jamais rien à l'écran, donc rien à masquer), puis seulement à ce moment-là
+  // on nettoie les classes et on rend la main au CSS — qui, .overlay-visible étant déjà
+  // absente, retombe sur opacity:0 de toute façon : aucun retour visible à l'opacité 1.
+  overlay.style.setProperty("opacity", "0", "important");
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      overlay.classList.remove("debate-iframe-parent-loading-learning-page");
+      overlay.style.removeProperty("opacity");
+    });
+  });
 }
 
 function cleanupStaleDebateIframeModalBlockers() {
@@ -20063,7 +20089,7 @@ function ensureCategoryFilterVisualStyles() {
 
       body.page-home-mobile #index-active-filters,
       body.page-home-mobile .index-active-filters {
-        margin-top: -14px !important;
+        margin-top: 8px !important;
       }
     }
   `;
@@ -20274,13 +20300,11 @@ function alignStandaloneBubbleFrameToActiveFilter() {
 function renderIndexActiveFilterTags() {
   const container = document.getElementById("index-active-filters");
   if (!container) return;
-  // En mode "Ma mémoire", setMemoireCloudMode masque ce bloc entier (style.display='none' en
-  // ligne, aucun filtre de liste n'a de sens dans cette navigation) — mais cette fonction est
-  // aussi appelée par d'autres chemins (rafraîchissement de la liste, changement de filtre
-  // thématique, etc.) qui ignorent le mode courant et forçaient display:flex plus bas,
-  // ré-affichant le bandeau (et le tag "Arènes ouvertes par la communauté" hérité d'un passage
-  // précédent en Bulles Mnoria) par-dessus "Ma mémoire". On sort avant d'y toucher.
-  if (typeof _memoireCloudMode !== "undefined" && _memoireCloudMode) return;
+  // "Ma mémoire" (comme Bulles Mnoria/Communauté) garde #debates-list affichée
+  // sous le nuage de bulles : les tags de filtres actifs ont donc bien un
+  // effet visible dans les 3 modes (demande du 13/09/2026, "le bouton
+  // trier/rechercher est aussi présent, et des arènes également") — jamais
+  // masqués ici, quel que soit le mode courant.
 
   const tags = [];
   const searchQuery = getCurrentIndexSearchQuery();
@@ -20326,6 +20350,10 @@ function renderIndexActiveFilterTags() {
   container.classList.toggle("index-active-filters-empty", !hasActiveTags);
   container.style.display = "flex";
   alignStandaloneBubbleFrameToActiveFilter();
+  // Le nombre de tags change la hauteur de #index-sort-search-wrap : si le
+  // bloc est actuellement épinglé, son spacer doit suivre (cf.
+  // initIndexSortSearchPinning).
+  if (typeof indexSortSearchRefreshSpacer === "function") indexSortSearchRefreshSpacer();
 }
 
 function clearActiveBubbles() {
@@ -20854,22 +20882,19 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // utilisateurs, tout mélangé"). setTypeFilter("all") remet réellement le filtre à zéro
     // (et rafraîchit la liste), pas seulement son affichage.
     if (currentTypeFilter !== 'all') setTypeFilter('all');
-    // Tag de filtre "Arènes ouvertes par mnoria/la communauté" (cf. renderIndexActiveFilterTags,
-    // reflète currentTypeFilter — sans rapport avec le mode bulles) : n'a aucun sens pendant la
-    // navigation "Ma mémoire", qui ne filtre aucune liste d'arènes — demande du 08/08/2026.
-    // Sur mobile, conserve sa hauteur mais masque son contenu : display:none retirait environ
-    // 32px du flux et remontait le cadre Ma mémoire par rapport aux cadres Actu/Mnoria. Sur
-    // desktop, où cet alignement mobile ne s'applique pas, il peut rester retiré du flux.
+    // Tags de filtres actifs (cf. renderIndexActiveFilterTags) : #debates-list reste affichée
+    // sous le nuage de bulles dans les 3 modes (Actu/Communauté/Ma mémoire), donc un filtre y a
+    // toujours un effet visible — plus masqués ici depuis le 13/09/2026 ("le bouton
+    // trier/rechercher est aussi présent, et des arènes également"). setTypeFilter('all')
+    // juste au-dessus a déjà vidé la liste de tags le temps de cette entrée en Ma mémoire ;
+    // ce ré-affichage synchronise juste le conteneur avec cet état.
     const activeFiltersEl = document.getElementById('index-active-filters');
     if (activeFiltersEl) {
-      if (isMnoriaMobileCloudViewport()) {
-        activeFiltersEl.style.display = '';
-        activeFiltersEl.style.visibility = 'hidden';
-        activeFiltersEl.style.pointerEvents = 'none';
-      } else {
-        activeFiltersEl.style.display = 'none';
-      }
+      activeFiltersEl.style.display = '';
+      activeFiltersEl.style.visibility = '';
+      activeFiltersEl.style.pointerEvents = '';
     }
+    renderIndexActiveFilterTags();
     if (!_memoireModuleLoadPromise) {
       _memoireModuleLoadPromise = import('/mon-univers.js?v=20260910-hide-frame-until-memory-v1').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
@@ -20936,9 +20961,9 @@ function setMemoireCloudMode(enable, skipSync = false) {
     // synchrone (window.MNORIA_TAG_TRENDS déjà en mémoire), n'a pas ce délai mais ce nettoyage ne
     // lui nuit pas non plus.
     cloudEl?.querySelectorAll('.mnoria-tag-bubble, .mnoria-tag-center-btn, .mnoria-tag-label-overlay, .mnoria-tag-trend, .mnoria-tag-trend-connector, .mnoria-tag-orbit-line').forEach((el) => el.remove());
-    // Retire le display:none posé à l'entrée en mode mémoire puis redessine réellement le tag
-    // (pas juste un reset de style) : currentTypeFilter a pu changer entre-temps via
-    // toggleMnoriaCloud (Actu/Mnoria), le tag affiché doit refléter l'état à jour.
+    // Redessine réellement le tag (pas juste un reset de style, par symétrie avec l'entrée
+    // ci-dessus) : currentTypeFilter a pu changer entre-temps via toggleMnoriaCloud
+    // (Actu/Mnoria), le tag affiché doit refléter l'état à jour.
     const activeFiltersEl = document.getElementById('index-active-filters');
     if (activeFiltersEl) {
       activeFiltersEl.style.display = '';
@@ -21489,6 +21514,10 @@ function setIndexExplorerControlsOpen(forceOpen) {
   controls.style.display = shouldOpen ? "grid" : "none";
 
   syncIndexExplorerControlButtons(shouldOpen);
+  // Le panneau ouvert/fermé change la hauteur de #index-sort-search-wrap :
+  // si le bloc est actuellement épinglé (cf. indexSortSearchSetPinned), son
+  // spacer doit suivre, sinon le contenu en dessous saute au dépinglage.
+  if (typeof indexSortSearchRefreshSpacer === "function") indexSortSearchRefreshSpacer();
 }
 
 function toggleIndexSortControls(event) {
@@ -21530,6 +21559,97 @@ function initIndexExplorerControls() {
   window.addEventListener("resize", () => {
     syncIndexExplorerControlButtons(controls.style.display !== "none");
   }, { passive: true });
+
+  initIndexSortSearchPinning();
+}
+
+// Épinglage manuel du bouton Trier/Rechercher + tags actifs au scroll
+// (demande du 13/09/2026, "le bouton trier/rechercher ainsi que les tags
+// doivent rester accrochés en haut" — puis confirmé en usage réel : le
+// position:sticky natif ne tient pas, même bug d'overflow que
+// #tribunes-sort-search-wrap sur /autres-sources, cf. son propre
+// commentaire de tête). position:fixed appliquée seulement une fois le
+// point d'ancrage (position de repos) dépassé, jamais avant — la position
+// de repos déjà validée ne bouge donc pas tant qu'on n'a pas scrollé
+// jusque-là. Contrairement à Tribunes : bouton/panneau/tags vivent TOUJOURS
+// ensemble dans #index-sort-search-wrap (jamais de reparentage au
+// pin/dépin ici) — un simple spacer compense la hauteur retirée du flux
+// pendant l'épinglage.
+let indexSortSearchTriggerY = null;
+
+function indexSortSearchSetPinned(pinned) {
+  const wrap = document.getElementById("index-sort-search-wrap");
+  if (!wrap) return;
+  const isPinned = wrap.classList.contains("index-sort-search-pinned");
+  if (pinned === isPinned) return;
+  let spacer = document.getElementById("index-sort-search-spacer");
+  if (pinned) {
+    const height = Math.ceil(wrap.getBoundingClientRect().height);
+    if (!spacer) {
+      spacer = document.createElement("div");
+      spacer.id = "index-sort-search-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      wrap.insertAdjacentElement("afterend", spacer);
+    }
+    spacer.style.height = height + "px";
+    wrap.classList.add("index-sort-search-pinned");
+  } else {
+    wrap.classList.remove("index-sort-search-pinned");
+    if (spacer) spacer.remove();
+  }
+}
+
+// Rappelée après tout changement de hauteur du bloc épinglé (ouverture/
+// fermeture du panneau, cf. setIndexExplorerControlsOpen ; changement des
+// tags actifs, cf. renderIndexActiveFilterTags) : le spacer doit continuer à
+// réserver exactement la bonne place, sinon le contenu sous le bloc saute
+// d'autant au dépinglage.
+function indexSortSearchRefreshSpacer() {
+  const wrap = document.getElementById("index-sort-search-wrap");
+  const spacer = document.getElementById("index-sort-search-spacer");
+  if (!wrap || !spacer || !wrap.classList.contains("index-sort-search-pinned")) return;
+  spacer.style.height = Math.ceil(wrap.getBoundingClientRect().height) + "px";
+}
+
+function indexSortSearchUpdate() {
+  if (indexSortSearchTriggerY === null) {
+    indexSortSearchSetPinned(false);
+    return;
+  }
+  indexSortSearchSetPinned(window.scrollY >= indexSortSearchTriggerY);
+}
+
+// Recalcule le point de déclenchement (position naturelle, non épinglée, du
+// bloc par rapport à la page) — à refaire à chaque fois que la mise en page
+// peut changer (resize, orientation, chargement initial). Même technique que
+// tribunesSortSearchRecalcTrigger : mesure le "top" réellement appliqué une
+// fois épinglé depuis le rendu plutôt que dupliqué en JS, pour rester juste
+// même si la valeur CSS (env(safe-area-inset-top)...) change plus tard.
+function indexSortSearchRecalcTrigger() {
+  const wrap = document.getElementById("index-sort-search-wrap");
+  if (!wrap) return;
+  indexSortSearchSetPinned(false);
+  const naturalTop = window.scrollY + wrap.getBoundingClientRect().top;
+  indexSortSearchSetPinned(true);
+  const pinnedTop = wrap.getBoundingClientRect().top;
+  indexSortSearchSetPinned(false);
+  indexSortSearchTriggerY = Math.max(0, naturalTop - pinnedTop);
+  indexSortSearchUpdate();
+}
+
+function initIndexSortSearchPinning() {
+  if (!document.getElementById("index-sort-search-wrap")) return;
+  indexSortSearchRecalcTrigger();
+  let ticking = false;
+  window.addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      indexSortSearchUpdate();
+      ticking = false;
+    });
+  }, { passive: true });
+  window.addEventListener("resize", indexSortSearchRecalcTrigger, { passive: true });
 }
 
 document.addEventListener("click", function(event) {
@@ -26788,6 +26908,15 @@ function showDebateNotionMemorizeExplainer(notionName, isGenerating = false) {
       spinner.hidden = true;
       text.textContent = `Le QCM « ${notionName} » est prêt dans « Apprentissage ».`;
     },
+    // partial (12/09/2026, "je ne reçois pas de message... seulement la notification push") :
+    // le premier palier (Élémentaire) vient de répondre, mais un niveau supérieur a été demandé
+    // directement (level picker) — le reste continue en arrière-plan, jamais encore "prêt" au
+    // sens de ce qui a été demandé. Spinner volontairement laissé actif : l'annonce cross-page
+    // (showNotionQuizReadyAnnouncement, via checkPendingNotionQuizzesReadiness) prendra le relais
+    // dès que le niveau réellement demandé sera atteint, marqueur toujours suivi jusque-là.
+    partial() {
+      text.textContent = `Le niveau Élémentaire de « ${notionName} » est déjà disponible dans « Apprentissage ». La suite continue de se générer, tu seras prévenu(e) dès que ce sera complet.`;
+    },
     failed() {
       if (spinnerId) { clearInterval(spinnerId); spinnerId = null; }
       spinner.hidden = true;
@@ -27006,7 +27135,7 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
         const pendingSlot = key ? `notion:custom:${key}:${level}` : "";
         btn.setAttribute("data-memorized", "true");
         btn.classList.add("is-active");
-        if (pendingSlot) startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate });
+        if (pendingSlot) startPendingNotionQuizGeneration({ slot: pendingSlot, label: notionName, quizDate, awaitLevel: level });
         const explainer = showDebateNotionMemorizeExplainer(notionName, true);
 
         const progressiveEndpoint = `${API}/users/notion-quizzes/custom/progressive`;
@@ -27020,8 +27149,17 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
         })
           .then(() => {
             disarmBeaconFallback();
-            if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
-            explainer.ready();
+            // Réponse rapide = seulement Élémentaire garanti (cf. server.js .../custom/progressive,
+            // "ne jamais attendre Approfondi/Expert avant d'ouvrir le premier QCM") : si le niveau
+            // demandé va au-delà, ce n'est PAS encore ce que l'utilisateur a demandé — le marqueur
+            // reste suivi (checkPendingNotionQuizzesReadiness prendra le relais avec l'annonce
+            // cross-page dès que ce niveau précis sera réellement atteint, cf. awaitLevel ci-dessus).
+            if (level === "elementaire") {
+              if (pendingSlot) finishPendingNotionQuizGeneration(pendingSlot);
+              explainer.ready();
+            } else {
+              explainer.partial();
+            }
           })
           .catch((error) => {
             disarmBeaconFallback();
@@ -30240,7 +30378,7 @@ function showActiveRubricModal() {
     }
   } else {
     html += '<div class="rubric-modal-section">'
-      + '<p class="rubric-modal-text">L\'IA évalue chaque argument sur 100 points : pertinence par rapport à la question (/20), clarté de la thèse (/15), qualité du raisonnement (/30), précision du mécanisme concret (/20), nuance et prise en compte des objections (/10), ton (/5). Les sources fournies en URL donnent un bonus jusqu\'à +10 points, score final plafonné à 100.</p>'
+      + '<p class="rubric-modal-text">L\'IA évalue chaque argument sur 100 points : pertinence par rapport à la question (/20), clarté de la thèse (/15), solidité ou justification (/25), apport à l\'arène (/25), nuance et prise en compte des objections (/10), ton (/5). Les sources fournies en URL donnent un bonus jusqu\'à +10 points, score final plafonné à 100.</p>'
       + '</div>';
   }
 
@@ -30381,8 +30519,8 @@ function renderDefaultRubricDetailHtml(entry, isOpen) {
   ] : [
     { key: 'pertinence', label: 'Pertinence par rapport à la question', max: 20 },
     { key: 'clarity',    label: 'Clarté de la thèse', max: 15 },
-    { key: 'reasoning',  label: 'Qualité du raisonnement', max: 30 },
-    { key: 'precision',  label: 'Précision / mécanisme concret', max: 20 },
+    { key: 'reasoning',  label: 'Solidité ou justification', max: 25 },
+    { key: 'precision',  label: "Apport à l'arène", max: 25 },
     { key: 'nuance',     label: 'Nuance et prise en compte des limites', max: 10 },
     { key: 'tone',       label: "Qualité de l'arène / ton", max: 5 }
   ];

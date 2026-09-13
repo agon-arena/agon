@@ -619,7 +619,11 @@
       display: none;
       visibility: hidden;
       width: calc(100% + 24px);
-      margin: 0 -12px 28px;
+      /* Réduit de 28 à 16px (demande du 13/09/2026, "remonte légèrement le cadre
+         avec charge de mémorisation") : resserre l'espace avant le bouton
+         "Mémoriser" pour que le cadre de la jauge, plus bas, se retrouve avec
+         autant d'espace au-dessus (onglets + bouton) qu'en dessous. */
+      margin: 0 -12px 16px;
       justify-content: center;
       align-items: baseline;
       gap: 9px;
@@ -939,7 +943,22 @@
       position: relative;
       display: flex;
       justify-content: center;
-      margin: 0 0 20px;
+      /* margin-bottom réduit de 20 à 12px (13/09/2026, "remonte légèrement le
+         cadre avec charge de mémorisation") : resserre l'espace juste avant la
+         jauge. margin-top ajouté ensuite le même jour ("baisse le bouton
+         cliquer ici pour commencer") : redonne de l'air entre les onglets et
+         ce bouton sans reperdre le resserrement obtenu vers la jauge. Valeur
+         réglée à 26px (pas 10px) : .qcm-panel n'étant pas flex/grid, ce
+         margin-top fusionne avec le margin-bottom:16px de .qcm-category-group
+         juste au-dessus (fusion des marges CSS, l'espacement réel est alors le
+         PLUS GRAND des deux, jamais leur somme) — 10px restait donc invisible,
+         absorbé par les 16px du voisin ; 26px produit un espace visible de 26px
+         (soit +10px par rapport aux 16px précédents), constaté sans effet la
+         première fois ("je ne vois aucune différence"). */
+      /* 26px -> 34px (13/09/2026, "baisse encore un peu le bouton") : au-delà des 16px du
+         voisin au-dessus, la fusion des marges ne joue plus (cf. commentaire précédent),
+         chaque px ajouté ici est donc bien visible. */
+      margin: 34px 0 12px;
     }
     .qcm-knowledge-add-menu {
       position: absolute;
@@ -3254,6 +3273,15 @@
       padding: 0;
       list-style: none;
     }
+    /* "Connaissances mémorisées ce jour" (13/09/2026, "sous la dernière connaissance
+       mémorisée ce jour, je veux plus d'espace avec le bandeau d'en dessous") : dernier
+       bloc du panneau Découvrir, sans marge basse propre jusqu'ici — seul le padding du
+       panneau (24px) puis le bandeau bas fixe suivaient directement le dernier item.
+       32px jugé excessif ("c'est trop") : ramené à 20px, identique à la marge basse de
+       la jauge de charge de mémorisation (.qcm-load-gauge, même valeur). */
+    #qcm-memorized-today {
+      margin: 0 0 20px;
+    }
     .qcm-fiche-memorization-item {
       margin: 4px 0;
     }
@@ -3982,37 +4010,14 @@
         <button type="button" class="qcm-mes-acquis-btn" id="qcm-mes-acquis-btn"><span>Mes acquis</span></button>
       </div>
     </div>
-    <!-- Jauge de charge d'apprentissage (demande du 17/08/2026, repositionnée
-         le 17/08/2026 sous Découvrir/Ancrer/Relier + Mes acquis, avant la
-         barre de recherche ; remplacée le 27/08/2026 par une barre de
-         progression horizontale, cadran à aiguille jugé trop massif) :
-         visible uniquement sur "Découvrir" (cf. renderLoadGauge, appelée
-         depuis loadMesQcm) — hidden par défaut pour ne jamais apparaître un
-         instant sur Ancrer/Relier ni avant la première résolution des
-         données. -->
-    <div class="qcm-load-gauge" id="qcm-load-gauge" hidden>
-      <div class="qcm-load-gauge-header">
-        <span class="qcm-load-gauge-title">Charge de mémorisation</span>
-        <span class="qcm-load-gauge-percent" id="qcm-load-gauge-percent"></span>
-      </div>
-      <p class="qcm-load-gauge-label" id="qcm-load-gauge-label"></p>
-      <div class="qcm-load-gauge-bar-track" role="progressbar" aria-label="Charge de mémorisation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="qcm-load-gauge-bar-fill" id="qcm-load-gauge-bar-fill" aria-hidden="true"></div>
-        <div class="qcm-load-gauge-ideal-marker" id="qcm-load-gauge-ideal-marker"></div>
-        <div class="qcm-load-gauge-overload-marker"></div>
-      </div>
-      <div class="qcm-load-gauge-axis-labels">
-        <span class="qcm-load-gauge-ideal-label" id="qcm-load-gauge-ideal-label">Idéal</span>
-        <span class="qcm-load-gauge-overload-label">Surcharge</span>
-      </div>
-      <p class="qcm-load-gauge-caption" id="qcm-load-gauge-caption"></p>
-    </div>
     <!-- Un seul bouton "Mémoriser" (demande du 27/08/2026, "alléger la page", puis
          "un menu déroulant") : ouvre un menu qui regroupe désormais la génération IA
          ET les anciennes options "Plus d'options" (Explorer/import) — plus rien
          d'affiché par défaut à part ce bouton. Reprend telle quelle la mécanique de
          menu déjà en place (ouverture/fermeture/clic extérieur/Échap, cf.
-         closeKnowledgeAddMenu plus bas), seul le bouton déclencheur change. -->
+         closeKnowledgeAddMenu plus bas), seul le bouton déclencheur change.
+         Placé au-dessus de la jauge de charge de mémorisation (demande du
+         12/09/2026) : action prioritaire, avant l'indicateur de charge. -->
     <div class="qcm-knowledge-add" id="qcm-knowledge-add">
       <button type="button" class="qcm-memorize-toggle" id="qcm-memorize-toggle"
         aria-expanded="false" aria-controls="qcm-knowledge-add-menu" hidden>
@@ -4036,6 +4041,45 @@
         <button type="button" class="qcm-knowledge-add-option qcm-knowledge-add-option-btn" data-title="YouTube" data-icon="fa-brands fa-youtube" data-url="/youtube-knowledge"><i class="fa-brands fa-youtube" aria-hidden="true"></i><strong>YouTube</strong><span>Importer une vidéo</span></button>
       </div>
     </div>
+    <!-- Jauge de charge d'apprentissage (demande du 17/08/2026, repositionnée
+         le 17/08/2026 sous Découvrir/Ancrer/Relier + Mes acquis, avant la
+         barre de recherche ; remplacée le 27/08/2026 par une barre de
+         progression horizontale, cadran à aiguille jugé trop massif ;
+         repassée le 12/09/2026 sous le bouton "Cliquer ici pour commencer un
+         nouvel apprentissage") : visible uniquement sur "Découvrir" (cf.
+         renderLoadGauge, appelée depuis loadMesQcm) — hidden par défaut pour
+         ne jamais apparaître un instant sur Ancrer/Relier ni avant la
+         première résolution des données. -->
+    <div class="qcm-load-gauge" id="qcm-load-gauge" hidden>
+      <div class="qcm-load-gauge-header">
+        <span class="qcm-load-gauge-title">Charge de mémorisation</span>
+        <span class="qcm-load-gauge-percent" id="qcm-load-gauge-percent"></span>
+      </div>
+      <p class="qcm-load-gauge-label" id="qcm-load-gauge-label"></p>
+      <div class="qcm-load-gauge-bar-track" role="progressbar" aria-label="Charge de mémorisation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="qcm-load-gauge-bar-fill" id="qcm-load-gauge-bar-fill" aria-hidden="true"></div>
+        <div class="qcm-load-gauge-ideal-marker" id="qcm-load-gauge-ideal-marker"></div>
+        <div class="qcm-load-gauge-overload-marker"></div>
+      </div>
+      <div class="qcm-load-gauge-axis-labels">
+        <span class="qcm-load-gauge-ideal-label" id="qcm-load-gauge-ideal-label">Idéal</span>
+        <span class="qcm-load-gauge-overload-label">Surcharge</span>
+      </div>
+      <p class="qcm-load-gauge-caption" id="qcm-load-gauge-caption"></p>
+    </div>
+    <!-- "Connaissances mémorisées ce jour" (demande du 12/09/2026) : connaissances
+         ayant reçu au moins une review aujourd'hui (cf. server.js GET
+         /api/users/memorized-today) — checkbox pré-cochée par connaissance,
+         décocher = "Non mémorisée" (même mécanisme/mêmes classes que
+         .qcm-fiche-memorization-toggle de la fiche, POST
+         /api/users/knowledge-memorization, cf. wireMemorizedTodayToggles).
+         hidden par défaut : affichée uniquement sur "Découvrir" (cf.
+         loadMemorizedToday, appelée depuis loadMesQcm) et seulement si la
+         liste n'est pas vide. -->
+    <div class="qcm-memorized-today" id="qcm-memorized-today" hidden>
+      <p class="qcm-mesqcm-group-title">Connaissances mémorisées ce jour</p>
+      <ul class="qcm-fiche-memorization-list" id="qcm-memorized-today-list"></ul>
+    </div>
     <!-- Le suivi d'une génération lancée reste immédiatement sous le bouton
          principal, avant les sujets proposés. Le statut et son indicateur
          sont temporairement déplacés dans la modale pendant la saisie puis
@@ -4055,8 +4099,8 @@
          ci-dessus, cf. refreshLearnNextInlineVisibility) ET seulement une fois
          un contenu réel obtenu (jamais un état vide/erreur affiché ici). -->
     <div class="qcm-learn-next-inline" id="qcm-learn-next-inline">
-      <p class="qcm-mesqcm-group-title">Sujets proposés</p>
-      <div class="qcm-learn-next-inline-list" id="qcm-learn-next-inline-list"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass qcm-learn-next-inline-hourglass" role="status" aria-label="Chargement des sujets proposés"></div>
+      <p class="qcm-mesqcm-group-title">Apprentissages proposés</p>
+      <div class="qcm-learn-next-inline-list" id="qcm-learn-next-inline-list"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass qcm-learn-next-inline-hourglass" role="status" aria-label="Chargement des apprentissages proposés"></div>
     </div>
     <!-- Emplacement d'origine du formulaire IA (cf. openAiGenerateModal) : le
          <form> y revient (reparenté) à la fermeture de la modale, jamais recréé
@@ -4089,7 +4133,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260910-hide-frame-until-memory-v1" defer></script>
+<script src="/script.min.js?v=20260912-progressive-ready-notification-fix" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -4118,6 +4162,9 @@
   var loadGaugeLabel = document.getElementById('qcm-load-gauge-label');
   var loadGaugeCaption = document.getElementById('qcm-load-gauge-caption');
   var loadGaugeToken = 0;
+  var memorizedTodayEl = document.getElementById('qcm-memorized-today');
+  var memorizedTodayList = document.getElementById('qcm-memorized-today-list');
+  var memorizedTodayToken = 0;
   var learnNextInline = document.getElementById('qcm-learn-next-inline');
   var learnNextInlineList = document.getElementById('qcm-learn-next-inline-list');
   var learningReturnBottom = document.getElementById('qcm-learning-return-bottom');
@@ -5224,6 +5271,29 @@
       (completedLevel ? '&completedLevel=' + encodeURIComponent(completedLevel) : '');
   }
 
+  // Propositions de mémorisation de fin de bloc (chantier "Connaissances
+  // mémorisées ce jour", 12/09/2026, "je veux que ces connaissances
+  // apparaissent dans la nouvelle rubrique") : fire-and-forget, jamais sur
+  // le chemin critique de l'écran de score (cf. renderFinalScore, qui ne
+  // dépend jamais de cette réponse). Le serveur (POST .../apply) n'active
+  // "Mémoriser" QUE pour les connaissances sans préférence déjà explicite
+  // (cf. server.js applyMemorizationSuggestionsForQuiz) — idempotent, donc
+  // rappelable sans risque à chaque transition de niveau (Élémentaire ->
+  // Avancé -> Expert) du même parcours : jamais d'écrasement d'un décochage
+  // manuel déjà fait par l'utilisateur depuis cette même rubrique ou la
+  // fiche. La connaissance apparaît ensuite d'elle-même dans "Connaissances
+  // mémorisées ce jour" au prochain chargement de Découvrir (loadMesQcm ->
+  // loadMemorizedToday), puisqu'elle a aussi reçu une review aujourd'hui.
+  function applyMemorizationSuggestions(slot, quizDate) {
+    if (!voterKey) return;
+    fetch('/api/users/notion-quizzes/memorization-suggestions/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate }),
+      keepalive: true
+    }).catch(function () {});
+  }
+
   function finishCurrentBlockOrContinue() {
     if (practiceMode || !voterKey || currentCategory !== 'mesqcm' || !currentSlot || currentSlot.indexOf('notion:') !== 0 || !currentQuizDate) {
       renderFinalScore();
@@ -5232,6 +5302,7 @@
     var slotAtCall = currentSlot;
     var dateAtCall = currentQuizDate;
     var completedLevelAtCall = currentServedLevel;
+    applyMemorizationSuggestions(slotAtCall, dateAtCall);
     fetch(
       progressiveLevelStatusUrl(slotAtCall, dateAtCall, completedLevelAtCall),
       { cache: 'no-store' }
@@ -7491,6 +7562,84 @@
       .catch(function () { return null; });
   }
 
+  // "Connaissances mémorisées ce jour" (demande du 12/09/2026, cf. server.js
+  // GET /api/users/memorized-today) : chargement indépendant de la liste
+  // principale, même esprit que loadLearnNextInline ci-dessous — son propre
+  // état ne retient jamais signalIframeReady.
+  function hideMemorizedToday() {
+    memorizedTodayToken++;
+    if (memorizedTodayEl) memorizedTodayEl.hidden = true;
+  }
+  // Réutilise telles quelles les classes/l'apparence de la fiche
+  // (.qcm-fiche-memorization-toggle, cf. buildKnowledgeMemorizationSectionHtml)
+  // pour une seule et même façon de cocher/décocher une connaissance dans
+  // toute la page. Toujours affichée cochée à l'arrivée ici (chaque item
+  // vient d'une review du jour, donc forcément encore mémorisée au moment du
+  // chargement, cf. le filtre côté serveur) — cochable/décochable ensuite
+  // dans les deux sens (demande du 12/09/2026, "qu'elles soient cochables /
+  // décochables aussi") : la ligne n'est JAMAIS retirée du DOM au décochage,
+  // contrairement à une première version — même principe que
+  // wireKnowledgeMemorizationToggles de la fiche.
+  function renderMemorizedToday(items) {
+    if (!memorizedTodayEl || !memorizedTodayList) return;
+    if (!items || !items.length) { memorizedTodayEl.hidden = true; return; }
+    memorizedTodayList.innerHTML = items.map(function (item, i) {
+      return '<li class="qcm-fiche-memorization-item">' +
+        '<button type="button" class="qcm-fiche-memorization-toggle is-memorized" data-memorized-today-index="' + i + '" aria-pressed="true">' +
+        '<i class="fa-solid fa-square-check" aria-hidden="true"></i>' +
+        '<span>' + escapeHtml(item.label || '') + '</span>' +
+        '</button>' +
+        '</li>';
+    }).join('');
+    wireMemorizedTodayToggles(items);
+    memorizedTodayEl.hidden = false;
+  }
+  // Même API/mêmes principes que wireKnowledgeMemorizationToggles (fiche) :
+  // optimistic UI immédiate, requestToken par bouton (ignore une réponse
+  // réseau devenue obsolète si un second clic est déjà parti), restauration
+  // de l'état précédent en cas d'échec réseau — jamais de ligne retirée du
+  // DOM, cocher/décocher reste possible autant de fois que voulu.
+  function wireMemorizedTodayToggles(items) {
+    if (!memorizedTodayList) return;
+    memorizedTodayList.querySelectorAll('[data-memorized-today-index]').forEach(function (btn) {
+      var item = items[Number(btn.getAttribute('data-memorized-today-index'))];
+      if (!item) return;
+      var requestToken = 0;
+      function renderState(enabled) {
+        btn.classList.toggle('is-memorized', enabled);
+        btn.classList.toggle('is-unmemorized', !enabled);
+        btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        var icon = btn.querySelector('i');
+        if (icon) icon.className = 'fa-solid ' + (enabled ? 'fa-square-check' : 'fa-square');
+      }
+      btn.addEventListener('click', function () {
+        var nextEnabled = btn.getAttribute('aria-pressed') !== 'true';
+        var myToken = ++requestToken;
+        renderState(nextEnabled);
+        setKnowledgeMemorization(item.subjectType, item.subjectSourceId, item.knowledgeTargetId, nextEnabled, function (ok) {
+          if (myToken !== requestToken) return;
+          if (!ok) {
+            renderState(!nextEnabled);
+            console.warn('[apprentissage] préférence de mémorisation non enregistrée.');
+          }
+        });
+      });
+    });
+  }
+  function loadMemorizedToday() {
+    if (!voterKey) { hideMemorizedToday(); return; }
+    var myToken = ++memorizedTodayToken;
+    fetch('/api/users/memorized-today?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (myToken !== memorizedTodayToken) return;
+        renderMemorizedToday(data && !data.error && Array.isArray(data.items) ? data.items : []);
+      })
+      .catch(function () {
+        if (myToken === memorizedTodayToken) renderMemorizedToday([]);
+      });
+  }
+
   // "À apprendre ensuite" (demande du 30/08/2026) : section compacte intégrée
   // directement sous "Commencer un nouvel apprentissage" (remplace l'ancienne
   // entrée "Préconisations" du menu + sa fenêtre dédiée) — mêmes routes
@@ -7830,6 +7979,7 @@
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY.mesqcm;
     renderCategorySwitcher();
     hideLoadGauge();
+    hideMemorizedToday();
 
     if (!voterKey) {
       renderMesQcmEmpty();
@@ -7865,6 +8015,7 @@
     // puis son propre contenu (refreshLearnNextInlineVisibility) sans lien
     // avec signalIframeReady.
     loadLearnNextInline();
+    loadMemorizedToday();
 
     // La liste principale n'attend pas la jauge : sur mobile, une lecture
     // FSRS lente ne doit pas laisser vide toute la moitié basse de la page.
@@ -8218,22 +8369,37 @@
     var pendingQuizzes = quizzes.filter(function (q) { return !q.realized; });
     var inProgressQuizzes = pendingQuizzes.filter(function (q) { return q.inProgress; });
     var notStartedQuizzes = pendingQuizzes.filter(function (q) { return !q.inProgress; });
+    // "Apprentissages du jour" (demande du 12/09/2026) : sous-ensemble de
+    // "Apprentissages commencés" dont la 1ère réponse date d'aujourd'hui (cf.
+    // q.startedToday, server.js GET /api/users/notion-quizzes) — rubrique
+    // dédiée tout en haut, sous "Apprentissages proposés" (#qcm-learn-next-inline,
+    // juste au-dessus de #qcm-body dans le DOM). Retiré de "Apprentissages
+    // commencés" plus bas pour qu'un apprentissage n'apparaisse jamais dans
+    // deux rubriques à la fois.
+    var todayQuizzes = inProgressQuizzes.filter(function (q) { return q.startedToday; });
+    var inProgressRestQuizzes = inProgressQuizzes.filter(function (q) { return !q.startedToday; });
 
     // Pas de sélection groupée ici (demande du 26/08/2026, "on le laisse juste dans mes
     // acquis") : ni la barre "Tout cocher" (MESQCM_BULK_BAR_HTML, non préfixée ci-dessous) ni
     // la colonne de cases à cocher par ligne (showCheckbox=false plus bas) — la suppression
     // individuelle (icône corbeille par ligne) reste disponible.
     var html = '<div class="qcm-mesqcm-groups">' + creatingHtml;
+    if (todayQuizzes.length) {
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--today">';
+      html += '<h2 class="qcm-mesqcm-group-title">Apprentissages du jour</h2>';
+      html += renderMesQcmPaginatedTablesHtml(todayQuizzes, quizzes, false);
+      html += '</section>';
+    }
     if (notStartedQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending">';
       html += '<h2 class="qcm-mesqcm-group-title">En attente de réalisation</h2>';
       html += renderMesQcmPaginatedTablesHtml(notStartedQuizzes, quizzes, false);
       html += '</section>';
     }
-    if (inProgressQuizzes.length) {
+    if (inProgressRestQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--inprogress">';
-      html += '<h2 class="qcm-mesqcm-group-title">Mes apprentissages en cours</h2>';
-      html += renderMesQcmPaginatedTablesHtml(inProgressQuizzes, quizzes, false);
+      html += '<h2 class="qcm-mesqcm-group-title">Apprentissages commencés</h2>';
+      html += renderMesQcmPaginatedTablesHtml(inProgressRestQuizzes, quizzes, false);
       html += '</section>';
     }
     if (!pendingQuizzes.length && !creatingHtml) {
@@ -8436,6 +8602,7 @@
     setParentIframeCloseVisible(true);
     setPanelCloseVisible(false);
     hideLoadGauge();
+    hideMemorizedToday();
     var myToken = ++loadToken;
     currentCategory = 'mesacquis';
     currentSlot = null;
@@ -9403,6 +9570,7 @@
     // cours (Ancrer/Relier/un apprentissage précis), où subtitleText change
     // de sens sans lien avec la charge à venir.
     hideLoadGauge();
+    hideMemorizedToday();
     var myToken = ++loadToken;
     currentSlot = slotKey;
     currentQuizDate = quizDate || null;

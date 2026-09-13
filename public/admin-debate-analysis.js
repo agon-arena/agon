@@ -160,7 +160,17 @@
 
     const clientKey = (typeof getKey === 'function') ? getKey() : '';
     const adminHeaders = (typeof debateOwnerHeaders === 'function') ? debateOwnerHeaders() : {};
-    const promise = fetch('/api/debates/' + key + '/analysis' + (clientKey ? '?key=' + encodeURIComponent(clientKey) : ''), { headers: adminHeaders })
+    // Timeout client (12/09/2026, "resté bloqué sur l'animation liée à l'analyse IA") : un
+    // fetch() brut n'a par défaut AUCUNE limite de temps — une requête qui reste en attente sans
+    // jamais répondre (cas réel juste après avoir tapé une notification, connexion instable/
+    // reprise d'appli à froid) bloquait indéfiniment openReport à ce await, avant même d'arriver
+    // à hideAiAnalysisAnimation. Même seuil que le timeout par défaut de fetchJSON ailleurs sur
+    // le site : au-delà, on abandonne proprement (catch ci-dessous) plutôt que d'attendre à
+    // l'infini.
+    const timeoutController = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeoutId = timeoutController ? setTimeout(() => timeoutController.abort(), 12000) : null;
+    const promise = fetch('/api/debates/' + key + '/analysis' + (clientKey ? '?key=' + encodeURIComponent(clientKey) : ''), { headers: adminHeaders, signal: timeoutController ? timeoutController.signal : undefined })
+      .finally(function () { if (timeoutId) clearTimeout(timeoutId); })
       .then(async function (response) {
         const json = await response.json().catch(() => ({}));
         return {
@@ -1440,8 +1450,8 @@
       position: [
         { key: 'pertinence', label: 'Pertinence par rapport à la question', max: 20 },
         { key: 'clarity',    label: 'Clarté de la thèse', max: 15 },
-        { key: 'reasoning',  label: 'Qualité du raisonnement', max: 30 },
-        { key: 'precision',  label: 'Précision / mécanisme concret', max: 20 },
+        { key: 'reasoning',  label: 'Solidité ou justification', max: 25 },
+        { key: 'precision',  label: "Apport à l'arène", max: 25 },
         { key: 'nuance',     label: 'Nuance et prise en compte des limites', max: 10 },
         { key: 'tone',       label: "Qualité de l'arène / ton", max: 5 }
       ]
@@ -2453,8 +2463,8 @@
       <ul>
         <li><strong>Pertinence par rapport à la question : 20 points</strong><br>L'idée répond-elle vraiment à la question posée ?</li>
         <li><strong>Clarté de la thèse : 15 points</strong><br>L'idée est-elle compréhensible et bien formulée ?</li>
-        <li><strong>Qualité du raisonnement : 25 points</strong><br>L'idée est-elle logique, cohérente et bien construite ?</li>
-        <li><strong>Précision / mécanisme concret : 15 points</strong><br>L'idée donne-t-elle un mécanisme, un exemple ou une conséquence précise ?</li>
+        <li><strong>Solidité ou justification : 25 points</strong><br>L'idée est-elle logique, cohérente et bien étayée ?</li>
+        <li><strong>Apport à l'arène : 25 points</strong><br>L'idée apporte-t-elle un éclairage ou un élément nouveau au débat ?</li>
         <li><strong>Nuance et prise en compte des limites : 10 points</strong><br>L'idée reconnaît-elle les risques, objections ou limites ?</li>
         <li><strong>Ton : 5 points</strong><br>L'idée reste-t-elle constructive, sans insulte ni attaque ?</li>
         <li><strong>Sources (URL fournie) : jusqu'à 10 points</strong><br>Une source fiable et pertinente renforce la crédibilité, mais ne remplace jamais la qualité du raisonnement.</li>

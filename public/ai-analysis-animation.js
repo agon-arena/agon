@@ -53,24 +53,43 @@
     }
   }
 
+  // Filet de sécurité anti-blocage (12/09/2026, "resté bloqué sur l'animation liée à l'analyse
+  // IA") : onload/onerror suffisent en temps normal, mais une requête réseau qui reste en
+  // attente SANS jamais déclencher ni l'un ni l'autre (cas réel juste après avoir tapé une
+  // notification — connexion instable, reprise d'appli à froid) bloquait indéfiniment ce
+  // preload, et avec lui tout le cycle de l'animation : showAiAnalysisAnimation ne l'affiche
+  // jamais (attend cette même promesse), et hideAiAnalysisAnimation ne la masque jamais non
+  // plus (attend _showPromise, qui attend ce même preload) — y compris le filet de 15s côté
+  // script.js (pendingAiReportNotificationTransition), lui-même dépendant de ce cycle pour
+  // masquer réellement l'overlay de transition. Un timeout dur ici garantit que ce preload
+  // finit toujours par se résoudre.
+  var PRELOAD_TIMEOUT_MS = 2500;
+
   function preloadSablier() {
     if (_sablierPromise) return _sablierPromise;
     _sablierImg = new Image();
     _sablierImg.decoding = 'sync';
     _sablierImg.src = '/sablier3-256.png';
     _sablierPromise = new Promise(function (resolve) {
+      var settled = false;
+      function settle() {
+        if (settled) return;
+        settled = true;
+        resolve();
+      }
       function done() {
         if (_sablierImg && typeof _sablierImg.decode === 'function') {
-          _sablierImg.decode().then(resolve).catch(resolve);
+          _sablierImg.decode().then(settle).catch(settle);
         } else {
-          resolve();
+          settle();
         }
       }
       if (_sablierImg.complete && _sablierImg.naturalWidth) done();
       else {
         _sablierImg.onload = done;
-        _sablierImg.onerror = resolve;
+        _sablierImg.onerror = settle;
       }
+      setTimeout(settle, PRELOAD_TIMEOUT_MS);
     });
     return _sablierPromise;
   }
@@ -81,18 +100,25 @@
     _bgImg.decoding = 'sync';
     _bgImg.src = '/visuels/fondanimation.webp';
     _bgPromise = new Promise(function (resolve) {
+      var settled = false;
+      function settle() {
+        if (settled) return;
+        settled = true;
+        resolve();
+      }
       function done() {
         if (_bgImg && typeof _bgImg.decode === 'function') {
-          _bgImg.decode().then(resolve).catch(resolve);
+          _bgImg.decode().then(settle).catch(settle);
         } else {
-          resolve();
+          settle();
         }
       }
       if (_bgImg.complete && _bgImg.naturalWidth) done();
       else {
         _bgImg.onload = done;
-        _bgImg.onerror = resolve;
+        _bgImg.onerror = settle;
       }
+      setTimeout(settle, PRELOAD_TIMEOUT_MS);
     });
     return _bgPromise;
   }

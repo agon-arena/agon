@@ -224,7 +224,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260909-startup-scroll-unlock-fade">
+  <link rel="stylesheet" href="/style.min.css?v=20260913-sort-search-panel-gap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -759,7 +759,7 @@
       align-items: center;
       gap: 4px 5px !important;
       min-height: 26px;
-      margin-top: -2px !important;
+      margin-top: 6px !important;
       margin-bottom: 6px !important;
     }
     .index-active-filters > * {
@@ -1461,67 +1461,69 @@
 
   <section class="debates-section">
 
-    <div class="index-explorer-topbar">
-      <button
-        type="button"
-        id="index-sort-toggle"
-        class="index-sort-toggle"
-        aria-label="Afficher les filtres de tri et de recherche"
-        aria-controls="index-explorer-controls"
-        aria-expanded="false"
-        onclick="toggleIndexSortControls(event)"
-      >
-        <i class="fa-solid fa-sliders"></i>
-        <span>Trier / <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Rechercher</span>
-      </button>
-    </div>
-
-    <div id="index-explorer-controls" class="index-explorer-controls" style="display:none;">
-<div class="search-box">
-        <input
-          id="debate-search"
-          type="text"
-          placeholder="Découvrir une arène ouverte..."
-          autocomplete="off"
+    <div id="index-sort-search-wrap" class="index-sort-search-wrap">
+      <div class="index-explorer-topbar">
+        <button
+          type="button"
+          id="index-sort-toggle"
+          class="index-sort-toggle"
+          aria-label="Afficher les filtres de tri et de recherche"
+          aria-controls="index-explorer-controls"
+          aria-expanded="false"
+          onclick="toggleIndexSortControls(event)"
         >
-        <button type="button" class="button index-search-submit" onclick="applyIndexSearch()">
-          <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-          <span>Rechercher</span>
+          <i class="fa-solid fa-sliders"></i>
+          <span>Trier / <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Rechercher</span>
         </button>
       </div>
 
-      <div class="debate-type-filter">
-        <button onclick="setTypeFilter('all')" id="filter-all">Tous</button>
-        <button onclick="setTypeFilter('debate')" id="filter-debate">Arènes à positions</button>
-        <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
-        <button onclick="setTypeFilter('visited')" id="filter-visited">Arènes consultées</button>
-        <button onclick="setTypeFilter('mnoria')" id="filter-mnoria">Arènes ouvertes par mnoria</button>
-      </div>
-
-      <div class="index-theme-filter-wrap index-type-filter-mobile" data-active="false">
-        <label class="index-theme-filter-label" for="index-type-mobile-select">
-          <span class="index-theme-filter-label-icon"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></span>
-          <span>Arènes</span>
-        </label>
-        <div class="index-theme-filter-field">
-          <select id="index-type-mobile-select" class="index-theme-filter-select" onchange="setIndexMobileTypeFilter(this.value)">
-            <option value="all">Tous</option>
-            <option value="debate">Arènes à positions</option>
-            <option value="question">Arènes libres</option>
-            <option value="visited">Arènes consultées</option>
-            <option value="mnoria">Arènes ouvertes par mnoria</option>
-          </select>
+      <div id="index-explorer-controls" class="index-explorer-controls" style="display:none;">
+        <div class="search-box">
+          <input
+            id="debate-search"
+            type="text"
+            placeholder="Découvrir une arène ouverte..."
+            autocomplete="off"
+          >
+          <button type="button" class="button index-search-submit" onclick="applyIndexSearch()">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            <span>Rechercher</span>
+          </button>
         </div>
+
+        <div class="debate-type-filter">
+          <button onclick="setTypeFilter('all')" id="filter-all">Tous</button>
+          <button onclick="setTypeFilter('debate')" id="filter-debate">Arènes à positions</button>
+          <button onclick="setTypeFilter('question')" id="filter-question">Arènes libres</button>
+          <button onclick="setTypeFilter('visited')" id="filter-visited">Arènes consultées</button>
+          <button onclick="setTypeFilter('mnoria')" id="filter-mnoria">Arènes ouvertes par mnoria</button>
+        </div>
+
+        <div class="index-theme-filter-wrap index-type-filter-mobile" data-active="false">
+          <label class="index-theme-filter-label" for="index-type-mobile-select">
+            <span class="index-theme-filter-label-icon"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></span>
+            <span>Arènes</span>
+          </label>
+          <div class="index-theme-filter-field">
+            <select id="index-type-mobile-select" class="index-theme-filter-select" onchange="setIndexMobileTypeFilter(this.value)">
+              <option value="all">Tous</option>
+              <option value="debate">Arènes à positions</option>
+              <option value="question">Arènes libres</option>
+              <option value="visited">Arènes consultées</option>
+              <option value="mnoria">Arènes ouvertes par mnoria</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="theme-filter-slot"></div>
+
+        <button type="button" class="index-explorer-close-btn" onclick="toggleIndexSortControls(event)" aria-label="Fermer les options">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
 
-      <div id="theme-filter-slot"></div>
-
-      <button type="button" class="index-explorer-close-btn" onclick="toggleIndexSortControls(event)" aria-label="Fermer les options">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
+      <div id="index-active-filters" class="index-active-filters index-active-filters-empty"></div>
     </div>
-
-    <div id="index-active-filters" class="index-active-filters index-active-filters-empty"></div>
 
 
 
@@ -2454,7 +2456,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260910-hide-frame-until-memory-v1" defer></script>
+<script src="/script.min.js?v=20260913-sort-search-pin-fix" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

@@ -23,6 +23,8 @@ const {
   chunkSentences,
   scoreChunk,
   bucketIndexFor,
+  trimTrailingReferenceSentences,
+  stratifiedIndices,
   selectRepresentativeExcerpt
 } = require("../lib/source-excerpt-selection");
 
@@ -190,4 +192,151 @@ test("le module reste générique — aucun terme spécifique à l'histoire, à 
   for (const forbidden of [/wikipedia/i, /ottoman/i, /empire/i, /sultan/i, /histoire/i]) {
     assert.doesNotMatch(code, forbidden, `le CODE (hors commentaires) ne doit jamais référencer : ${forbidden}`);
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// Correctif "sujet gigantesque" (12/09/2026, cas réels "Révolution
+// française" et "Aires urbaines" — diagnostic qualité éditoriale du
+// pipeline QCM progressif). Reproduit, avec des documents SYNTHÉTIQUES
+// (aucun réseau, aucun appel IA), les deux défauts mesurés sur les vrais
+// articles Wikipédia :
+//   (a) un plancher de 6 buckets POSITIONNELS fixes, quelle que soit la
+//       taille du document, faisait tenir plusieurs grands sous-thèmes
+//       distincts dans le MÊME bucket — un seul survivait, au hasard du
+//       score de prose (mesuré : le curriculum réel ne couvrait que le
+//       vote aux États généraux et les factions, jamais la Bastille, la
+//       DDHC, la République ou la Terreur, pourtant bien présents) ;
+//   (b) la liste de notes/bibliographie de fin d'article (repérée par le
+//       marqueur de renvoi "↑") pouvait représenter jusqu'à ~26 % des
+//       caractères d'un grand article SANS jamais rien apporter, tout en
+//       obtenant un score de prose comparable au corps de l'article.
+// ══════════════════════════════════════════════════════════════════════
+
+// ── trimTrailingReferenceSentences ──────────────────────────────────────
+
+test("trimTrailingReferenceSentences : tronque à partir de la première phrase portant le marqueur de renvoi, jamais avant", () => {
+  const sentences = [
+    "Premier fait du corps de l'article.",
+    "Second fait du corps de l'article.",
+    "↑ Première note de bas de page.",
+    "↑ Seconde note de bas de page."
+  ];
+  const trimmed = trimTrailingReferenceSentences(sentences);
+  assert.deepEqual(trimmed, sentences.slice(0, 2));
+});
+
+test("trimTrailingReferenceSentences : aucun marqueur -> renvoie les phrases inchangées", () => {
+  const sentences = ["Un fait.", "Un autre fait."];
+  const trimmed = trimTrailingReferenceSentences(sentences);
+  assert.deepEqual(trimmed, sentences);
+});
+
+test("trimTrailingReferenceSentences : marqueur dès la toute première phrase -> ne tronque rien (mieux vaut ne rien perdre qu'un faux positif)", () => {
+  const sentences = ["↑ Texte inhabituel dès le début.", "Suite du texte."];
+  const trimmed = trimTrailingReferenceSentences(sentences);
+  assert.deepEqual(trimmed, sentences);
+});
+
+test("trimTrailingReferenceSentences : la dernière phrase du corps n'est jamais fusionnée avec la première note dans le même chunk perdu", () => {
+  // Reproduit le bug identifié pendant le développement de ce correctif :
+  // une dernière phrase de corps COURTE, immédiatement suivie d'une note,
+  // pouvait auparavant être regroupée avec elle par chunkSentences (les deux
+  // sous TARGET_CHUNK_CHARS une fois assemblées) puis disparaître avec le
+  // chunk entier une fois celui-ci tronqué — d'où la troncature désormais
+  // faite au niveau des PHRASES, avant tout regroupement en chunks.
+  const sentences = ["Une phrase de corps très courte.", "↑ Une note tout aussi courte."];
+  const trimmed = trimTrailingReferenceSentences(sentences);
+  assert.deepEqual(trimmed, ["Une phrase de corps très courte."]);
+});
+
+// ── stratifiedIndices ────────────────────────────────────────────────
+
+test("stratifiedIndices : count >= total -> tous les indices, dans l'ordre", () => {
+  assert.deepEqual(stratifiedIndices(4, 10), [0, 1, 2, 3]);
+  assert.deepEqual(stratifiedIndices(4, 4), [0, 1, 2, 3]);
+});
+
+test("stratifiedIndices : répartit régulièrement sur toute la plage, jamais concentré en tête", () => {
+  const picks = stratifiedIndices(100, 5);
+  assert.equal(picks.length, 5);
+  assert.ok(picks[0] < 20, "le premier indice doit rester proche du début");
+  assert.ok(picks[picks.length - 1] > 80, "le dernier indice doit atteindre la fin de la plage");
+  for (let i = 1; i < picks.length; i += 1) assert.ok(picks[i] > picks[i - 1], "indices strictement croissants");
+});
+
+test("stratifiedIndices : entrées invalides -> tableau vide, jamais une exception", () => {
+  assert.deepEqual(stratifiedIndices(0, 5), []);
+  assert.deepEqual(stratifiedIndices(5, 0), []);
+  assert.deepEqual(stratifiedIndices(NaN, 5), []);
+});
+
+// ── selectRepresentativeExcerpt : couverture sur un sujet gigantesque
+// (Test 1 de la demande de diagnostic — "le système ne doit pas
+// sélectionner N connaissances sur un seul micro-thème et ignorer les
+// autres grands thèmes") ────────────────────────────────────────────────
+
+function buildWideSubjectDocument() {
+  // Six thèmes distincts, réellement structurants et de longueur comparable
+  // (prose positive, chacun ~320-450 caractères, volontairement écrit comme
+  // un paragraphe AUTONOME plutôt qu'entrecoupé de texte de remplissage —
+  // deux paragraphes voisins pourraient sinon être fusionnés par
+  // chunkSentences en un seul chunk et artificiellement se disputer un même
+  // "créneau" de sélection) — chacun repérable par un marqueur unique.
+  const etatsGeneraux = "L'ouverture des États généraux à Versailles rassemble pour la première fois depuis 1614 les représentants des trois ordres du royaume, dans un climat d'attente réformatrice généralisée qui traverse toutes les couches de la société. Cette assemblée exceptionnelle suscite d'immenses espoirs de changement profond dans l'ensemble du pays.";
+  // Un micro-thème plus développé que les cinq autres (comme mesuré en
+  // conditions réelles sur le débat du vote par tête, plus longuement
+  // couvert dans l'article que chacun des cinq grands thèmes ci-dessous pris
+  // isolément) — ne doit pas pour autant, à lui seul, éclipser tous les
+  // autres dans l'extrait final.
+  const voteParTete = "Le débat sur les modalités de vote oppose les partisans du vote par tête, favorable au tiers état, aux tenants du vote par ordre traditionnel, chaque camp mobilisant des arguments juridiques et historiques longuement développés dans les cahiers de doléances. Cette controverse occupe une place importante dans les débats préparatoires et continue longtemps d'alimenter les tensions entre les trois ordres représentés durant plusieurs semaines.";
+  const bastille = "La prise de la Bastille par les habitants parisiens marque un tournant décisif : cette forteresse royale, symbole de l'arbitraire de l'Ancien Régime, tombe après plusieurs heures d'affrontement et devient immédiatement un événement fondateur. Sa chute résonne rapidement bien au-delà de la capitale et de ses environs immédiats.";
+  const ddhc = "L'adoption de la déclaration des droits proclame solennellement des principes universels de liberté individuelle et d'égalité devant la loi, inspirant durablement les constitutions rédigées dans les décennies suivantes à travers le monde entier. Ce texte fondateur influence profondément la pensée politique européenne ultérieure.";
+  const republique = "La proclamation de la république met fin définitivement à des siècles de monarchie, inaugurant un régime nouveau dont les institutions doivent encore s'inventer face aux menaces intérieures et aux coalitions étrangères hostiles. Ce basculement institutionnel majeur redéfinit durablement l'organisation politique du pays.";
+  const terreur = "La période de terreur voit se multiplier les mesures d'exception justifiées par l'urgence de la guerre et les complots redoutés, avant qu'un retournement politique brutal n'y mette fin de façon tout aussi soudaine que son déclenchement initial. Ses conséquences marquent profondément la mémoire collective ultérieure.";
+
+  const body = [etatsGeneraux, voteParTete, bastille, ddhc, republique, terreur].join(" ");
+  // Liste de notes en fin de document (marqueur "↑"), volumineuse, sans
+  // jamais apporter d'information sur les six thèmes ci-dessus.
+  const referenceTail = Array.from({ length: 40 }, (_, i) => `↑ Référence bibliographique numéro ${i + 1}, sans rapport direct avec le contenu du corps de l'article.`).join(" ");
+  return `${body} ${referenceTail}`;
+}
+
+test("selectRepresentativeExcerpt : sur un sujet large, ne concentre pas la sélection sur un seul micro-thème surreprésenté et ignore les autres grands thèmes", () => {
+  const doc = buildWideSubjectDocument();
+  const { excerpt } = selectRepresentativeExcerpt(doc, { budgetChars: 3000 });
+  const themes = {
+    "États généraux": /États généraux/,
+    "Bastille": /Bastille/,
+    "Déclaration des droits": /déclaration des droits/i,
+    "République": /république/i,
+    "Terreur": /terreur/i
+  };
+  const covered = Object.entries(themes).filter(([, re]) => re.test(excerpt)).map(([name]) => name);
+  assert.ok(covered.length >= 3, `au moins 3 des 5 grands thèmes doivent apparaître dans l'extrait, obtenu : ${covered.join(", ") || "(aucun)"}`);
+});
+
+test("selectRepresentativeExcerpt : la liste de notes de fin de document (marqueur de renvoi) n'apparaît jamais dans l'extrait final", () => {
+  const doc = buildWideSubjectDocument();
+  const { excerpt } = selectRepresentativeExcerpt(doc, { budgetChars: 3000 });
+  assert.doesNotMatch(excerpt, /↑/, "aucune note de bas de page ne doit polluer l'extrait");
+  assert.doesNotMatch(excerpt, /Référence bibliographique/);
+});
+
+// ── selectRepresentativeExcerpt : plusieurs grandes sections d'un même
+// document (Test 4 de la demande de diagnostic) ────────────────────────
+
+test("selectRepresentativeExcerpt : sur un document composé de plusieurs grandes sections de taille comparable, la sélection ne se concentre pas presque entièrement dans une seule d'entre elles", () => {
+  // Six sections, chacune une longue prose homogène (même profil de score),
+  // chacune marquée par un identifiant unique répété uniquement dans sa
+  // propre section — reproduit un document structuré sans dépendre du
+  // moindre marqueur de titre (non conservé par extractReadableContent,
+  // cf. commentaire de tête du fichier).
+  const sectionLabels = ["SectionAlpha", "SectionBeta", "SectionGamma", "SectionDelta", "SectionEpsilon", "SectionZeta"];
+  const sentenceFor = (label) => `Cette partie du document développe longuement des considérations spécifiques à ${label}, avec plusieurs phrases construites de façon habituelle pour représenter une prose normale et cohérente.`;
+  const sections = sectionLabels.map((label) => Array.from({ length: 8 }, () => sentenceFor(label)).join(" "));
+  const doc = sections.join(" ");
+
+  const { excerpt } = selectRepresentativeExcerpt(doc, { budgetChars: 2500 });
+  const coveredSections = sectionLabels.filter((label) => excerpt.includes(label));
+  assert.ok(coveredSections.length >= 4, `au moins 4 des 6 sections doivent être représentées, obtenu : ${coveredSections.join(", ") || "(aucune)"}`);
 });
