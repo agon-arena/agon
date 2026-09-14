@@ -16,7 +16,7 @@ function functionSource(name, nextName) {
 
 test('le tableau horizontal classique conserve Apprentissage, État et Niveau sans ancrage ni suppression', () => {
   const source = functionSource('renderMesQcmTableHtml', 'renderMesQcmPaginatedTablesHtml');
-  assert.match(source, /<thead><tr><th>Apprentissage<\/th><th>État<\/th><th>Niveau<\/th><\/tr><\/thead><tbody>/);
+  assert.match(source, /<thead><tr><th><\/th><th>État<\/th><th>Niveau<\/th><\/tr><\/thead><tbody>/);
   assert.doesNotMatch(source, /<th>Ancrage<\/th>/);
   assert.doesNotMatch(source, /data-mesqcm-delete-index/);
   assert.doesNotMatch(source, /qcm-mesqcm-row-checkbox/);
@@ -40,7 +40,8 @@ test('le mode détail inline masque État et Niveau et ne garde que les actions 
   const hydrateRenderer = functionSource('hydrateVisibleMesQcmNameThumbs', 'compareMesQcmByStateThenName');
   const listRenderer = functionSource('renderMesQcmList', 'scrollToAndBlinkMesQcmRow');
   assert.match(source, /qcm-mesqcm-table--inline-details/);
-  assert.match(source, /<thead><tr><th>Apprentissage<\/th><\/tr><\/thead><tbody>/);
+  assert.match(source, /\? '<tbody>'/);
+  assert.doesNotMatch(source, /<thead><tr><th>Apprentissage<\/th><\/tr><\/thead><tbody>/);
   assert.match(source, /data-mesqcm-toggle-index/);
   assert.match(source, /renderMesQcmNameVisualHtml\(q, meta, index\)/);
   assert.match(visualRenderer, /qcm-mesqcm-name-thumb/);
@@ -67,19 +68,25 @@ test('le mode détail inline masque État et Niveau et ne garde que les actions 
   assert.match(listRenderer, /renderMesQcmPaginatedTablesHtml\(inProgressRestQuizzes, quizzes, false, \{ inlineDetails: true \}\)/);
 });
 
-test('les apprentissages en cours de création affichent État et Niveau dans un détail déroulé', () => {
+test('les apprentissages en cours de création affichent uniquement leur état dans le détail déroulé', () => {
   const source = functionSource('renderCreatingNotionQuizzesHtml', 'pendingNotionQuizMessage');
   assert.match(source, /qcm-mesqcm-table--inline-details/);
-  assert.match(source, /<thead><tr><th>Apprentissage<\/th><\/tr><\/thead><tbody>/);
+  assert.match(source, /qcm-mesqcm-table qcm-mesqcm-table--inline-details"><tbody>/);
+  assert.doesNotMatch(source, /<thead><tr><th>Apprentissage<\/th><\/tr><\/thead><tbody>/);
   assert.match(source, /data-creating-toggle/);
   assert.match(source, /qcm-mesqcm-detail-label">État/);
-  assert.match(source, /qcm-mesqcm-detail-label">Niveau/);
+  assert.doesNotMatch(source, /qcm-mesqcm-detail-label">Niveau/);
+  assert.doesNotMatch(source, /pendingCreationLevelHtml/);
+  assert.doesNotMatch(source, /Niveau en préparation/);
   assert.doesNotMatch(source, /<th>État<\/th>/);
 });
 
 test('les apprentissages proposés restent un clic direct de mémorisation, sans détail État/Niveau', () => {
   const source = functionSource('renderLearnNextInlineList', 'appendLearnNextItems');
-  assert.match(source, /class="qcm-learn-next-inline-item" data-index="/);
+  assert.match(source, /qcm-mesqcm-name-btn qcm-learn-next-inline-item" data-index="/);
+  assert.match(source, /qcm-mesqcm-name-title/);
+  assert.match(source, /qcm-mesqcm-name-theme-icon/);
+  assert.match(source, /qcm-mesqcm-name-label/);
   assert.match(source, /learnNextVisible\[parseInt\(btn\.getAttribute\('data-index'\), 10\)\]/);
   assert.doesNotMatch(source, /data-learn-next-toggle-index/);
   assert.doesNotMatch(source, /qcm-learn-next-inline-detail/);

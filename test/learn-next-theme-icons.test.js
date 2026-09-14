@@ -9,9 +9,10 @@ test('les sujets proposés affichent leur icône thématique avant leur nom', ()
   const start = view.indexOf('function renderLearnNextInlineList()');
   const end = view.indexOf('function appendLearnNextItems(', start);
   const renderer = view.slice(start, end);
-  assert.match(renderer, /learnNextThemeIconClass\(item\).*qcm-learn-next-inline-icon/);
-  assert.match(renderer, /<span>' \+ escapeHtml\(item\.name \|\| item\.title/);
-  assert.ok(renderer.indexOf('qcm-learn-next-inline-icon') < renderer.indexOf("escapeHtml(item.name"));
+  assert.match(renderer, /learnNextThemeIconClass\(item\)[\s\S]*qcm-mesqcm-name-theme-icon/);
+  assert.match(renderer, /qcm-mesqcm-name-title/);
+  assert.match(renderer, /qcm-mesqcm-name-label/);
+  assert.ok(renderer.indexOf('qcm-mesqcm-name-theme-icon') < renderer.indexOf('qcm-mesqcm-name-label'));
 });
 
 test('Histoire et les civilisations comme les Incas utilisent le temple', () => {

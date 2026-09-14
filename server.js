@@ -30,7 +30,7 @@ const { reviewMemoryItem, computeRetrievability } = require("./lib/spaced-repeti
 const { mapMnoriaReviewToFsrsRating } = require("./lib/spaced-repetition/rating-mapper");
 const { resolveQuestionVariantLabel, resolveActiveQuestionVariant } = require("./lib/spaced-repetition/question-variant");
 const { HELP_LEVELS, deriveHelpLevel } = require("./lib/spaced-repetition/help-level");
-const { DEFAULT_PROJECTION_DAYS, computeLearningLoadGauge, levelFromPeakLoad } = require("./lib/spaced-repetition/learning-load");
+const { levelFromPeakLoad } = require("./lib/spaced-repetition/learning-load");
 const {
   buildCultureGeneraleReviewQuestionId,
   parseCultureGeneraleReviewRef
@@ -6548,6 +6548,48 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       (async () => {
         try {
           const acquisWithSourceIds = await fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
+          // Ancrage FSRS par fiche (demande du 14/09/2026, effet "éclipse" sur une étoile dont
+          // TOUTES les fiches se sont mises à décliner, cf. atRisk plus bas) : moyenne de
+          // rétrivabilité sur les seules questions déjà répondues au moins une fois pour ce
+          // slot. Volontairement plus simple que progressPct de /api/users/notion-quizzes (pas
+          // de plafond de niveau progressif ni d'exclusion de question passée) — acceptable ici
+          // car une fiche présente dans "Ma mémoire" a par construction déjà été correctement
+          // répondue au moins une fois (cf. recordDailyQuizEclairageAcquisition), donc l'essentiel
+          // de ses questions le sont déjà dans l'immense majorité des cas. Reste dans CETTE
+          // branche du Promise.all (jamais un 5e bloc séparé) : ne retarde que la résolution de
+          // acquisFicheByKey elle-même, jamais les 3 autres lectures parallèles ci-dessous.
+          const quizSlots = [...new Set(acquisWithSourceIds.map((item) => item.notionQuizSlot).filter(Boolean))];
+          if (quizSlots.length) {
+            const { data: fsrsRows, error: fsrsError } = await supabase
+              .from("memory_item_fsrs_states")
+              .select("state, stability, last_review_at, memory_items!inner(slot, quiz_date)")
+              .eq("user_id", user.id)
+              .in("memory_items.slot", quizSlots);
+            if (fsrsError) {
+              console.warn("[intellectual universe] ancrage FSRS indisponible :", fsrsError.message);
+            } else {
+              const retrievabilityNow = new Date();
+              const retrievabilityByQuizKey = new Map();
+              for (const row of fsrsRows || []) {
+                const mi = row.memory_items;
+                if (!mi) continue;
+                const key = `${mi.quiz_date}:${mi.slot}`;
+                const r = computeRetrievability(
+                  { state: row.state, stability: row.stability, lastReviewAt: row.last_review_at },
+                  retrievabilityNow
+                );
+                if (!retrievabilityByQuizKey.has(key)) retrievabilityByQuizKey.set(key, []);
+                retrievabilityByQuizKey.get(key).push(r);
+              }
+              for (const item of acquisWithSourceIds) {
+                if (!item.notionQuizSlot || !item.notionQuizDate) continue;
+                const values = retrievabilityByQuizKey.get(`${item.notionQuizDate}:${item.notionQuizSlot}`);
+                if (values && values.length) {
+                  item.progressPct = Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 100);
+                }
+              }
+            }
+          }
           return new Map(acquisWithSourceIds.map((item) => [
             `${item.sourceType}:${item.sourceDebateId}`,
             item
@@ -6635,6 +6677,10 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         sourceDebateId: a.eclairage_source_id,
         quizSlot: fiche?.notionQuizSlot || null,
         quizDate: fiche?.notionQuizDate || null,
+        // null si jamais répondue via un QCM (ancien acquis, cf. commentaire ci-dessus) : dans
+        // ce cas cette fiche n'entre jamais dans le calcul de atRisk d'une étoile (ni pour ni
+        // contre), cf. construction de starsArr plus bas.
+        progressPct: typeof fiche?.progressPct === "number" ? fiche.progressPct : null,
         sourceDetail,
         category: null,
         categoryPrecision: null,
@@ -6646,6 +6692,9 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
     // nombre d'articles décroissant, égalité départagée par ordre alphabétique.
     const sortArticles = (arts) => arts.slice().sort((a, b) => (a.acquiredAt < b.acquiredAt ? 1 : a.acquiredAt > b.acquiredAt ? -1 : 0));
 
+    // Seuil d'éclipse (demande du 14/09/2026) : même valeur que MES_QCM_AT_RISK_THRESHOLD
+    // (views/qcm-du-jour.html) — à garder synchronisée si l'une des deux change.
+    const MEMORY_STAR_AT_RISK_THRESHOLD = 50;
     let totalSolarSystems = 0;
     let totalArticles = 0;
     const galaxies = [...galaxyBuckets.values()]
@@ -6653,12 +6702,24 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
         const solarSystemsArr = [...bucket.solarSystems.values()]
           .map((s) => {
             const starsArr = [...s.stars.values()]
-              .map((star) => ({
-                id: star.key,
-                name: star.name,
-                articleCount: star.articles.length,
-                articles: sortArticles(star.articles)
-              }))
+              .map((star) => {
+                // "Éclipse" (impact visuel) uniquement si TOUTES les fiches de cette étoile qui
+                // ont une rétrivabilité connue sont sous le seuil — jamais à cause d'UNE SEULE
+                // fiche fragile parmi d'autres saines (demande du 14/09/2026). Une étoile sans
+                // aucune fiche à rétrivabilité connue (jamais répondue via un QCM) n'est jamais
+                // éclipsée : aucun signal de désapprentissage n'existe pour elle.
+                const knownPcts = star.articles
+                  .map((article) => article.progressPct)
+                  .filter((pct) => typeof pct === "number");
+                const atRisk = knownPcts.length > 0 && knownPcts.every((pct) => pct < MEMORY_STAR_AT_RISK_THRESHOLD);
+                return {
+                  id: star.key,
+                  name: star.name,
+                  articleCount: star.articles.length,
+                  atRisk,
+                  articles: sortArticles(star.articles)
+                };
+              })
               .sort((a, b) => b.articleCount - a.articleCount || a.name.localeCompare(b.name, "fr"));
             const articleCount = starsArr.reduce((sum, star) => sum + star.articleCount, 0);
             totalArticles += articleCount;
@@ -7111,22 +7172,34 @@ app.post("/api/admin/push/process-pending", requireAdmin, async (req, res) => {
 // jamais d'exception, résultat mis en cache) : "pas encore prêt" n'est plus une erreur mais un
 // état normal, à re-vérifier plus tard — la génération elle-même reste du ressort des
 // schedulers dédiés à chaque rubrique, jamais de cette fonction.
-// hasAnyActualiteToday (12/09/2026, "je reçois la notification... alors qu'aucune actualité n'a
-// été publiée") : condition INDÉPENDANTE de eclairages.available, ci-dessous. Depuis le
-// correctif du 09/09/2026 ("insufficient"/"failed" comptent comme résolues), les 7 rubriques
-// Éclairages peuvent TOUTES se résoudre à "insufficient" faute d'actualité du jour à couvrir —
-// eclairages.available devient alors vrai précisément le jour où il n'y a, par construction,
-// rien à annoncer. Vérifie directement la source de vérité (debates créés par le bot de veille
-// aujourd'hui, même filtre que getPublishedTopicsForDateUncached) plutôt que de déduire cette
-// information de l'état des rubriques. Mémoïsé par dateKey, même principe que
-// getDailyEclairagesPublicationStatus : un simple count, TTL long une fois vrai (ne peut plus
-// redevenir faux dans la journée), court sinon (peut encore arriver plus tard).
+// hasAnyActualiteForWave (12/09/2026, "je reçois la notification... alors qu'aucune actualité
+// n'a été publiée", récidive le 13/09/2026 "à cette heure-ci, aucune actualité n'a été
+// publiée" — cf. incident du 13/09 : vague du matin publiée normalement ~8h20-8h22, vague du
+// soir n'a RIEN publié ce jour-là (quota egress Supabase épuisé), et le push du soir est quand
+// même parti à 13h06 parce que la 1re version de ce garde-fou vérifiait "au moins une actualité
+// AUJOURD'HUI", donc trivialement vraie dès la vague du matin, toute la journée). Condition
+// INDÉPENDANTE de eclairages.available, ci-dessous. Depuis le correctif du 09/09/2026
+// ("insufficient"/"failed" comptent comme résolues), les 7 rubriques Éclairages peuvent TOUTES
+// se résoudre à "insufficient" faute d'actualité à couvrir — eclairages.available devient alors
+// vrai précisément le jour (ou la vague) où il n'y a, par construction, rien à annoncer. Vérifie
+// directement la source de vérité (debates créés par le bot de veille, même filtre que
+// getPublishedTopicsForDateUncached), mais désormais bornée à la fenêtre de LA VAGUE annoncée
+// (depuis minuit Paris pour "morning", depuis 13h Paris — même seuil que le calcul de `wave`
+// plus bas — pour "evening") plutôt qu'à la journée entière : la vague du matin ne peut plus
+// jamais couvrir, à tort, l'absence de publication de la vague du soir. Mémoïsé par
+// (dateKey, wave), même principe que getDailyEclairagesPublicationStatus : un simple count, TTL
+// long une fois vrai (ne peut plus redevenir faux avant la fin de LA vague), court sinon (peut
+// encore arriver plus tard dans la même vague).
 const hasAnyActualiteTodayCache = new Map();
-async function hasAnyActualiteToday(dateKey) {
-  const cached = hasAnyActualiteTodayCache.get(dateKey);
+async function hasAnyActualiteForWave(dateKey, wave) {
+  const cacheKey = `${dateKey}:${wave}`;
+  const cached = hasAnyActualiteTodayCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
-  const cutoff = parisStartOfDayIso(new Date(`${dateKey}T12:00:00Z`));
-  const nextDayCutoff = new Date(new Date(cutoff).getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const dayStart = parisStartOfDayIso(new Date(`${dateKey}T12:00:00Z`));
+  const cutoff = wave === "evening"
+    ? new Date(new Date(dayStart).getTime() + 13 * 60 * 60 * 1000).toISOString()
+    : dayStart;
+  const nextDayCutoff = new Date(new Date(dayStart).getTime() + 24 * 60 * 60 * 1000).toISOString();
   const { count, error } = await supabase
     .from("debates")
     .select("id", { count: "exact", head: true })
@@ -7136,7 +7209,7 @@ async function hasAnyActualiteToday(dateKey) {
   if (error) throw new Error(error.message);
   const value = (count || 0) > 0;
   const ttl = value ? 30 * 60 * 1000 : ECLAIRAGES_STATUS_CACHE_TTL_MS;
-  hasAnyActualiteTodayCache.set(dateKey, { value, expiresAt: Date.now() + ttl });
+  hasAnyActualiteTodayCache.set(cacheKey, { value, expiresAt: Date.now() + ttl });
   return value;
 }
 
@@ -7149,15 +7222,20 @@ async function trySendDailyPushBroadcast() {
   if (!eclairages.available) {
     return { sent: false, reason: "eclairages_not_ready", eclairages };
   }
-  const hasActualite = await hasAnyActualiteToday(parisDateKey());
-  if (!hasActualite) {
-    return { sent: false, reason: "no_actualite_today", eclairages };
-  }
 
   // Les publications se font par vagues (~8h et ~16h heure de Paris) : avant 13h on suppose
   // la vague du matin, sinon celle du soir. Seuil au milieu des deux vagues, avec un peu de
   // marge si l'admin clique/le scheduler passe un peu en retard sur la vague du matin.
+  // Calculé AVANT hasAnyActualiteForWave ci-dessous (13/09/2026) : la vérification "au moins une
+  // actualité publiée" doit porter sur CETTE vague précise, jamais sur la journée entière (cf.
+  // son commentaire de tête — incident réel où la vague du matin couvrait à tort l'absence de
+  // publication de la vague du soir).
   const wave = parisHour() < 13 ? "morning" : "evening";
+  const hasActualite = await hasAnyActualiteForWave(parisDateKey(), wave);
+  if (!hasActualite) {
+    return { sent: false, reason: "no_actualite_today", eclairages, wave };
+  }
+
   const body = "Les actualités du jour sont disponibles.";
 
   // Idempotence (demande du 01/09/2026, "je reçois deux fois la même notification", puis
@@ -17645,20 +17723,41 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   const slotBySourceId = new Map();
   const originalByDateAndId = new Map();
   for (const row of quizRows || []) {
+    // Regroupées par sourceDebateId AU SEIN de cette ligne (correctif du 13/09/2026, "les
+    // fiches associées aux connaissances dans la mémoire sont toujours tronquées") : depuis
+    // slimSourceDetailForDuplicateQuestion (egress du 04/09/2026, cf. findCanonicalSourceDetail
+    // déjà utilisée pour la même raison dans GET .../notion-quizzes/fiche), une seule question
+    // par sourceDebateId porte encore la fiche complète (sections/meta/image) dans une ligne
+    // daily_quiz — les autres questions de la même notion n'ont qu'un sourceDetail allégé.
+    // contentBySourceId.set(q.sourceDebateId, q) écrasait auparavant sans discernement avec la
+    // DERNIÈRE question croisée dans la boucle, quel que soit son sourceDetail — si elle
+    // n'était pas la question canonique, "Ma mémoire" (et le badge "Mes acquis") affichait
+    // alors systématiquement la version allégée, d'où la troncature signalée à plusieurs
+    // reprises. Regroupe désormais toutes les questions de la même notion au sein de cette
+    // ligne pour y retrouver la vraie fiche complète, exactement comme le fait déjà la route
+    // /fiche.
+    const rowQuestionsBySourceId = new Map();
     for (const q of (row.questions || [])) {
       if (!isCultureGeneraleQuestionId(q.id)) continue;
       originalByDateAndId.set(`${row.quiz_date}:${q.id}`, q);
       contentByQuestionId.set(q.id, q);
-      if (q.sourceDebateId) {
-        contentBySourceId.set(q.sourceDebateId, q);
-        originalQuizDateBySourceId.set(q.sourceDebateId, row.quiz_date);
-        // Slot réel de la ligne daily_quiz qui porte cette notion — depuis
-        // l'introduction des niveaux (12/08/2026), il peut porter un suffixe
-        // ":elementaire|avance|expert" que rien ne permet de reconstruire par
-        // simple concaténation (cf. GET /api/users/intellectual-universe, qui
-        // devinait auparavant ce slot au lieu de le lire ici).
-        if (row.slot) slotBySourceId.set(q.sourceDebateId, row.slot);
-      }
+      if (!q.sourceDebateId) continue;
+      if (!rowQuestionsBySourceId.has(q.sourceDebateId)) rowQuestionsBySourceId.set(q.sourceDebateId, []);
+      rowQuestionsBySourceId.get(q.sourceDebateId).push(q);
+    }
+    for (const [sourceDebateId, rowQuestions] of rowQuestionsBySourceId) {
+      const canonicalSourceDetail = findCanonicalSourceDetail(rowQuestions);
+      const representative = rowQuestions[0];
+      contentBySourceId.set(sourceDebateId, canonicalSourceDetail
+        ? { ...representative, sourceDetail: canonicalSourceDetail }
+        : representative);
+      originalQuizDateBySourceId.set(sourceDebateId, row.quiz_date);
+      // Slot réel de la ligne daily_quiz qui porte cette notion — depuis
+      // l'introduction des niveaux (12/08/2026), il peut porter un suffixe
+      // ":elementaire|avance|expert" que rien ne permet de reconstruire par
+      // simple concaténation (cf. GET /api/users/intellectual-universe, qui
+      // devinait auparavant ce slot au lieu de le lire ici).
+      if (row.slot) slotBySourceId.set(sourceDebateId, row.slot);
     }
   }
 
@@ -17922,116 +18021,31 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey, 
   return due;
 }
 
-// Jauge de charge d'apprentissage (demande du 17/08/2026) : projette les
-// échéances FSRS déjà programmées de cet utilisateur sur les prochains
-// DEFAULT_PROJECTION_DAYS jours et simule le report en cascade au-delà du
-// plafond quotidien (cf. computeLearningLoadGauge,
-// lib/spaced-repetition/learning-load.js — toute la logique de simulation
-// vit là-bas, pure et testée ; cette fonction ne fait que lire/agréger).
-// Lecture seule : aucun état FSRS modifié, aucune carte choisie ici.
+// Jauge de charge de mémorisation (simplifiée le 14/09/2026, "juste
+// comptabiliser le nombre de connaissance par jour, puis se remettre à zéro
+// tous les jours ... pas de calcul sur plusieurs jours comme actuellement") :
+// remplace l'ancienne simulation de report FSRS sur plusieurs jours par un
+// simple comptage du jour même — exactement le même calcul que
+// "Connaissances mémorisées ce jour" (fetchMemorizedTodayForUser, plus bas
+// dans ce fichier), réutilisé tel quel pour ne jamais avoir deux
+// implémentations différentes du même comptage. Remise à zéro automatique à
+// minuit Paris, puisque fetchMemorizedTodayForUser filtre déjà sur
+// parisStartOfDayIso() — rien à gérer explicitement ici.
 async function fetchLearningLoadGaugeForUser(voterKey) {
   const key = String(voterKey || "").trim();
   if (!key) return null;
 
   // Lecture seule (jamais resolveLegacyUser, qui crée la ligne) : même
   // principe que fetchCultureGeneraleReviewInjectionForToday — un visiteur
-  // sans historique n'a par définition aucun état FSRS, inutile de lui créer
-  // une ligne users ici.
+  // sans historique n'a par définition rien mémorisé aujourd'hui, inutile de
+  // lui créer une ligne users ici.
   const { data: userRow, error: userError } = await supabase.from("users").select("id").eq("legacy_key", key).maybeSingle();
   if (userError) { console.warn("[learning-load] lecture user échouée :", userError.message); return null; }
-  if (!userRow) return { level: "calm", ratio: 0, peakDayIndex: -1, peakLoad: 0, dueCountsByDay: [] };
+  if (!userRow) return { level: "calm", count: 0 };
 
-  // Désactivations personnelles par knowledgeTarget (chantier "Mémoriser/Non
-  // mémorisée", 06/09/2026) : une connaissance désactivée ne doit plus
-  // compter dans la charge future (cohérence avec Ancrer, cf.
-  // fetchCultureGeneraleReviewInjectionForToday). Note de cohérence
-  // (vérifiée avant modification, demande explicite du diagnostic) : cette
-  // jauge n'a JAMAIS filtré user_question_exclusions (l'ancien mécanisme par
-  // question_id) — son unique requête ne lisait que due_at, sans aucune
-  // jointure vers memory_items/question_id. Rien à préserver de ce côté :
-  // seul le nouveau filtre par knowledgeTarget est ajouté ici, aucun
-  // comportement legacy n'existait à respecter pour cette jauge précise.
-  const disabledKnowledgeTargetKeys = await fetchDisabledKnowledgeTargetKeys(userRow.id);
-  // Chemin rapide inchangé (aucune désactivation) : même requête, même coût
-  // qu'avant ce chantier — le join memory_items (nécessaire pour résoudre
-  // knowledgeTargetId) n'est demandé QUE si au moins une désactivation
-  // existe pour cet utilisateur, jamais pour le cas commun.
-  const needsKnowledgeTargetFilter = disabledKnowledgeTargetKeys.size > 0;
-
-  const now = new Date();
-  // Borne haute unique (fin du dernier jour de la fenêtre) : une seule
-  // requête plutôt que DEFAULT_PROJECTION_DAYS requêtes séparées, le
-  // bucketing par jour se fait ensuite en mémoire (volume par utilisateur
-  // toujours restreint, cf. plafond quotidien de repasses).
-  const windowEndIso = parisStartOfDayIso(new Date(now.getTime() + DEFAULT_PROJECTION_DAYS * 24 * 60 * 60 * 1000));
-  const { data: dueRows, error: dueError } = await supabase
-    .from("memory_item_fsrs_states")
-    .select(needsKnowledgeTargetFilter
-      ? "due_at, memory_items(slot, quiz_date, question_id, subject_type, subject_source_id)"
-      : "due_at")
-    .eq("user_id", userRow.id)
-    .lt("due_at", windowEndIso);
-  if (dueError) { console.warn("[learning-load] lecture memory_item_fsrs_states échouée :", dueError.message); return null; }
-
-  // Résolution knowledgeTargetId bornée à la fenêtre de projection déjà
-  // chargée ci-dessus (jamais un ensemble plus large) : regroupe par ligne
-  // daily_quiz d'origine pour ne la relire qu'une fois, même principe que
-  // fetchCultureGeneraleReviewInjectionForToday.
-  let excludedRows = new Set();
-  if (needsKnowledgeTargetFilter) {
-    const bySlotDate = new Map();
-    for (const row of dueRows || []) {
-      const mi = row.memory_items;
-      if (!mi) continue;
-      const k = `${mi.quiz_date}:${mi.slot}`;
-      if (!bySlotDate.has(k)) bySlotDate.set(k, { quizDate: mi.quiz_date, slot: mi.slot });
-    }
-    const quizRowResults = await Promise.all([...bySlotDate.values()].map(({ quizDate, slot }) =>
-      supabase.from("daily_quiz").select("quiz_date, slot, questions, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
-    const questionByDateSlotId = new Map();
-    const curriculumBySlotDate = new Map();
-    for (const { data } of quizRowResults) {
-      if (!data) continue;
-      curriculumBySlotDate.set(`${data.quiz_date}:${data.slot}`, data.curriculum || null);
-      for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
-    }
-    for (const row of dueRows || []) {
-      const mi = row.memory_items;
-      if (!mi || !mi.subject_type || !mi.subject_source_id) continue;
-      const question = questionByDateSlotId.get(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`);
-      if (!question) continue;
-      const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${mi.quiz_date}:${mi.slot}`));
-      if (knowledgeTargetId && disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(mi.subject_type, mi.subject_source_id, knowledgeTargetId))) {
-        excludedRows.add(row);
-      }
-    }
-  }
-
-  // dayBoundaries[i] = minuit Paris du jour i (0 = aujourd'hui) ; le jour 0
-  // regroupe tout ce qui est dû AVANT la fin du jour 0, retard déjà
-  // accumulé inclus (due_at au passé) — comme fetchCultureGeneraleReviewInjectionForToday,
-  // jamais une comparaison sur une date arrondie.
-  const dayBoundaries = [];
-  for (let i = 0; i <= DEFAULT_PROJECTION_DAYS; i++) {
-    dayBoundaries.push(new Date(parisStartOfDayIso(new Date(now.getTime() + i * 24 * 60 * 60 * 1000))).getTime());
-  }
-  const dueCountsByDay = new Array(DEFAULT_PROJECTION_DAYS).fill(0);
-  for (const row of dueRows || []) {
-    if (excludedRows.has(row)) continue;
-    const dueMs = new Date(row.due_at).getTime();
-    if (!Number.isFinite(dueMs)) continue;
-    let dayIndex = dayBoundaries.findIndex((boundary, i) => dueMs < dayBoundaries[i + 1]);
-    if (dayIndex === -1) dayIndex = DEFAULT_PROJECTION_DAYS - 1; // garde-fou, ne devrait pas arriver (borne haute déjà filtrée côté requête)
-    dueCountsByDay[dayIndex] += 1;
-  }
-
-  const gauge = computeLearningLoadGauge(dueCountsByDay, DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY);
-  // level recalculé (demande du 13/09/2026, "idéal pour 6 connaissances, surcharge à partir
-  // de 9") : computeLearningLoadGauge garde son cap=20 pour la simulation de report en
-  // cascade, réaliste et inchangée — seul le NIVEAU affiché à l'utilisateur (couleur/libellé)
-  // est recalculé ici sur les nouveaux seuils, directement à partir du peakLoad déjà simulé
-  // (cf. levelFromPeakLoad, lib/spaced-repetition/learning-load.js).
-  return { ...gauge, level: levelFromPeakLoad(gauge.peakLoad), dueCountsByDay };
+  const { items } = await fetchMemorizedTodayForUser(userRow.id);
+  const count = items.length;
+  return { level: levelFromPeakLoad(count), count };
 }
 
 // Rubrique Éclairages -> service de lecture + clé du tableau de contenu
@@ -21991,6 +22005,88 @@ app.post("/api/users/notion-quizzes/adopt", rateLimit("users", 30), async (req, 
   }
 });
 
+// Cascade "Ma mémoire" (demande du 14/09/2026) : quand une connaissance quitte
+// "Mes acquis", sa fiche (user_article_acquisitions) disparaît avec elle, et son
+// étoile/solar ne remontent avec elle QUE si plus rien d'autre n'y fait référence
+// — jamais seulement "plus d'autre fiche de CET utilisateur". solar_systems/stars
+// sont un catalogue canonique partagé entre TOUS les utilisateurs ET avec le
+// pipeline actualités (opinion_articles.solar_system_id/star_id, cf.
+// data/migration-solar-systems.sql et data/migration-stars.sql) : supprimer une
+// étoile ou un solar encore utilisé ailleurs casserait la mémoire d'un autre
+// utilisateur ou la classification d'un article. Reste best-effort (jamais awaité
+// avant de répondre au retrait du QCM lui-même, qui doit toujours réussir même si
+// cette cascade échoue) : voir removeMemoryFicheCascade.
+async function deleteStarIfOrphaned(starId) {
+  const [
+    { count: acquisitionCount, error: acquisitionCountError },
+    { count: articleCount, error: articleCountError }
+  ] = await Promise.all([
+    supabase.from("user_article_acquisitions").select("id", { count: "exact", head: true }).eq("star_id", starId),
+    supabase.from("opinion_articles").select("id", { count: "exact", head: true }).eq("star_id", starId)
+  ]);
+  if (acquisitionCountError) throw new Error(acquisitionCountError.message);
+  if (articleCountError) throw new Error(articleCountError.message);
+  if (acquisitionCount || articleCount) return;
+  const { error } = await supabase.from("stars").delete().eq("id", starId);
+  if (error) throw new Error(error.message);
+}
+
+async function deleteSolarSystemIfOrphaned(solarSystemId) {
+  const [
+    { count: starCount, error: starCountError },
+    { count: acquisitionCount, error: acquisitionCountError },
+    { count: articleCount, error: articleCountError }
+  ] = await Promise.all([
+    supabase.from("stars").select("id", { count: "exact", head: true }).eq("solar_system_id", solarSystemId),
+    supabase.from("user_article_acquisitions").select("id", { count: "exact", head: true }).eq("solar_system_id", solarSystemId),
+    supabase.from("opinion_articles").select("id", { count: "exact", head: true }).eq("solar_system_id", solarSystemId)
+  ]);
+  if (starCountError) throw new Error(starCountError.message);
+  if (acquisitionCountError) throw new Error(acquisitionCountError.message);
+  if (articleCountError) throw new Error(articleCountError.message);
+  if (starCount || acquisitionCount || articleCount) return;
+  // Plus aucune fiche/étoile/article n'y fait référence : ce solar ne peut plus
+  // servir que de repère d'activation obsolète (user_solar_activations, FK sans
+  // ON DELETE) — à retirer avant de pouvoir supprimer le solar lui-même.
+  const { error: activationError } = await supabase.from("user_solar_activations").delete().eq("solar_system_id", solarSystemId);
+  if (activationError) throw new Error(activationError.message);
+  const { error } = await supabase.from("solar_systems").delete().eq("id", solarSystemId);
+  if (error) throw new Error(error.message);
+}
+
+async function removeMemoryFicheCascade({ userId, quizDate, slot }) {
+  let questions = getCachedNotionQuizFicheRow(slot, quizDate)?.questions;
+  if (!questions) {
+    const { data, error } = await supabase
+      .from("daily_quiz").select("questions").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle();
+    if (error) throw new Error(error.message);
+    questions = data?.questions || [];
+  }
+  const firstQuestion = questions[0];
+  const sourceType = String(firstQuestion?.sourceType || "").trim();
+  const sourceDebateId = firstQuestion?.sourceDebateId != null ? String(firstQuestion.sourceDebateId).trim() : "";
+  if (!sourceType || !sourceDebateId) return;
+
+  const { data: acquisitionRow, error: acquisitionError } = await supabase
+    .from("user_article_acquisitions")
+    .select("id, solar_system_id, star_id")
+    .eq("user_id", userId)
+    .eq("eclairage_type", sourceType)
+    .eq("eclairage_source_id", sourceDebateId)
+    .maybeSingle();
+  if (acquisitionError) throw new Error(acquisitionError.message);
+  if (!acquisitionRow) return;
+
+  const { error: deleteAcquisitionError } = await supabase
+    .from("user_article_acquisitions")
+    .delete()
+    .eq("id", acquisitionRow.id);
+  if (deleteAcquisitionError) throw new Error(deleteAcquisitionError.message);
+
+  if (acquisitionRow.star_id) await deleteStarIfOrphaned(acquisitionRow.star_id);
+  if (acquisitionRow.solar_system_id) await deleteSolarSystemIfOrphaned(acquisitionRow.solar_system_id);
+}
+
 // Déclic sur "Mémoriser" : retire uniquement la ligne de la liste
 // personnelle, jamais le QCM partagé (daily_quiz) — recliquer plus tard sur
 // la même notion le même jour ne régénère donc rien.
@@ -22010,6 +22106,14 @@ app.post("/api/users/notion-quizzes/remove", rateLimit("users", 30), async (req,
       .eq("quiz_date", quizDate)
       .eq("slot", slot);
     if (error) throw new Error(error.message);
+
+    try {
+      await removeMemoryFicheCascade({ userId: user.id, quizDate, slot });
+      invalidateIntellectualUniverseCache(validation.legacyKey);
+    } catch (cascadeError) {
+      console.error("[notion-quizzes] cascade fiche/étoile/solar :", cascadeError.message);
+    }
+
     res.json({ ok: true });
   } catch (error) {
     console.error("[notion-quizzes] suppression :", error.message);
@@ -22179,9 +22283,79 @@ app.get("/api/users/notion-quizzes/generation-status", rateLimit("users", 60), a
   }
 });
 
+// Rattrapage de classification pour les sujets sans thématique résolue
+// (demande du 13/09/2026, "les classer directement... un appel API par
+// apprentissage, partagé pour les utilisateurs, jamais 2 fois") : le contenu
+// généré AVANT l'introduction de classificationContext dans
+// generateNotionLevelQuiz n'a jamais reçu de sourcePlacement — jamais classé
+// nulle part, ni pour l'icône de thématique ("Mes apprentissages"), ni pour
+// "Ma mémoire" à l'acquisition (qui retombe alors sur son propre flux
+// historique plus lourd, cf. validateStoredCultureGeneralePlacement).
+//
+// Déclenché à la demande, au premier chargement de la liste qui rencontre un
+// tel sujet (jamais un batch rétroactif sur toute la base) — best-effort,
+// fire-and-forget : ne bloque JAMAIS la réponse de /notion-quizzes,
+// l'utilisateur qui déclenche ce rattrapage voit l'icône générique cette
+// fois, la bonne au prochain chargement. Persisté sur la ligne daily_quiz
+// PARTAGÉE (jamais par utilisateur, jamais dans une table à part) : un seul
+// appel IA au total pour ce contenu, tous les visiteurs suivants (et
+// validateStoredCultureGeneralePlacement à l'acquisition) le réutilisent
+// ensuite tel quel, exactement comme pour un master généré après ce
+// chantier. _pendingKnowledgeThemeBackfills (mémoire process, jamais
+// persisté) évite un second appel IA concurrent si deux visiteurs
+// rencontrent le même sujet non classé au même moment.
+const _pendingKnowledgeThemeBackfills = new Set();
+async function backfillMissingKnowledgeThemeClassification(quizDate, slot, userId) {
+  const backfillKey = `${quizDate}:${slot}`;
+  if (_pendingKnowledgeThemeBackfills.has(backfillKey)) return;
+  _pendingKnowledgeThemeBackfills.add(backfillKey);
+  try {
+    const { data: quizRow, error: quizRowError } = await supabase
+      .from("daily_quiz")
+      .select("questions")
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot)
+      .maybeSingle();
+    if (quizRowError || !quizRow) return;
+    const rawQuestions = Array.isArray(quizRow.questions) ? quizRow.questions : [];
+    const first = rawQuestions[0];
+    // Déjà classé entre-temps (un autre visiteur a déclenché ce même
+    // rattrapage juste avant que celui-ci ne lise la ligne) : jamais un
+    // second appel IA pour rien.
+    if (!first || first.sourcePlacement?.category) return;
+    const sourceType = String(first.sourceType || "").trim();
+    const sourceName = String(first.sourceName || "").trim();
+    const sourceDebateId = first.sourceDebateId;
+    if (!sourceType || !sourceName || sourceDebateId == null) return;
+
+    const sourcePlacement = await classifyCultureGeneraleKnowledgePlacementWithAI(
+      sourceType, sourceName, first.sourceDetail || null, userId, sourceDebateId
+    );
+    if (!sourcePlacement?.category) return;
+
+    const updatedQuestions = rawQuestions.map((q) => ({ ...q, sourcePlacement }));
+    const { error: updateError } = await supabase
+      .from("daily_quiz")
+      .update({ questions: updatedQuestions })
+      .eq("quiz_date", quizDate)
+      .eq("slot", slot);
+    if (updateError) {
+      console.warn("[knowledge-theme-backfill] écriture échouée :", updateError.message);
+      return;
+    }
+    console.info("[knowledge-theme-backfill] classé", JSON.stringify({ quizDate, slot, category: sourcePlacement.category }));
+  } catch (error) {
+    console.warn("[knowledge-theme-backfill] échec :", error.message);
+  } finally {
+    _pendingKnowledgeThemeBackfills.delete(backfillKey);
+  }
+}
+
 // Liste "Mes QCM" (onglet par défaut de /qcm-du-jour) : les notions que ce
 // visiteur a choisi de mémoriser, les plus récentes en premier. Lecture
-// seule, jamais d'upsert (même esprit que les autres routes GET /api/users/*).
+// seule pour tout le reste de la route (même esprit que les autres routes
+// GET /api/users/*) — seule exception : backfillMissingKnowledgeThemeClassification
+// ci-dessus, fire-and-forget, jamais sur le chemin de CETTE réponse.
 app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) => {
   try {
     const validation = validateLegacyKey(req.query?.legacyKey);
@@ -22465,6 +22639,13 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
       const memoryKnowledgeKey = `${quizMeta.sourceType || ""}:${quizMeta.sourceDebateId || ""}`;
       const primaryTheme = memoryGalaxyByKnowledgeKey.get(memoryKnowledgeKey)
         || getPrimaryNotionQuizTheme({ sourcePlacement: { category: quizMeta.sourcePlacementCategory }, sourceThemes: quizMeta.sourceThemes });
+      // Sujet jamais classé (contenu antérieur à classificationContext, cf.
+      // backfillMissingKnowledgeThemeClassification ci-dessus) : rattrapage
+      // fire-and-forget, jamais awaité ici — cette réponse-ci garde l'icône
+      // générique, la bonne apparaîtra au prochain chargement.
+      if (!primaryTheme) {
+        backfillMissingKnowledgeThemeClassification(link.quiz_date, link.slot, userRow.id).catch(() => {});
+      }
       // "Réalisé" seulement une fois TOUTES les questions répondues au moins
       // une fois (juste ou fausse) OU passées (cf. answeredCount ci-dessus,
       // demande du 30/08/2026) — pas dès la première réponse (demande du
@@ -26473,6 +26654,90 @@ app.post("/api/users/knowledge-memorization", rateLimit("users", 30), async (req
 // modifié). Seules les connaissances encore memorizationEnabled=true sont
 // renvoyées : une connaissance déjà désactivée avant sa dernière review du
 // jour n'a plus sa place dans une liste de connaissances "mémorisées".
+// Connaissances mémorisées aujourd'hui pour un utilisateur donné (voluntary +
+// suggested) — extrait dans sa propre fonction le 14/09/2026 pour que la
+// jauge de charge de mémorisation (fetchLearningLoadGaugeForUser, plus haut
+// dans ce fichier) puisse réutiliser exactement le même comptage plutôt que
+// deux implémentations séparées de la même chose. Lecture seule.
+async function fetchMemorizedTodayForUser(userId) {
+  const { data: reviewRows, error: reviewError } = await supabase
+    .from("memory_review_events")
+    .select("memory_items(slot, quiz_date, question_id, subject_type, subject_source_id)")
+    .eq("user_id", userId)
+    .gte("reviewed_at", parisStartOfDayIso());
+  if (reviewError) throw new Error(reviewError.message);
+  if (!reviewRows || !reviewRows.length) return { items: [], voluntary: [], suggested: [] };
+
+  // Un seul aller-retour daily_quiz par (slot, quiz_date) distinct de la
+  // fenêtre, jamais une lecture par review.
+  const bySlotDate = new Map();
+  for (const row of reviewRows) {
+    const mi = row.memory_items;
+    if (!mi) continue;
+    const k = `${mi.quiz_date}:${mi.slot}`;
+    if (!bySlotDate.has(k)) bySlotDate.set(k, { quizDate: mi.quiz_date, slot: mi.slot });
+  }
+  const quizRowResults = await Promise.all([...bySlotDate.values()].map(({ quizDate, slot }) =>
+    supabase.from("daily_quiz").select("quiz_date, slot, questions, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
+  const questionByDateSlotId = new Map();
+  const curriculumBySlotDate = new Map();
+  for (const { data } of quizRowResults) {
+    if (!data) continue;
+    curriculumBySlotDate.set(`${data.quiz_date}:${data.slot}`, data.curriculum || null);
+    for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
+  }
+
+  // Dédoublonnée par connaissance (knowledgeTargetId), jamais par review :
+  // plusieurs reviews du même jour sur la même connaissance ne comptent
+  // qu'une fois.
+  const itemsByKey = new Map();
+  for (const row of reviewRows) {
+    const mi = row.memory_items;
+    if (!mi || !mi.subject_type || !mi.subject_source_id) continue;
+    const question = questionByDateSlotId.get(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`);
+    if (!question) continue;
+    const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${mi.quiz_date}:${mi.slot}`));
+    if (!knowledgeTargetId) continue;
+    const key = knowledgeTargetPreferenceKey(mi.subject_type, mi.subject_source_id, knowledgeTargetId);
+    if (itemsByKey.has(key)) continue;
+    itemsByKey.set(key, {
+      knowledgeTargetId,
+      subjectType: mi.subject_type,
+      subjectSourceId: mi.subject_source_id,
+      label: question.knowledgeTarget || question.question || ""
+    });
+  }
+  if (!itemsByKey.size) return { items: [], voluntary: [], suggested: [] };
+
+  // Même règle de défaut que Découvrir (attachMemorizationPreferenceToQuestions,
+  // "décoché par défaut", 12/09/2026) : une connaissance jamais explicitement
+  // cochée n'a pas sa place ici, même si elle a bien reçu une review
+  // aujourd'hui (répondre à une question ne coche jamais "Mémoriser" tout
+  // seul, cf. wireExcludeButton).
+  //
+  // Deux listes distinctes (demande du 13/09/2026, "distinguer les connaissances
+  // volontairement mémorisées des connaissances préconisées à mémoriser", revu le
+  // même jour "pas cochées par défaut... état réel") : `voluntary` garde le filtre
+  // enabled===true (un vrai clic explicite) ; `suggested` n'exige PAS enabled===true
+  // — applyMemorizationSuggestionsForQuiz écrit désormais source:"suggested" avec
+  // enabled:false (jamais encore confirmée), donc n'apparaîtrait jamais ici sinon.
+  // Un clic sur une connaissance "suggested" passe par POST .../knowledge-memorization,
+  // qui pose source:"manual" — elle sort alors définitivement de ce groupe au
+  // prochain chargement, jamais mélangée avec `voluntary` entre-temps. `items`
+  // conservé (fusion des deux, ordre voluntary puis suggested) pour ne rien casser
+  // côté rétrocompatibilité.
+  const preferenceMap = await fetchKnowledgeTargetMemorizationPreferenceMap(userId);
+  const voluntary = [];
+  const suggested = [];
+  for (const [key, item] of itemsByKey.entries()) {
+    const pref = preferenceMap.get(key);
+    if (!pref) continue;
+    if (pref.source === "suggested") suggested.push(item);
+    else if (pref.enabled === true) voluntary.push(item);
+  }
+  return { items: [...voluntary, ...suggested], voluntary, suggested };
+}
+
 app.get("/api/users/memorized-today", rateLimit("users", 30), async (req, res) => {
   try {
     const validation = validateLegacyKey(req.query?.legacyKey);
@@ -26483,83 +26748,7 @@ app.get("/api/users/memorized-today", rateLimit("users", 30), async (req, res) =
     if (userError) throw new Error(userError.message);
     if (!userRow) return res.json({ items: [] });
 
-    const { data: reviewRows, error: reviewError } = await supabase
-      .from("memory_review_events")
-      .select("memory_items(slot, quiz_date, question_id, subject_type, subject_source_id)")
-      .eq("user_id", userRow.id)
-      .gte("reviewed_at", parisStartOfDayIso());
-    if (reviewError) throw new Error(reviewError.message);
-    if (!reviewRows || !reviewRows.length) return res.json({ items: [] });
-
-    // Même principe que fetchLearningLoadGaugeForUser ci-dessus : un seul
-    // aller-retour daily_quiz par (slot, quiz_date) distinct de la fenêtre,
-    // jamais une lecture par review.
-    const bySlotDate = new Map();
-    for (const row of reviewRows) {
-      const mi = row.memory_items;
-      if (!mi) continue;
-      const k = `${mi.quiz_date}:${mi.slot}`;
-      if (!bySlotDate.has(k)) bySlotDate.set(k, { quizDate: mi.quiz_date, slot: mi.slot });
-    }
-    const quizRowResults = await Promise.all([...bySlotDate.values()].map(({ quizDate, slot }) =>
-      supabase.from("daily_quiz").select("quiz_date, slot, questions, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
-    const questionByDateSlotId = new Map();
-    const curriculumBySlotDate = new Map();
-    for (const { data } of quizRowResults) {
-      if (!data) continue;
-      curriculumBySlotDate.set(`${data.quiz_date}:${data.slot}`, data.curriculum || null);
-      for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
-    }
-
-    // Dédoublonnée par connaissance (knowledgeTargetId), jamais par review :
-    // plusieurs reviews du même jour sur la même connaissance ne comptent
-    // qu'une fois.
-    const itemsByKey = new Map();
-    for (const row of reviewRows) {
-      const mi = row.memory_items;
-      if (!mi || !mi.subject_type || !mi.subject_source_id) continue;
-      const question = questionByDateSlotId.get(`${mi.quiz_date}:${mi.slot}:${mi.question_id}`);
-      if (!question) continue;
-      const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${mi.quiz_date}:${mi.slot}`));
-      if (!knowledgeTargetId) continue;
-      const key = knowledgeTargetPreferenceKey(mi.subject_type, mi.subject_source_id, knowledgeTargetId);
-      if (itemsByKey.has(key)) continue;
-      itemsByKey.set(key, {
-        knowledgeTargetId,
-        subjectType: mi.subject_type,
-        subjectSourceId: mi.subject_source_id,
-        label: question.knowledgeTarget || question.question || ""
-      });
-    }
-    if (!itemsByKey.size) return res.json({ items: [] });
-
-    // Même règle de défaut que Découvrir (attachMemorizationPreferenceToQuestions,
-    // "décoché par défaut", 12/09/2026) : une connaissance jamais explicitement
-    // cochée n'a pas sa place ici, même si elle a bien reçu une review
-    // aujourd'hui (répondre à une question ne coche jamais "Mémoriser" tout
-    // seul, cf. wireExcludeButton).
-    //
-    // Deux listes distinctes (demande du 13/09/2026, "distinguer les connaissances
-    // volontairement mémorisées des connaissances préconisées à mémoriser", revu le
-    // même jour "pas cochées par défaut... état réel") : `voluntary` garde le filtre
-    // enabled===true (un vrai clic explicite) ; `suggested` n'exige PAS enabled===true
-    // — applyMemorizationSuggestionsForQuiz écrit désormais source:"suggested" avec
-    // enabled:false (jamais encore confirmée), donc n'apparaîtrait jamais ici sinon.
-    // Un clic sur une connaissance "suggested" passe par POST .../knowledge-memorization,
-    // qui pose source:"manual" — elle sort alors définitivement de ce groupe au
-    // prochain chargement, jamais mélangée avec `voluntary` entre-temps. `items`
-    // conservé (fusion des deux, ordre voluntary puis suggested) pour ne rien casser
-    // côté rétrocompatibilité.
-    const preferenceMap = await fetchKnowledgeTargetMemorizationPreferenceMap(userRow.id);
-    const voluntary = [];
-    const suggested = [];
-    for (const [key, item] of itemsByKey.entries()) {
-      const pref = preferenceMap.get(key);
-      if (!pref) continue;
-      if (pref.source === "suggested") suggested.push(item);
-      else if (pref.enabled === true) voluntary.push(item);
-    }
-    res.json({ items: [...voluntary, ...suggested], voluntary, suggested });
+    res.json(await fetchMemorizedTodayForUser(userRow.id));
   } catch (error) {
     console.error("[memorized-today] :", error.message);
     return sendServerError(res, "Erreur chargement des connaissances mémorisées du jour.");

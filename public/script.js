@@ -292,9 +292,9 @@ function __mnoriaRecordReloadReason(reason) {
     const skipStartup = window.__mnoriaSkipStartupOnce === true;
 
     // Un déchargement normal (navigation, fermeture) écrit toujours un snapshot
-    // "pagehide"/"beforeunload" en dernier. Si le dernier snapshot est un simple
-    // changement de visibilité récent, la page précédente est morte sans être
-    // déchargée proprement : processus WebKit tué (mémoire) ou crashé.
+    // "pagehide" en dernier. Les anciens snapshots "beforeunload" restent
+    // acceptés par compatibilité, mais on n'écoute plus beforeunload afin de ne
+    // pas pénaliser la restauration BFCache de l'accueil.
     const lifecycleAgeMs = lastLifecycleSnapshot?.timestamp
       ? Date.now() - new Date(lastLifecycleSnapshot.timestamp).getTime()
       : null;
@@ -434,11 +434,6 @@ window.addEventListener("unhandledrejection", (event) => {
 window.addEventListener("pagehide", (event) => {
   __mnoriaStoreLifecycleSnapshot("pagehide", { pagehidePersisted: event.persisted === true });
   __mnoriaDebugRefreshLog("window-pagehide", "lifecycle", { persisted: event.persisted === true });
-}, true);
-
-window.addEventListener("beforeunload", () => {
-  __mnoriaStoreLifecycleSnapshot("beforeunload");
-  __mnoriaDebugRefreshLog("window-beforeunload", "lifecycle");
 }, true);
 
 document.addEventListener("freeze", () => {
@@ -789,6 +784,21 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   window.scrollTo(0, 0);
 
   const wait = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };
+  const waitForStartupPushInviteGate = function() {
+    if (!document.documentElement.classList.contains('mnoria-startup-wait-push-invite')) {
+      return Promise.resolve();
+    }
+    return new Promise(function(resolve) {
+      let done = false;
+      const finish = function() {
+        if (done) return;
+        done = true;
+        window.removeEventListener('mnoria:startup-push-invite-complete', finish);
+        resolve();
+      };
+      window.addEventListener('mnoria:startup-push-invite-complete', finish, { once: true });
+    });
+  };
   // Demande du 31/08/2026, "le message Cultive ton esprit est visible avant même le logo" :
   // la pause de 400ms ci-dessous (runIntroSequence) supposait le logo déjà chargé à ce
   // moment-là (cas fréquent sur cache chaud), mais rien ne l'empêchait de s'écouler AVANT
@@ -974,6 +984,7 @@ window.forceFullPageRefresh = forceFullPageRefresh;
   }, startupAbsoluteFailsafeMs);
 
   async function runIntroSequence() {
+    await waitForStartupPushInviteGate();
     // Continuité d'un refresh utilisateur (bouton "Actualiser", cf. forceFullPageRefresh —
     // mnoria-user-refresh-startup posé dès la tête de <head> quand _swrefresh est dans l'URL) :
     // le texte a déjà fini de s'afficher en entier sur la page précédente, juste avant la
@@ -1283,6 +1294,7 @@ const PUSH_INVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 let pushInviteToastEl = null;
 let pushInviteEnablePending = false;
 let pushSubscriptionSyncPromise = null;
+let pushInviteCloseCallback = null;
 
 // Nettoie la clé dismissed corrompue par l'ancien bug (iOS "denied" par défaut)
 try {
@@ -1290,6 +1302,12 @@ try {
     lsRemove(PUSH_INVITE_DISMISSED_KEY);
   }
 } catch {}
+
+function releaseStartupPushInviteGate() {
+  if (!document.documentElement.classList.contains("mnoria-startup-wait-push-invite")) return;
+  document.documentElement.classList.remove("mnoria-startup-wait-push-invite");
+  window.dispatchEvent(new Event("mnoria:startup-push-invite-complete"));
+}
 
 // Capture globale (toutes les pages) du prompt d'installation Android/Chrome ;
 // consommé par shouldShowPushInvite et window.triggerAndroidInstall (index.html)
@@ -2326,9 +2344,14 @@ function ensurePushInviteStyles() {
 }
 
 function hidePushInvite() {
+  const closeCallback = pushInviteCloseCallback;
+  pushInviteCloseCallback = null;
   if (pushInviteToastEl) {
     pushInviteToastEl.remove();
     pushInviteToastEl = null;
+  }
+  if (typeof closeCallback === "function") {
+    try { closeCallback(); } catch (error) {}
   }
 }
 
@@ -2487,6 +2510,7 @@ function showPushInvite(reason = "action", options = {}) {
 
   ensurePushInviteStyles();
   lsSet(PUSH_INVITE_LAST_SHOWN_KEY, String(Date.now()));
+  pushInviteCloseCallback = typeof options.onClose === "function" ? options.onClose : null;
 
   const toast = document.createElement("div");
   toast.className = "push-invite-toast";
@@ -2802,6 +2826,8 @@ const INDEX_DEBATES_CACHE_KEY = "mnoria_debates_cache_paged_v2";
 const INDEX_DEBATES_CACHE_TIME_KEY = "mnoria_debates_cache_time_paged_v2";
 const INDEX_DEBATES_CACHE_META_KEY = "mnoria_debates_cache_meta_paged_v2";
 const INDEX_DEBATES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const HOME_RETURN_UNIVERSE_CACHE_TTL = 5 * 60 * 1000;
+const HOME_RETURN_UNIVERSE_EMPTY_CACHE_TTL = 10 * 60 * 1000;
 const INDEX_INITIAL_DEBATES_FETCH_LIMIT = 120;
 const INDEX_DEBATES_PAGE_SIZE = 60;
 const INDEX_SIMILAR_DEBATES_FETCH_LIMIT = 120;
@@ -2821,6 +2847,56 @@ function clearIndexDebatesSessionCache() {
     sessionStorage.removeItem(INDEX_DEBATES_CACHE_TIME_KEY);
     sessionStorage.removeItem(INDEX_DEBATES_CACHE_META_KEY);
   } catch (error) {}
+}
+
+function getHomeReturnUniverseInvalidatedAt(voterKey) {
+  const key = `mnoriaUniverseInvalidated:${voterKey}`;
+  const values = [];
+  try { values.push(Number(sessionStorage.getItem(key) || 0)); } catch (error) {}
+  try { values.push(Number(localStorage.getItem(key) || 0)); } catch (error) {}
+  return Math.max(0, ...values.filter(Number.isFinite));
+}
+
+function hasFreshHomeReturnUniverseCache() {
+  const voterKey = lsGet("key");
+  if (!voterKey) return false;
+  const invalidatedAt = getHomeReturnUniverseInvalidatedAt(voterKey);
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(`mnoriaUniverseData:${voterKey}`) || "null");
+    if (
+      cached &&
+      Number.isFinite(cached.at) &&
+      cached.at > invalidatedAt &&
+      Date.now() - cached.at <= HOME_RETURN_UNIVERSE_CACHE_TTL
+    ) {
+      return true;
+    }
+  } catch (error) {}
+  try {
+    const cachedEmpty = JSON.parse(sessionStorage.getItem(`mnoriaUniverseEmpty:${voterKey}`) || "null");
+    if (
+      cachedEmpty?.empty === true &&
+      Number.isFinite(cachedEmpty.at) &&
+      cachedEmpty.at > invalidatedAt &&
+      Date.now() - cachedEmpty.at <= HOME_RETURN_UNIVERSE_EMPTY_CACHE_TTL
+    ) {
+      return true;
+    }
+  } catch (error) {}
+  return false;
+}
+
+function hasWarmHomeReturnVisualCache() {
+  if (location.pathname !== "/") return false;
+  if (!hasFreshHomeReturnUniverseCache()) return false;
+  if (typeof readMnoriaFrameCache !== "function" || !readMnoriaFrameCache("mnoriaHomeTrendsSectionTop")) return false;
+  const standaloneMobile = !!(
+    document.body &&
+    document.body.classList.contains("is-standalone") &&
+    document.body.classList.contains("page-home-mobile") &&
+    window.innerWidth <= 768
+  );
+  return !standaloneMobile || !!readMnoriaFrameCache("mnoriaMobileFrame");
 }
 
 let pageArrivalLoadingOverlayHideTimer = null;
@@ -7618,17 +7694,10 @@ function openLearningPageWithArenaLoading(url = "/apprentissage") {
 }
 
 function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
-  /* Le start_url "/" est volontairement cache-first pour démarrer vite. Lors
-     d'un retour interne, ce choix pouvait toutefois enchaîner le voile neuf de
-     la page de départ avec un ancien prepaint d'Accueil encore en cache (fond
-     court et police Oswald). Ce marqueur demande au service worker une copie
-     fraîche pour cette navigation précise ; il est retiré de l'URL dès le
-     début du document d'arrivée. */
   let homeNavigationUrl = url;
   try {
     const parsedHomeUrl = new URL(String(url || "/?skipStartup=1"), window.location.origin);
     if (parsedHomeUrl.origin === window.location.origin && parsedHomeUrl.pathname === "/") {
-      parsedHomeUrl.searchParams.set("mnoriaHomeReturn", "20260910-hide-frame-until-memory-v1");
       homeNavigationUrl = `${parsedHomeUrl.pathname}${parsedHomeUrl.search}${parsedHomeUrl.hash}`;
     }
   } catch (error) {}
@@ -7666,15 +7735,11 @@ function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
     closeDebateIframeModal({ skipReturnLoader: true });
     return;
   }
-  // Préchauffe la connexion vers "/" pendant que le voile s'anime (demande du
-  // 09/09/2026, "réduire le temps de chargement Apprentissage -> Accueil") :
-  // le mode "navigate" ci-dessus force le service worker à attendre le réseau
-  // pour CE retour précis, donc tout délai avant que le navigateur commence à
-  // parler au serveur s'ajoute intégralement au temps perçu. Ce fetch ignoré
-  // (mode "cors", jamais intercepté par la branche navigate du service worker)
-  // n'affiche rien et ne remplace aucune logique de fraîcheur existante — il
-  // ouvre juste la connexion TCP/TLS en avance pendant les ~2 frames + 80 ms
-  // que le voile met de toute façon à s'établir avant la vraie navigation.
+  if (tryRestoreCachedHomeFromHistory(homeNavigationUrl)) return;
+  // Repli sans historique restaurable : on préchauffe "/" pendant que le voile
+  // s'anime, puis on navigue normalement. Le retour idéal est traité juste
+  // au-dessus par history.back(), afin de laisser le navigateur réafficher
+  // l'accueil déjà vivant en BFCache quand il le peut.
   try { fetch(homeNavigationUrl, { credentials: "same-origin" }).catch(() => {}); } catch (error) {}
   // Ce verrou ne doit exister que lors d'un vrai retour depuis Ma mémoire.
   // Posé auparavant pour Débat/Notifications/Apprentissage également, il
@@ -7695,6 +7760,42 @@ function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
       setTimeout(() => { window.location.href = homeNavigationUrl; }, 80);
     });
   });
+}
+
+function tryRestoreCachedHomeFromHistory(fallbackUrl = "/?skipStartup=1") {
+  if (window.self !== window.top) return false;
+  if (location.pathname === "/") return false;
+  let referrerUrl = null;
+  try {
+    if (!document.referrer) return false;
+    referrerUrl = new URL(document.referrer, window.location.origin);
+  } catch (error) {
+    return false;
+  }
+  if (referrerUrl.origin !== window.location.origin || referrerUrl.pathname !== "/") return false;
+  if (window.history.length <= 1) return false;
+
+  let didLeave = false;
+  const onPageHide = () => { didLeave = true; };
+  window.addEventListener("pagehide", onPageHide, { once: true });
+  __mnoriaDebugRefreshLog("openHomePageWithArenaLoading", "history-back", {
+    target: "cached-home",
+    referrer: referrerUrl.pathname + referrerUrl.search + referrerUrl.hash
+  });
+  try {
+    window.history.back();
+  } catch (error) {
+    window.removeEventListener("pagehide", onPageHide);
+    return false;
+  }
+  setTimeout(() => {
+    window.removeEventListener("pagehide", onPageHide);
+    if (!didLeave) {
+      __mnoriaRecordReloadReason("history-back-home-fallback");
+      window.location.href = fallbackUrl;
+    }
+  }, 700);
+  return true;
 }
 
 document.addEventListener("click", (event) => {
@@ -20908,9 +21009,21 @@ function setMemoireCloudMode(enable, skipSync = false) {
     }
     renderIndexActiveFilterTags();
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260910-hide-frame-until-memory-v1').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260914-memory-eclipse-v1').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
+        const trendsSection = document.getElementById('mnoria-tag-trends-section');
+        const cloudContainer = document.getElementById('mnoria-tag-trends-cloud');
+        if (trendsSection) {
+          trendsSection.hidden = false;
+          trendsSection.style.visibility = 'visible';
+        }
+        if (cloudContainer) {
+          cloudContainer.hidden = false;
+          cloudContainer.classList.add('mnoria-memoire-frame');
+        }
         if (_memoireCloudMode) hideBubbleCloudLoadingSpinner();
+        window.dispatchEvent(new Event("mnoria:memoire-frame-ready"));
+        window.dispatchEvent(new Event("mnoria:mobile-cloud-frame-settled"));
         window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
         _memoireModuleLoadPromise = null;
         return null;
@@ -21618,57 +21731,13 @@ function indexSortSearchSetPinned(pinned) {
   const topbar = document.querySelector(".index-explorer-topbar");
   if (!topbar) return;
   const tags = document.getElementById("index-active-filters");
-  const shouldPinTags = pinned && indexActiveFiltersHasTags();
-
-  const topbarWasPinned = topbar.classList.contains("index-sort-search-pinned");
-  if (pinned !== topbarWasPinned) {
-    if (pinned) {
-      const height = Math.ceil(topbar.getBoundingClientRect().height);
-      let spacer = document.getElementById("index-sort-search-spacer");
-      if (!spacer) {
-        spacer = document.createElement("div");
-        spacer.id = "index-sort-search-spacer";
-        spacer.setAttribute("aria-hidden", "true");
-        topbar.insertAdjacentElement("afterend", spacer);
-      }
-      spacer.style.height = height + "px";
-      topbar.classList.add("index-sort-search-pinned");
-    } else {
-      topbar.classList.remove("index-sort-search-pinned");
-      const spacer = document.getElementById("index-sort-search-spacer");
-      if (spacer) spacer.remove();
-    }
-  }
+  topbar.classList.remove("index-sort-search-pinned");
+  document.getElementById("index-sort-search-spacer")?.remove();
 
   if (!tags) return;
-  const tagsWasPinned = tags.classList.contains("index-sort-search-pinned");
-  if (shouldPinTags !== tagsWasPinned) {
-    if (shouldPinTags) {
-      const tagsHeight = Math.ceil(tags.getBoundingClientRect().height);
-      let tagsSpacer = document.getElementById("index-active-filters-spacer");
-      if (!tagsSpacer) {
-        tagsSpacer = document.createElement("div");
-        tagsSpacer.id = "index-active-filters-spacer";
-        tagsSpacer.setAttribute("aria-hidden", "true");
-        tags.insertAdjacentElement("afterend", tagsSpacer);
-      }
-      tagsSpacer.style.height = tagsHeight + "px";
-      tags.classList.add("index-sort-search-pinned");
-    } else {
-      tags.classList.remove("index-sort-search-pinned");
-      tags.style.top = "";
-      const tagsSpacer = document.getElementById("index-active-filters-spacer");
-      if (tagsSpacer) tagsSpacer.remove();
-    }
-  }
-  if (shouldPinTags) {
-    // Resynchronise systématiquement top/hauteur, même si déjà épinglés : le
-    // nombre de tags (donc leur propre hauteur) peut changer pendant que
-    // c'est épinglé, cf. son appel depuis renderIndexActiveFilterTags.
-    tags.style.top = topbar.getBoundingClientRect().bottom + "px";
-    const tagsSpacer = document.getElementById("index-active-filters-spacer");
-    if (tagsSpacer) tagsSpacer.style.height = Math.ceil(tags.getBoundingClientRect().height) + "px";
-  }
+  tags.classList.remove("index-sort-search-pinned");
+  tags.style.top = "";
+  document.getElementById("index-active-filters-spacer")?.remove();
 }
 
 // Rappelée à chaque scroll ET à chaque rendu des tags (cf.
@@ -21678,11 +21747,7 @@ function indexSortSearchSetPinned(pinned) {
 // scrollé" que "le dernier filtre vient d'être retiré alors qu'on est
 // épinglé".
 function indexSortSearchUpdate() {
-  if (indexSortSearchTriggerY === null || !indexActiveFiltersHasTags()) {
-    indexSortSearchSetPinned(false);
-    return;
-  }
-  indexSortSearchSetPinned(window.scrollY >= indexSortSearchTriggerY);
+  indexSortSearchSetPinned(false);
 }
 
 // Recalcule le point de déclenchement (position naturelle, non épinglée, du
@@ -21696,27 +21761,12 @@ function indexSortSearchRecalcTrigger() {
   const topbar = document.querySelector(".index-explorer-topbar");
   if (!topbar) return;
   indexSortSearchSetPinned(false);
-  const naturalTop = window.scrollY + topbar.getBoundingClientRect().top;
-  topbar.classList.add("index-sort-search-pinned");
-  const pinnedTop = topbar.getBoundingClientRect().top;
-  topbar.classList.remove("index-sort-search-pinned");
-  indexSortSearchTriggerY = Math.max(0, naturalTop - pinnedTop);
-  indexSortSearchUpdate();
+  indexSortSearchTriggerY = null;
 }
 
 function initIndexSortSearchPinning() {
   if (!document.querySelector(".index-explorer-topbar")) return;
-  indexSortSearchRecalcTrigger();
-  let ticking = false;
-  window.addEventListener("scroll", () => {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => {
-      indexSortSearchUpdate();
-      ticking = false;
-    });
-  }, { passive: true });
-  window.addEventListener("resize", indexSortSearchRecalcTrigger, { passive: true });
+  indexSortSearchSetPinned(false);
 }
 
 document.addEventListener("click", function(event) {
@@ -21966,7 +22016,22 @@ function applyIndexFilters() {
   __mnoriaDebugRefreshLog("applyIndexFilters", "rerender", {});
   syncIndexTypeFilterButtons();
   syncIndexShortcutFilterButtons();
-  const filteredDebates = getFilteredDebatesForIndex(debatesCache);
+  let filteredDebates = getFilteredDebatesForIndex(debatesCache);
+  if (
+    !filteredDebates.length &&
+    currentTypeFilter === DEFAULT_INDEX_TYPE_FILTER &&
+    DEFAULT_INDEX_TYPE_FILTER === "mnoria" &&
+    !getCurrentIndexSearchQuery() &&
+    !currentBubbleTag &&
+    _politicalCloudGroup === "mixed" &&
+    Array.isArray(debatesCache) &&
+    debatesCache.some((debate) => getDebatePoliticalGroup(debate) === "mixed")
+  ) {
+    currentTypeFilter = "all";
+    syncIndexTypeFilterButtons();
+    syncIndexShortcutFilterButtons();
+    filteredDebates = getFilteredDebatesForIndex(debatesCache);
+  }
   updateIndexLists(filteredDebates);
   updateCategoryFilterVisualState();
   renderIndexActiveFilterTags();
@@ -23505,13 +23570,14 @@ function setTypeFilter(type) {
   }
 }
 
-async function waitForInitialIndexFeedStability() {
+async function waitForInitialIndexFeedStability(fastCachedReturn = false) {
   await new Promise((resolve) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         // La classe visible a été ajoutée dans le RAF précédent.
-        // On attend fade-in (180ms) + temps visible minimum (320ms) = 500ms.
-        setTimeout(resolve, 500);
+        // Attente complète au chargement normal ; fortement raccourcie quand
+        // accueil + mémoire + mesures du cadre sont déjà servis depuis cache.
+        setTimeout(resolve, fastCachedReturn ? 20 : 500);
       });
     });
   });
@@ -23907,6 +23973,8 @@ async function initIndex() {
     const cached = getDebatesFromSessionCache();
 
     if (cached) {
+      const warmHomeReturnVisualCache = hasWarmHomeReturnVisualCache();
+      window.__mnoriaHomeReturnHotCache = warmHomeReturnVisualCache;
       // Rendu immédiat depuis le cache — pas d'appel API pour l'affichage initial
       debatesCache = cached;
       restoreIndexDebatesPaginationStateFromCache(debatesCache);
@@ -23933,7 +24001,7 @@ async function initIndex() {
       }
       setTypeFilter(DEFAULT_INDEX_TYPE_FILTER);
 
-      await waitForInitialIndexFeedStability();
+      await waitForInitialIndexFeedStability(warmHomeReturnVisualCache);
       pageArrivalLoadingOverlayReady = true;
       hidePageArrivalLoadingOverlay();
       window.dispatchEvent(new Event("mnoria:feed-ready"));
@@ -27077,16 +27145,18 @@ function showNotionQuizLevelPicker(onSelect) {
 // que sur confirmation explicite, jamais sur fermeture/Escape/clic extérieur. Même famille
 // visuelle que showNotionQuizLevelPicker ci-dessus (styles partagés, cf. style.css).
 function showNotionGenerateConfirmModal(topic, level, onConfirm) {
-  const levelMeta = NOTION_QUIZ_LEVEL_OPTIONS.find((o) => o.level === level);
-  const levelName = levelMeta ? levelMeta.name : level;
-
+  // Mention du niveau retirée (demande du 14/09/2026, "supprime la mention du niveau, lance
+  // juste le nom de l'apprentissage") : le niveau est désormais toujours Élémentaire par défaut
+  // (plus de sélecteur, cf. showNotionQuizLevelPicker retiré des points d'entrée de génération),
+  // la préciser ici n'apportait plus rien. `level` reste un paramètre de la fonction (toujours
+  // utilisé par l'appelant pour la génération elle-même), seul l'affichage change.
   const overlay = document.createElement("div");
   overlay.className = "notion-level-picker-overlay";
   overlay.innerHTML = `
     <div class="notion-level-picker-modal">
       <button type="button" class="notion-level-picker-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
       <p class="notion-level-picker-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Confirmer la génération</p>
-      <p class="notion-generate-confirm-text">${escapeHtml(topic)}, niveau ${escapeHtml(levelName)}. Tu confirmes ?</p>
+      <p class="notion-generate-confirm-text">${escapeHtml(topic)}. Tu confirmes ?</p>
       <p class="notion-level-picker-hint">La génération peut prendre plusieurs minutes. Nous te préviendrons lorsque le parcours d'apprentissage sera prêt.</p>
       <div class="notion-generate-confirm-actions">
         <button type="button" class="notion-generate-confirm-cancel">Annuler</button>
@@ -27192,12 +27262,14 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
   }
   if (!voterKey || !notionName) return;
 
-  showNotionQuizLevelPicker((level) => {
-    // Confirmation avant de lancer l'appel IA (demande du 09/09/2026, "exactement la même
-    // [fenêtre] que sur la page apprentissage") : jamais de génération partie par erreur sur un
-    // simple clic de niveau — coûte un appel IA (jusqu'à plusieurs minutes pour Expert)
-    // impossible à annuler une fois lancé.
-    showNotionGenerateConfirmModal(notionName, level, () => {
+  // Niveau toujours Élémentaire, plus de sélecteur (demande du 14/09/2026, "supprime cette
+  // fenêtre [niveau], on va mettre élémentaire par défaut tout le temps") — showNotionQuizLevelPicker
+  // n'est plus appelée ici. La fenêtre de confirmation ci-dessous reste, elle, inchangée
+  // (demande du 09/09/2026, "exactement la même [fenêtre] que sur la page apprentissage") :
+  // jamais de génération partie par erreur sur un simple clic — coûte un appel IA (jusqu'à
+  // plusieurs minutes) impossible à annuler une fois lancé.
+  const level = "elementaire";
+  showNotionGenerateConfirmModal(notionName, level, () => {
       computeCustomTopicKey(notionName).then((key) => {
         const pendingSlot = key ? `notion:custom:${key}:${level}` : "";
         btn.setAttribute("data-memorized", "true");
@@ -27251,7 +27323,6 @@ function activateDebateNotion(btn, voterKey, debateId, quizDate) {
           });
       });
     });
-  });
 }
 
 function renderDebateNotions(debateId, debateQuestion, notions) {
@@ -31766,17 +31837,17 @@ ${
       <div class="comment-stance-row">
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
-          ✓ Soutient l'idée
+          <span class="comment-stance-label-text">✓ Soutient l'idée</span>
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-          ✕ Conteste l'idée
+          <span class="comment-stance-label-text">✕ Conteste l'idée</span>
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="amelioration">
-          ↻ Propose une amélioration
+          <span class="comment-stance-label-text">↻ Propose une amélioration</span>
         </label>
       </div>
     `
@@ -32217,17 +32288,17 @@ ${
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="favorable">
-          ✓ Soutient l'idée
+          <span class="comment-stance-label-text">✓ Soutient l'idée</span>
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="defavorable">
-          ✕ Conteste l'idée
+          <span class="comment-stance-label-text">✕ Conteste l'idée</span>
         </label>
 
         <label class="comment-stance-option">
           <input type="radio" name="comment-stance-${a.id}" value="amelioration">
-          ↻ Propose une amélioration
+          <span class="comment-stance-label-text">↻ Propose une amélioration</span>
         </label>
       </div>
     `
@@ -34593,6 +34664,20 @@ function ensureCommentStanceMobileStyles() {
         background: currentColor !important;
         box-shadow: inset 0 0 0 3px #ffffff !important;
       }
+
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"][value="amelioration"]),
+      body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"][value="amelioration"]) {
+        justify-content: center !important;
+        gap: 4px !important;
+      }
+
+      body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"][value="amelioration"] + .comment-stance-label-text,
+      body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option input[type="radio"][value="amelioration"] + .comment-stance-label-text {
+        flex: 0 1 auto !important;
+        width: auto !important;
+        max-width: calc(100% - 16px) !important;
+        text-align: left !important;
+      }
     }
   `;
 
@@ -35280,6 +35365,31 @@ function hasReportsBadgeTarget() {
   return !!document.getElementById("reports-count");
 }
 
+// "Apprentissages" du bandeau du bas en jaune quand du contenu attend en
+// Ancrer/Relier (demande du 13/09/2026, "je veux que le bouton apprentissage
+// ... apparaisse d'une autre couleur ... jaune comme le bouton consulter les
+// connaissances") : même route que qcm-du-jour.html pour la disponibilité
+// des créneaux (GET /api/daily-quiz/status, cf. isCategoryAvailable/
+// slotsStatus dans ce fichier), 'renforcement' = Ancrer, 'comprendre' =
+// Relier — jamais 'mesqcm' (Découvrir, toujours disponible, pas un signal
+// de nouveauté ici).
+function hasLearningNavHighlightTarget() {
+  return !!document.getElementById("apprentissages-bottom-nav-link");
+}
+async function refreshLearningNavHighlight() {
+  const link = document.getElementById("apprentissages-bottom-nav-link");
+  if (!link) return;
+  try {
+    const voterKey = typeof getKey === "function" ? getKey() : null;
+    const payload = await fetchJSON(API + "/daily-quiz/status" + (voterKey ? "?voterKey=" + encodeURIComponent(voterKey) : ""));
+    const slots = (payload && payload.slots) || {};
+    const available = !!((slots.renforcement && slots.renforcement.available) || (slots.comprendre && slots.comprendre.available));
+    link.classList.toggle("home-bottom-nav-item-learning-available", available);
+  } catch (error) {
+    // Best-effort : le bouton garde son apparence normale en cas de coupure réseau.
+  }
+}
+
 
 function ensureProgressSortOption() {
   const menu = document.getElementById("sort-menu");
@@ -35372,6 +35482,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (location.pathname !== "/notifications" && hasNotificationBadgeTargets()) {
     loadNotifications();
   }
+  if (location.pathname !== "/apprentissage" && hasLearningNavHighlightTarget()) {
+    refreshLearningNavHighlight();
+  }
   renderGlobalShareBar();
   ensureProgressSortOption();
   initDebateTopbarAutoHide();
@@ -35422,6 +35535,13 @@ if (location.pathname === "/debate") {
     setInterval(() => {
       if (!shouldRunBackgroundRefresh()) return;
       loadNotifications();
+    }, 2 * 60 * 1000);
+  }
+
+  if (location.pathname !== "/apprentissage" && hasLearningNavHighlightTarget()) {
+    setInterval(() => {
+      if (!shouldRunBackgroundRefresh()) return;
+      refreshLearningNavHighlight();
     }, 2 * 60 * 1000);
   }
 
@@ -36525,49 +36645,7 @@ function initHomeTopbarAutoHide() {
 
   const topbar = document.querySelector(".topbar");
   if (!topbar) return;
-
-  let ticking = false;
-  let lastScrollY = window.scrollY;
-  const SHOW_THRESHOLD = 80;
-  const HIDE_THRESHOLD = 10;
-
-  function updateTopbar() {
-    const currentScrollY = window.scrollY;
-    const delta = currentScrollY - lastScrollY;
-
-    if (currentScrollY <= 10) {
-      topbar.classList.remove("topbar-hidden");
-      lastScrollY = currentScrollY;
-      ticking = false;
-      return;
-    }
-
-    if (delta > HIDE_THRESHOLD) {
-      topbar.classList.add("topbar-hidden");
-      lastScrollY = currentScrollY;
-      ticking = false;
-      return;
-    }
-
-    if (delta < -SHOW_THRESHOLD) {
-      topbar.classList.remove("topbar-hidden");
-      lastScrollY = currentScrollY;
-      ticking = false;
-      return;
-    }
-
-    lastScrollY = currentScrollY;
-    ticking = false;
-  }
-
-  window.addEventListener("scroll", () => {
-    if (!ticking) {
-      window.requestAnimationFrame(updateTopbar);
-      ticking = true;
-    }
-  }, { passive: true });
-
-  updateTopbar();
+  topbar.classList.remove("topbar-hidden");
 }
 
 window.closeHomeBottomShareMenu = closeHomeBottomShareMenu;
@@ -37279,6 +37357,26 @@ function syncMnoriaHomeTrendsSectionMinHeight() {
   });
 }
 
+let mnoriaHomeReturnControlsReadyDispatched = false;
+
+function maybeDispatchHomeReturnControlsReady() {
+  if (mnoriaHomeReturnControlsReadyDispatched) return;
+  const root = document.documentElement;
+  if (!root.classList.contains('mnoria-home-return-loading')) return;
+  if (root.classList.contains('mnoria-home-memory-return-loading')) return;
+
+  const sortBar = document.querySelector('.index-explorer-topbar');
+  const firstRow = document.querySelector('#debates-list .theme-row-section');
+  if (!sortBar || !firstRow || !isMnoriaVisibleElement(sortBar)) return;
+
+  mnoriaHomeReturnControlsReadyDispatched = true;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('mnoria:home-return-controls-ready'));
+    });
+  });
+}
+
 function updateHomeBottomNavViewportOffset() {
   // syncMnoriaHomeTrendsSectionMinHeight() D'ABORD : c'est lui qui commit la hauteur
   // définitive de #mnoria-tag-trends-section (--mnoria-home-trends-section-top) la première
@@ -37292,6 +37390,7 @@ function updateHomeBottomNavViewportOffset() {
   // 100ms plus bas, qui documentait déjà ce risque).
   syncMnoriaHomeTrendsSectionMinHeight();
   syncMnoriaHomeTrendsCaptionAnchor();
+  maybeDispatchHomeReturnControlsReady();
   const viewportBottomFill = getMnoriaMobileViewportBottomFill();
   const cssSafeBottomFill = getMnoriaCssSafeAreaBottomFill();
   const legacyBottomFill = getMnoriaLegacyStandaloneBottomFallback(cssSafeBottomFill);
@@ -37965,12 +38064,29 @@ window.closeHomeTopbarMenu = closeHomeTopbarMenu;
 const PUSH_STANDALONE_INVITE_DONE_KEY = "pushStandaloneInviteDone_v2";
 
 function maybeShowPushInviteOnStandaloneOpen() {
-  if (!isStandaloneMode()) return;
-  if (lsGet(PUSH_STANDALONE_INVITE_DONE_KEY) === "1") return;
+  if (!isStandaloneMode()) {
+    releaseStartupPushInviteGate();
+    return;
+  }
+  if (lsGet(PUSH_STANDALONE_INVITE_DONE_KEY) === "1") {
+    releaseStartupPushInviteGate();
+    return;
+  }
   lsSet(PUSH_STANDALONE_INVITE_DONE_KEY, "1");
-  window.setTimeout(() => {
-    try { showPushInvite("standalone-open", { ignoreCooldown: true }); } catch {}
-  }, 1500);
+  const waitBeforeStartup = document.documentElement.classList.contains("mnoria-startup-wait-push-invite");
+  const show = () => {
+    try {
+      const shown = showPushInvite("standalone-open", {
+        ignoreCooldown: true,
+        onClose: releaseStartupPushInviteGate
+      });
+      if (!shown) releaseStartupPushInviteGate();
+    } catch {
+      releaseStartupPushInviteGate();
+    }
+  };
+  if (waitBeforeStartup) show();
+  else window.setTimeout(show, 1500);
 }
 
 function initPushSubscriptionRefresh() {

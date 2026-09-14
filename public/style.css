@@ -4334,6 +4334,11 @@ body.mnoria-global-bottom-nav-enabled .page-scroll-fade-hint {
   font-weight:700;
 }
 
+.comment-stance-label-text{
+  display:inline-block;
+  min-width:0;
+}
+
 .comment-stance-option input[type="radio"]{
   width: 10px;
   height: 10px;
@@ -9025,11 +9030,19 @@ body.page-home-mobile #debates-list:has(.index-initial-theme-row) {
     border-radius: 999px !important;
     padding-left: 8px !important;
     padding-right: 8px !important;
-    gap: 1px !important;
+    justify-content: center !important;
+    gap: 4px !important;
   }
   .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-row
   .comment-stance-option input[type="radio"][value="amelioration"] {
-    margin-right: 0 !important;
+    margin-right: 2px !important;
+  }
+  .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-row
+  .comment-stance-option input[type="radio"][value="amelioration"] + .comment-stance-label-text {
+    flex: 0 1 auto !important;
+    width: auto !important;
+    max-width: calc(100% - 16px) !important;
+    text-align: left !important;
   }
 
   .debate-columns:not(.focus-a):not(.focus-b) .comment-stance-option:has(input[type="radio"]:checked) {
@@ -11752,6 +11765,37 @@ body.page-home.page-home-mobile {
   background: rgba(255, 255, 255, 0.74);
   color: #111827;
   outline: none;
+}
+
+/* "Apprentissages" du bandeau du bas mis en jaune quand Ancrer/Relier ont du
+   contenu qui attend (demande du 13/09/2026) : même jaune que "Consulter les
+   connaissances"/"Sujets proposés" (qcm-du-jour.html), cf.
+   refreshLearningNavHighlight (script.js). border ajoutée par-dessus le
+   border:none de base, sans changer la boîte (border-box).
+   !important + même préfixe html body .home-bottom-nav ... que les règles
+   qui forcent color:#000000 plus bas dans ce fichier (bandeau unifié,
+   ~L28460) et dans body.page-home ci-dessous (~L22250) : sans ça, ces deux
+   séries de règles gagnaient toujours (constaté le 13/09/2026, "toujours
+   noir" alors que le fond jaune, lui, s'appliquait déjà). */
+.home-bottom-nav-item-learning-available {
+  background: #fdf3dd;
+  border: 1px solid #f0d9a0;
+  color: #243038;
+}
+.home-bottom-nav-item-learning-available:hover,
+.home-bottom-nav-item-learning-available:focus-visible {
+  background: #fbeac8;
+  border-color: #e8c886;
+  color: #243038;
+}
+html body .home-bottom-nav .home-bottom-nav-item.home-bottom-nav-item-learning-available,
+html body .home-bottom-nav .home-bottom-nav-item.home-bottom-nav-item-learning-available i,
+html body .home-bottom-nav .home-bottom-nav-item.home-bottom-nav-item-learning-available span {
+  color: #243038 !important;
+}
+html body .home-bottom-nav .home-bottom-nav-item.home-bottom-nav-item-learning-available {
+  background: #fdf3dd !important;
+  border: 1px solid #f0d9a0 !important;
 }
 
 .home-bottom-nav-item-notifications {
@@ -14592,6 +14636,20 @@ body.page-debate .debate-top-sticky-actions {
   body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option input[type="radio"]:checked {
     background: currentColor !important;
     box-shadow: inset 0 0 0 3px #ffffff !important;
+  }
+
+  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"][value="amelioration"]),
+  body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option:has(input[type="radio"][value="amelioration"]) {
+    justify-content: center !important;
+    gap: 4px !important;
+  }
+
+  body.page-debate .debate-columns .argument-card-unit .comment-form .comment-stance-option input[type="radio"][value="amelioration"] + .comment-stance-label-text,
+  body.page-debate .arguments-list-unified .argument-card-unit .comment-form .comment-stance-option input[type="radio"][value="amelioration"] + .comment-stance-label-text {
+    flex: 0 1 auto !important;
+    width: auto !important;
+    max-width: calc(100% - 16px) !important;
+    text-align: left !important;
   }
 }
 
@@ -20487,6 +20545,20 @@ body.page-home-mobile .debate-card-mnoria-badge {
     margin-top: var(--mnoria-home-first-row-mt, 21px);
     position: relative;
     z-index: 2;
+  }
+
+  /* Tag de filtre thématique actif qui empiète sur le bandeau "À la une" (demande du
+     14/09/2026, "il devrait apparaître plus haut, quitte à laisser plus d'espace") :
+     --mnoria-home-first-row-mt ci-dessus est calculé (syncMnoriaHomeTrendsCaptionAnchor,
+     script.js) uniquement à partir de la légende masquée et du bouton Trier/Rechercher,
+     sans jamais tenir compte de la présence d'un tag actif juste au-dessus (#index-active-
+     filters, z-index 140 — au-dessus du bandeau, d'où le tag visuellement PAR-DESSUS le
+     bandeau plutôt que caché derrière). Volontairement une marge simple ajoutée ici plutôt
+     qu'une modification de ce calcul JS déjà très finement calé (cf. ses propres
+     commentaires) — un tag actif ajoute son espace propre, jamais soustrait de celui déjà
+     calculé pour la légende. */
+  body.is-standalone.page-home-mobile #index-active-filters:not(.index-active-filters-empty) {
+    margin-bottom: 24px;
   }
 
   /* Mode "Ma mémoire" seulement : le bouton "Autres actus" (référence de la
@@ -26927,6 +26999,30 @@ body.is-standalone.page-home-mobile #mnoria-tag-trends-cloud.mnoria-memoire-fram
 .mnoria-tag-bubble-star::before {
   display: none;
 }
+/* "Éclipse" (demande du 14/09/2026) : disque noirci pour une étoile dont TOUTES les fiches
+   ont vu leur ancrage FSRS retomber sous le seuil d'alerte (cf. star.atRisk côté serveur,
+   GET /api/users/intellectual-universe, et mon-univers.js) — le fond noir est posé en
+   inline (background:#000000) par mon-univers.js, ce ::before ne fournit que la couronne
+   lumineuse autour, réactivant le halo désactivé juste au-dessus. Couleur reprise de
+   --mnoria-tag-bubble-glow, posée en JS avec la MÊME teinte thématique que le disque normal
+   de cette étoile (star.themeHue) — jamais une couleur générique (blanc/rose) : la couronne
+   doit rester identifiable comme "la même étoile", juste éteinte en son cœur. */
+.mnoria-tag-bubble-star.is-memory-eclipsed::before {
+  display: block;
+  content: "";
+  position: absolute;
+  inset: -20px;
+  width: auto;
+  height: auto;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    var(--mnoria-tag-bubble-glow, rgba(255,255,255,0.6)) 0%,
+    var(--mnoria-tag-bubble-glow, rgba(255,255,255,0.6)) 32%,
+    transparent 72%);
+  opacity: 0.7;
+  z-index: -1;
+  pointer-events: none;
+}
 /* Anneau en dégradé (conic-gradient, plusieurs teintes de noir/gris) à la place de l'ancien
    contour uni — demande du 07/08/2026. Épaisseur (padding) 7px : même largeur que le contour
    précédent ("grossit les liserets noirs de beaucoup"). Technique du masque XOR : le
@@ -27619,6 +27715,15 @@ body.page-home-mobile:not(.mnoria-memoire-cloud-mode) .universe-isolation-info {
      y compris sur les zones claires du fond (halos de galaxie, nuages d'étoiles). */
   color: #ffffff;
   text-shadow: 0 1px 4px rgba(0,0,0,0.85), 0 0 10px rgba(0,0,0,0.6);
+}
+/* Nom d'une étoile "éclipsée" (cf. .mnoria-tag-bubble-star.is-memory-eclipsed juste au-dessus) :
+   le text-shadow existant suffit sur un fond clair/coloré, mais pas sur le disque noir plein de
+   l'éclipse — contour dur ajouté en plus (jamais à la place) pour garder le nom lisible quelle
+   que soit la partie du disque sous le texte. paint-order fait passer le contour derrière le
+   remplissage blanc, sans quoi le stroke mangerait la moitié de l'épaisseur des lettres. */
+.universe-zoom-bubble-label.is-memory-eclipsed {
+  -webkit-text-stroke: 3px #000000;
+  paint-order: stroke fill;
 }
 .universe-zoom-bubble-label.is-revealed {
   opacity: 1;

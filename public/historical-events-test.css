@@ -328,27 +328,32 @@ html {
 
 /* Bouton "Mémoriser" (cf. memorizeEvent dans historical-events-test-page.js) :
    en bas du contenu de chaque bloc, une fois le texte lu. Coloré une fois
-   actif (cf. .is-active). */
+   actif (cf. .is-active). Volontairement petit/discret (demande du
+   14/09/2026) : ce n'est pas l'action principale de la page. */
 .het-rubric-memorize-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  width: 100%;
-  max-width: 320px;
-  margin: 20px auto 0;
-  padding: 13px 20px;
-  border: 2px solid #243038;
+  gap: 6px;
+  width: auto;
+  max-width: 200px;
+  margin: 14px auto 0;
+  padding: 6px 14px;
+  border: 1px solid #c7ced4;
   border-radius: 999px;
   background: #ffffff;
-  color: #243038;
+  color: #6b7680;
   font-family: "Barlow Condensed", Arial, sans-serif;
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.het-rubric-memorize-btn i {
+  font-size: 12px;
 }
 
 .het-rubric-memorize-btn:hover {
@@ -536,14 +541,15 @@ html {
 }
 
 .het-card-toggle {
-  display: inline-block;
-  margin: 0 0 10px;
-  padding: 6px 12px;
+  display: block;
+  width: fit-content;
+  margin: 0 auto 12px;
+  padding: 9px 20px;
   border: 1px solid #d1d5db;
   border-radius: 999px;
   background: #f9fafb;
   color: #374151;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -645,7 +651,7 @@ html {
     font-size: 16px;
   }
   .het-card-toggle {
-    font-size: 14px;
+    font-size: 16px;
   }
   .het-card-summary-long,
   .het-card-why-it-matters,

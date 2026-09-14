@@ -19,7 +19,7 @@
     document.documentElement.style.setProperty('--mnoria-loader-phase', '-' + (Date.now() % 1000) + 'ms');
   </script>
   <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high">
-  <link rel="stylesheet" href="/style.min.css?v=20260909-learning-no-back-arrow-v29">
+  <link rel="stylesheet" href="/style.min.css?v=20260913-yellow-nav-highlight">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -480,10 +480,17 @@
        telles quelles (un léger dégradé clair->couleur de base et un halo
        assorti, demande du 27/08/2026 "plus visuelle" — jamais de teinte
        nouvelle, juste une variation de luminosité de la même couleur). */
-    .qcm-load-gauge-bar-fill-calm { --gauge-color-start: #5dd184; --gauge-color-end: #19964a; }
-    .qcm-load-gauge-bar-fill-moderate { --gauge-color-start: #ffd160; --gauge-color-end: #ee9810; }
-    .qcm-load-gauge-bar-fill-busy { --gauge-color-start: #ffad62; --gauge-color-end: #e45d16; }
-    .qcm-load-gauge-bar-fill-overloaded { --gauge-color-start: #fa8585; --gauge-color-end: #d83232; }
+    /* Palette revue (demande du 13/09/2026, "plus on s'approche de l'idéal,
+       plus le vert doit devenir pétant et lumineux, après il devient orangé
+       rouge puis rouge écarlate en surcharge") : calm ET moderate restent
+       toutes deux VERTES (avant, moderate était jaune/or) — moderate, plus
+       proche de l'idéal, utilise un vert nettement plus vif/lumineux que
+       calm, jamais une teinte différente. busy vire vers l'orangé-rouge,
+       overloaded vers un rouge écarlate saturé (avant, plus pâle/saumoné). */
+    .qcm-load-gauge-bar-fill-calm { --gauge-color-start: #6ee89a; --gauge-color-end: #2e9e53; }
+    .qcm-load-gauge-bar-fill-moderate { --gauge-color-start: #4dff8a; --gauge-color-end: #00c853; }
+    .qcm-load-gauge-bar-fill-busy { --gauge-color-start: #ff8a5c; --gauge-color-end: #e64a19; }
+    .qcm-load-gauge-bar-fill-overloaded { --gauge-color-start: #ff5252; --gauge-color-end: #d50000; }
     /* Repère "Idéal" (demande du 17/08/2026, repositionné en barre le
        27/08/2026, puis décalé aux 2/3 de la barre le 30/08/2026 pour laisser
        un tiers de piste à la zone de surcharge au-delà des 100 % — la barre
@@ -527,7 +534,7 @@
       left: 100%;
       width: 2px;
       height: 40px;
-      background: #d83232;
+      background: #d50000;
       border-radius: 999px;
       transform: translateX(-50%);
       pointer-events: none;
@@ -541,7 +548,7 @@
       height: 7px;
       border: 2px solid #ffffff;
       border-radius: 50%;
-      background: #d83232;
+      background: #d50000;
       box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
       transform: translateX(-50%);
     }
@@ -584,7 +591,7 @@
       letter-spacing: 0.02em;
       text-transform: uppercase;
       white-space: nowrap;
-      color: #d83232;
+      color: #d50000;
     }
     .qcm-load-gauge-caption {
       margin: 9px 0 0;
@@ -864,17 +871,29 @@
       max-width: min(100%, 320px);
       margin: 0 auto 20px;
       padding: 10px 22px;
-      border: none;
+      border: 2px solid rgba(122, 72, 10, 0.42);
       border-radius: 999px;
-      background: #243038;
-      color: #ffffff;
+      background: linear-gradient(135deg, #fff2a8 0%, #ffd447 42%, #f09a20 100%);
+      color: #1A1F24;
       font-size: 14px;
       font-weight: 700;
       line-height: 1.25;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        inset 0 0 0 1px rgba(122, 72, 10, 0.22),
+        0 4px 0 rgba(122, 72, 10, 0.22),
+        0 0 15px rgba(255, 196, 55, 0.45);
       cursor: pointer;
     }
     .qcm-memorize-toggle:hover {
-      background: #384852;
+      background: linear-gradient(135deg, #fff7c7 0%, #ffe064 42%, #f6a934 100%);
+      border-color: rgba(122, 72, 10, 0.52);
+      transform: translateY(-1px);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        inset 0 0 0 1px rgba(122, 72, 10, 0.18),
+        0 5px 0 rgba(122, 72, 10, 0.22),
+        0 0 19px rgba(255, 202, 65, 0.56);
     }
     .qcm-custom-search {
       display: none;
@@ -1743,6 +1762,26 @@
       font-size: 15px;
       line-height: 1.4;
     }
+    #qcm-body > .qcm-state-message {
+      min-height: 170px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+      color: #243038;
+      font-family: var(--font-heading, "Oswald", Impact, "Arial Narrow", sans-serif);
+      font-size: clamp(24px, 5vw, 34px);
+      font-weight: 800;
+      line-height: 1.15;
+    }
+    #qcm-body > .qcm-state-message .qcm-loading-hourglass {
+      width: 40px;
+      height: 40px;
+      margin-right: 0;
+      flex: 0 0 auto;
+    }
     .qcm-loading-hourglass {
       display: inline-block;
       width: 28px;
@@ -1830,6 +1869,20 @@
     .qcm-acquis-badge.is-validated i {
       font-size: 11px;
     }
+    /* Alerte de désapprentissage (demande du 14/09/2026, seuil MES_QCM_AT_RISK_THRESHOLD
+       côté JS) : rétrivabilité FSRS retombée sous 50%, prioritaire sur "Acquis" — une
+       connaissance validée peut très bien s'être remise à décliner depuis, cf.
+       isMesQcmAtRisk. */
+    .qcm-acquis-badge.is-at-risk {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .qcm-acquis-badge.is-at-risk i {
+      font-size: 11px;
+    }
     /* Onglet "Mes QCM" : regroupé par thématique (cf. renderMesQcmList),
        une vraie rubrique titrée par thématique plutôt qu'un simple tableau
        plat — une connaissance à plusieurs thématiques apparaît sous
@@ -1850,6 +1903,7 @@
       margin: 0 -24px 8px;
       padding: 9px 44px 9px 24px;
       background: #ffffff;
+      border-radius: 12px;
       font-family: "Barlow Condensed", Arial, sans-serif;
       font-size: 20px;
       font-weight: 700;
@@ -1881,6 +1935,15 @@
     }
     details[open] > .qcm-mesqcm-group-title::after {
       transform: translateY(-50%) rotate(180deg);
+    }
+    /* Rubrique "En train de s'oublier" (renderMesAcquisList) : même bandeau que les
+       autres rubriques de premier niveau, teinté d'alerte pour rester repérable même
+       fermé. */
+    .qcm-mesqcm-group-title--at-risk {
+      color: #b91c1c;
+    }
+    .qcm-mesqcm-group-title--at-risk i {
+      margin-right: 6px;
     }
     /* Sous-rubrique (demande du 13/09/2026, "mémorisées volontairement"/"préconisées à
        mémoriser" sont des sous-rubriques de "Connaissances mémorisées ce jour" — ne
@@ -1925,13 +1988,54 @@
        .theme-row-title::before (style.css) — dégradé clair→foncé en haut,
        foncé→clair en bas, posées en fond via deux calques sur un seul
        pseudo-élément plutôt que deux. */
+    /* Liseret dégradé continu tout autour, angles arrondis compris (demande
+       du 13/09/2026, "ne pas s'arrêter sur les côtés") : un simple
+       background top/bottom (ci-dessus, avant cette date) ne couvrait pas
+       les côtés verticaux. Technique du masque (padding = épaisseur du
+       trait, content-box exclu du masque) plutôt qu'un border-image, qui
+       ignore border-radius — ainsi le dégradé suit le contour arrondi sur
+       les 4 côtés sans jamais s'interrompre aux coins.
+       Un seul conic-gradient a été essayé puis abandonné (13/09/2026,
+       "ça passe du noir au blanc") : ce bandeau est bien plus large que
+       haut, or un conic-gradient répartit ses arrêts par ANGLE, pas par
+       distance parcourue — sur une forme aussi large, l'essentiel du
+       dégradé se retrouve compressé tout près du centre de chaque bord
+       horizontal, qui paraît donc changer de couleur d'un coup, alors que
+       l'essentiel du reste du bord (proche des coins) reste presque uni.
+       4 dégradés linéaires distincts (un par bord, horizontaux en haut/bas,
+       verticaux à gauche/droite), calés pour se raccorder exactement aux 4
+       coins, donnent une vraie progression noir → gris foncé → gris clair
+       → blanc → ... régulière sur toute la longueur réelle de chaque bord. */
     .qcm-mesqcm-group-title::before {
       content: '';
       position: absolute;
       inset: 0;
+      border-radius: 12px;
+      padding: 2px;
+      /* Les 4 bandes ci-dessous ne couvrent chacune que la partie DROITE
+         de leur bord (2px d'épaisseur, perpendiculairement au bord) : dans
+         le coin arrondi lui-même, ni la bande horizontale (limitée à
+         y:0-2px) ni la verticale (limitée à x:0-2px) n'atteignent le pixel
+         courbe qui n'est ni pile en haut ni pile sur le côté — d'où le trou
+         constaté (13/09/2026, "pas de continuité"). Les 4 pastilles pleines
+         12x12 ci-dessous comblent chaque coin : comme le bord horizontal et
+         le bord vertical qui s'y rejoignent partagent toujours exactement
+         la même couleur à cet endroit (ex. haut-gauche : début du bord du
+         haut = clair, haut du bord gauche = clair), une couleur unie suffit
+         — jamais besoin d'un dégradé supplémentaire dans le coin lui-même. */
       background:
-        linear-gradient(90deg, #f3f4f6 0%, #d1d5db 25%, #9ca3af 50%, #374151 75%, #111827 100%) top    / 100% 2px no-repeat,
-        linear-gradient(90deg, #111827 0%, #374151 25%, #9ca3af 50%, #d1d5db 75%, #f3f4f6 100%) bottom / 100% 2px no-repeat;
+        linear-gradient(90deg,  #f3f4f6 0%, #d1d5db 33%, #374151 66%, #111827 100%) top    / 100% 2px no-repeat,
+        linear-gradient(90deg,  #111827 0%, #374151 33%, #d1d5db 66%, #f3f4f6 100%) bottom / 100% 2px no-repeat,
+        linear-gradient(180deg, #f3f4f6 0%, #d1d5db 33%, #374151 66%, #111827 100%) left   / 2px 100% no-repeat,
+        linear-gradient(180deg, #111827 0%, #374151 33%, #d1d5db 66%, #f3f4f6 100%) right  / 2px 100% no-repeat,
+        linear-gradient(#f3f4f6, #f3f4f6) top left     / 12px 12px no-repeat,
+        linear-gradient(#111827, #111827) top right    / 12px 12px no-repeat,
+        linear-gradient(#111827, #111827) bottom left  / 12px 12px no-repeat,
+        linear-gradient(#f3f4f6, #f3f4f6) bottom right / 12px 12px no-repeat;
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask-composite: exclude;
       z-index: -1;
     }
     /* "Tous mes apprentissages" (Mes acquis) : premier bandeau juste après
@@ -2103,8 +2207,10 @@
        padding du grand cadre. On élargit ici la vraie zone scrollable — et
        non seulement son titre — afin qu'elle rejoigne les deux bords du
        cadre principal. */
+    .qcm-mesqcm-group--today .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
     .qcm-mesqcm-group--inprogress .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
-    .qcm-mesqcm-group--pending .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell {
+    .qcm-mesqcm-group--pending .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
+    .qcm-learn-next-inline .qcm-mesqcm-table-shell {
       width: calc(100% + 48px);
       margin-left: -24px;
       margin-right: -24px;
@@ -2295,13 +2401,11 @@
     .qcm-mesqcm-table td {
       box-sizing: border-box;
       padding: 10px;
-      border-bottom: 1px solid #eef1f3;
       vertical-align: middle;
     }
     .qcm-mesqcm-table th {
       box-sizing: border-box;
       padding: 8px 10px;
-      border-bottom: 1px solid #000000;
       color: #000000;
       font-size: 12px;
       font-weight: 700;
@@ -2338,6 +2442,63 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
+    }
+    /* Alerte de désapprentissage sous le pastille d'état (renderMesQcmStateHtml) :
+       même seuil/couleur que .qcm-acquis-badge.is-at-risk, affichée en plus de l'état
+       existant (Réalisé/Acquis/En cours), jamais à sa place. */
+    .qcm-mesqcm-at-risk-badge {
+      display: block;
+      margin-top: 4px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .qcm-mesqcm-at-risk-badge i {
+      margin-right: 3px;
+    }
+    /* Cartes de la rubrique "En train de s'oublier" (demande du 14/09/2026, révision) :
+       image + nom + niveau d'ancrage uniquement, jamais l'état/le niveau du tableau
+       habituel — cf. renderMesQcmAtRiskCardsHtml. */
+    .qcm-mesqcm-atrisk-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 18px;
+      padding: 4px 0;
+    }
+    .qcm-mesqcm-atrisk-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      text-align: center;
+    }
+    .qcm-mesqcm-atrisk-card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .qcm-mesqcm-atrisk-card-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #111827;
+      line-height: 1.25;
     }
     .qcm-mesqcm-state.is-creating .qcm-loading-hourglass {
       width: 18px;
@@ -2437,11 +2598,11 @@
     }
     .qcm-mesqcm-name-thumb {
       position: relative;
-      flex: 0 0 72px;
-      width: 72px;
-      height: 72px;
+      flex: 0 0 152px;
+      width: 152px;
+      height: 152px;
       overflow: hidden;
-      border-radius: 12px;
+      border-radius: 20px;
       border: 1px solid rgba(81, 103, 118, 0.22);
       background: #eef3f6;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.38);
@@ -2458,24 +2619,45 @@
       inset: 0;
       align-items: center;
       justify-content: center;
-      font-size: 23px;
+      font-size: 48px;
       color: #516776;
     }
     .qcm-mesqcm-name-thumb.is-empty .qcm-mesqcm-name-thumb-fallback {
       display: flex;
     }
+    /* Icône de thématique avant le nom (demande du 13/09/2026) : même
+       gabarit compact que .qcm-learn-next-inline-icon sur "Apprentissages
+       proposés" — couleur/flex déjà hérités de la règle générique
+       .qcm-mesqcm-name-btn i ci-dessus. */
+    .qcm-mesqcm-name-theme-icon {
+      width: 18px;
+      font-size: 15px;
+      text-align: center;
+    }
+    .qcm-mesqcm-name-title {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-grid;
+      grid-template-columns: 18px minmax(0, auto);
+      align-items: center;
+      justify-content: center;
+      column-gap: 0.55em;
+      padding: 0 10px;
+      text-align: center;
+      transform: translateX(-10px);
+    }
     .qcm-mesqcm-name-label {
       min-width: 0;
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 800;
-      line-height: 1.15;
+      line-height: 1.1;
     }
     .qcm-mesqcm-row-toggle {
       width: 100%;
       justify-content: flex-start;
     }
     .qcm-mesqcm-row-toggle-chevron {
-      margin-left: auto;
+      margin-left: 0;
       color: #9ca3af;
       font-size: 12px;
       transition: transform 0.15s ease;
@@ -2495,16 +2677,65 @@
     }
     .qcm-mesqcm-detail-cell {
       padding-top: 0 !important;
+      padding-bottom: 14px !important;
       background: transparent !important;
+    }
+    .qcm-mesqcm-detail-cell::after {
+      content: "";
+      display: block;
+      width: 100px;
+      height: 1px;
+      margin: 10px auto 0;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    /* Même liseret entre deux apprentissages quand le détail est fermé
+       (demande du 13/09/2026, "marquer la séparation entre les
+       apprentissages" même replié) : porté par la ligne visible du nom,
+       masqué via :has() quand la ligne de détail juste après est ouverte
+       (elle affiche alors déjà son propre liseret tout en bas du bloc). */
+    .qcm-mesqcm-table--inline-details tbody > tr:not(.qcm-mesqcm-detail-row) > td {
+      padding-top: 4px;
+      padding-bottom: 8px;
+    }
+    .qcm-mesqcm-table--inline-details tbody > tr:not(.qcm-mesqcm-detail-row) > td::after {
+      content: "";
+      display: block;
+      width: 100px;
+      height: 1px;
+      /* En dessous, la ligne suivante (nom du prochain apprentissage) ajoute
+         encore ses 10px de padding-top par défaut (.qcm-mesqcm-table td) :
+         24px ici pour que l'espace perçu au-dessus et en dessous du liseret
+         soit réellement identique, pas seulement les valeurs CSS isolées. */
+      margin: 12px auto 0;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    .qcm-mesqcm-table--inline-details tbody > tr:not(.qcm-mesqcm-detail-row):has(+ .qcm-mesqcm-detail-row:not([hidden])) > td::after {
+      display: none;
+    }
+    /* Jamais de liseret après le DERNIER apprentissage d'une rubrique
+       (demande du 13/09/2026) — rien à séparer de ce qui suit, que ce soit
+       le seul apprentissage de la rubrique ou le dernier d'une plus longue
+       liste. Structure à paire nom+détail (autres rubriques) : le dernier
+       <tr> du tbody est toujours la ligne de détail (jamais la ligne de
+       nom, qui la précède systématiquement) — d'où :has(+ ...:last-child)
+       côté nom (fermé) et :last-child direct côté détail (ouvert).
+       "Apprentissages proposés" (mêmes classes --inline-details, mais
+       aucune ligne de détail) : chaque sujet est son propre <tr>, donc
+       simplement :last-child. */
+    .qcm-mesqcm-table--inline-details tbody > tr:not(.qcm-mesqcm-detail-row):has(+ .qcm-mesqcm-detail-row:last-child) > td::after,
+    .qcm-mesqcm-table--inline-details tbody > tr:not(.qcm-mesqcm-detail-row):last-child > td::after {
+      display: none;
+    }
+    .qcm-mesqcm-table--inline-details tbody > tr.qcm-mesqcm-detail-row:last-child .qcm-mesqcm-detail-cell::after {
+      display: none;
     }
     .qcm-mesqcm-inline-detail {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       padding: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 10px;
-      background: rgba(255, 255, 255, 0.10);
+      background: transparent;
     }
     .qcm-mesqcm-detail-field {
       min-width: 0;
@@ -2526,6 +2757,16 @@
       justify-content: center;
       gap: 9px;
       margin-top: 6px;
+    }
+    /* Rapproche les boutons de la vignette/nom de l'apprentissage au-dessus
+       (demande du 13/09/2026) : moins de padding-top quand ce bloc ne
+       contient que les actions (pas l'État/Niveau, qui garde son padding
+       habituel). */
+    .qcm-mesqcm-inline-detail:has(> .qcm-mesqcm-detail-actions) {
+      padding-top: 2px;
+    }
+    .qcm-mesqcm-inline-detail:has(> .qcm-mesqcm-detail-actions) .qcm-mesqcm-detail-actions {
+      margin-top: 0;
     }
     .qcm-mesqcm-detail-action-btn {
       display: inline-flex;
@@ -2551,9 +2792,9 @@
       cursor: pointer;
     }
     .qcm-mesqcm-detail-action-btn.is-secondary {
-      border-color: #cbd5df;
-      background: #ffffff;
-      color: #374151;
+      border-color: #f0d9a0;
+      background: #fdf3dd;
+      color: #243038;
       box-shadow: none;
       font-size: 13px;
     }
@@ -2570,8 +2811,8 @@
     }
     .qcm-mesqcm-detail-action-btn.is-secondary:hover,
     .qcm-mesqcm-detail-action-btn.is-secondary:focus-visible {
-      background: #f8fafc;
-      border-color: #9ca3af;
+      background: #fbeac8;
+      border-color: #e8c886;
       transform: translateY(-1px);
     }
     /* Nombre de questions du QCM associé à cette connaissance (demande du
@@ -2856,14 +3097,11 @@
     .qcm-learn-next-inline {
       margin: 0 0 20px;
     }
-    /* Même espace qu'en bas de la section (demande du 30/08/2026) : le titre
-       partagé .qcm-mesqcm-group-title garde 8px partout ailleurs, override
-       scopé à ce seul conteneur — et, depuis le 13/09/2026, au seul état
-       OUVERT (replié, ce surplus n'a plus lieu d'être : cf. commentaire
-       ci-dessus, "harmonise l'espace"). */
-    .qcm-learn-next-inline details[open] > .qcm-mesqcm-group-title {
-      margin-bottom: 30px;
-    }
+    /* Même espace que sous les autres rubriques (demande du 13/09/2026,
+       "trop d'espace" — l'ancien override 30px ci-dessus datait de la
+       présentation en pastilles, abandonnée depuis pour le même gabarit de
+       ligne que les autres rubriques) : plus d'override, on garde les 8px
+       partagés de .qcm-mesqcm-group-title. */
     /* Juste le nom des sujets (demande du 30/08/2026) : flex-wrap +
        justify-content:center pose naturellement 2 sujets par ligne centrés,
        et le 3e (impair) seul sur sa propre ligne, centré lui aussi — sans
@@ -2874,44 +3112,17 @@
        identique". */
     .qcm-learn-next-inline-list {
       display: flex;
-      flex-flow: row wrap;
-      justify-content: center;
-      row-gap: 6px;
-      column-gap: 8px;
-    }
-    /* Contour neutre (corrigé le 02/09/2026 : le doré utilisé jusque-là, cf. ancienne
-       demande du 02/09/2026, doré pastel) — même teinte neutre pour tous les sujets
-       proposés, catalogue comme propositions IA — la distinction is-ai-proposal (liseré
-       différent) reste volontairement abandonnée, cf. plus bas. */
-    .qcm-learn-next-inline-item {
-      display: inline-flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 6px 14px;
-      border: 1px solid #f0d9a0;
-      border-radius: 999px;
-      background: #fdf3dd;
-      font: inherit;
-      font-size: 13px;
-      font-weight: 600;
-      color: #243038;
-      text-align: center;
-      cursor: pointer;
-      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
-    .qcm-learn-next-inline-icon {
-      flex: 0 0 auto;
-      width: 15px;
-      font-size: 13px;
-      text-align: center;
-    }
-    .qcm-learn-next-inline-item:hover,
-    .qcm-learn-next-inline-item:focus-visible {
-      background: #fbe9c6;
-    }
-    /* Le temps de l'adoption (fiche + adopt, cf. adoptCatalogRecommendation) :
-       même langage que .qcm-custom-search-btn:disabled ailleurs sur la page. */
+    /* Même présentation que les autres rubriques de "Mes apprentissages"
+       (demande du 13/09/2026) : .qcm-learn-next-inline-item n'est plus une
+       pastille isolée, mais un .qcm-mesqcm-name-btn de plus (vignette +
+       icône de thématique + nom, cf. renderLearnNextInlineList) — cette
+       règle ne garde donc que ce qui n'est pas déjà couvert par
+       .qcm-mesqcm-name-btn : l'état désactivé pendant l'adoption (cf.
+       adoptCatalogRecommendation).
+       */
     .qcm-learn-next-inline-item:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -4042,8 +4253,10 @@
         margin-left: -16px;
         margin-right: -16px;
       }
+      .qcm-mesqcm-group--today .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
       .qcm-mesqcm-group--inprogress .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
-      .qcm-mesqcm-group--pending .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell {
+      .qcm-mesqcm-group--pending .qcm-mesqcm-paged-list .qcm-mesqcm-table-shell,
+      .qcm-learn-next-inline .qcm-mesqcm-table-shell {
         width: calc(100% + 32px);
         margin-left: -16px;
         margin-right: -16px;
@@ -4291,6 +4504,14 @@
       </div>
       <p class="qcm-load-gauge-caption" id="qcm-load-gauge-caption"></p>
     </div>
+    <!-- Suivi de la génération IA : placé sous le cadre de charge de
+         mémorisation, avant les connaissances mémorisées du jour. Le statut
+         et son indicateur sont temporairement déplacés dans la modale pendant
+         la saisie puis reviennent dans cet emplacement à sa fermeture. -->
+    <div id="qcm-generation-status-anchor">
+      <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
+      <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
+    </div>
     <!-- "Connaissances mémorisées ce jour" (demande du 12/09/2026) : connaissances
          ayant reçu au moins une review aujourd'hui (cf. server.js GET
          /api/users/memorized-today) — checkbox pré-cochée par connaissance,
@@ -4318,14 +4539,6 @@
           <ul class="qcm-fiche-memorization-list" id="qcm-memorized-today-suggested-list"></ul>
         </details>
       </details>
-    </div>
-    <!-- Le suivi d'une génération lancée reste immédiatement sous le bouton
-         principal, avant les sujets proposés. Le statut et son indicateur
-         sont temporairement déplacés dans la modale pendant la saisie puis
-         reviennent dans cet emplacement à sa fermeture. -->
-    <div id="qcm-generation-status-anchor">
-      <p class="qcm-custom-search-status" id="qcm-custom-search-status" hidden></p>
-      <div class="qcm-pie-spinner" id="qcm-pie-spinner" hidden></div>
     </div>
     <!-- "Sujets proposés" (demande du 30/08/2026) : intégrée directement
          sous "Commencer un nouvel apprentissage" plutôt que dans une fenêtre
@@ -4365,7 +4578,7 @@
          chargement (signalé le 12/08/2026, capture d'écran à l'appui — le cadre
          masqué par le parent iframe pendant .loading n'empêche pas ce même
          cadre vide d'apparaître si CE masquage lui-même a un accroc). -->
-    <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours…</p></div>
+    <div id="qcm-body"><p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement en cours</p></div>
     <div class="qcm-learning-return-bottom" id="qcm-learning-return-bottom" hidden>
       <button type="button" class="qcm-learning-return-btn" id="qcm-learning-return-btn">
         <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
@@ -4374,7 +4587,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260912-progressive-ready-notification-fix" defer></script>
+<script src="/script.min.js?v=20260914-confirm-modal-nolevel" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -4511,6 +4724,24 @@
     });
   }
   var voterKey = null;
+  function invalidateMnoriaUniverseCacheForCurrentUser() {
+    if (!voterKey) return;
+    var invalidatedAt = String(Date.now());
+    var dataKey = 'mnoriaUniverseData:' + voterKey;
+    var emptyKey = 'mnoriaUniverseEmpty:' + voterKey;
+    var invalidationKey = 'mnoriaUniverseInvalidated:' + voterKey;
+    try {
+      sessionStorage.removeItem(dataKey);
+      sessionStorage.removeItem(emptyKey);
+      sessionStorage.setItem(invalidationKey, invalidatedAt);
+    } catch (e) {}
+    try { localStorage.setItem(invalidationKey, invalidatedAt); } catch (e) {}
+    try {
+      if (window.parent && window.parent !== window && typeof window.parent.mnoriaInvalidateUniverseCache === 'function') {
+        window.parent.mnoriaInvalidateUniverseCache();
+      }
+    } catch (e) {}
+  }
   var questions = [];
   // Référence stable du QCM complet (demande du 13/08/2026, "Refaire les
   // questions loupées") — jamais mutée après le chargement, contrairement à
@@ -4551,7 +4782,7 @@
     // sur l'accueil, le module attendra alors la réponse fraîche et ne montrera jamais
     // furtivement l'ancien message vide devant les nouvelles bulles.
     if (!practiceMode && data && data.correct) {
-      try { sessionStorage.removeItem('mnoriaUniverseEmpty:' + voterKey); } catch (e) {}
+      invalidateMnoriaUniverseCacheForCurrentUser();
       qcmCorrectStreakCount += 1;
       showProgressPlusOne(qcmCorrectStreakCount);
     }
@@ -4676,6 +4907,45 @@
   var mesQcmThumbImagePending = {}; // getMesQcmRowKey(q) -> Promise
   function invalidateMesQcmListCache() {
     mesQcmListCache = null;
+    writeMesQcmSessionCache(null);
+  }
+  // Persistance sessionStorage de la liste + de la jauge (demande du
+  // 14/09/2026, "l'entrée sur la page apprentissage est toujours trop
+  // long") : mesQcmListCache ci-dessus ne survit qu'à l'intérieur d'une même
+  // exécution JS (navigation interne dans l'iframe déjà ouverte) — chaque
+  // NOUVELLE ouverture de /apprentissage recrée tout le contexte JS depuis
+  // zéro, donc ce cache mémoire repart toujours vide, et loadMesQcm attend
+  // alors la route GET /api/users/notion-quizzes (5+ lectures Supabase
+  // séquentielles, ~1,1s côté serveur, cf. commentaire ci-dessus) avant de
+  // pouvoir peindre quoi que ce soit. sessionStorage survit, lui, à ces
+  // réouvertures successives tant que l'onglet/la PWA reste ouvert(e) :
+  // affiche donc immédiatement la dernière liste connue, puis revalide
+  // toujours en tâche de fond (jamais de TTL de fraîcheur ici contrairement
+  // à mesQcmListCache — juste un âge maximum raisonnable pour ne jamais
+  // montrer une liste franchement périmée si l'onglet est resté ouvert des
+  // heures).
+  var MES_QCM_SESSION_CACHE_KEY = 'mnoria_mesqcm_entry_cache_v1';
+  var MES_QCM_SESSION_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+  function readMesQcmSessionCache() {
+    if (!voterKey) return null;
+    try {
+      var raw = sessionStorage.getItem(MES_QCM_SESSION_CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || parsed.key !== voterKey) return null;
+      if (Date.now() - Number(parsed.fetchedAt || 0) > MES_QCM_SESSION_CACHE_MAX_AGE_MS) return null;
+      return parsed;
+    } catch (error) {
+      return null;
+    }
+  }
+  function writeMesQcmSessionCache(entry) {
+    try {
+      if (!entry) { sessionStorage.removeItem(MES_QCM_SESSION_CACHE_KEY); return; }
+      sessionStorage.setItem(MES_QCM_SESSION_CACHE_KEY, JSON.stringify(entry));
+    } catch (error) {
+      // Best-effort (quota dépassé, navigation privée...) : jamais bloquant.
+    }
   }
   // Slot|date de l'apprentissage à faire défiler jusqu'à "En attente de
   // réalisation" puis à faire clignoter, une fois la liste rechargée (cf.
@@ -5053,12 +5323,28 @@
     return html;
   }
 
+  function normalizeQcmStateMessage(text) {
+    var raw = String(text || '').trim();
+    if (/^Chargement\b/i.test(raw)) return 'Chargement en cours';
+    if (/(Impossible de charger|n['’]a pas pu être chargé|n['’]ont pas pu être chargés?|chargement a échoué)/i.test(raw)) {
+      return 'Le chargement a échoué';
+    }
+    return raw;
+  }
+
   function renderMessage(text) {
-    var isLoading = /^Chargement\b/i.test(String(text || ''));
+    var normalizedText = normalizeQcmStateMessage(text);
+    if (!normalizedText) {
+      body.innerHTML = '';
+      if (questionSourceNameEl) questionSourceNameEl.hidden = true;
+      signalIframeReady();
+      return;
+    }
+    var isLoading = /^Chargement\b/i.test(String(normalizedText || ''));
     var loadingHtml = isLoading
       ? '<img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">'
       : '';
-    body.innerHTML = '<p class="qcm-state-message">' + loadingHtml + escapeHtml(text) + '</p>';
+    body.innerHTML = '<p class="qcm-state-message">' + loadingHtml + escapeHtml(normalizedText) + '</p>';
     if (questionSourceNameEl) questionSourceNameEl.hidden = true;
     if (!isLoading) signalIframeReady();
   }
@@ -5321,13 +5607,16 @@
         var ok = !!(result.ok && result.data && result.data.ok);
         // Charge de mémorisation mise à jour immédiatement (demande du 13/09/2026, "si je
         // coche ou décoche une connaissance à mémoriser, la charge doit se mettre à jour
-        // immédiatement") : (dés)activer une connaissance change ce qui sera dû dans les
-        // prochains jours (cf. fetchLearningLoadGaugeForUser, server.js, qui exclut déjà les
-        // connaissances désactivées), donc le pic simulé par la jauge. Point d'entrée unique
+        // immédiatement") : (dés)activer une connaissance change le compte du jour renvoyé
+        // par fetchLearningLoadGaugeForUser (server.js, qui exclut déjà les connaissances
+        // désactivées). Point d'entrée unique
         // (setKnowledgeMemorization est le seul chemin d'écriture, cf. wireExcludeButton/
         // wireMemorizedTodayToggles/wireKnowledgeMemorizationToggles) — un seul appel suffit
         // à couvrir les trois interfaces qui peuvent déclencher ce changement.
-        if (ok) refreshLoadGaugeNow();
+        if (ok) {
+          invalidateMnoriaUniverseCacheForCurrentUser();
+          refreshLoadGaugeNow();
+        }
         onDone(ok);
       })
       .catch(function () { onDone(false); });
@@ -5562,7 +5851,11 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate }),
       keepalive: true
-    }).catch(function () {});
+    })
+      .then(function (res) {
+        if (res && res.ok) invalidateMnoriaUniverseCacheForCurrentUser();
+      })
+      .catch(function () {});
   }
 
   function finishCurrentBlockOrContinue() {
@@ -6637,17 +6930,10 @@
   function renderCreatingNotionQuizzesHtml() {
     var pending = getVisiblePendingNotionQuizGenerations();
     if (!pending.length) return '';
-    function pendingCreationLevelHtml(item) {
-      var match = String(item && item.slot || '').match(/:(elementaire|avance|expert)$/);
-      var levelLabel = match ? formatMesQcmLevelLabel(match[1]) : '';
-      return '<span class="qcm-mesqcm-level">' +
-        (levelLabel ? '<span class="qcm-mesqcm-level-name">' + escapeHtml(levelLabel) + '</span>' : '<span class="qcm-mesqcm-level-count">Niveau en préparation</span>') +
-        '</span>';
-    }
     return '<section class="qcm-mesqcm-group qcm-mesqcm-group--creating"><details open>' +
       '<summary class="qcm-mesqcm-group-title">En cours de création</summary>' +
       '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Parcours en cours de création">' +
-      '<table class="qcm-mesqcm-table qcm-mesqcm-table--inline-details"><thead><tr><th>Apprentissage</th></tr></thead><tbody>' +
+      '<table class="qcm-mesqcm-table qcm-mesqcm-table--inline-details"><tbody>' +
       pending.map(function (item, index) {
         var detailId = 'qcm-creating-detail-' + index;
         var stateHtml = '<span class="qcm-mesqcm-state is-creating"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">En cours de création</span>';
@@ -6656,7 +6942,6 @@
           '<tr class="qcm-mesqcm-detail-row" id="' + detailId + '" hidden><td class="qcm-mesqcm-detail-cell">' +
           '<div class="qcm-mesqcm-inline-detail">' +
             '<div class="qcm-mesqcm-detail-field"><span class="qcm-mesqcm-detail-label">État</span>' + stateHtml + '</div>' +
-            '<div class="qcm-mesqcm-detail-field"><span class="qcm-mesqcm-detail-label">Niveau</span>' + pendingCreationLevelHtml(item) + '</div>' +
           '</div></td></tr>';
       }).join('') + '</tbody></table></div><div class="qcm-mesqcm-table-scroll-hint" aria-hidden="true"></div></div></details></section>';
   }
@@ -6820,10 +7105,12 @@
   // fetch (le statut qui suit s'affiche en ligne dans la barre de
   // recherche, jamais dans une nouvelle popup).
   function showGenerateConfirmModal(topic, level, onConfirm) {
-    var levelMeta = (typeof NOTION_QUIZ_LEVEL_OPTIONS !== 'undefined' ? NOTION_QUIZ_LEVEL_OPTIONS : [])
-      .filter(function (o) { return o.level === level; })[0];
-    var levelName = levelMeta ? levelMeta.name : level;
-
+    // Mention du niveau retirée (demande du 14/09/2026, "supprime la mention du niveau, lance
+    // juste le nom de l'apprentissage") : le niveau est désormais toujours Élémentaire par
+    // défaut (plus de sélecteur, cf. showNotionQuizLevelPicker retiré des points d'entrée de
+    // génération), la préciser ici n'apportait plus rien. `level` reste un paramètre de la
+    // fonction (toujours utilisé par l'appelant pour la génération elle-même), seul l'affichage
+    // change.
     var overlay = document.createElement('div');
     overlay.className = 'qcm-fiche-overlay';
     overlay.innerHTML =
@@ -6833,7 +7120,7 @@
             '<p class="qcm-fiche-rubric"><i class="fa-solid fa-wand-magic-sparkles"></i> Confirmer la génération</p>' +
             '<button type="button" class="qcm-fiche-close" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>' +
           '</div>' +
-          '<p class="qcm-generate-confirm-text">' + escapeHtml(topic) + ', niveau ' + escapeHtml(levelName) + '. Tu confirmes ?</p>' +
+          '<p class="qcm-generate-confirm-text">' + escapeHtml(topic) + '. Tu confirmes ?</p>' +
           '<p class="qcm-generate-confirm-hint">La génération peut prendre plusieurs minutes. Nous te préviendrons lorsque le parcours d\'apprentissage sera prêt.</p>' +
           '<div class="qcm-generate-confirm-actions">' +
             '<button type="button" class="qcm-generate-confirm-cancel">Annuler</button>' +
@@ -7233,7 +7520,12 @@
       setCustomSearchStatus('Décris le sujet en au moins 3 caractères.', true);
       return;
     }
-    startCustomTopicGeneration(topic);
+    // Niveau toujours Élémentaire, plus de sélecteur (demande du 14/09/2026, "supprime cette
+    // fenêtre [niveau], on va mettre élémentaire par défaut tout le temps") : presetLevel
+    // passé directement à startCustomTopicGeneration, qui saute alors showNotionQuizLevelPicker
+    // (cf. son propre "if (presetLevel) withLevel(presetLevel); else showNotionQuizLevelPicker(...)")
+    // — la fenêtre de confirmation (showGenerateConfirmModal) reste, elle, inchangée.
+    startCustomTopicGeneration(topic, undefined, 'elementaire');
   }
   customSearchForm.addEventListener('submit', submitCustomTopic);
   // <textarea> plutôt qu'un <input> (cf. 12/08/2026) : Entrée y insère une
@@ -7519,22 +7811,24 @@
     }
 
     function adoptExploreItem(slot, quizDate, itemBtn) {
-      if (typeof showNotionQuizLevelPicker !== 'function') return;
-      showNotionQuizLevelPicker(function (level) {
-        itemBtn.disabled = true;
-        fetch('/api/users/notion-quizzes/adopt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate, level: level })
+      // Niveau toujours Élémentaire, plus de sélecteur (demande du 14/09/2026, "pour explorer,
+      // préconisation, catalogue, on met aussi élémentaire par défaut") — même traitement que
+      // startCustomTopicGeneration/activateDebateNotion, showNotionQuizLevelPicker n'est plus
+      // appelée ici.
+      var level = 'elementaire';
+      itemBtn.disabled = true;
+      fetch('/api/users/notion-quizzes/adopt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legacyKey: voterKey, slot: slot, quizDate: quizDate, level: level })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.ok) { itemBtn.disabled = false; return; }
+          closeMesQcmExploreModal();
+          loadMesQcm(true);
         })
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            if (!data.ok) { itemBtn.disabled = false; return; }
-            closeMesQcmExploreModal();
-            loadMesQcm(true);
-          })
-          .catch(function () { itemBtn.disabled = false; });
-      });
+        .catch(function () { itemBtn.disabled = false; });
     }
 
     var exploreSearchDebounce = null;
@@ -7722,14 +8016,16 @@
     loadMesAcquis();
   });
 
-  // Jauge de charge d'apprentissage (demande du 17/08/2026, cf. server.js
-  // GET /api/users/learning-load + lib/spaced-repetition/learning-load.js
-  // pour tout le calcul — ce bloc ne fait que l'afficher). Visible
-  // uniquement sur "Découvrir" (appelée depuis loadMesQcm), jamais pendant
-  // un QCM en cours ni sur Ancrer/Relier (cf. hideLoadGauge dans loadSlot).
-  // "Charge de mémorisation" (demande du 17/08/2026), plus clair que le
-  // simple "Charge" — précise qu'il s'agit du rythme des repasses à venir,
-  // pas d'une charge générale de l'appli.
+  // Jauge de charge de mémorisation (demande du 17/08/2026, simplifiée le
+  // 14/09/2026 en simple comptage du jour — "pas de calcul sur plusieurs
+  // jours comme actuellement" — cf. server.js GET /api/users/learning-load
+  // + lib/spaced-repetition/learning-load.js pour le calcul, ce bloc ne fait
+  // que l'afficher). Visible uniquement sur "Découvrir" (appelée depuis
+  // loadMesQcm), jamais pendant un QCM en cours ni sur Ancrer/Relier (cf.
+  // hideLoadGauge dans loadSlot). Le nombre affiché (gauge.count) est
+  // exactement celui de "Connaissances mémorisées ce jour" plus bas sur
+  // cette même page — remis à zéro chaque jour, jamais projeté sur les
+  // jours suivants.
   // shortLabel (demande du 27/08/2026, nouveau composant barre) : juste le
   // qualificatif, affiché séparément du titre "Charge de mémorisation" dans
   // le nouveau design compact. minRatio/maxRatio ci-dessous ne sont que de la
@@ -7747,13 +8043,10 @@
   var LOAD_GAUGE_LEVEL_ORDER = ['calm', 'moderate', 'busy', 'overloaded'];
 
   // Repère "Idéal" (demande du 13/09/2026, "idéal doit se situer pour 6 connaissances
-  // mémorisées ce jour, contre 12 actuellement ; surcharge à partir de 9 questions") :
-  // rythme confortable de 6 repasses/jour, pas un seuil d'alerte. Le plafond technique
-  // de 20 côté serveur (DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY) continue de servir UNIQUEMENT
-  // à simuler un report de charge réaliste jour après jour (computeLearningLoadGauge) —
-  // jamais changé, sans rapport avec ce repère "Idéal" ; seuls le niveau affiché
-  // (calme/modéré/élevé/surchargé, désormais basé sur le nombre brut de connaissances via
-  // levelFromPeakLoad) et l'échelle visuelle du pourcentage ici sont recalés sur 6/9.
+  // mémorisées ce jour ; surcharge à partir de 9 questions") : rythme confortable de 6
+  // connaissances mémorisées par jour, pas un seuil d'alerte — cf. levelFromPeakLoad,
+  // lib/spaced-repetition/learning-load.js, appliqué directement au comptage du jour
+  // depuis le 14/09/2026 (plus de simulation multi-jours).
   var LOAD_GAUGE_IDEAL_QUESTIONS = 6;
 
   // Repère "Idéal" placé aux 2/3 de la piste (demande du 30/08/2026) : le
@@ -7794,14 +8087,13 @@
     loadGaugeEl.hidden = false;
     var meta = LOAD_GAUGE_LEVEL_META[gauge.level] || LOAD_GAUGE_LEVEL_META.calm;
     // Le pourcentage visible exprime l'avancement vers le rythme idéal :
-    // 12 questions prévues = 100 %. Au-delà, il continue de grimper (110 %,
-    // 120 %, 130 %…, demande du 30/08/2026) au lieu d'être plafonné — seul le
-    // remplissage visuel de la barre est borné, sur une échelle qui va
-    // jusqu'à LOAD_GAUGE_BAR_MAX_PERCENT (150 %, l'extrémité de la piste,
-    // repère "Surcharge cognitive"). La couleur/le libellé continuent de
-    // refléter le niveau calculé côté serveur. Aucun calcul FSRS ni seuil
-    // métier n'est modifié.
-    var peakLoad = Math.max(0, Number(gauge.peakLoad) || 0);
+    // 6 connaissances mémorisées aujourd'hui = 100 %. Au-delà, il continue de
+    // grimper (110 %, 120 %, 130 %…, demande du 30/08/2026) au lieu d'être
+    // plafonné — seul le remplissage visuel de la barre est borné, sur une
+    // échelle qui va jusqu'à LOAD_GAUGE_BAR_MAX_PERCENT (150 %, l'extrémité
+    // de la piste, repère "Surcharge cognitive"). La couleur/le libellé
+    // continuent de refléter le niveau calculé côté serveur.
+    var peakLoad = Math.max(0, Number(gauge.count) || 0);
     var chargePercent = Math.round((peakLoad / LOAD_GAUGE_IDEAL_QUESTIONS) * 100);
     var barFillPercent = Math.min((chargePercent / LOAD_GAUGE_BAR_MAX_PERCENT) * 100, 100);
     if (loadGaugePercent) loadGaugePercent.textContent = chargePercent + ' %';
@@ -7834,11 +8126,10 @@
     }
     if (loadGaugeLabel) loadGaugeLabel.textContent = meta.shortLabel || meta.label;
     if (loadGaugeCaption) {
-      if (gauge.peakLoad > 0 && gauge.peakDayIndex >= 0) {
-        var when = gauge.peakDayIndex === 0 ? "aujourd'hui" : (gauge.peakDayIndex === 1 ? 'demain' : 'dans ' + gauge.peakDayIndex + ' jours');
-        loadGaugeCaption.textContent = 'Pic estimé : ' + gauge.peakLoad + ' question' + (gauge.peakLoad > 1 ? 's' : '') + ' ' + when + '.';
+      if (peakLoad > 0) {
+        loadGaugeCaption.textContent = peakLoad + ' connaissance' + (peakLoad > 1 ? 's' : '') + ' mémorisée' + (peakLoad > 1 ? 's' : '') + ' aujourd’hui.';
       } else {
-        loadGaugeCaption.textContent = 'Aucune repasse programmée pour l’instant.';
+        loadGaugeCaption.textContent = 'Aucune connaissance mémorisée pour l’instant aujourd’hui.';
       }
     }
     loadGaugeEl.classList.add('visible');
@@ -7995,9 +8286,12 @@
   // cette fiche.
   function adoptCatalogRecommendation(item, btn) {
     if (!voterKey) return;
-    if (typeof showNotionQuizLevelPicker !== 'function') return;
-    showNotionQuizLevelPicker(function (level) {
-      if (btn) btn.disabled = true;
+    // Niveau toujours Élémentaire, plus de sélecteur (demande du 14/09/2026, "pour explorer,
+    // préconisation, catalogue, on met aussi élémentaire par défaut") — même traitement que
+    // startCustomTopicGeneration/activateDebateNotion/adoptExploreItem, showNotionQuizLevelPicker
+    // n'est plus appelée ici.
+    var level = 'elementaire';
+    if (btn) btn.disabled = true;
     // Sablier immédiat (demande du 30/08/2026, "je veux un bandeau de
     // chargement qui se déclenche immédiatement") : sans lui, rien ne
     // signalait que le clic avait été pris en compte pendant les deux
@@ -8044,7 +8338,6 @@
         removeLoadingOverlay();
         if (btn) btn.disabled = false;
       });
-    });
   }
   // idle -> loading -> has-content | empty. Pilote à la fois l'affichage
   // (refreshLearnNextInlineVisibility) et le déclenchement du chargement
@@ -8131,16 +8424,26 @@
       return;
     }
     learnNextInlinePhase = 'has-content';
-    // Juste le nom (demande du 30/08/2026, "juste le nom des sujets") : plus
-    // de raison/chevron — 2 par ligne centrées, la 3e seule en dessous,
-    // centrée aussi (cf. .qcm-learn-next-inline-list flex-wrap + justify-
-    // content:center).
-    learnNextInlineList.innerHTML = learnNextVisible.map(function (item, i) {
-      return '<button type="button" class="qcm-learn-next-inline-item" data-index="' + i + '">' +
-        '<i class="fa-solid ' + learnNextThemeIconClass(item) + ' qcm-learn-next-inline-icon" aria-hidden="true"></i>' +
-        '<span>' + escapeHtml(item.name || item.title || 'Connaissance') + '</span>' +
-      '</button>';
-    }).join('');
+    // Même présentation que les autres rubriques de "Mes apprentissages"
+    // (demande du 13/09/2026, "exactement la même présentation ... avec
+    // vignettes etc.") : réutilise le même gabarit ligne (vignette + icône
+    // de thématique + nom) que renderMesQcmTableHtml/renderMesQcmNameVisualHtml,
+    // dans le même tableau .qcm-mesqcm-table--inline-details (une seule
+    // colonne pleine largeur, même liseret de séparation entre lignes). Pas
+    // de chevron ici : un clic sur la ligne déclenche directement l'adoption
+    // (adoptCatalogRecommendation), il n'y a rien à déplier.
+    learnNextInlineList.innerHTML =
+      '<div class="qcm-mesqcm-table-shell"><div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">' +
+      '<table class="qcm-mesqcm-table qcm-mesqcm-table--inline-details"><tbody>' +
+      learnNextVisible.map(function (item, i) {
+        var iconClass = learnNextThemeIconClass(item);
+        var label = escapeHtml(item.name || item.title || 'Connaissance');
+        return '<tr><td><button type="button" class="qcm-mesqcm-name-btn qcm-learn-next-inline-item" data-index="' + i + '">' +
+          '<span class="qcm-mesqcm-name-thumb is-empty"><i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-thumb-fallback" aria-hidden="true"></i></span>' +
+          '<span class="qcm-mesqcm-name-title"><i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-theme-icon" aria-hidden="true"></i><span class="qcm-mesqcm-name-label">' + label + '</span></span>' +
+        '</button></td></tr>';
+      }).join('') +
+      '</tbody></table></div></div>';
     learnNextInlineList.querySelectorAll('.qcm-learn-next-inline-item').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var item = learnNextVisible[parseInt(btn.getAttribute('data-index'), 10)];
@@ -8308,7 +8611,29 @@
       requestAnimationFrame(function () { requestAnimationFrame(signalIframeReady); });
       return;
     }
-    renderMessage('Chargement de tes QCM…');
+    // Peinture immédiate depuis la dernière ouverture connue (sessionStorage,
+    // cf. le commentaire de MES_QCM_SESSION_CACHE_KEY) pendant que la vraie
+    // lecture réseau tourne en fond ci-dessous — jamais de "Chargement de tes
+    // QCM…" tant qu'on a déjà quelque chose de réel à montrer. La route
+    // GET /api/users/notion-quizzes reste, elle, toujours appelée juste après
+    // (jamais remplacée) : c'est elle qui corrige/complète l'affichage dès
+    // qu'elle répond, cache ou pas.
+    var mesQcmSessionEntry = readMesQcmSessionCache();
+    if (mesQcmSessionEntry && Array.isArray(mesQcmSessionEntry.data && mesQcmSessionEntry.data.quizzes)) {
+      var cachedQuizzesForInstantPaint = mesQcmSessionEntry.data.quizzes;
+      syncPendingNotionQuizGenerations(cachedQuizzesForInstantPaint);
+      renderMesQcmList(cachedQuizzesForInstantPaint);
+      updateMesAcquisAvailability(cachedQuizzesForInstantPaint);
+      if (mesQcmSessionEntry.gauge) renderLoadGauge(mesQcmSessionEntry.gauge);
+      discoverContentReady = true;
+      refreshLearnNextInlineVisibility();
+      revealDiscoverActions();
+      iframeReadyDeferredForOverview = false;
+      requestAnimationFrame(function () { requestAnimationFrame(signalIframeReady); });
+    } else {
+      renderMessage('Chargement de tes QCM…');
+    }
+
     var myGaugeToken = ++loadGaugeToken;
     var cachedQuizzesEntry = mesQcmListCache && mesQcmListCache.key === voterKey && (Date.now() - mesQcmListCache.fetchedAt) <= MES_QCM_LIST_CACHE_TTL_MS
       ? mesQcmListCache
@@ -8334,6 +8659,12 @@
     loadLearnNextInline();
     loadMemorizedToday();
 
+    // Jauge la plus récente connue pour cette entrée de cache, mise à jour au
+    // fil des deux réponses réseau ci-dessous (ordre non garanti entre elles) —
+    // sert uniquement à écrire un sessionCache toujours complet (liste + jauge),
+    // jamais à l'affichage lui-même.
+    var latestGaugeForSessionCache = mesQcmSessionEntry ? mesQcmSessionEntry.gauge : null;
+
     // La liste principale n'attend pas la jauge : sur mobile, une lecture
     // FSRS lente ne doit pas laisser vide toute la moitié basse de la page.
     var quizzesRenderRequest = quizzesRequest
@@ -8350,9 +8681,10 @@
         discoverContentReady = true;
         refreshLearnNextInlineVisibility();
         revealDiscoverActions();
+        writeMesQcmSessionCache({ key: voterKey, data: data, gauge: latestGaugeForSessionCache, fetchedAt: Date.now() });
       })
       .catch(function () {
-        if (myToken === loadToken) {
+        if (myToken === loadToken && !mesQcmSessionEntry) {
           renderMessage('Impossible de charger tes QCM pour le moment.');
           discoverContentReady = true;
           refreshLearnNextInlineVisibility();
@@ -8362,8 +8694,12 @@
 
     var gaugeRenderRequest = gaugeRequest.then(function (gauge) {
       if (myToken !== loadToken || myGaugeToken !== loadGaugeToken) return;
+      latestGaugeForSessionCache = gauge;
       if (gauge) renderLoadGauge(gauge);
       else hideLoadGauge();
+      if (mesQcmListCache && mesQcmListCache.key === voterKey) {
+        writeMesQcmSessionCache({ key: voterKey, data: mesQcmListCache.data, gauge: gauge, fetchedAt: Date.now() });
+      }
     });
 
     Promise.allSettled([quizzesRenderRequest, gaugeRenderRequest]).then(function () {
@@ -8451,14 +8787,31 @@
       '</button>';
   }
 
+  // Seuil d'alerte "désapprentissage" (demande du 14/09/2026) : rétrivabilité FSRS
+  // (q.progressPct, cf. server.js GET /api/users/notion-quizzes) retombée sous 50% —
+  // point où l'on a statistiquement plus de chances de rater la question que de la
+  // retrouver. Jamais déclenché pour une connaissance jamais répondue (trueAnsweredCount
+  // à 0 : son 0% de départ n'est pas de l'oubli, juste un apprentissage pas commencé).
+  var MES_QCM_AT_RISK_THRESHOLD = 50;
+  function isMesQcmAtRisk(q) {
+    return (Number(q.trueAnsweredCount) || 0) > 0
+      && typeof q.progressPct === 'number'
+      && q.progressPct < MES_QCM_AT_RISK_THRESHOLD;
+  }
+
   function renderMesQcmStateHtml(q, questionCount) {
-    return q.realized
+    var stateHtml = q.realized
       ? '<span class="qcm-mesqcm-state is-realized">Réalisé<br>(' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
       : (q.completedLevel
         ? '<span class="qcm-mesqcm-state is-realized">Acquis<br>' + escapeHtml(formatMesQcmLevelLabel(q.completedLevel) || q.completedLevel) + '</span>'
         : (q.inProgress
           ? '<span class="qcm-mesqcm-state is-inprogress">En cours<br>' + (Number(q.answeredCount) || 0) + '/' + questionCount + '</span>'
           : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>'));
+    if (isMesQcmAtRisk(q)) {
+      stateHtml += '<span class="qcm-mesqcm-at-risk-badge" title="Rétrivabilité actuelle estimée">' +
+        '<i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>Ancrage ' + Math.round(q.progressPct) + '%</span>';
+    }
+    return stateHtml;
   }
 
   function renderMesQcmLevelHtml(q, questionCount) {
@@ -8475,10 +8828,35 @@
     var img = q && q.image && q.image.url ? q.image : null;
     var iconClass = (meta && meta.icon) || 'fa-book-open';
     var altText = q.label || (meta && meta.label) || '';
-    return '<span class="qcm-mesqcm-name-thumb' + (img ? '' : ' is-empty') + '" data-mesqcm-thumb-index="' + index + '">' +
-      (img ? '<img src="' + escapeHtml(img.url) + '" alt="' + escapeHtml(altText) + '" loading="lazy" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
+    // Repli par thématique (demande du 13/09/2026) : un master sans image
+    // propre affiche désormais une image liée à sa thématique plutôt qu'une
+    // simple icône, quand une image est prévue pour cette thématique (cf.
+    // getMesAcquisThemeFallbackImage) — sinon comportement inchangé (icône).
+    var theme = q && Array.isArray(q.themes) ? q.themes[0] : null;
+    var visualUrl = img ? img.url : getMesAcquisThemeFallbackImage(normalizeKnowledgeThemeLabel(theme));
+    return '<span class="qcm-mesqcm-name-thumb' + (visualUrl ? '' : ' is-empty') + '" data-mesqcm-thumb-index="' + index + '">' +
+      (visualUrl ? '<img src="' + escapeHtml(visualUrl) + '" alt="' + escapeHtml(altText) + '" loading="lazy" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
       '<i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-thumb-fallback" aria-hidden="true"></i>' +
       '</span>';
+  }
+
+  // Petite icône de thématique avant le nom (demande du 13/09/2026, "mets
+  // aussi ces petits logo dans les autres rubriques") : même esprit que
+  // .qcm-learn-next-inline-icon sur "Apprentissages proposés", mais réutilise
+  // getMesAcquisThemeIconClass (déjà la bonne table pour q.themes, cf. son
+  // propre commentaire — ce sont les mêmes 21 Galaxies de "Ma mémoire",
+  // jamais les catégories brutes non résolues des recommandations
+  // catalogue). Absente (chaîne vide) si aucune thématique résolue, jamais
+  // une icône générique inventée pour combler.
+  function renderMesQcmThemeIconHtml(q) {
+    // Toujours une icône, même sans thématique résolue (q.themes vide — un
+    // sujet en recherche libre n'est pas toujours classé) : getMesAcquisThemeIconClass
+    // retombe déjà sur fa-layer-group dans ce cas, même repli que le groupe
+    // "Autres" de "Mes acquis" (renderMesAcquisList) — jamais une absence
+    // totale d'icône, constatée le 13/09/2026 sur un sujet non classé.
+    var theme = q && Array.isArray(q.themes) ? q.themes[0] : null;
+    var iconClass = getMesAcquisThemeIconClass(normalizeKnowledgeThemeLabel(theme));
+    return '<i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-theme-icon" aria-hidden="true"></i>';
   }
 
   function renderMesQcmInlineDetailRowHtml(q, index, questionCount, rowIndex) {
@@ -8497,14 +8875,37 @@
     };
   }
 
+  // Rubrique "En train de s'oublier" (demande du 14/09/2026, révision) : gabarit carte
+  // (image + nom + niveau d'ancrage) plutôt que le tableau habituel — l'état ("Réalisé"/
+  // "En cours") et le niveau (Élémentaire/Avancé/Expert) n'ont pas de sens pour ce signal
+  // d'alerte, seul l'ancrage compte ici. data-mesqcm-index réutilisé tel quel : le clic
+  // ouvre la même fiche d'action que partout ailleurs (cf. wireMesQcmListInteractions),
+  // aucun câblage spécifique à écrire.
+  function renderMesQcmAtRiskCardsHtml(list, allQuizzes) {
+    var html = '<div class="qcm-mesqcm-atrisk-grid">';
+    list.forEach(function (q) {
+      var index = allQuizzes.indexOf(q);
+      var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
+      var pct = Math.max(0, Math.min(100, Math.round(Number(q.progressPct) || 0)));
+      html += '<button type="button" class="qcm-mesqcm-atrisk-card" data-mesqcm-index="' + index + '">';
+      html += '<span class="qcm-mesqcm-atrisk-card-badge"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>Ancrage ' + pct + '%</span>';
+      html += renderMesQcmNameVisualHtml(q, meta, index);
+      html += '<span class="qcm-mesqcm-atrisk-card-name">' + escapeHtml(q.label || meta.label) + '</span>';
+      html += '</button>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   function renderMesQcmTableHtml(list, allQuizzes, options) {
+    if (options && options.cardMode) return renderMesQcmAtRiskCardsHtml(list, allQuizzes);
     var inlineDetails = !!(options && options.inlineDetails);
     var html = '<div class="qcm-mesqcm-table-shell">';
     html += '<div class="qcm-mesqcm-table-wrap" tabindex="0" role="region" aria-label="Tableau défilable horizontalement">';
     html += '<table class="qcm-mesqcm-table' + (inlineDetails ? ' qcm-mesqcm-table--inline-details' : '') + '">';
     html += inlineDetails
-      ? '<thead><tr><th>Apprentissage</th></tr></thead><tbody>'
-      : '<thead><tr><th>Apprentissage</th><th>État</th><th>Niveau</th></tr></thead><tbody>';
+      ? '<tbody>'
+      : '<thead><tr><th></th><th>État</th><th>Niveau</th></tr></thead><tbody>';
     list.forEach(function (q, rowIndex) {
       var index = allQuizzes.indexOf(q);
       var meta = ACQUIS_SOURCE_TYPE_META[q.sourceType] || ACQUIS_SOURCE_TYPE_META.histoire;
@@ -8521,7 +8922,7 @@
       var detail = inlineDetails ? renderMesQcmInlineDetailRowHtml(q, index, questionCount, rowIndex) : null;
       html += '<tr>';
       html += '<td><button type="button" class="qcm-mesqcm-name-btn' + (inlineDetails ? ' qcm-mesqcm-row-toggle' : '') + '" ' + (inlineDetails ? 'data-mesqcm-toggle-index="' + index + '" aria-expanded="false" aria-controls="' + detail.detailId + '"' : 'data-mesqcm-index="' + index + '"') + '>';
-      html += renderMesQcmNameVisualHtml(q, meta, index) + '<span class="qcm-mesqcm-name-label">' + escapeHtml(q.label || meta.label) + '</span>';
+      html += renderMesQcmNameVisualHtml(q, meta, index) + '<span class="qcm-mesqcm-name-title">' + renderMesQcmThemeIconHtml(q) + '<span class="qcm-mesqcm-name-label">' + escapeHtml(q.label || meta.label) + '</span></span>';
       if (inlineDetails) html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-row-toggle-chevron" aria-hidden="true"></i>';
       html += '</button></td>';
       if (!inlineDetails) {
@@ -8960,6 +9361,45 @@
     return iconsByTheme[String(theme || '').trim()] || 'fa-layer-group';
   }
 
+  // Image de secours par thématique (demande du 13/09/2026, "au lieu de ne
+  // rien mettre [quand un master n'a pas d'image], je veux y mettre des
+  // images de secours liées à la thématique") : les 21 Galaxies ont chacune
+  // reçu une image dédiée (fournie par l'utilisateur, compressée ici en webp
+  // 480x480 ~40 Ko en moyenne — contre ~2 Mo en PNG source, pour ne jamais
+  // alourdir l'egress). Seules les anciennes rubriques hybrides (avant la
+  // scission des Galaxies, cf. getMesAcquisThemeIconClass) n'ont PAS d'image
+  // dédiée : reviennent simplement à l'icône de thématique (comportement
+  // inchangé), jamais une image générique inventée pour combler. Retourne
+  // null si aucune image n'est prévue pour cette thématique — jamais une
+  // chaîne vide qui casserait silencieusement le <img src="">.
+  function getMesAcquisThemeFallbackImage(theme) {
+    var imagesByTheme = {
+      'Histoire': 'histoire.webp',
+      'Arts': 'arts.webp',
+      'Sciences - technologie': 'sciences-technologie.webp',
+      'Sciences sociales': 'sciences-sociales.webp',
+      'Société - éducation': 'societe-education.webp',
+      'Économie - emploi': 'economie-emploi.webp',
+      'Politique': 'politique.webp',
+      'International': 'international.webp',
+      'Géographie': 'geographie.webp',
+      'Justice - faits divers': 'justice-faits-divers.webp',
+      'Climat - environnement': 'climat-environnement.webp',
+      'Culture': 'culture.webp',
+      'Sport': 'sport.webp',
+      'Loisirs': 'loisirs.webp',
+      'Médias - divertissements': 'medias-divertissements.webp',
+      'Santé - bien-être': 'sante-bien-etre.webp',
+      'Vie personnelle - modes de vie': 'vie-personnelle-modes-de-vie.webp',
+      'Espace jeunes': 'espace-jeunes.webp',
+      'Philosophie': 'philosophie.webp',
+      'Langues': 'langues.webp',
+      'Lettres': 'lettres.webp'
+    };
+    var file = imagesByTheme[String(theme || '').trim()];
+    return file ? ('/images/theme-fallbacks/' + file) : null;
+  }
+
   // Certains acquis historiques ont reçu le nom d'une sous-branche
   // ("Culture", "Arts" ou "Arts et culture") alors que la rubrique
   // officielle d'Explorer est unique. La normalisation reste purement
@@ -9020,9 +9460,24 @@
     var themeNames = Object.keys(byTheme).sort(function (a, b) { return a.localeCompare(b, 'fr', { sensitivity: 'base' }); });
     if (untagged.length) { byTheme['Autres'] = untagged; themeNames.push('Autres'); }
 
+    // "En train de s'oublier" (demande du 14/09/2026) : rubrique dédiée tout en haut,
+    // avant même les thématiques, pour les connaissances déjà répondues au moins une
+    // fois dont la rétrivabilité FSRS estimée est retombée sous le seuil d'alerte (cf.
+    // isMesQcmAtRisk) — triées de la plus fragile à la moins fragile. Une connaissance
+    // qui y figure reste aussi visible dans sa rubrique thématique habituelle plus bas :
+    // ce n'est qu'un raccourci de visibilité, pas un déplacement.
+    var atRiskQuizzes = quizzes.filter(isMesQcmAtRisk)
+      .sort(function (a, b) { return (Number(a.progressPct) || 0) - (Number(b.progressPct) || 0); });
+
     // Suppression groupée retirée : la suppression individuelle reste
     // disponible sur chaque apprentissage, sans cases de sélection inutiles.
     var html = '<div class="qcm-mesqcm-groups">';
+    if (atRiskQuizzes.length) {
+      html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--at-risk"><details open>';
+      html += '<summary class="qcm-mesqcm-group-title qcm-mesqcm-group-title--at-risk"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>En train de s\'oublier</summary>';
+      html += renderMesQcmPaginatedTablesHtml(atRiskQuizzes, quizzes, false, { cardMode: true });
+      html += '</details></section>';
+    }
     if (themeNames.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--all"><details open>';
       html += '<summary class="qcm-mesqcm-group-title">Tous mes apprentissages</summary>';
@@ -9593,9 +10048,15 @@
           ? 'Reprends ce QCM là où tu t’étais arrêté.'
           : 'Réponds aux questions pour la première fois sur cet apprentissage.'));
     var progressPct = Math.max(0, Math.min(100, Number(q.progressPct) || 0));
-    var ancrageBadgeHtml = q.validated
-      ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
-      : '<span class="qcm-acquis-badge">' + progressPct + '%</span>';
+    // Une connaissance "Acquis" (streak de bonnes réponses) peut très bien avoir
+    // recommencé à décliner depuis sans que ce badge le montre (streak et rétrivabilité
+    // sont deux mécanismes indépendants, cf. commentaire plus bas "Ne jamais confondre…")
+    // — l'alerte de désapprentissage prend donc le pas sur "Acquis" ici.
+    var ancrageBadgeHtml = isMesQcmAtRisk(q)
+      ? '<span class="qcm-acquis-badge is-at-risk"><i class="fa-solid fa-triangle-exclamation"></i> ' + progressPct + '%</span>'
+      : (q.validated
+        ? '<span class="qcm-acquis-badge is-validated"><i class="fa-solid fa-circle-check"></i> Acquis</span>'
+        : '<span class="qcm-acquis-badge">' + progressPct + '%</span>');
 
     // Carte icône + titre + phrase d'explication (demande du 30/08/2026) — un
     // seul gabarit pour les trois actions, `dangerClass` optionnel pour
@@ -10060,7 +10521,7 @@
     titleText.textContent = label || QCM_INITIAL_TITLE_BY_CATEGORY[currentCategory] || CATEGORY_LABELS[currentCategory] || 'Apprentissage';
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || '';
     renderCategorySwitcher();
-    renderMessage('Chargement du QCM…');
+    renderMessage('Chargement en cours');
 
     var dateParam = currentQuizDate ? '&date=' + encodeURIComponent(currentQuizDate) : '';
     fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey) + dateParam + (voterKey ? '&voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })

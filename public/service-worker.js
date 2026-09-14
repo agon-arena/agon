@@ -37,7 +37,7 @@
 // revalidation arrière-plan ci-dessous, même stratégie que les assets
 // statiques immuables locaux (cf. isMutableStaticAsset plus bas) — une police
 // change assez rarement pour que ça ne soit jamais un problème de fraîcheur.
-const SW_VERSION = "20260910-hide-frame-until-memory-v1";
+const SW_VERSION = "20260914-qcm-state-message-v1";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -226,15 +226,26 @@ self.addEventListener("fetch", (event) => {
     // consulteront jamais.
     const requestUrl = new URL(request.url);
     const forcedRefresh = requestUrl.searchParams.has("_swrefresh");
-    const forcedHomeReturnFresh = requestUrl.searchParams.has("mnoriaHomeReturn");
-    const forcedFresh = forcedRefresh || forcedHomeReturnFresh;
+    const homeReturnMarker = requestUrl.searchParams.has("mnoriaHomeReturn");
+    const forcedFresh = forcedRefresh;
     // "/" volontairement absente de cette liste (correctif du 07/09/2026,
     // "lancement standalone lent") : c'est le start_url du manifest, donc LA
     // page ouverte à chaque tap sur l'icône — elle redevient cache-first
     // instantané, cf. le commentaire de tête sur SW_VERSION pour le détail
     // complet (boucle de fraîcheur fermée côté script.js).
+    // "/apprentissage" retirée le 14/09/2026 (demande "limiter le temps
+    // d'ouverture de la page") : même traitement cache-first + revalidation
+    // arrière-plan que "/" ci-dessus. L'invalidation du 03/09/2026 en tête de
+    // fichier visait un cache resservant une version antérieure au câblage
+    // de la route progressive — le chantier qui l'a motivée est terminé
+    // depuis. Le seul garde-fou perdu est le rechargement automatique unique
+    // (mnoria:page-stale, cf. script.js) : il ne s'applique déjà jamais ici,
+    // volontairement, car cette page tourne toujours en iframe
+    // (window.self !== window.top, cf. son commentaire) — une page un peu
+    // obsolète au tout premier chargement après un déploiement, jamais après
+    // (revalidation arrière-plan), reste donc le seul compromis, identique à
+    // celui déjà accepté pour "/".
     const navigationNetworkFirst = [
-      "/apprentissage",
       "/create",
       "/notifications",
       "/contributions",
@@ -242,7 +253,7 @@ self.addEventListener("fetch", (event) => {
       "/autres-sources"
     ].includes(requestUrl.pathname);
     let cacheKeyRequest = request;
-    if (forcedFresh) {
+    if (forcedFresh || homeReturnMarker) {
       requestUrl.searchParams.delete("_swrefresh");
       requestUrl.searchParams.delete("mnoriaHomeReturn");
       cacheKeyRequest = new Request(requestUrl.toString(), { headers: request.headers });
@@ -250,9 +261,7 @@ self.addEventListener("fetch", (event) => {
 
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
-        const cachedFallback = forcedHomeReturnFresh
-          ? await cache.match(cacheKeyRequest)
-          : !forcedFresh && navigationNetworkFirst
+        const cachedFallback = !forcedFresh && navigationNetworkFirst
           ? await cache.match(cacheKeyRequest)
           : null;
         const cachedResponse = forcedFresh || navigationNetworkFirst

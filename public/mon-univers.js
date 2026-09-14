@@ -236,6 +236,7 @@ let linksOverlayEl = null;
 // d'écran (rotation mobile, passage d'un écran Retina à un autre), cf. mountUniverse.
 let universeBgResizeObserver = null;
 const labelElByNodeId = new Map();
+const LABEL_FRAME_PADDING_PX = 4;
 // Traits connecteurs étoile -> système solaire (demande du 13/08/2026) : enfants de worldEl
 // (pas de la couche des libellés), donc mis à l'échelle avec la scène comme les bulles — pas
 // besoin d'une précision de rendu façon texte, une ligne reste lisible même mise à l'échelle.
@@ -343,6 +344,13 @@ let minimapBounds = null;
 let minimapActiveGalaxyId = null;
 let minimapClipIdCounter = 0;
 const minimapMarkerByNodeId = new Map();
+
+function isLabelRectFullyInsideFrame(labelRect, frameRect, padding = 0) {
+  return labelRect.left >= frameRect.left + padding
+    && labelRect.right <= frameRect.right - padding
+    && labelRect.top >= frameRect.top + padding
+    && labelRect.bottom <= frameRect.bottom - padding;
+}
 
 // Repli sur #mnoria-tag-trends-cloud (bulles "Ma mémoire" embarquées sur l'accueil, même cadre
 // que Bulles Actu/Bulles Mnoria) — la page /mon-univers autonome a bien son propre
@@ -1360,13 +1368,22 @@ function mountUniverse() {
 
   worldLayout.stars.forEach((star) => {
     star.themeHue = hueForGalaxy(getGalaxyNameFromId(star.galaxyId));
+    // "Éclipse" (demande du 14/09/2026, star.ref.atRisk posé côté serveur — cf.
+    // GET /api/users/intellectual-universe) : disque noirci quand TOUTES les fiches de
+    // l'étoile ont vu leur ancrage FSRS retomber sous le seuil, jamais à cause d'une seule
+    // fiche fragile parmi d'autres saines (déjà tranché côté serveur). Le halo reprend la
+    // teinte thématique déjà utilisée pour cette étoile (star.themeHue, jamais une couleur
+    // générique) via --mnoria-tag-bubble-glow, réutilisant le mécanisme existant des bulles
+    // galaxie (cf. createBubbleEl/style.css).
+    const isAtRisk = !!star.ref?.atRisk;
     createBubbleEl(
       "star",
       star,
-      bubbleBackgroundFor(getGalaxyNameFromId(star.galaxyId), "star", true),
-      null,
-      "mnoria-tag-bubble-star"
+      isAtRisk ? "#000000" : bubbleBackgroundFor(getGalaxyNameFromId(star.galaxyId), "star", true),
+      isAtRisk ? `hsla(${star.themeHue}, 75%, 60%, 0.65)` : null,
+      "mnoria-tag-bubble-star" + (isAtRisk ? " is-memory-eclipsed" : "")
     );
+    if (isAtRisk) labelElByNodeId.get(star.id)?.classList.add("is-memory-eclipsed");
     const parentSystem = nodeById.get(star.solarSystemId);
     if (parentSystem) {
       connectorElByNodeId.set(star.id, createConnectorEl(parentSystem.x, parentSystem.y, star.x, star.y, star.r));
@@ -1569,10 +1586,10 @@ async function dispatchMemoireContentReadyAfterPaint(modeToken, maxWaitMs = 900)
   window.dispatchEvent(new Event("mnoria:memoire-content-ready"));
 }
 
-async function mountUniverseAndHideSpinnerWhenReady(modeToken) {
+async function mountUniverseAndHideSpinnerWhenReady(modeToken, options = {}) {
   await waitForHomeTrendsSectionTopReady();
   if (modeToken !== window._mnoriaCloudModeToken) return;
-  await waitForContainerSizeStable(cloudEl);
+  await waitForContainerSizeStable(cloudEl, options.cached === true ? 220 : 900);
   if (modeToken !== window._mnoriaCloudModeToken) return;
   mountUniverse();
   if (typeof window.__mnoriaHideBubbleCloudLoadingSpinner !== "function") return;
@@ -1733,14 +1750,23 @@ function onCameraChange(state) {
   // de layout pour tous les candidats plutôt qu'un reflow par étiquette. rejectedLabels regroupe
   // les étiquettes déjà écartées cette frame pour ne jamais leur laisser .is-revealed d'une frame
   // précédente.
+  // Même exigence pour les bords du cadre : une étiquette doit tenir ENTIÈREMENT dans le
+  // viewport. Sinon, elle est rejetée comme une collision. On ne laisse jamais overflow:hidden
+  // couper une lettre ou un mot ("Philosophie" avec un p hors écran, demande du 14/09/2026).
+  const frameRect = viewportEl.getBoundingClientRect();
   const acceptedRects = [];
   const rejectedLabels = new Set(labelCandidates.map((c) => c.label));
+  const outOfFrameLabels = new Set();
   const OVERLAP_PADDING_PX = 3;
   labelCandidates
     .filter((c) => c.labelRevealed)
     .sort((a, b) => a.priority - b.priority)
     .forEach(({ label }) => {
       const rect = label.getBoundingClientRect();
+      if (!isLabelRectFullyInsideFrame(rect, frameRect, LABEL_FRAME_PADDING_PX)) {
+        outOfFrameLabels.add(label);
+        return; // reste dans rejectedLabels : masqué cette frame
+      }
       const collides = acceptedRects.some((accepted) =>
         rect.left < accepted.right + OVERLAP_PADDING_PX
         && rect.right + OVERLAP_PADDING_PX > accepted.left
@@ -1752,7 +1778,11 @@ function onCameraChange(state) {
       rejectedLabels.delete(label);
     });
   labelCandidates.forEach(({ label, labelRevealed }) => {
+    const outOfFrame = outOfFrameLabels.has(label);
     label.classList.toggle("is-revealed", labelRevealed && !rejectedLabels.has(label));
+    // Si le label dépasse du cadre, il doit disparaître instantanément plutôt que de finir son
+    // fondu en étant rogné par overflow:hidden. Les autres rejets gardent le fondu existant.
+    label.style.visibility = outOfFrame ? "hidden" : "";
   });
 
   // Un seul niveau de liens actif à la fois (demande du 16/08/2026) : le niveau le plus profond
@@ -2347,7 +2377,11 @@ function setKnowledgeMemorization(subjectType, subjectSourceId, knowledgeTargetI
     keepalive: true
   })
     .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-    .then((result) => onDone?.(!!(result.ok && result.data?.ok)))
+    .then((result) => {
+      const ok = !!(result.ok && result.data?.ok);
+      if (ok) invalidateUniverseDataCache();
+      onDone?.(ok);
+    })
     .catch(() => onDone?.(false));
 }
 
@@ -2590,10 +2624,10 @@ function showStatus(kind) {
     return;
   }
 
-  // "loading"/"empty" gardent le cadre visible (fond/bordure décorative) dès le clic sur "Ma
-  // mémoire", plutôt que d'attendre la fin du chargement pour l'afficher. Seul "error" masque
-  // encore le cloud (rien à montrer dans le cadre dans ce cas, le message d'erreur suffit).
-  cloudEl.hidden = kind === "error";
+  // Le cadre doit rester visible aussi en erreur sur l'accueil embarqué : masquer #cloudEl
+  // supprimait tout le cadre "Ma mémoire" et ne laissait que le texte "Impossible de charger..."
+  // hors du visuel. La page /mon-univers autonome garde son message d'état classique.
+  cloudEl.hidden = kind === "error" && !embeddedMarker;
   statusEl.hidden = false;
   statusEl.innerHTML = "";
 
@@ -2638,6 +2672,20 @@ function showStatus(kind) {
     });
     cloudEl.appendChild(message);
   } else if (kind === "error") {
+    if (embeddedMarker) {
+      statusEl.hidden = true;
+      const message = document.createElement("div");
+      message.className = "mnoria-tag-label-overlay universe-empty-overlay";
+      message.style.cssText = "position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:clamp(20px,6vw,46px);text-align:center;color:#fff;pointer-events:none;opacity:1;visibility:visible;transform:none;";
+      message.innerHTML = '<div style="width:min(100%,500px);box-sizing:border-box;padding:clamp(20px,5vw,30px);border:1px solid rgba(255,255,255,.2);border-radius:22px;background:linear-gradient(145deg,rgba(18,29,38,.9),rgba(27,42,52,.78));box-shadow:0 18px 48px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.08);">' +
+        '<div style="width:48px;height:48px;margin:0 auto 15px;border:1px solid rgba(255,255,255,.24);border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);box-shadow:0 0 24px rgba(160,198,212,.18);"><i class="fa-solid fa-wifi" style="font-size:18px;color:#c9dce5;"></i></div>' +
+        '<p style="margin:0 0 16px;font-family:Oswald,Impact,Arial Narrow,sans-serif;font-size:clamp(20px,4.3vw,26px);font-weight:600;line-height:1.2;letter-spacing:.01em;color:#f4f7f8;text-shadow:0 2px 8px rgba(0,0,0,.4);">Impossible de charger ta mémoire pour le moment.</p>' +
+        '<button type="button" class="universe-status__retry" style="pointer-events:auto;">Réessayer</button>' +
+        '</div>';
+      message.querySelector(".universe-status__retry")?.addEventListener("click", loadUniverse);
+      cloudEl.appendChild(message);
+      return;
+    }
     const p = document.createElement("p");
     // Même langage typographique que le titre de l'état "vide" juste au-dessus
     // (Oswald 600) — cohérent avec les autres écrans techniques Mnoria harmonisés
@@ -2726,7 +2774,7 @@ function buildDemoUniverseData() {
 // réseau met plus longtemps à se stabiliser qu'un onglet Safari déjà actif, peut laisser
 // ce fetch sans réponse ni erreur — sans lui, "Ma mémoire" restait bloquée en chargement
 // perpétuel, seulement en standalone, jamais en navigateur mobile classique déjà "chaud".
-const UNIVERSE_FETCH_TIMEOUT_MS = 12000;
+const UNIVERSE_FETCH_TIMEOUT_MS = 20000;
 
 // L'état vide varie rarement d'un affichage à l'autre, mais l'appel Supabase qui le confirme
 // peut prendre plusieurs secondes au réveil d'une PWA standalone. Mémorise seulement cette
@@ -2746,29 +2794,91 @@ const UNIVERSE_EMPTY_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 // scène peut ainsi être montée dès l'évaluation du module, sans attendre le réseau.
 const UNIVERSE_DATA_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 const UNIVERSE_BACKGROUND_REFRESH_MIN_AGE_MS = 2 * 60 * 1000;
+const UNIVERSE_STALE_DATA_FALLBACK_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function getUniverseDataCacheKey() {
   return `mnoriaUniverseData:${getKey()}`;
 }
 
-function readCachedUniverseDataEntry() {
+function getUniverseEmptyCacheKey() {
+  return `mnoriaUniverseEmpty:${getKey()}`;
+}
+
+function getUniverseInvalidationCacheKey() {
+  return `mnoriaUniverseInvalidated:${getKey()}`;
+}
+
+function getUniverseCacheInvalidatedAt() {
+  const key = getUniverseInvalidationCacheKey();
+  const values = [];
+  try { values.push(Number(sessionStorage.getItem(key) || 0)); } catch {}
+  try { values.push(Number(localStorage.getItem(key) || 0)); } catch {}
+  return Math.max(0, ...values.filter(Number.isFinite));
+}
+
+function invalidateUniverseDataCache() {
+  const invalidatedAt = Date.now();
+  try {
+    sessionStorage.removeItem(getUniverseDataCacheKey());
+    sessionStorage.removeItem(getUniverseEmptyCacheKey());
+    sessionStorage.setItem(getUniverseInvalidationCacheKey(), String(invalidatedAt));
+  } catch {}
+  try { localStorage.setItem(getUniverseInvalidationCacheKey(), String(invalidatedAt)); } catch {}
+}
+
+window.mnoriaInvalidateUniverseCache = invalidateUniverseDataCache;
+
+function readUniverseDataCacheEntry(maxAgeMs = UNIVERSE_DATA_CACHE_MAX_AGE_MS) {
   try {
     const cached = JSON.parse(sessionStorage.getItem(getUniverseDataCacheKey()) || "null");
-    if (!cached || !Number.isFinite(cached.at) || Date.now() - cached.at > UNIVERSE_DATA_CACHE_MAX_AGE_MS) return null;
+    if (!cached || !Number.isFinite(cached.at) || Date.now() - cached.at > maxAgeMs) return null;
+    if (cached.at <= getUniverseCacheInvalidatedAt()) return null;
     return cached;
   } catch {
     return null;
   }
 }
 
+function readCachedUniverseDataEntry() {
+  return readUniverseDataCacheEntry(UNIVERSE_DATA_CACHE_MAX_AGE_MS);
+}
+
+function readStaleUniverseDataEntry() {
+  return readUniverseDataCacheEntry(UNIVERSE_STALE_DATA_FALLBACK_MAX_AGE_MS);
+}
+
 function readCachedUniverseData() {
   return readCachedUniverseDataEntry()?.data || null;
 }
 
-function cacheUniverseData(data) {
+// Lancement standalone à froid (demande du 14/09/2026, "augmenter la vitesse
+// d'ouverture [de l'accueil] ... seul le cadre de ma mémoire peut se mettre à
+// jour éventuellement") : sessionStorage ci-dessus repart TOUJOURS vide à
+// chaque nouveau lancement de la PWA (nouvel onglet/process, cf. commentaire
+// de UNIVERSE_FETCH_TIMEOUT_MS sur ce même sujet) — seul localStorage survit
+// réellement d'un lancement à l'autre. Utilisée uniquement en repli quand
+// readCachedUniverseDataEntry() (sessionStorage, 5 min) est vide : peint la
+// scène avec la dernière donnée connue, même si le lancement précédent
+// remonte à plusieurs heures (même tolérance que readStaleUniverseDataEntry,
+// déjà acceptée comme repli sur échec réseau), pendant qu'un fetch silencieux
+// la rafraîchit pour le lancement suivant — jamais un second rendu de la
+// scène déjà montée (cf. son appelant dans loadUniverse : seul le cache,
+// jamais la scène affichée, est mis à jour par ce fetch de fond).
+function readCrossLaunchUniverseDataEntry() {
   try {
-    sessionStorage.setItem(getUniverseDataCacheKey(), JSON.stringify({ data, at: Date.now() }));
-  } catch {}
+    const cached = JSON.parse(localStorage.getItem(getUniverseDataCacheKey()) || "null");
+    if (!cached || !Number.isFinite(cached.at) || Date.now() - cached.at > UNIVERSE_STALE_DATA_FALLBACK_MAX_AGE_MS) return null;
+    if (cached.at <= getUniverseCacheInvalidatedAt()) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function cacheUniverseData(data) {
+  const entry = JSON.stringify({ data, at: Date.now() });
+  try { sessionStorage.setItem(getUniverseDataCacheKey(), entry); } catch {}
+  try { localStorage.setItem(getUniverseDataCacheKey(), entry); } catch {}
 }
 
 function shouldRefreshCachedUniverseData(cachedEntry) {
@@ -2779,15 +2889,12 @@ function shouldRefreshCachedUniverseData(cachedEntry) {
   return true;
 }
 
-function getUniverseEmptyCacheKey() {
-  return `mnoriaUniverseEmpty:${getKey()}`;
-}
-
 function hasFreshEmptyUniverseCache() {
   try {
     const cached = JSON.parse(sessionStorage.getItem(getUniverseEmptyCacheKey()) || "null");
     return cached?.empty === true
       && Number.isFinite(cached.at)
+      && cached.at > getUniverseCacheInvalidatedAt()
       && Date.now() - cached.at <= UNIVERSE_EMPTY_CACHE_MAX_AGE_MS;
   } catch {
     return false;
@@ -2875,14 +2982,34 @@ async function loadUniverse() {
     const emptyUniverse = isUniverseEmpty(universeData);
     if (emptyUniverse) {
       showStatus("empty");
-      await dispatchMemoireContentReadyAfterPaint(modeToken);
+      await dispatchMemoireContentReadyAfterPaint(modeToken, 220);
     } else {
       showStatus("none");
-      await mountUniverseAndHideSpinnerWhenReady(modeToken);
+      await mountUniverseAndHideSpinnerWhenReady(modeToken, { cached: true });
     }
     if (shouldRefreshCachedUniverseData(cachedUniverseEntry)) {
       fetchIntellectualUniverseWithRetry(modeToken, 1).then(cacheUniverseData).catch(() => {});
     }
+    return;
+  }
+
+  // Repli lancement standalone à froid (sessionStorage ci-dessus toujours vide dans ce cas,
+  // cf. readCrossLaunchUniverseDataEntry) : peint quand même depuis la dernière donnée connue
+  // du lancement précédent plutôt que d'attendre le réseau, avec la même revalidation
+  // silencieuse en tâche de fond que la branche ci-dessus (jamais de second rendu de la scène).
+  const crossLaunchUniverseEntry = readCrossLaunchUniverseDataEntry();
+  if (crossLaunchUniverseEntry?.data) {
+    universeData = crossLaunchUniverseEntry.data;
+    if (modeToken !== window._mnoriaCloudModeToken) return;
+    const emptyUniverse = isUniverseEmpty(universeData);
+    if (emptyUniverse) {
+      showStatus("empty");
+      await dispatchMemoireContentReadyAfterPaint(modeToken, 220);
+    } else {
+      showStatus("none");
+      await mountUniverseAndHideSpinnerWhenReady(modeToken, { cached: true });
+    }
+    fetchIntellectualUniverseWithRetry(modeToken, 1).then(cacheUniverseData).catch(() => {});
     return;
   }
 
@@ -2900,6 +3027,19 @@ async function loadUniverse() {
   } catch (error) {
     console.warn("[mon-univers] chargement échoué :", error.message);
     if (modeToken !== window._mnoriaCloudModeToken) return;
+    const staleUniverseEntry = readStaleUniverseDataEntry();
+    if (staleUniverseEntry?.data) {
+      universeData = staleUniverseEntry.data;
+      const emptyUniverse = isUniverseEmpty(universeData);
+      if (emptyUniverse) {
+        showStatus("empty");
+        await dispatchMemoireContentReadyAfterPaint(modeToken);
+      } else {
+        showStatus("none");
+        await mountUniverseAndHideSpinnerWhenReady(modeToken);
+      }
+      return;
+    }
     // Si un état vide récent est déjà visible, une panne réseau momentanée ne doit pas le
     // remplacer par une erreur ni faire réapparaître un chargement long. La prochaine entrée
     // relancera de toute façon une vérification fraîche.
