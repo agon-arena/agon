@@ -36777,6 +36777,7 @@ window.scrollToTheme = scrollToTheme;
 let homeBottomNavViewportOffsetRaf = null;
 let homeBottomNavViewportOffsetTimeout = null;
 let homeBottomNavViewportOffsetLastRunAt = 0;
+let homeBottomNavViewportFillOnlyRaf = null;
 let mnoriaSafeAreaBottomProbe = null;
 
 function isMnoriaMobileViewportBottomFillEnabled() {
@@ -37377,7 +37378,8 @@ function maybeDispatchHomeReturnControlsReady() {
   });
 }
 
-function updateHomeBottomNavViewportOffset() {
+function updateHomeBottomNavViewportOffset(options = {}) {
+  const reflowHomeControls = options.reflowHomeControls !== false;
   // syncMnoriaHomeTrendsSectionMinHeight() D'ABORD : c'est lui qui commit la hauteur
   // définitive de #mnoria-tag-trends-section (--mnoria-home-trends-section-top) la première
   // fois qu'elle se stabilise. Appeler syncMnoriaHomeTrendsCaptionAnchor() après (pas avant,
@@ -37388,9 +37390,11 @@ function updateHomeBottomNavViewportOffset() {
   // visible comme un petit saut/disparition furtive du liseret, du bouton Trier/Rechercher et
   // de la bande "À la une" avant qu'ils ne se stabilisent (cf. commentaire sur le débounce
   // 100ms plus bas, qui documentait déjà ce risque).
-  syncMnoriaHomeTrendsSectionMinHeight();
-  syncMnoriaHomeTrendsCaptionAnchor();
-  maybeDispatchHomeReturnControlsReady();
+  if (reflowHomeControls) {
+    syncMnoriaHomeTrendsSectionMinHeight();
+    syncMnoriaHomeTrendsCaptionAnchor();
+    maybeDispatchHomeReturnControlsReady();
+  }
   const viewportBottomFill = getMnoriaMobileViewportBottomFill();
   const cssSafeBottomFill = getMnoriaCssSafeAreaBottomFill();
   const legacyBottomFill = getMnoriaLegacyStandaloneBottomFallback(cssSafeBottomFill);
@@ -37426,6 +37430,17 @@ function updateHomeBottomNavViewportOffset() {
   }
 
   document.documentElement.style.setProperty('--home-bottom-nav-offset', `${Math.round(safeBottomFill)}px`);
+}
+
+function scheduleHomeBottomNavViewportFillOnlyUpdate() {
+  if (homeBottomNavViewportFillOnlyRaf !== null) {
+    cancelAnimationFrame(homeBottomNavViewportFillOnlyRaf);
+  }
+
+  homeBottomNavViewportFillOnlyRaf = requestAnimationFrame(() => {
+    homeBottomNavViewportFillOnlyRaf = null;
+    updateHomeBottomNavViewportOffset({ reflowHomeControls: false });
+  });
 }
 
 function scheduleHomeBottomNavViewportOffsetUpdate() {
@@ -37468,12 +37483,11 @@ function bindMnoriaMobileViewportBottomFillSync() {
   window.addEventListener("load", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
   document.addEventListener("visibilitychange", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
   // Repli du bandeau de la barre Safari (URL/onglets) déclenché par le scroll de la page
-  // elle-même (pas un zoom/pan) : ni "resize" ni visualViewport "resize"/"scroll" ne se
-  // déclenchent de façon fiable pendant ce scroll sur iOS Safari (constaté le 12/08/2026, le
-  // bandeau blanc du bas restait à l'ancienne position après que la barre a disparu au
-  // scroll) — un listener sur le scroll de la page comble ce trou, sans nouveau calcul
-  // (réutilise le même throttle rAF que les autres déclencheurs).
-  window.addEventListener("scroll", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+  // elle-même (pas un zoom/pan) : on garde ce correctif iOS, mais sans relancer le recalage
+  // des éléments au-dessus de "À la une" (Trier/Rechercher, liseret, premier bandeau). Ces
+  // marges sont calculées par delta sur des mesures live ; les recalculer pendant le scroll les
+  // faisait disparaître/réapparaître visuellement en standalone.
+  window.addEventListener("scroll", scheduleHomeBottomNavViewportFillOnlyUpdate, { passive: true });
 
   // Le bloc "isSortBarSymmetricMode" de syncMnoriaHomeTrendsCaptionAnchor (liseret, bouton
   // Trier/Rechercher, bande "À la une") a besoin de #debates-list .theme-row-section:first-child
@@ -37491,7 +37505,7 @@ function bindMnoriaMobileViewportBottomFillSync() {
 
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
-    window.visualViewport.addEventListener("scroll", scheduleHomeBottomNavViewportOffsetUpdate, { passive: true });
+    window.visualViewport.addEventListener("scroll", scheduleHomeBottomNavViewportFillOnlyUpdate, { passive: true });
   }
 
   if (document.readyState === "loading") {
