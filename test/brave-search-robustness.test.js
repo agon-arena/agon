@@ -178,12 +178,12 @@ test("braveSearchAttempt distingue explicitement timeout/network_error/http_erro
 // ── Non-régression : scoring/seuils/domaines/priorité Wikipédia/V3.2 ─────
 // intouchés (ce correctif ne concerne que braveSearchRaw/braveSearchAttempt) ─
 
-test("MIN_QUALITY_THRESHOLD, les domaines exclus et la priorité Wikipédia ne sont pas modifiés par ce correctif", () => {
+test("MIN_QUALITY_THRESHOLD, les domaines exclus et la hiérarchie d'autorité des sources ne sont pas modifiés par ce correctif", () => {
   assert.match(fs.readFileSync(path.join(__dirname, "..", "lib", "source-scoring.js"), "utf8"), /const MIN_QUALITY_THRESHOLD = 40;/);
   const groundingLib = fs.readFileSync(path.join(__dirname, "..", "lib", "web-search-grounding.js"), "utf8");
   assert.match(groundingLib, /EXCLUDED_GROUNDING_DOMAINS = new Set\(\[/);
   assert.match(groundingLib, /WIKIPEDIA_DOMAIN_PATTERN/);
-  assert.match(groundingLib, /PRIORITÉ : si un résultat pointe vers une page Wikipédia/);
+  assert.match(groundingLib, /HIÉRARCHIE D'AUTORITÉ/);
 });
 
 test("le nombre d'appels IA (web_search_source_selection) et V3.2 ne sont pas modifiés : toujours exactement 1 appel _callOpenAI dans resolveWebSearchGrounding", () => {

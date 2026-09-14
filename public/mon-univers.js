@@ -2702,6 +2702,10 @@ function showStatus(kind) {
         '</div>';
       message.querySelector(".universe-status__retry")?.addEventListener("click", loadUniverse);
       cloudEl.appendChild(message);
+      if (isMemoireEmbedActive()) {
+        window.__mnoriaHideBubbleCloudLoadingSpinner?.();
+        window.__mnoriaSetMemoireFrameLoadingOverlayVisible?.(false);
+      }
       return;
     }
     const p = document.createElement("p");
@@ -2720,7 +2724,10 @@ function showStatus(kind) {
   }
 
   if (kind === "empty" || kind === "error") {
-    if (isMemoireEmbedActive()) window.__mnoriaHideBubbleCloudLoadingSpinner?.();
+    if (isMemoireEmbedActive()) {
+      window.__mnoriaHideBubbleCloudLoadingSpinner?.();
+      window.__mnoriaSetMemoireFrameLoadingOverlayVisible?.(false);
+    }
   }
 }
 

@@ -2703,24 +2703,6 @@
     .qcm-mesqcm-carousel-detail-close:focus-visible {
       background: rgba(0, 0, 0, 0.12);
     }
-    /* État + Niveau rappelés au-dessus des boutons (demande du 14/09/2026,
-       suite) : pleine largeur de la grille du panneau (grid-column:1/-1,
-       même traitement que .qcm-mesqcm-detail-actions), pastilles côte à côte
-       et centrées — même correctif de décalage que .qcm-mesqcm-carousel-
-       card-meta, ce décalage -4px n'a de sens que dans une colonne de
-       tableau. */
-    .qcm-mesqcm-carousel-detail-meta {
-      grid-column: 1 / -1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .qcm-mesqcm-carousel-detail-meta .qcm-mesqcm-state,
-    .qcm-mesqcm-carousel-detail-meta .qcm-mesqcm-level {
-      left: 0;
-    }
     /* Carte cliquée centrée (demande du 14/09/2026, suite) : posée en JS
        (initInlineLearningDetails) dès que les cartes sœurs sont masquées —
        ne reste alors qu'une seule carte dans le rang flex, sinon collée au
@@ -4982,6 +4964,8 @@
   var loadGaugeLabel = document.getElementById('qcm-load-gauge-label');
   var loadGaugeCaption = document.getElementById('qcm-load-gauge-caption');
   var loadGaugeToken = 0;
+  var loadGaugeOptimisticToken = 0;
+  var lastLoadGaugeData = null;
   var memorizedTodayEl = document.getElementById('qcm-memorized-today');
   var memorizedTodayVoluntaryEl = document.getElementById('qcm-memorized-today-voluntary');
   var memorizedTodayVoluntaryList = document.getElementById('qcm-memorized-today-voluntary-list');
@@ -6012,8 +5996,11 @@
   // consécutifs aboutissent au même état côté serveur). `onDone(ok)` reçoit
   // toujours un booléen, jamais l'erreur brute — l'appelant décide seul de
   // l'affichage en cas d'échec.
-  function setKnowledgeMemorization(subjectType, subjectSourceId, knowledgeTargetId, enabled, onDone) {
+  function setKnowledgeMemorization(subjectType, subjectSourceId, knowledgeTargetId, enabled, onDone, options) {
     if (!voterKey) { onDone(false); return; }
+    var optimisticGauge = options && typeof options.optimisticLoadGaugeDelta === 'number'
+      ? applyOptimisticLoadGaugeDelta(options.optimisticLoadGaugeDelta)
+      : null;
     fetch('/api/users/knowledge-memorization', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -6023,21 +6010,23 @@
       .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
       .then(function (result) {
         var ok = !!(result.ok && result.data && result.data.ok);
-        // Charge de mémorisation mise à jour immédiatement (demande du 13/09/2026, "si je
-        // coche ou décoche une connaissance à mémoriser, la charge doit se mettre à jour
-        // immédiatement") : (dés)activer une connaissance change le compte du jour renvoyé
-        // par fetchLearningLoadGaugeForUser (server.js, qui exclut déjà les connaissances
-        // désactivées). Point d'entrée unique
-        // (setKnowledgeMemorization est le seul chemin d'écriture, cf. wireExcludeButton/
-        // wireMemorizedTodayToggles/wireKnowledgeMemorizationToggles) — un seul appel suffit
-        // à couvrir les trois interfaces qui peuvent déclencher ce changement.
+        // Charge de mémorisation : le POST renvoie désormais la jauge recalculée
+        // avec l'écriture, ce qui évite l'ancien enchaînement POST puis GET
+        // /learning-load. Si le backend ne peut pas la joindre, on garde l'ancien
+        // GET en secours.
         if (ok) {
           invalidateMnoriaUniverseCacheForCurrentUser();
-          refreshLoadGaugeNow();
+          if (currentCategory === 'mesqcm' && !currentSlot && result.data.learningLoad) renderLoadGauge(result.data.learningLoad);
+          else refreshLoadGaugeNow();
+        } else if (optimisticGauge && optimisticGauge.token === loadGaugeOptimisticToken) {
+          renderLoadGauge(optimisticGauge.gauge);
         }
         onDone(ok);
       })
-      .catch(function () { onDone(false); });
+      .catch(function () {
+        if (optimisticGauge && optimisticGauge.token === loadGaugeOptimisticToken) renderLoadGauge(optimisticGauge.gauge);
+        onDone(false);
+      });
   }
 
   // cf. commentaire dans setKnowledgeMemorization ci-dessus. Ignoré hors de l'écran Découvrir
@@ -8478,6 +8467,26 @@
   var LOAD_GAUGE_IDEAL_POSITION_PERCENT = 200 / 3;
   var LOAD_GAUGE_BAR_MAX_PERCENT = 150;
 
+  function getLoadGaugeLevelForCount(count) {
+    var safeCount = Math.max(0, Number(count) || 0);
+    if (safeCount >= 9) return 'overloaded';
+    if (safeCount >= 7) return 'busy';
+    if (safeCount >= 3) return 'moderate';
+    return 'calm';
+  }
+
+  function applyOptimisticLoadGaugeDelta(delta) {
+    if (currentCategory !== 'mesqcm' || currentSlot || !lastLoadGaugeData || !loadGaugeEl || loadGaugeEl.hidden) return null;
+    var previousGauge = {
+      level: lastLoadGaugeData.level,
+      count: Math.max(0, Number(lastLoadGaugeData.count) || 0)
+    };
+    var nextCount = Math.max(0, previousGauge.count + delta);
+    var token = ++loadGaugeOptimisticToken;
+    renderLoadGauge({ level: getLoadGaugeLevelForCount(nextCount), count: nextCount });
+    return { token: token, gauge: previousGauge };
+  }
+
   // Repère "Idéal" (demande du 27/08/2026, nouvelle barre horizontale ;
   // repositionné aux 2/3 le 30/08/2026) : position fixe, indépendante de la
   // charge réelle affichée par la barre. Posée une seule fois, jamais
@@ -8492,6 +8501,7 @@
 
   function hideLoadGauge() {
     loadGaugeToken++;
+    lastLoadGaugeData = null;
     if (loadGaugeEl) {
       loadGaugeEl.classList.remove('visible');
       // .hidden ET la classe : une règle globale [hidden]{display:none !important}
@@ -8504,6 +8514,10 @@
 
   function renderLoadGauge(gauge) {
     if (!loadGaugeEl || !gauge) return;
+    lastLoadGaugeData = {
+      level: gauge.level,
+      count: Math.max(0, Number(gauge.count) || 0)
+    };
     loadGaugeEl.hidden = false;
     var meta = LOAD_GAUGE_LEVEL_META[gauge.level] || LOAD_GAUGE_LEVEL_META.calm;
     // Le pourcentage visible exprime l'avancement vers le rythme idéal :
@@ -8594,27 +8608,23 @@
   // Réutilise telles quelles les classes/l'apparence de la fiche
   // (.qcm-fiche-memorization-toggle, cf. buildKnowledgeMemorizationSectionHtml)
   // pour une seule et même façon de cocher/décocher une connaissance dans
-  // toute la page. Toujours affichée cochée à l'arrivée ici (chaque item
-  // vient d'une review du jour, donc forcément encore mémorisée au moment du
-  // chargement, cf. le filtre côté serveur) — cochable/décochable ensuite
-  // dans les deux sens (demande du 12/09/2026, "qu'elles soient cochables /
-  // décochables aussi") : la ligne n'est JAMAIS retirée du DOM au décochage,
-  // contrairement à une première version — même principe que
-  // wireKnowledgeMemorizationToggles de la fiche.
+  // toute la page. La ligne reste affichée même décochée ; seule la case
+  // reflète memorizationEnabled.
   // Un seul sous-groupe (voluntary OU suggested, cf. renderMemorizedToday) : masqué
   // individuellement si sa liste est vide, indépendamment de l'autre sous-groupe.
-  // `defaultChecked` (13/09/2026, "les préconisées ne doivent pas être cochées par
-  // défaut... état réel") : reflète memorization_enabled réel de chaque connaissance —
-  // true pour voluntary (un vrai clic a déjà activé "Mémoriser"), toujours false pour
-  // suggested (posée inactive par applyMemorizationSuggestionsForQuiz, cf. son
-  // commentaire) — jamais un simple habillage visuel déconnecté de l'état serveur.
+  // `memorizationEnabled` vient du serveur pour chaque item. `defaultChecked`
+  // ne sert plus que de compatibilité si une vieille réponse en cache ne porte
+  // pas encore ce champ.
   function renderMemorizedTodayGroup(groupEl, listEl, items, defaultChecked) {
     if (!groupEl || !listEl) return;
     if (!items || !items.length) { groupEl.hidden = true; return; }
     listEl.innerHTML = items.map(function (item, i) {
+      var checked = Object.prototype.hasOwnProperty.call(item || {}, 'memorizationEnabled')
+        ? item.memorizationEnabled === true
+        : defaultChecked;
       return '<li class="qcm-fiche-memorization-item">' +
-        '<button type="button" class="qcm-fiche-memorization-toggle ' + (defaultChecked ? 'is-memorized' : 'is-unmemorized') + '" data-memorized-today-index="' + i + '" aria-pressed="' + (defaultChecked ? 'true' : 'false') + '">' +
-        '<i class="fa-solid ' + (defaultChecked ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i>' +
+        '<button type="button" class="qcm-fiche-memorization-toggle ' + (checked ? 'is-memorized' : 'is-unmemorized') + '" data-memorized-today-index="' + i + '" aria-pressed="' + (checked ? 'true' : 'false') + '">' +
+        '<i class="fa-solid ' + (checked ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i>' +
         '<span>' + escapeHtml(item.label || '') + '</span>' +
         '</button>' +
         '</li>';
@@ -8649,6 +8659,7 @@
       var item = items[Number(btn.getAttribute('data-memorized-today-index'))];
       if (!item) return;
       var requestToken = 0;
+      var countsInLoadGauge = btn.getAttribute('aria-pressed') === 'true';
       function renderState(enabled) {
         btn.classList.toggle('is-memorized', enabled);
         btn.classList.toggle('is-unmemorized', !enabled);
@@ -8659,14 +8670,19 @@
       btn.addEventListener('click', function () {
         var nextEnabled = btn.getAttribute('aria-pressed') !== 'true';
         var myToken = ++requestToken;
+        var previousCountsInLoadGauge = countsInLoadGauge;
+        var nextCountsInLoadGauge = !!nextEnabled;
+        var loadGaugeDelta = (nextCountsInLoadGauge ? 1 : 0) - (previousCountsInLoadGauge ? 1 : 0);
+        countsInLoadGauge = nextCountsInLoadGauge;
         renderState(nextEnabled);
         setKnowledgeMemorization(item.subjectType, item.subjectSourceId, item.knowledgeTargetId, nextEnabled, function (ok) {
           if (myToken !== requestToken) return;
           if (!ok) {
+            countsInLoadGauge = previousCountsInLoadGauge;
             renderState(!nextEnabled);
             console.warn('[apprentissage] préférence de mémorisation non enregistrée.');
           }
-        });
+        }, loadGaugeDelta ? { optimisticLoadGaugeDelta: loadGaugeDelta } : null);
       });
     });
   }
@@ -8768,6 +8784,7 @@
         sendLearnNextEvent(item, 'added');
         replaceLearnNextItem(item);
         removeLoadingOverlay();
+        invalidateMesQcmListCache();
         // Lance directement le QCM (demande du 14/09/2026) : "Commencer" doit se
         // comporter comme le même bouton sur un apprentissage déjà adopté pas
         // encore débuté (loadSlot direct, jamais un retour sur Découvrir avec
@@ -8923,9 +8940,22 @@
         var iconClass = learnNextThemeIconClass(item);
         var label = escapeHtml(item.name || item.title || 'Connaissance');
         var detailId = 'qcm-learn-next-detail-' + i;
+        // Vignette dès le rendu, jamais seulement en repli d'un échec réseau
+        // (demande du 14/09/2026, "je ne veux pas une rustine mais cela à
+        // chaque fois") : même logique que renderMesQcmNameVisualHtml pour
+        // "Mes apprentissages"/"Mes acquis" — une image de thématique connue
+        // (getMesAcquisThemeFallbackImage) s'affiche immédiatement, la vraie
+        // image (si trouvée par hydrateLearnNextThumbs) vient ensuite la
+        // remplacer plutôt que d'être la seule voie d'affichage.
+        var key = item && item.subjectType && item.subjectSourceId ? (item.subjectType + ':' + item.subjectSourceId) : null;
+        var knownImg = key && Object.prototype.hasOwnProperty.call(learnNextImageCache, key) ? learnNextImageCache[key] : null;
+        var visualUrl = knownImg ? knownImg.url : getMesAcquisThemeFallbackImage(normalizeKnowledgeThemeLabel(item.theme || item.suggestedTheme || item.category));
         return '<div class="qcm-mesqcm-carousel-card">' +
           '<button type="button" class="qcm-mesqcm-carousel-card-btn" data-mesqcm-toggle-index="' + i + '" aria-expanded="false" aria-controls="' + detailId + '">' +
-            '<span class="qcm-mesqcm-name-thumb is-empty" data-learn-next-thumb-index="' + i + '"><i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-thumb-fallback" aria-hidden="true"></i></span>' +
+            '<span class="qcm-mesqcm-name-thumb' + (visualUrl ? '' : ' is-empty') + '" data-learn-next-thumb-index="' + i + '">' +
+              (visualUrl ? '<img src="' + escapeHtml(visualUrl) + '" alt="' + label + '" loading="lazy" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
+              '<i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-thumb-fallback" aria-hidden="true"></i>' +
+            '</span>' +
             '<span class="qcm-mesqcm-carousel-card-name"><i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-theme-icon" aria-hidden="true"></i>' + label + '</span>' +
           '</button>' +
         '</div>';
@@ -8948,6 +8978,16 @@
     // learnNextInlineList plutôt qu'un appel global, cette liste étant
     // rechargée indépendamment de wireMesQcmListInteractions.
     initInlineLearningDetails(learnNextInlineList);
+    // Fermeture par scroll latéral (demande du 14/09/2026, même comportement
+    // que "Apprentissages commencés") : initMesQcmCarouselScrollHydration
+    // recherche tous les .qcm-mesqcm-carousel du document et ignore ceux déjà
+    // câblés (dataset.hydrationWired), donc ce ré-appel à chaque rendu ne
+    // fait que câbler le nouveau carousel de cette liste sans jamais
+    // dupliquer les écouteurs des autres rubriques. [] : ce carousel n'a pas
+    // de vignettes .qcm-mesqcm-name-thumb (data-mesqcm-thumb-index) à
+    // réhydrater au scroll, seulement des data-learn-next-thumb-index déjà
+    // chargés indépendamment plus haut dans cette fonction.
+    initMesQcmCarouselScrollHydration([]);
     learnNextInlineList.querySelectorAll('[data-learn-next-fiche-index]').forEach(function (btn) {
       btn.addEventListener('click', function (event) {
         event.stopPropagation();
@@ -9005,10 +9045,20 @@
     learnNextVisible.forEach(function (item, i) {
       if (!item || !item.subjectType || !item.subjectSourceId) return;
       var thumb = learnNextInlineList.querySelector('[data-learn-next-thumb-index="' + i + '"]');
-      if (!thumb || !thumb.classList.contains('is-empty')) return;
+      if (!thumb) return;
       var key = item.subjectType + ':' + item.subjectSourceId;
+      // Repli par thématique déjà affiché au rendu (renderLearnNextInlineList,
+      // demande du 14/09/2026, "je ne veux pas une rustine mais cela à chaque
+      // fois") : ce n'est plus la seule voie d'affichage, mais la vraie image
+      // reste toujours recherchée pour venir la remplacer — d'où pas de sortie
+      // anticipée sur "déjà pas is-empty" ici, seulement sur une résolution
+      // déjà connue (learnNextImageCache), pour ne jamais relancer la même
+      // recherche deux fois.
+      var fallbackImageUrl = getMesAcquisThemeFallbackImage(normalizeKnowledgeThemeLabel(item.theme || item.suggestedTheme || item.category));
       if (Object.prototype.hasOwnProperty.call(learnNextImageCache, key)) {
-        if (learnNextImageCache[key]) applyMesQcmThumbImage(thumb, learnNextImageCache[key], { label: item.name || item.title });
+        var cachedImg = learnNextImageCache[key];
+        if (cachedImg) applyMesQcmThumbImage(thumb, cachedImg, { label: item.name || item.title });
+        else if (fallbackImageUrl && thumb.classList.contains('is-empty')) applyMesQcmThumbImage(thumb, { url: fallbackImageUrl }, { label: item.name || item.title });
         return;
       }
       if (!learnNextImagePending[key]) {
@@ -9027,9 +9077,10 @@
           });
       }
       learnNextImagePending[key].then(function (img) {
-        if (!img) return;
         var liveThumb = learnNextInlineList.querySelector('[data-learn-next-thumb-index="' + i + '"]');
-        if (liveThumb) applyMesQcmThumbImage(liveThumb, img, { label: item.name || item.title });
+        if (!liveThumb) return;
+        if (img) { applyMesQcmThumbImage(liveThumb, img, { label: item.name || item.title }); return; }
+        if (fallbackImageUrl) applyMesQcmThumbImage(liveThumb, { url: fallbackImageUrl }, { label: item.name || item.title });
       });
     });
   }
@@ -9111,18 +9162,25 @@
     if (!voterKey) return Promise.resolve();
     if (learnNextLoadPromise) return learnNextLoadPromise;
     if (learnNextInlinePhase !== 'idle') return Promise.resolve();
-    learnNextInlinePhase = 'loading';
-    // Peinture immédiate depuis sessionStorage (cf. LEARN_NEXT_SESSION_CACHE_KEY) :
-    // affiche la dernière liste connue tout de suite plutôt qu'un sablier
-    // systématique, la vraie réponse réseau la remplace ci-dessous une fois prête.
+    // Cache sessionStorage FAISANT FOI tant qu'il est valide (< 30 min, cf.
+    // LEARN_NEXT_SESSION_CACHE_MAX_AGE_MS), jamais plus un simple aperçu
+    // remplacé ensuite par un aller-retour réseau systématique (demande du
+    // 14/09/2026, "on fait un aller-retour pas à chaque fois !!! tant pis si
+    // la liste reste vide" — annule le comportement "peinture instantanée
+    // PUIS remplacement" ci-dessous en commentaire d'origine, qui rechargeait
+    // à chaque ouverture de la page, y compris le fallback IA potentiellement
+    // coûteux). Une liste vide déjà mise en cache reste donc affichée vide
+    // jusqu'à expiration du cache, sans nouvelle tentative.
     var cachedLearnNext = readLearnNextSessionCache();
-    if (cachedLearnNext && Array.isArray(cachedLearnNext.visible) && cachedLearnNext.visible.length) {
+    if (cachedLearnNext && Array.isArray(cachedLearnNext.visible)) {
       learnNextVisible = cachedLearnNext.visible;
       learnNextQueue = Array.isArray(cachedLearnNext.queue) ? cachedLearnNext.queue : [];
       renderLearnNextInlineList();
-    } else {
-      renderLearnNextInlineSkeleton();
+      refreshLearnNextInlineVisibility();
+      return Promise.resolve();
     }
+    learnNextInlinePhase = 'loading';
+    renderLearnNextInlineSkeleton();
     refreshLearnNextInlineVisibility();
     learnNextLoadPromise = fetch('/api/users/recommendations/learn-next?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store' })
       .then(function (res) {
@@ -9146,12 +9204,10 @@
         // Best-effort strict (demande du 30/08/2026) : jamais de message
         // d'erreur agressif ; la rubrique reste néanmoins présente afin de
         // ne jamais laisser toute la zone sous le bouton visuellement vide.
-        // La peinture instantanée éventuelle (cachedLearnNext) reste affichée
-        // telle quelle plutôt que d'être effacée par un échec réseau.
-        if (!cachedLearnNext || !cachedLearnNext.visible || !cachedLearnNext.visible.length) {
-          learnNextVisible = [];
-          renderLearnNextInlineList();
-        }
+        // cachedLearnNext est toujours absent ici (sinon retour anticipé plus
+        // haut, sans fetch) — rien à préserver, juste l'état vide habituel.
+        learnNextVisible = [];
+        renderLearnNextInlineList();
       })
       .then(function () { learnNextLoadPromise = null; });
     return learnNextLoadPromise;
@@ -9378,6 +9434,36 @@
     return q.slot + '|' + q.quizDate;
   }
 
+  function markMesQcmStartedLocally(q, quizzes) {
+    if (!q || !q.slot) return;
+    var rowKey = getMesQcmRowKey(q);
+    function markListStarted(list) {
+      if (!Array.isArray(list)) return false;
+      var changed = false;
+      list.forEach(function (item) {
+        if (!item || getMesQcmRowKey(item) !== rowKey) return;
+        if (item.inProgress !== true || item.startedToday !== true) changed = true;
+        item.inProgress = true;
+        item.startedToday = true;
+      });
+      return changed;
+    }
+    markListStarted(quizzes);
+    markListStarted(currentMesQcmQuizzes);
+    if (mesQcmListCache && mesQcmListCache.key === voterKey && mesQcmListCache.data) {
+      markListStarted(mesQcmListCache.data.quizzes);
+      mesQcmListCache.fetchedAt = Date.now();
+    }
+    var sessionEntry = readMesQcmSessionCache();
+    if (sessionEntry && sessionEntry.data && Array.isArray(sessionEntry.data.quizzes)) {
+      markListStarted(sessionEntry.data.quizzes);
+      sessionEntry.fetchedAt = Date.now();
+      writeMesQcmSessionCache(sessionEntry);
+    } else if (mesQcmListCache && mesQcmListCache.key === voterKey && mesQcmListCache.data) {
+      writeMesQcmSessionCache({ key: voterKey, data: mesQcmListCache.data, gauge: sessionEntry && sessionEntry.gauge, fetchedAt: Date.now() });
+    }
+  }
+
   function formatMesQcmLevelLabel(level) {
     var tableLevelLabels = { elementaire: 'Élémentaire', avance: 'Approfondi', expert: 'Expert' };
     return tableLevelLabels[level] || '';
@@ -9560,17 +9646,12 @@
       html += '</button>';
       var actionLabel = q.inProgress ? 'Continuer' : 'Commencer';
       // Plus d'État ("En attente de réalisation", "Niveau atteint"...) ni de
-      // Niveau ici (demande du 14/09/2026) : uniquement l'ancrage, et
-      // seulement s'il a un sens (au moins une question déjà répondue —
-      // sinon 0% sur un apprentissage jamais commencé n'apporte rien), avant
-      // les deux boutons.
-      var trueAnsweredCount = Number(q.trueAnsweredCount) || 0;
-      var ancragePct = Math.max(0, Math.min(100, Math.round(Number(q.progressPct) || 0)));
-      var metaHtml = trueAnsweredCount > 0
-        ? '<div class="qcm-mesqcm-carousel-detail-meta"><span class="qcm-acquis-badge">Ancrage ' + ancragePct + '%</span></div>'
-        : '';
+      // Niveau ici (demande du 14/09/2026), et plus de pastille Ancrage non
+      // plus (demande du 14/09/2026, suite — Découvrir uniquement, jamais
+      // Mes acquis qui garde ses propres badges d'ancrage indépendants,
+      // cf. renderMesQcmAtRiskCardsHtml/renderMesQcmStateHtml) : uniquement
+      // les deux boutons d'action dans le panneau déplié.
       detailsHtml += '<div class="qcm-mesqcm-inline-detail" id="' + detailId + '" hidden>' +
-        metaHtml +
         '<div class="qcm-mesqcm-detail-actions">' +
           '<button type="button" class="qcm-mesqcm-detail-action-btn is-secondary" data-mesqcm-fiche-index="' + index + '"><i class="fa-solid fa-file-lines"></i> Consulter les connaissances</button>' +
           '<button type="button" class="qcm-mesqcm-detail-action-btn" data-mesqcm-start-index="' + index + '"><i class="fa-solid fa-play"></i> ' + actionLabel + '</button>' +
@@ -9878,7 +9959,13 @@
   }
 
   function initMesQcmCarouselScrollHydration(quizzes) {
-    body.querySelectorAll('.qcm-mesqcm-carousel').forEach(function (carousel) {
+    // document, jamais body (= #qcm-body) : "Apprentissages proposés"
+    // (#qcm-learn-next-inline-list) est un FRÈRE de #qcm-body dans le HTML
+    // statique, pas un descendant — body.querySelectorAll ne l'a jamais
+    // trouvé, donc son carousel n'était jamais câblé pour la fermeture par
+    // scroll latéral malgré l'appel ajouté dans renderLearnNextInlineList
+    // (constaté le 14/09/2026, "ça ne marche toujours pas").
+    document.querySelectorAll('.qcm-mesqcm-carousel').forEach(function (carousel) {
       if (carousel.dataset.hydrationWired) return;
       carousel.dataset.hydrationWired = '1';
       var ticking = false;
@@ -10045,6 +10132,7 @@
         event.stopPropagation();
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-start-index'))];
         if (!q || !q.slot) return;
+        markMesQcmStartedLocally(q, quizzes);
         loadSlot(q.slot, q.quizDate, q.label, q.level);
       });
     });
@@ -10219,6 +10307,14 @@
       'Philosophie': 'fa-brain',
       'Sciences sociales': 'fa-people-group',
       'Société - éducation': 'fa-users',
+      // Société/Éducation (demande du 14/09/2026, suite à "pourquoi les icônes [...]
+      // pas mis aussi") : la scission des Galaxies en deux thématiques distinctes
+      // (confirmée en base, solar_systems.galaxy) n'avait jamais rejoint cette table
+      // ni celle de getMesAcquisThemeFallbackImage juste en dessous — tout candidat
+      // classé "Société" ou "Éducation" seul (jamais le libellé combiné ci-dessus,
+      // devenu obsolète) retombait donc lui aussi sur l'icône générique "couches".
+      'Société': 'fa-users',
+      'Éducation': 'fa-graduation-cap',
       'Économie - emploi': 'fa-briefcase',
       'Politique': 'fa-scale-balanced',
       'International': 'fa-globe',
@@ -10265,6 +10361,12 @@
       'Sciences - technologie': 'sciences-technologie.webp',
       'Sciences sociales': 'sciences-sociales.webp',
       'Société - éducation': 'societe-education.webp',
+      // Même image que le libellé combiné ci-dessus, faute d'illustration dédiée
+      // séparée (aucun fichier societe.webp/education.webp fourni) — reste
+      // strictement meilleur que l'icône générique pour ces deux Galaxies bien
+      // réelles (16 Solar Systems chacune en base au 14/09/2026).
+      'Société': 'societe-education.webp',
+      'Éducation': 'societe-education.webp',
       'Économie - emploi': 'economie-emploi.webp',
       'Politique': 'politique.webp',
       'International': 'international.webp',

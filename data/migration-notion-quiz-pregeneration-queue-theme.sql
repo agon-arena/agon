@@ -1,0 +1,22 @@
+-- À exécuter une fois dans le SQL editor de Supabase, après
+-- data/migration-notion-quiz-pregeneration-queue.sql.
+--
+-- "Apprentissages proposés" (Découvrir) : les sujets servis depuis le stock
+-- de réserve pré-généré par le Batch (selectUnclaimedReadyTopics, jamais
+-- encore adoptés par personne) n'avaient AUCUNE thématique — contrairement
+-- aux recommandations catalogue (engine.js, corrigé le 14/09/2026 via
+-- galaxyBySolarId) et aux propositions IA déjà équivalentes à un sujet
+-- existant (server.js .../ai-fallback, theme: p.suggestedTheme, corrigé le
+-- même jour) — d'où l'icône générique "couches" et, une fois l'image de
+-- secours par thématique ajoutée (demande du 14/09/2026, "je ne veux pas une
+-- rustine mais cela à chaque fois"), aucune image de secours non plus faute
+-- de thématique à résoudre.
+--
+-- suggested_theme provient du MÊME appel IA que title/reason (cf.
+-- ai-fallback.js buildFallbackPrompt, "suggested_theme"), déjà calculé pour
+-- chaque proposition mais jusqu'ici jeté à la porte de enqueueProposedTopic.
+-- Texte libre de l'IA (jamais garanti dans la taxonomie exacte des 21
+-- Galaxies), mais suffisant pour la correspondance regex côté frontend
+-- (learnNextThemeIconClass) et la clé exacte côté getMesAcquisThemeFallbackImage.
+ALTER TABLE notion_quiz_pregeneration_queue
+  ADD COLUMN IF NOT EXISTS suggested_theme TEXT;

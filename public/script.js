@@ -20919,6 +20919,18 @@ function setMnoriaCloudMode(enableMnoria) {
 let _memoireCloudMode = false;
 let _memoireModuleLoadPromise = null;
 
+function setMemoireFrameLoadingOverlayVisible(visible) {
+  const overlay = document.getElementById('mnoria-memory-frame-loading');
+  if (!overlay) return;
+  overlay.classList.toggle('is-hidden', !visible);
+}
+
+window.__mnoriaSetMemoireFrameLoadingOverlayVisible = setMemoireFrameLoadingOverlayVisible;
+
+window.addEventListener('mnoria:memoire-content-ready', () => {
+  setMemoireFrameLoadingOverlayVisible(false);
+});
+
 function setMemoireCloudMode(enable, skipSync = false) {
   const enableMemoire = Boolean(enable);
   if (enableMemoire) highlightMnoriaCloudModeSwitchButton('mnoria-cloud-mode-memoire-btn');
@@ -20948,6 +20960,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
   window._mnoriaCloudModeToken++;
   _memoireCloudMode = enableMemoire;
   document.body.classList.toggle('mnoria-memoire-cloud-mode', _memoireCloudMode);
+  setMemoireFrameLoadingOverlayVisible(_memoireCloudMode);
   const beforeEl = document.getElementById('mnoria-memoire-embed-before');
   const afterEl = document.getElementById('mnoria-memoire-embed-after');
   const politicalSwitch = document.getElementById('mnoria-political-cloud-switch');
@@ -21038,7 +21051,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
     }
     renderIndexActiveFilterTags();
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260914-memory-fiche-full-v2').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260914-memory-empty-loader-v1').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         const trendsSection = document.getElementById('mnoria-tag-trends-section');
         const cloudContainer = document.getElementById('mnoria-tag-trends-cloud');

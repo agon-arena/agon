@@ -20,6 +20,7 @@ const {
   buildTopicContext,
   inferContextualAuthority,
   scoreSourceForTopic,
+  classifyDomainAuthorityTier,
   rankCandidates,
   filterByMinQuality,
   findBestUnrepresentedAuthority,
@@ -343,6 +344,156 @@ test("Wikipédia reste capable de gagner quand les autres sources sont faibles (
     candidate("blog-generique.com", "Verdun, ce qu'il faut savoir", "")
   ]);
   assert.equal(ranked[0].domain, "fr.wikipedia.org");
+});
+
+// ── Hiérarchie d'autorité des sources (demande du 14/09/2026, cas réel
+// "constructivisme russe" — Wikipédia formulait une affirmation trop
+// catégorique reprise telle quelle faute de hiérarchie entre les sources) ──
+
+// Cas 1 : source institutionnelle (musée majeur, A+) contre Wikipédia (C).
+test("Cas 1 — Tate (musée majeur, A+) contre Wikipédia FR : à pertinence comparable, Tate est classée avant Wikipédia", () => {
+  const ranked = rank("Le constructivisme russe", [
+    candidate("fr.wikipedia.org", "Constructivisme (art)", "Le constructivisme est un mouvement artistique et architectural né en Russie au début du XXe siècle, lié à l'art de la révolution russe."),
+    candidate("tate.org.uk", "Le constructivisme russe — Tate", "La Tate, célèbre musée d'art moderne, présente le constructivisme russe comme l'un des courants majeurs de l'avant-garde artistique née en Russie après la révolution de 1917.")
+  ]);
+  assert.equal(ranked[0].domain, "tate.org.uk", "Tate doit devancer Wikipédia à pertinence comparable");
+  assert.ok(ranked[0].score.finalScore > ranked.find((c) => c.domain === "fr.wikipedia.org").score.finalScore);
+});
+
+// Cas 2 : encyclopédie académique de référence (A) contre Wikipédia (C).
+test("Cas 2 — Britannica (niveau A) contre Wikipédia EN : Britannica est prioritaire", () => {
+  const ranked = rank("Constructivism art movement", [
+    candidate("en.wikipedia.org", "Constructivism (art)", "Constructivism is an art movement that originated in Russia in the early twentieth century."),
+    candidate("britannica.com", "Constructivism — art movement", "Constructivism, movement in the arts that originated in Russia in the early twentieth century.")
+  ]);
+  assert.equal(ranked[0].domain, "britannica.com", "Britannica doit être classée avant Wikipédia");
+});
+
+// Cas 3 : la pertinence garde le dernier mot — un A+ hors sujet ne doit pas
+// battre une source B très directement liée au sujet.
+test("Cas 3 — une source A+ peu pertinente ne bat pas nécessairement une source B très directement liée au sujet", () => {
+  const ranked = rank("Les techniques de nettoyage d'une poêle en inox", [
+    candidate("nasa.gov", "Mission Artemis vers la Lune", "La NASA prépare la prochaine mission habitée vers la Lune dans le cadre du programme Artemis."),
+    candidate("magazine-cuisine.fr", "Comment nettoyer une poêle en inox sans l'abîmer", "Nos conseils détaillés pour nettoyer efficacement une poêle en inox : vinaigre blanc, bicarbonate, technique du choc thermique, entretien régulier.")
+  ]);
+  assert.equal(ranked[0].domain, "magazine-cuisine.fr", "La source directement pertinente doit l'emporter sur une autorité hors-sujet");
+});
+
+// Cas 4 : Wikipédia seule reste utilisable — jamais rejetée arbitrairement.
+test("Cas 4 — Wikipédia seule reste utilisable : passe le seuil minimal de qualité, le système ne doit pas échouer", () => {
+  const ranked = rank("Le constructivisme russe", [
+    candidate("fr.wikipedia.org", "Constructivisme (art)", "Le constructivisme est un mouvement artistique et architectural né en Russie au début du XXe siècle, lié aux nouvelles institutions culturelles soviétiques après la révolution de 1917.")
+  ]);
+  const qualified = filterByMinQuality(ranked);
+  assert.ok(qualified.length === 1, "Wikipédia seule doit rester un candidat exploitable, jamais rejetée arbitrairement");
+  assert.equal(qualified[0].domain, "fr.wikipedia.org");
+});
+
+// Cas 5 : toutes les variantes linguistiques de Wikipédia appartiennent au
+// même niveau C.
+test("Cas 5 — fr.wikipedia.org, en.wikipedia.org, de.wikipedia.org appartiennent tous au même niveau C", () => {
+  assert.equal(classifyDomainAuthorityTier("fr.wikipedia.org"), "C");
+  assert.equal(classifyDomainAuthorityTier("en.wikipedia.org"), "C");
+  assert.equal(classifyDomainAuthorityTier("de.wikipedia.org"), "C");
+  assert.equal(classifyDomainAuthorityTier("wikipedia.org"), "C");
+});
+
+// Cas 6 : non-régression — la hiérarchie ne fait disparaître aucune source,
+// seul l'ORDRE change ; toutes les sources précédemment récupérées restent
+// des candidats classés (aucune silencieusement supprimée par ce correctif).
+test("Cas 6 — non-régression : toutes les sources récupérées restent classées, aucune silencieusement écartée par la hiérarchie d'autorité", () => {
+  const raw = [
+    candidate("fr.wikipedia.org", "Constructivisme (art)", "Le constructivisme est un mouvement artistique né en Russie au début du XXe siècle."),
+    candidate("tate.org.uk", "Constructivism — Art Term", "Constructivism was an artistic movement that originated in Russia."),
+    candidate("britannica.com", "Constructivism", "Constructivism, movement in the arts that originated in Russia."),
+    candidate("blog-art-generique.com", "10 mouvements artistiques à connaître", "")
+  ];
+  const ranked = rank("Le constructivisme russe", raw);
+  assert.equal(ranked.length, raw.length, "aucune source ne doit disparaître du classement lui-même");
+  assert.deepEqual(new Set(ranked.map((c) => c.domain)), new Set(raw.map((c) => c.domain)));
+});
+
+// Étiquetage A+/A/B/C : classifyDomainAuthorityTier couvre bien les 4 niveaux.
+test("classifyDomainAuthorityTier : classe correctement les 4 niveaux sur des exemples représentatifs", () => {
+  assert.equal(classifyDomainAuthorityTier("legifrance.gouv.fr"), "A+", "registre curé");
+  assert.equal(classifyDomainAuthorityTier("who.int"), "A+", "registre curé");
+  assert.equal(classifyDomainAuthorityTier("cdc.gov"), "A+", "registre curé");
+  assert.equal(classifyDomainAuthorityTier("nasa.gov"), "A+", "TLD institutionnel générique (.gov, hors registre nommé sur ce point précis)");
+  assert.equal(classifyDomainAuthorityTier("britannica.com"), "A");
+  assert.equal(classifyDomainAuthorityTier("universalis.fr"), "A");
+  assert.equal(classifyDomainAuthorityTier("lemonde.fr"), "B", "aucune détection positive : repli neutre");
+  assert.equal(classifyDomainAuthorityTier("fr.wikipedia.org"), "C");
+  assert.equal(classifyDomainAuthorityTier(null), "B");
+});
+
+// ── Ajustements du 14/09/2026 : Larousse A → B, domaines .edu/.ac.xx A+ → A ──
+
+test("Ajustement — Larousse (larousse.fr) est désormais classé B, plus A : dictionnaire/encyclopédie grand public, moins spécialisé que Britannica/Universalis/Our World in Data", () => {
+  assert.equal(classifyDomainAuthorityTier("larousse.fr"), "B");
+});
+
+test("Ajustement — Britannica, Universalis et Our World in Data restent au niveau A", () => {
+  assert.equal(classifyDomainAuthorityTier("britannica.com"), "A");
+  assert.equal(classifyDomainAuthorityTier("universalis.fr"), "A");
+  assert.equal(classifyDomainAuthorityTier("ourworldindata.org"), "A");
+});
+
+test("Ajustement — un domaine .edu générique quelconque n'est plus automatiquement A+, il est classé A par défaut", () => {
+  assert.equal(classifyDomainAuthorityTier("exemple-universite-inconnue.edu"), "A");
+});
+
+test("Ajustement — un domaine .ac.xx générique quelconque n'est plus automatiquement A+, il est classé A par défaut", () => {
+  assert.equal(classifyDomainAuthorityTier("exemple-universite.ac.uk"), "A");
+});
+
+test("Ajustement — Stanford Encyclopedia of Philosophy (plato.stanford.edu) n'est jamais dégradée sous A, même sans entrée curée nommée", () => {
+  const tier = classifyDomainAuthorityTier("plato.stanford.edu");
+  assert.ok(tier === "A" || tier === "A+", `attendu A ou A+, obtenu ${tier}`);
+  assert.notEqual(tier, "B");
+  assert.notEqual(tier, "C");
+});
+
+test("Ajustement — les domaines gouvernementaux/internationaux/muséaux génériques (hors .edu/.ac.xx) restent A+", () => {
+  assert.equal(classifyDomainAuthorityTier("travail-emploi.gouv.fr"), "A+");
+  assert.equal(classifyDomainAuthorityTier("un-organisme-onusien.int"), "A+");
+});
+
+test("Ajustement — un domaine du registre curé A+ qui serait aussi en .edu resterait A+ (le registre garde priorité sur le motif académique générique)", () => {
+  // Aucun domaine .edu n'est actuellement dans AUTHORITY_REGISTRY, mais le
+  // test documente l'ordre de priorité attendu si un tel cas apparaissait :
+  // registryEntry est vérifié AVANT isAcademicGenericDomain dans
+  // scoreSourceForTopic (lib/source-scoring.js).
+  const ctx = buildTopicContext("La durée légale du travail en France");
+  const scored = scoreSourceForTopic(
+    { domain: "legifrance.gouv.fr", url: "https://legifrance.gouv.fr/page", title: "Code du travail", description: "Article L3121-27 du Code du travail sur la durée légale du travail." },
+    ctx
+  );
+  assert.ok(scored.authorityScore >= 55, "le registre curé doit rester au moins aussi fort que le simple palier A");
+});
+
+test("Ajustement — Tate (A+) reste classée avant Wikipédia (C) après les deux ajustements", () => {
+  const ranked = rank("Le constructivisme russe", [
+    candidate("fr.wikipedia.org", "Constructivisme (art)", "Le constructivisme est un mouvement artistique et architectural né en Russie au début du XXe siècle, lié à l'art de la révolution russe."),
+    candidate("tate.org.uk", "Le constructivisme russe — Tate", "La Tate, célèbre musée d'art moderne, présente le constructivisme russe comme l'un des courants majeurs de l'avant-garde artistique née en Russie après la révolution de 1917.")
+  ]);
+  assert.equal(ranked[0].domain, "tate.org.uk");
+});
+
+test("Ajustement — Britannica (A) reste classée avant Wikipédia (C) après les deux ajustements", () => {
+  const ranked = rank("Constructivism art movement", [
+    candidate("en.wikipedia.org", "Constructivism (art)", "Constructivism is an art movement that originated in Russia in the early twentieth century."),
+    candidate("britannica.com", "Constructivism — art movement", "Constructivism, movement in the arts that originated in Russia in the early twentieth century.")
+  ]);
+  assert.equal(ranked[0].domain, "britannica.com");
+});
+
+test("Ajustement — Wikipédia seule reste exploitable après les deux ajustements (passe MIN_QUALITY_THRESHOLD)", () => {
+  const ranked = rank("Le constructivisme russe", [
+    candidate("fr.wikipedia.org", "Constructivisme (art)", "Le constructivisme est un mouvement artistique et architectural né en Russie au début du XXe siècle, lié aux nouvelles institutions culturelles soviétiques après la révolution de 1917.")
+  ]);
+  const qualified = filterByMinQuality(ranked);
+  assert.equal(qualified.length, 1);
+  assert.equal(qualified[0].domain, "fr.wikipedia.org");
 });
 
 test("Une autorité confirmée du registre reste toujours au moins aussi forte qu'une autorité seulement inférée (jamais dépassée par une simple inférence)", () => {

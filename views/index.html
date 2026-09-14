@@ -225,14 +225,17 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Le PNG 4K de Ma mémoire est chargé à la demande par son module, uniquement lorsque
-       l'utilisateur ouvre ce mode : évite 12 Mo de trafic aux visiteurs qui n'y entrent pas. -->
+  <!-- Ma mémoire est désormais le mode initial de l'accueil : précharger le WebP léger
+       (1,1 Mo) évite que le cadre soit peint vide avant que la texture étoilée soit
+       découverte via le CSS ou l'import dynamique. On ne précharge toujours PAS le PNG 4K
+       historique (~12 Mo), réservé aux besoins hors accueil. -->
+  <link rel="preload" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" as="image" fetchpriority="high">
   <!-- style.min.css et Google Fonts restent bloquants sur l'accueil : sinon
        l'app rend brièvement en police de repli avant l'arrivée d'Oswald/Barlow,
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260914-memory-eclipse-visible-v1">
+  <link rel="stylesheet" href="/style.min.css?v=20260914-memory-sheet-tall-v1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -1593,6 +1596,11 @@
        JS ajoute la classe et bascule sur le fond étoilé, décalage visible à chaque
        rafraîchissement (demande du 17/08/2026, "il y a encore déplacement du fond"). -->
   <div id="mnoria-tag-trends-cloud" class="mnoria-tag-trends-cloud mnoria-memoire-frame">
+    <div class="mnoria-memory-prepaint-bg" aria-hidden="true"></div>
+    <div id="mnoria-memory-frame-loading" class="mnoria-memory-frame-loading" aria-hidden="true">
+      <div class="mnoria-memory-frame-loading__bg"></div>
+      <img src="/sablier-96.png" alt="" class="mnoria-memory-frame-loading__hourglass">
+    </div>
     <!-- Présent dès le HTML initial, avant même le chargement des données de Ma mémoire : le
          moteur de scène le remonte ensuite au-dessus de ses calques, mais un état vide ou lent
          ne peut plus faire disparaître l'accès plein écran. -->
@@ -1634,6 +1642,83 @@
   <span>Autres actus</span>
 </a>
 <style>
+@keyframes mnoriaMemoryFrameHourglassSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.mnoria-memory-prepaint-bg {
+  position: absolute;
+  inset: var(--bubble-frame-top, 55px) 20px 23px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: var(--bubble-frame-radius, 14px);
+  background-color: #020610;
+  background-image: url("/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy");
+  background-size: var(--mnoria-tile-width, 1152px) var(--mnoria-tile-height, 768px);
+  background-position: center;
+  background-repeat: repeat;
+}
+@media (max-width: 768px) {
+  .mnoria-memory-prepaint-bg {
+    inset: var(--bubble-frame-top, 55px) 2px 78px;
+  }
+}
+body:not(.mnoria-memoire-cloud-mode) .mnoria-memory-prepaint-bg {
+  display: none;
+}
+.mnoria-memory-frame-loading {
+  position: absolute;
+  inset: var(--bubble-frame-top, 55px) 20px 23px;
+  z-index: 430;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: var(--bubble-frame-radius, 14px);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 180ms ease, visibility 180ms ease;
+  transform: translateZ(0);
+}
+.mnoria-memory-frame-loading__bg {
+  position: absolute;
+  inset: -14px;
+  background-color: #020610;
+  background-image:
+    linear-gradient(rgba(4, 10, 18, 0.36), rgba(4, 10, 18, 0.52)),
+    url("/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy");
+  background-size:
+    auto,
+    var(--mnoria-tile-width, 1152px) var(--mnoria-tile-height, 768px);
+  background-position: center;
+  background-repeat: repeat;
+  filter: blur(8px);
+  transform: scale(1.045);
+}
+.mnoria-memory-frame-loading__hourglass {
+  position: relative;
+  z-index: 1;
+  width: 108px;
+  height: 108px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.34));
+  animation: mnoriaMemoryFrameHourglassSpin 1s linear infinite;
+}
+.mnoria-memory-frame-loading.is-hidden,
+body:not(.mnoria-memoire-cloud-mode) .mnoria-memory-frame-loading {
+  opacity: 0;
+  visibility: hidden;
+}
+@media (max-width: 768px) {
+  .mnoria-memory-frame-loading {
+    inset: var(--bubble-frame-top, 55px) 2px 78px;
+  }
+  .mnoria-memory-frame-loading__hourglass {
+    width: 92px;
+    height: 92px;
+  }
+}
 .mnoria-memory-fullpage-btn {
   display: none;
   position: absolute;
@@ -2505,7 +2590,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260914-memory-close-no-reinit" defer></script>
+<script src="/script.min.js?v=20260914-memory-frame-loader-v2" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

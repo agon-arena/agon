@@ -164,27 +164,26 @@ test("filterCandidateSources : une url sans domaine extractible est écartée sa
   assert.equal(filtered.length, 1);
 });
 
-// ---- filterCandidateSources : Wikipédia privilégiée (demande du 31/08/2026) ----
+// ---- filterCandidateSources : hiérarchie d'autorité A+/A/B/C (demande du
+// 14/09/2026, remplace l'ancienne priorité "Wikipédia en tête") ----
 
-test("filterCandidateSources : place un résultat Wikipédia en tête, même arrivé en dernier dans les résultats bruts", () => {
+test("filterCandidateSources : une source institutionnelle (A+) passe devant Wikipédia (C), même arrivée en dernier dans les résultats bruts", () => {
   const raw = [
-    candidate("https://lemonde.fr/article", "Le Monde"),
+    candidate("https://fr.wikipedia.org/wiki/Photosynthese", "Wikipédia"),
     candidate("https://exemple.com/page", "Exemple"),
-    candidate("https://fr.wikipedia.org/wiki/Photosynthese", "Wikipédia")
+    candidate("https://nasa.gov/photosynthesis", "NASA")
   ];
   const filtered = filterCandidateSources(raw);
-  assert.equal(filtered[0].domain, "fr.wikipedia.org");
-  // L'ordre relatif des autres candidats reste inchangé (tri stable).
-  assert.deepEqual(filtered.slice(1).map((c) => c.domain), ["lemonde.fr", "exemple.com"]);
+  assert.equal(filtered[0].domain, "nasa.gov");
 });
 
-test("filterCandidateSources : n'importe quel sous-domaine *.wikipedia.org est reconnu (fr., en., etc.)", () => {
+test("filterCandidateSources : sans domaine plus autorisé, Wikipédia (n'importe quel sous-domaine *.wikipedia.org) reste un candidat exploitable, pas écartée", () => {
   const raw = [candidate("https://exemple.com/page"), candidate("https://en.wikipedia.org/wiki/Photosynthesis")];
   const filtered = filterCandidateSources(raw);
-  assert.equal(filtered[0].domain, "en.wikipedia.org");
+  assert.ok(filtered.some((c) => c.domain === "en.wikipedia.org"));
 });
 
-test("filterCandidateSources : sans résultat Wikipédia, l'ordre d'origine est simplement conservé", () => {
+test("filterCandidateSources : entre deux sources de même niveau (B, aucune autorité reconnue), l'ordre d'origine est simplement conservé", () => {
   const raw = [candidate("https://lemonde.fr/article"), candidate("https://exemple.com/page")];
   const filtered = filterCandidateSources(raw);
   assert.deepEqual(filtered.map((c) => c.domain), ["lemonde.fr", "exemple.com"]);
@@ -194,12 +193,12 @@ test("filterCandidateSources : sans résultat Wikipédia, l'ordre d'origine est 
 
 test("buildSourceSelectionPrompt : liste tous les candidats numérotés avec domaine/titre/résumé", () => {
   const candidates = filterCandidateSources([
-    candidate("https://fr.wikipedia.org/wiki/Avalanche", "Avalanche — Wikipédia"),
-    candidate("https://lemonde.fr/article", "Un article de presse")
+    candidate("https://lemonde.fr/article", "Un article de presse"),
+    candidate("https://fr.wikipedia.org/wiki/Avalanche", "Avalanche — Wikipédia")
   ]);
   const prompt = buildSourceSelectionPrompt("Avalanche glaciaire", null, candidates);
-  assert.match(prompt, /0\. \[fr\.wikipedia\.org\] Avalanche — Wikipédia/);
-  assert.match(prompt, /1\. \[lemonde\.fr\] Un article de presse/);
+  assert.match(prompt, /0\. \[lemonde\.fr\] Un article de presse/);
+  assert.match(prompt, /1\. \[fr\.wikipedia\.org\] Avalanche — Wikipédia/);
 });
 
 test("buildSourceSelectionPrompt : exige à la fois la pertinence ET la fiabilité éditoriale", () => {
@@ -217,12 +216,14 @@ test("buildSourceSelectionPrompt : rejette explicitement un article de presse su
   assert.match(prompt, /Préfère toujours une page de référence\/encyclopédique\/pédagogique/);
 });
 
-test("buildSourceSelectionPrompt : demande explicitement de privilégier Wikipédia quand une page pertinente et fiable existe (demande du 31/08/2026)", () => {
+test("buildSourceSelectionPrompt : demande explicitement de privilégier une source institutionnelle/académique à Wikipédia, sans jamais l'exclure (hiérarchie d'autorité, demande du 14/09/2026)", () => {
   const candidates = filterCandidateSources([candidate("https://lemonde.fr/article")]);
   const prompt = buildSourceSelectionPrompt("Sujet", null, candidates);
-  assert.match(prompt, /choisis-la en premier\/en priorité parmi tes sources retenues/);
+  assert.match(prompt, /HIÉRARCHIE D'AUTORITÉ/);
+  assert.match(prompt, /préfère toujours une source institutionnelle, gouvernementale, universitaire, muséale ou une encyclopédie académique\/spécialisée de référence/);
+  assert.match(prompt, /ne l'écarte jamais si elle est la seule pertinente et fiable disponible/);
   // La priorité ne dispense jamais de vérifier les critères habituels.
-  assert.match(prompt, /Cela ne dispense JAMAIS de vérifier qu'elle remplit bien les trois critères/);
+  assert.match(prompt, /Cela ne dispense JAMAIS de vérifier que la source institutionnelle\/académique remplit elle-même les trois critères/);
 });
 
 test("buildSourceSelectionPrompt : autorise explicitement un tableau vide plutôt qu'un choix médiocre", () => {
@@ -258,10 +259,10 @@ test("buildSourceSelectionPrompt : la consigne de diversité ne dispense jamais 
   assert.match(prompt, /N'écarte cependant jamais une source par ailleurs pertinente et fiable simplement pour "faire varier" artificiellement les types/);
 });
 
-test("buildSourceSelectionPrompt : la priorité Wikipédia reste intacte malgré la nouvelle consigne de diversité", () => {
+test("buildSourceSelectionPrompt : la hiérarchie d'autorité reste intacte malgré la consigne de diversité", () => {
   const candidates = filterCandidateSources([candidate("https://lemonde.fr/article")]);
   const prompt = buildSourceSelectionPrompt("Sujet", null, candidates);
-  assert.match(prompt, /choisis-la en premier\/en priorité parmi tes sources retenues/);
+  assert.match(prompt, /HIÉRARCHIE D'AUTORITÉ/);
 });
 
 // Diagnostic qualité éditoriale du 12/09/2026, cas réel "Débuts de l'islam" —

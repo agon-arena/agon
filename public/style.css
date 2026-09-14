@@ -27894,7 +27894,7 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(18px, env(safe-area-inset-top, 0px)) 16px calc(96px + env(safe-area-inset-bottom, 0px));
+  padding: max(12px, env(safe-area-inset-top, 0px)) 10px max(14px, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
 }
 .universe-star-panel[hidden] {
@@ -27907,8 +27907,8 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
 }
 .universe-star-panel__box {
   position: relative;
-  width: min(480px, 100%);
-  max-height: min(72dvh, 620px);
+  width: min(560px, 100%);
+  max-height: min(88dvh, 780px);
   margin: 0;
   background: #ffffff;
   border: none;
@@ -27925,9 +27925,9 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
     padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
   }
   .universe-star-panel__box {
-    width: min(480px, 90vw);
+    width: min(560px, 92vw);
     border-radius: 12px;
-    max-height: min(70vh, 560px);
+    max-height: min(86vh, 780px);
   }
 }
 .universe-star-panel__header {
@@ -27965,7 +27965,7 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
 .universe-star-panel__list {
   list-style: none;
   margin: 0;
-  padding: 0 2px 2px 0;
+  padding: 0 2px 58px 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -27976,10 +27976,10 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
   gap: 8px;
 }
 .universe-star-panel__scroll-hint {
-  left: 20px;
-  right: 20px;
-  bottom: 20px;
-  height: 48px;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  height: 52px;
   border-radius: 0 0 9px 9px;
 }
 .universe-star-panel__item {

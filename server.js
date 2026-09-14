@@ -16019,6 +16019,19 @@ async function resolveWebSearchGrounding(apiKey, subject, id) {
     return { diagnostic: { reason: "extraction_failed", detail } };
   }
 
+  // Priorité d'affichage (hiérarchie d'autorité des sources, demande du
+  // 14/09/2026, section 4 — "placer les sources A+ et A en premier ;
+  // Wikipédia ensuite") : l'ordre de `selected` reflète le JSON libre rendu
+  // par l'IA de sélection, jamais garanti trié par autorité. Un simple tri
+  // déterministe sur le score déjà calculé (`sourceScore`, cf.
+  // extractAndValidateSource ci-dessus, lui-même dérivé de
+  // lib/source-scoring.js) suffit — aucun nouvel appel réseau/IA. Fait
+  // AVANT l'attribution des identifiants SOURCE_1/2/3 (buildIdentifiedSources
+  // plus bas) : aucune génération n'a encore cité de SOURCE_N à ce stade,
+  // donc ce tri ne renumérote jamais un identifiant déjà exposé au modèle
+  // (cf. la contrainte homonyme d'appendIdentifiedSources plus bas).
+  extracted = [...extracted].sort((a, b) => (b.sourceScore ?? 0) - (a.sourceScore ?? 0));
+
   // Télémétrie légère (section A7, "diagnostiquer facilement un futur cas
   // corpus = infobox") : une seule ligne compacte, jamais le texte des
   // sources — cf. lib/web-search-grounding.js summarizeExtractedSourcesForTelemetry.
@@ -18104,7 +18117,7 @@ async function fetchLearningLoadGaugeForUser(voterKey) {
   if (!userRow) return { level: "calm", count: 0 };
 
   const { items } = await fetchMemorizedTodayForUser(userRow.id);
-  const count = items.length;
+  const count = items.filter((item) => item && item.memorizationEnabled === true).length;
   return { level: levelFromPeakLoad(count), count };
 }
 
@@ -23663,7 +23676,7 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
     // course "isNew croyait vrai, un master a été créé entre-temps".
     for (const p of resolved) {
       if (!p.isNew) continue;
-      pregenQueue.enqueueProposedTopic({ supabase, title: p.title, findExistingMaster: findExistingQuizMaster })
+      pregenQueue.enqueueProposedTopic({ supabase, title: p.title, findExistingMaster: findExistingQuizMaster, suggestedTheme: p.suggestedTheme })
         .catch((error) => console.warn("[notion-quiz-pregeneration] enqueue :", error.message));
     }
 
@@ -23711,7 +23724,15 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
         subjectSourceId: r.master_slot.slice("notion:custom:".length),
         name: r.title,
         reasonText: null,
-        recommendationType: "ai_gap_fallback"
+        recommendationType: "ai_gap_fallback",
+        // Même correctif que la branche existingId ci-dessus (demande du
+        // 14/09/2026, "pourquoi les icônes [...] pas mis aussi") : ce stock de
+        // réserve (selectUnclaimedReadyTopics) porte désormais lui aussi
+        // suggested_theme, capté au même moment que title/reason par
+        // enqueueProposedTopic — colonne absente tant que
+        // data/migration-notion-quiz-pregeneration-queue-theme.sql n'a pas
+        // été appliquée, d'où r.suggested_theme potentiellement undefined.
+        theme: r.suggested_theme || null
       })));
     }
 
@@ -24914,20 +24935,23 @@ async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
   return assembleComprehensionSession(pendingBanks, COMPREHENSION_QUIZ_MAX_QUESTIONS);
 }
 
-// Recherche jusqu'à trois liens pédagogiquement très pertinents entre la
+// Recherche jusqu'à deux liens pédagogiquement très pertinents entre la
 // nouvelle acquisition et TOUTES les autres connaissances déjà acquises par
-// ce visiteur. Un lien doit être à la fois FACTUEL (relation vérifiable) et
+// ce visiteur. Un lien doit être à la fois FACTUEL (relation vérifiable),
 // SIGNIFICATIF (il aide vraiment à mieux comprendre l'une des deux
-// connaissances grâce à l'autre) — un fait exact mais purement circonstanciel
-// (même lieu, même époque, biographie...) ne suffit pas (renforcé le
-// 17/08/2026 : cas réel observé "Rome capitale de l'Italie" ↔ "Aldo Moro" via
-// "Rome", techniquement vrai mais beaucoup trop générique — Rome pourrait
-// relier cette même connaissance à des centaines d'autres notions). Aucun
-// lien vague n'est forcé ; 0 ou 1 lien reste le résultat le plus fréquent et
-// normal. La sélection mécanique de la réponse IA (parsing/dédoublonnage/
-// plafond à 3) vit dans selectValidNotionLinks (lib/culture-generale-links.js)
-// — le filtre de pertinence lui-même reste entièrement sémantique, assuré par
-// ce prompt, jamais par une heuristique de mots-clés côté serveur (fragile et
+// connaissances grâce à l'autre) et RÉCIPROQUE (l'apport de compréhension
+// doit être réel dans les DEUX sens, pas seulement d'un côté) — un fait
+// exact mais purement circonstanciel (même lieu, même époque, biographie...)
+// ne suffit pas (renforcé le 17/08/2026 : cas réel observé "Rome capitale de
+// l'Italie" ↔ "Aldo Moro" via "Rome", techniquement vrai mais beaucoup trop
+// générique — Rome pourrait relier cette même connaissance à des centaines
+// d'autres notions ; durci le 14/09/2026 : plafond abaissé de 3 à 2, exigence
+// de réciprocité explicite, test de généricité étoffé). Aucun lien vague
+// n'est forcé ; 0 ou 1 lien reste le résultat le plus fréquent et normal. La
+// sélection mécanique de la réponse IA (parsing/dédoublonnage/plafond à 2)
+// vit dans selectValidNotionLinks (lib/culture-generale-links.js) — le
+// filtre de pertinence lui-même reste entièrement sémantique, assuré par ce
+// prompt, jamais par une heuristique de mots-clés côté serveur (fragile et
 // aveugle aux cas légitimes, ex. "Napoléon" ↔ "Waterloo").
 async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourceName, sourceDetail, userId) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -24946,15 +24970,16 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
   const prompt = [
     "Réponds uniquement en json valide.",
     "Un nouveau contenu de culture générale vient d'être acquis. Examine TOUTES les connaissances déjà acquises de cet utilisateur, listées dans existing_notions.",
-    "Un lien valide doit satisfaire DEUX critères SIMULTANÉMENT :",
+    "Un lien valide doit satisfaire TROIS critères SIMULTANÉMENT :",
     "1. FACTUEL : il relie deux faits précis par une relation concrète et vérifiable — la même personne/œuvre/événement directement impliquée, une cause et sa conséquence directe, un concept illustré par un exemple précis qui en découle vraiment, une chronologie réellement explicative (l'un provoque, précède ou explique directement l'autre). Cette relation doit pouvoir s'expliquer en une phrase factuelle et spécifique, jamais par une généralité.",
     "2. SIGNIFICATIF (critère essentiel, pas seulement décoratif) : ce lien doit permettre de mieux comprendre A grâce à B, ou B grâce à A — pas seulement être vrai. Un fait exact mais purement circonstanciel (même lieu, même époque, même institution, simple élément de biographie) sans apport réel de compréhension doit être REJETÉ même s'il est parfaitement vérifiable.",
-    "TEST DE GÉNÉRICITÉ, à appliquer à chaque lien avant de le retenir : si la même relation pourrait tout aussi bien être vraie avec de très nombreuses autres connaissances similaires, le lien est trop générique — REJETTE-le. La relation doit être DISTINCTIVE de cette paire précise, pas transposable telle quelle à des dizaines d'autres paires.",
-    "REJETTE explicitement toute relation qui ne repose que sur : même ville, même pays, même région, même époque, même discipline, même catégorie, même environnement culturel, même institution sans lien causal ou événementiel précis, une personnalité qui a simplement vécu, travaillé, étudié, exercé une fonction, est née ou morte dans un lieu, une œuvre simplement conservée ou exposée dans un musée d'une ville, un événement ayant simplement eu lieu au même endroit, une proximité géographique ou biographique, ou un rapprochement thématique général. Ces relations ne redeviennent acceptables QUE si le fait précis constitue un élément vraiment majeur des DEUX connaissances et explique directement leur relation (pas juste un décor commun).",
-    "Exemples À REJETER : \"Rome, capitale de l'Italie\" ↔ \"Aldo Moro\" via \"Rome\" — Rome pourrait tout aussi bien relier cette connaissance à des centaines d'autres responsables politiques, papes, artistes ou événements italiens, la relation n'est pas distinctive. \"Piton de la Fournaise\" ↔ \"viticulture à La Réunion\" — simple proximité géographique/terroir. \"Victor Hugo\" ↔ \"Paris, capitale de la France\" si la seule justification est qu'il y a vécu ou travaillé.",
-    "Exemples À ACCEPTER : \"Jules César\" ↔ \"Assassinat aux Ides de mars\" (César en est la victime directe). \"Guernica\" ↔ \"Guerre civile espagnole\" (le tableau est directement inspiré du bombardement de Guernica pendant cette guerre). \"Louis XVI\" ↔ \"Révolution française\" (la Révolution entraîne directement la chute de sa monarchie). \"Pasteur\" ↔ \"Vaccination contre la rage\" (ses travaux sont directement à l'origine de ce vaccin).",
-    "En cas de doute, ne crée aucun lien plutôt qu'un lien approximatif ou générique : un tableau vide est un résultat NORMAL et FRÉQUENT, pas un échec. Ne cherche JAMAIS à atteindre 3 liens à tout prix — 0 ou 1 lien est parfaitement normal dans la majorité des cas ; un 2e ou 3e lien n'est légitime que s'il est, lui aussi, indépendamment aussi fort que le premier selon ces mêmes critères stricts.",
-    "Retourne au maximum 3 liens, uniquement s'ils sont TOUS très pertinents selon ces critères stricts. Pour chacun, recopie exactement le champ key dans related_key et écris un libellé de 2 à 5 mots nommant précisément la relation factuelle (ex. \"Cause directe\", \"Même auteur\", \"Illustre ce concept\") — jamais un libellé thématique vague.",
+    "3. RÉCIPROQUE (critère essentiel, à vérifier séparément du critère 2) : l'apport de compréhension doit être réel dans LES DEUX SENS — comprendre B doit vraiment éclairer A, ET comprendre A doit vraiment éclairer B. Un lien où B n'est qu'un détail illustratif mineur de A, sans que A n'apporte en retour un éclairage substantiel sur B (ou inversement), doit être REJETÉ même s'il est factuel et même si le sens le plus fort, pris isolément, semblait significatif. TEST : formule explicitement \"comprendre B aide à comprendre A parce que...\" ET \"comprendre A aide à comprendre B parce que...\" — si l'une des deux phrases ne peut être complétée par un apport réel et spécifique (pas une généralité du type \"ça donne du contexte\"), rejette le lien.",
+    "TEST DE GÉNÉRICITÉ, à appliquer à chaque lien avant de le retenir : si la même relation pourrait tout aussi bien être vraie avec de très nombreuses autres connaissances similaires, le lien est trop générique — REJETTE-le. La relation doit être DISTINCTIVE de cette paire précise, pas transposable telle quelle à des dizaines d'autres paires. Pose-toi la question : \"combien d'autres connaissances pourraient, avec la même justification, être reliées à A (ou à B) ?\" — si la réponse est \"beaucoup\" ou \"potentiellement des dizaines\", le lien n'est pas distinctif, rejette-le même s'il te semble intéressant ou memorable.",
+    "REJETTE explicitement toute relation qui ne repose que sur : même ville, même pays, même région, même époque, même discipline, même catégorie, même environnement culturel, même institution sans lien causal ou événementiel précis, une personnalité qui a simplement vécu, travaillé, étudié, exercé une fonction, est née ou morte dans un lieu, une œuvre simplement conservée ou exposée dans un musée d'une ville, un événement ayant simplement eu lieu au même endroit, une proximité géographique ou biographique, un rapprochement thématique général, un point commun lexical ou de vocabulaire sans rapport causal, une simple similarité de forme/structure/genre (deux batailles, deux traités, deux tableaux...) sans influence directe de l'un sur l'autre, ou une filiation trop indirecte (un maître à penser lointain, une inspiration diffuse, une école de pensée partagée sans emprunt précis identifiable). Ces relations ne redeviennent acceptables QUE si le fait précis constitue un élément vraiment majeur des DEUX connaissances et explique directement leur relation (pas juste un décor commun).",
+    "Exemples À REJETER : \"Rome, capitale de l'Italie\" ↔ \"Aldo Moro\" via \"Rome\" — Rome pourrait tout aussi bien relier cette connaissance à des centaines d'autres responsables politiques, papes, artistes ou événements italiens, la relation n'est pas distinctive. \"Piton de la Fournaise\" ↔ \"viticulture à La Réunion\" — simple proximité géographique/terroir. \"Victor Hugo\" ↔ \"Paris, capitale de la France\" si la seule justification est qu'il y a vécu ou travaillé. \"Traité de Versailles\" ↔ \"Congrès de Vienne\" si la seule justification est \"les deux sont des traités qui redessinent l'Europe après une guerre\" — vrai mais générique, aucun emprunt ou influence directe précisée. \"Einstein\" ↔ \"Newton\" si la seule justification est \"tous deux physiciens majeurs\" — échoue le test de réciprocité : Newton n'éclaire rien de spécifique sur Einstein au-delà d'un vague héritage disciplinaire.",
+    "Exemples À ACCEPTER : \"Jules César\" ↔ \"Assassinat aux Ides de mars\" (César en est la victime directe ; réciproque : comprendre l'assassinat explique la fin du pouvoir de César, et comprendre César explique pourquoi le Sénat l'a visé). \"Guernica\" ↔ \"Guerre civile espagnole\" (le tableau est directement inspiré du bombardement de Guernica pendant cette guerre). \"Louis XVI\" ↔ \"Révolution française\" (la Révolution entraîne directement la chute de sa monarchie). \"Pasteur\" ↔ \"Vaccination contre la rage\" (ses travaux sont directement à l'origine de ce vaccin).",
+    "En cas de doute, ne crée aucun lien plutôt qu'un lien approximatif ou générique : un tableau vide est un résultat NORMAL et FRÉQUENT, pas un échec. Ne cherche JAMAIS à atteindre 2 liens à tout prix — 0 ou 1 lien est parfaitement normal dans la majorité des cas ; un 2e lien n'est légitime que s'il est, lui aussi, indépendamment aussi fort que le premier selon ces mêmes critères stricts.",
+    "Retourne au maximum 2 liens, uniquement s'ils sont TOUS très pertinents selon ces critères stricts. Pour chacun, recopie exactement le champ key dans related_key et écris un libellé de 2 à 5 mots nommant précisément la relation factuelle (ex. \"Cause directe\", \"Même auteur\", \"Illustre ce concept\") — jamais un libellé thématique vague.",
     "S'il n'existe aucun lien remplissant ces critères, retourne un tableau links vide.",
     "Format obligatoire : {\"links\":[{\"related_key\":\"type::id\",\"label\":\"...\"}]}",
     "",
@@ -24965,7 +24990,7 @@ async function findAndStoreCultureGeneraleNotionLink(sourceType, sourceId, sourc
     const content = await fetchGpt5JsonContentWithRetry(apiKey, OPINION_ARTICLE_CATEGORY_MODEL, prompt, "[culture-generale notion-links]", { feature: "knowledge_links" });
     const parsed = content ? JSON.parse(content) : null;
     const candidateByKey = new Map(candidates.map((c) => [cultureGeneraleNotionKey(c.type, c.id), c]));
-    const validLinks = selectValidNotionLinks(parsed?.links, candidateByKey, 3);
+    const validLinks = selectValidNotionLinks(parsed?.links, candidateByKey, 2);
     await Promise.all(validLinks.map(async ({ match, label }) => {
       const savedLink = await resolveOrCreateCultureGeneraleNotionLink(
         sourceType,
@@ -26118,13 +26143,26 @@ async function validateStoredCultureGeneralePlacement(rawPlacement) {
 }
 
 // Enregistre l'acquisition d'un contenu Culture Générale dans l'univers intellectuel
-// personnel de l'utilisateur (originale "culture_generale-qN" ou repasse "cgreview-...", les
-// deux portent déjà sourceDebateId/sourceType/sourceName sur l'objet question, cf.
-// fetchUserCultureGeneraleAnswerEvents). Seuil d'acquisition volontairement à une seule bonne
-// réponse : différent du seuil de validation à DAILY_QUIZ_ACQUIS_VALIDATION_STREAK réponses de
-// "Mes acquis", qui reste une fonctionnalité à part, inchangée. eclairage_name/eclairage_detail
-// sont enregistrés en clair (photographie au moment de l'acquisition) : ces contenus n'ont pas
-// de table dédiée relisible à la demande.
+// personnel de l'utilisateur. Déclencheur RÉVISÉ le 14/09/2026 ("on change la
+// logique, on va mettre seulement les éléments mémorisés cochés") : ce n'est
+// plus une bonne réponse qui appelle cette fonction (cf. l'ancien appel,
+// retiré de POST /api/daily-quiz/answer), mais POST
+// /api/users/knowledge-memorization, au moment où l'utilisateur coche une
+// connaissance "à mémoriser" — préconisée confirmée ou volontaire, peu
+// importe (memorization_enabled: true) — cf. la construction d'un `question`
+// synthétique juste avant cet appel dans la route. Granularité INCHANGÉE :
+// une acquisition reste par (sourceType, sourceDebateId), c'est-à-dire pour
+// TOUT le QCM/la notion d'origine, jamais par connaissance individuelle —
+// cocher UNE seule connaissance d'un QCM acquiert donc bien tout le QCM
+// (`eclairage_detail` reste la photographie de sourceDetail au complet, pas
+// seulement de la connaissance cochée). Le retrait symétrique (dernière
+// connaissance décochée pour ce QCM) vit dans
+// removeDailyQuizEclairageAcquisitionIfFullyUnmemorized ci-dessous, jamais
+// ici. Différent du seuil de validation à DAILY_QUIZ_ACQUIS_VALIDATION_STREAK
+// réponses de "Mes acquis", qui reste une fonctionnalité à part, inchangée.
+// eclairage_name/eclairage_detail sont enregistrés en clair (photographie au
+// moment de l'acquisition) : ces contenus n'ont pas de table dédiée relisible
+// à la demande.
 async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   const sourceDebateId = question?.sourceDebateId ? String(question.sourceDebateId) : "";
   const sourceType = String(question?.sourceType || "").trim();
@@ -26322,8 +26360,10 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
     invalidateLearnNextRecommendations(legacyKey);
 
     // La connaissance existe désormais réellement dans la mémoire. C'est à
-    // cet instant précis — première bonne réponse, jamais à la création du
-    // QCM — que l'IA examine tous les autres acquis de cet utilisateur.
+    // cet instant précis — première connaissance cochée "à mémoriser" pour ce
+    // QCM (révisé le 14/09/2026, jamais plus à la première bonne réponse, ni
+    // à la création du QCM) — que l'IA examine tous les autres acquis de cet
+    // utilisateur.
     await findAndStoreCultureGeneraleNotionLink(
       sourceType,
       sourceDebateId,
@@ -26334,6 +26374,84 @@ async function recordDailyQuizEclairageAcquisition(voterKey, question) {
   } catch (error) {
     console.warn("[daily quiz eclairage acquisitions] failed : écriture acquisition —", error.message);
   }
+}
+
+// Retrait symétrique de recordDailyQuizEclairageAcquisition ci-dessus
+// (demande du 14/09/2026 : "si on décoche, ça retire l'acquisition / fait
+// disparaître l'étoile") — appelé UNIQUEMENT par POST
+// /api/users/knowledge-memorization quand `enabled:false` vient d'être posé.
+// Granularité symétrique à la création : une acquisition existe pour TOUT le
+// QCM (sourceType, sourceDebateId) dès qu'AU MOINS UNE de ses connaissances
+// est cochée — elle n'est donc retirée que quand PLUS AUCUNE connaissance de
+// ce même QCM n'est cochée pour cet utilisateur (jamais dès la première
+// décochée s'il en reste d'autres cochées). Ne touche jamais aux tables
+// stars/solar_systems elles-mêmes (objets de classification partagés,
+// potentiellement utilisés par d'autres utilisateurs) — seule la ligne
+// d'acquisition PERSONNELLE de cet utilisateur disparaît, ce qui suffit à
+// faire disparaître l'étoile de SON univers (cf. GET
+// /api/users/intellectual-universe, qui ne lit que user_article_acquisitions).
+// Best-effort, jamais bloquant pour la réponse HTTP du toggle.
+async function removeDailyQuizEclairageAcquisitionIfFullyUnmemorized(voterKey, subjectType, subjectSourceId) {
+  try {
+    const { legacyKey, error: keyError } = validateLegacyKey(voterKey);
+    if (keyError) return;
+    const { user } = await resolveLegacyUser(supabase, legacyKey);
+
+    const { data: stillMemorized, error: stillMemorizedError } = await supabase
+      .from("user_knowledge_target_memorization_preferences")
+      .select("knowledge_target_id")
+      .eq("user_id", user.id)
+      .eq("subject_type", subjectType)
+      .eq("subject_source_id", subjectSourceId)
+      .eq("memorization_enabled", true)
+      .limit(1)
+      .maybeSingle();
+    if (stillMemorizedError) throw new Error(stillMemorizedError.message);
+    // Au moins une autre connaissance de ce même QCM reste cochée : l'étoile
+    // reste acquise, rien à retirer.
+    if (stillMemorized) return;
+
+    const { error: deleteError } = await supabase
+      .from("user_article_acquisitions")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("eclairage_type", subjectType)
+      .eq("eclairage_source_id", subjectSourceId);
+    if (deleteError) throw new Error(deleteError.message);
+
+    console.log(`[daily quiz eclairage acquisitions] retrait user=${user.id} sourceType=${subjectType} sourceDebateId=${subjectSourceId}`);
+    invalidateIntellectualUniverseCache(legacyKey);
+    invalidateLearnNextRecommendations(legacyKey);
+  } catch (error) {
+    console.warn("[daily quiz eclairage acquisitions] failed : retrait acquisition —", error.message);
+  }
+}
+
+// Retrouve un objet "question" représentatif du Subject (subjectType,
+// subjectSourceId) — même forme que celles déjà stockées sur
+// daily_quiz.questions (sourceDebateId/sourceType/sourceName/sourceDetail/
+// sourcePlacement) — pour pouvoir réutiliser TEL QUEL
+// recordDailyQuizEclairageAcquisition depuis POST
+// /api/users/knowledge-memorization, qui n'a en main que l'identité du
+// Subject, jamais une question précise. `candidateSlots` déjà calculé par
+// l'appelant (mêmes slots que sa propre vérification anti-hallucination) :
+// toutes les lignes candidates partagent par construction le même
+// sourceType/sourceDebateId (cf. buildNotionMasterSlot), donc la première
+// question dont l'identité correspond suffit — jamais besoin de les comparer
+// entre elles pour choisir la "meilleure".
+async function resolveCultureGeneraleSourceQuestionForSubject(subjectType, subjectSourceId, candidateSlots) {
+  const { data: rows, error } = await supabase
+    .from("daily_quiz")
+    .select("questions")
+    .in("slot", candidateSlots)
+    .order("quiz_date", { ascending: false })
+    .limit(5);
+  if (error || !Array.isArray(rows)) return null;
+  for (const row of rows) {
+    const match = (row.questions || []).find((q) => q && String(q.sourceDebateId) === subjectSourceId && q.sourceType === subjectType);
+    if (match) return match;
+  }
+  return null;
 }
 
 // gradeQuizSubmissionOptionIndex (factorisée entre POST /answer et POST
@@ -26515,15 +26633,13 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
       ...(questionType === "ordre" ? { items: question.items } : {})
     });
 
-    // Univers intellectuel : conséquence secondaire de la réponse, jamais sur le chemin
-    // critique — la réponse HTTP est déjà partie. Réservé au QCM Culture générale (le QCM
-    // actu n'alimente plus Mon univers), reconnu par le préfixe de l'id désormais que les
-    // deux types de questions partagent le même slot "daily".
-    if (correct && isCultureGeneraleQuestionId(question.id) && question.sourceDebateId) {
-      recordDailyQuizEclairageAcquisition(voterKey, question)
-        .then(() => invalidateIntellectualUniverseCache(voterKey))
-        .catch((error) => console.warn("[daily quiz eclairage acquisitions] failed :", error.message));
-    }
+    // Univers intellectuel : PLUS déclenché par une simple bonne réponse
+    // (retiré le 14/09/2026, "on change la logique, on va mettre seulement
+    // les éléments mémorisés cochés") — cf. POST /api/users/knowledge-
+    // memorization, qui appelle désormais recordDailyQuizEclairageAcquisition
+    // au moment où l'utilisateur coche une connaissance "à mémoriser"
+    // (préconisée confirmée ou volontaire), jamais plus ici. Une bonne
+    // réponse seule ne crée/n'alimente donc plus d'étoile.
 
     // État FSRS (cf. lib/spaced-repetition/) : uniquement sur une réponse
     // RÉELLEMENT nouvelle (jamais un simple re-fetch d'une réponse déjà
@@ -26906,20 +27022,62 @@ app.post("/api/users/knowledge-memorization", rateLimit("users", 30), async (req
     }
 
     const { user } = await resolveLegacyUser(supabase, validation.legacyKey);
+    // `source` volontairement ABSENT de ce payload (revu le 14/09/2026,
+    // "elle doit rester dans les apprentissages préconisées, même si je la
+    // coche !! ne pas le mettre dans volontairement ! pas de double
+    // affichage !" — annule le choix inverse du 13/09/2026 ci-dessous en
+    // commentaire d'origine). PostgREST ne construit le SET de l'upsert que
+    // sur les colonnes du payload : sur un conflit (ligne déjà existante,
+    // ex. source="suggested" posée par applyMemorizationSuggestionsForQuiz),
+    // `source` n'est donc JAMAIS touché ici, seul `memorization_enabled`
+    // change — la connaissance reste dans "Préconisées à mémoriser"
+    // (fetchMemorizedTodayForUser groupe uniquement par source), jamais
+    // déplacée vers "Mémorisées volontairement" ni dupliquée dans les deux.
+    // Sur un INSERT (aucune ligne existante, jamais suggérée avant ce clic),
+    // la colonne retombe sur son DEFAULT 'manual' (cf. migration-knowledge-
+    // target-memorization-preference-source.sql) — un vrai premier clic
+    // manuel reste donc bien classé "manual", inchangé.
     const { error } = await supabase.from("user_knowledge_target_memorization_preferences").upsert({
       user_id: user.id,
       subject_type: subjectType,
       subject_source_id: subjectSourceId,
       knowledge_target_id: knowledgeTargetId,
       memorization_enabled: enabled,
-      // Un vrai clic reste 'manual' même s'il reproduit une valeur déjà posée par une
-      // préconisation automatique (demande du 13/09/2026, distinguer les deux listes) :
-      // l'action explicite de l'utilisateur prime toujours sur sa provenance précédente.
-      source: "manual",
       updated_at: new Date().toISOString()
     }, { onConflict: "user_id,subject_type,subject_source_id,knowledge_target_id" });
     if (error) throw new Error(error.message);
-    res.json({ ok: true, enabled });
+
+    // Univers intellectuel (déclencheur révisé le 14/09/2026, "on change la
+    // logique, on va mettre seulement les éléments mémorisés cochés
+    // (préconisés ou volontairement), on y associe toujours le qcm entier") :
+    // c'est ICI, et nulle part ailleurs, qu'une connaissance cochée "à
+    // mémoriser" alimente désormais Ma mémoire — plus jamais une simple bonne
+    // réponse (cf. l'ancien appel retiré de POST /api/daily-quiz/answer). Peu
+    // importe que la connaissance soit "préconisée" puis confirmée ou cochée
+    // d'emblée volontairement : seul `enabled` compte ici, jamais `source`.
+    // Conséquence secondaire, jamais sur le chemin critique de la réponse
+    // HTTP de ce simple clic (une classification IA éventuelle ne doit
+    // jamais le ralentir) — même philosophie fire-and-forget que partout
+    // ailleurs dans ce fichier pour ce type d'effet de bord.
+    if (enabled) {
+      resolveCultureGeneraleSourceQuestionForSubject(subjectType, subjectSourceId, candidateSlots)
+        .then((sourceQuestion) => sourceQuestion
+          ? recordDailyQuizEclairageAcquisition(validation.legacyKey, sourceQuestion)
+            .then(() => invalidateIntellectualUniverseCache(validation.legacyKey))
+          : console.warn(`[knowledge-memorization] aucune question source retrouvée pour sourceType=${subjectType} sourceDebateId=${subjectSourceId}`))
+        .catch((acquisitionError) => console.warn("[knowledge-memorization] acquisition univers intellectuel échouée :", acquisitionError.message));
+    } else {
+      removeDailyQuizEclairageAcquisitionIfFullyUnmemorized(validation.legacyKey, subjectType, subjectSourceId)
+        .catch((removalError) => console.warn("[knowledge-memorization] retrait univers intellectuel échoué :", removalError.message));
+    }
+
+    let learningLoad = null;
+    try {
+      learningLoad = await fetchLearningLoadGaugeForUser(validation.legacyKey);
+    } catch (gaugeError) {
+      console.warn("[knowledge-memorization] recalcul jauge échoué :", gaugeError.message);
+    }
+    res.json({ ok: true, enabled, learningLoad });
   } catch (error) {
     console.error("[knowledge-memorization] :", error.message);
     res.status(500).json({ ok: false, error: error.message });
@@ -26931,9 +27089,9 @@ app.post("/api/users/knowledge-memorization", rateLimit("users", 30), async (req
 // (Europe/Paris), avec son statut de mémorisation courant — le décochage
 // éventuel côté client réutilise POST /api/users/knowledge-memorization
 // ci-dessus, jamais une écriture ici (lecture seule, aucun état FSRS
-// modifié). Seules les connaissances encore memorizationEnabled=true sont
-// renvoyées : une connaissance déjà désactivée avant sa dernière review du
-// jour n'a plus sa place dans une liste de connaissances "mémorisées".
+// modifié). Les connaissances restent renvoyées même si elles sont décochées :
+// l'affichage de la liste ("vu aujourd'hui et proposé/choisi") est distinct
+// du comptage de la jauge ("actuellement coché à mémoriser").
 // Connaissances mémorisées aujourd'hui pour un utilisateur donné (voluntary +
 // suggested) — extrait dans sa propre fonction le 14/09/2026 pour que la
 // jauge de charge de mémorisation (fetchLearningLoadGaugeForUser, plus haut
@@ -27003,25 +27161,24 @@ async function fetchMemorizedTodayForUser(userId) {
   // aujourd'hui (répondre à une question ne coche jamais "Mémoriser" tout
   // seul, cf. wireExcludeButton).
   //
-  // Deux listes distinctes (demande du 13/09/2026, "distinguer les connaissances
-  // volontairement mémorisées des connaissances préconisées à mémoriser", revu le
-  // même jour "pas cochées par défaut... état réel") : `voluntary` garde le filtre
-  // enabled===true (un vrai clic explicite) ; `suggested` n'exige PAS enabled===true
-  // — applyMemorizationSuggestionsForQuiz écrit désormais source:"suggested" avec
-  // enabled:false (jamais encore confirmée), donc n'apparaîtrait jamais ici sinon.
-  // Un clic sur une connaissance "suggested" passe par POST .../knowledge-memorization,
-  // qui pose source:"manual" — elle sort alors définitivement de ce groupe au
-  // prochain chargement, jamais mélangée avec `voluntary` entre-temps. `items`
-  // conservé (fusion des deux, ordre voluntary puis suggested) pour ne rien casser
-  // côté rétrocompatibilité.
+  // Deux listes distinctes (demande du 13/09/2026, puis correctif du
+  // 14/09/2026) : la présence dans la liste dépend de la provenance
+  // (préconisée ou explicitement touchée par l'utilisateur), pas de l'état
+  // coché. `memorizationEnabled` porte l'état réel de la case ; un décochage
+  // ne doit jamais faire disparaître la ligne au retour sur la page.
   const preferenceMap = await fetchKnowledgeTargetMemorizationPreferenceMap(userId);
   const voluntary = [];
   const suggested = [];
   for (const [key, item] of itemsByKey.entries()) {
     const pref = preferenceMap.get(key);
     if (!pref) continue;
-    if (pref.source === "suggested") suggested.push(item);
-    else if (pref.enabled === true) voluntary.push(item);
+    const enrichedItem = {
+      ...item,
+      memorizationEnabled: pref.enabled === true,
+      memorizationSource: pref.source || null
+    };
+    if (pref.source === "suggested") suggested.push(enrichedItem);
+    else if (pref.source === "manual" || pref.enabled === true) voluntary.push(enrichedItem);
   }
   return { items: [...voluntary, ...suggested], voluntary, suggested };
 }
@@ -27142,9 +27299,9 @@ app.get("/api/users/notion-quizzes/memorization-suggestions", rateLimit("users",
 // computeMemorizationSuggestionsForQuiz — jamais "Mémoriser" tant que
 // l'utilisateur n'a pas cliqué lui-même — SAUF si une préférence EXPLICITE
 // existe déjà pour elle (true OU false, cf. fetchKnowledgeTargetMemorization
-// PreferenceMap) — jamais d'écrasement d'un choix déjà posé (ex. un clic
-// manuel antérieur depuis cette même rubrique ou la fiche, qui pose toujours
-// source="manual"). Idempotent par construction : peut être rappelée sans
+// PreferenceMap) — jamais d'écrasement d'un choix déjà posé, quelle que soit
+// sa source (un clic sur une ligne déjà "suggested" reste "suggested" depuis
+// le 14/09/2026, cf. POST /api/users/knowledge-memorization). Idempotent par construction : peut être rappelée sans
 // risque à chaque transition de niveau (Élémentaire -> Avancé -> Expert) du
 // même parcours, cf. son appel côté client (finishCurrentBlockOrContinue).
 // Une fois la ligne posée, la connaissance apparaît d'elle-même dans le
