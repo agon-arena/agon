@@ -11397,6 +11397,12 @@ app.post("/api/opinion-articles/click", (req, res) => {
 const OPINION_ARTICLE_CLICKS_HISTORY_LIMIT = 200;
 const OPINION_ARTICLES_RECOMMENDED_TOP_CATEGORIES = 3;
 const OPINION_ARTICLES_RECOMMENDED_TOP_ORIENTATIONS = 2;
+// Poids par rang (index 0 = catégorie/orientation la plus cliquée) pour le score d'affinité
+// du palier 1 : avant le 14/09/2026, un article matchant la catégorie #3 (faiblement) ou
+// l'orientation #2 était trié à égalité avec un article matchant tout à la fois, seule la
+// date les départageait. Score combiné = pertinence d'abord, fraîcheur en tie-break.
+const OPINION_ARTICLES_RECOMMENDED_CATEGORY_WEIGHTS = [2, 1, 1];
+const OPINION_ARTICLES_RECOMMENDED_ORIENTATION_WEIGHTS = [1, 0.5];
 const OPINION_ARTICLES_RECOMMENDED_TRENDING_WINDOW_DAYS = 3;
 const OPINION_ARTICLES_RECOMMENDED_TRENDING_SCAN_LIMIT = 3000;
 const OPINION_ARTICLES_RECOMMENDED_FALLBACK_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -11472,14 +11478,31 @@ app.get("/api/opinion-articles/recommended", async (req, res) => {
         if (row.category) categoryFreq.set(row.category, (categoryFreq.get(row.category) || 0) + 1);
         if (row.orientation_group) orientationFreq.set(row.orientation_group, (orientationFreq.get(row.orientation_group) || 0) + 1);
       }
-      const topCategories = new Set(Array.from(categoryFreq.entries())
-        .sort((a, b) => b[1] - a[1]).slice(0, OPINION_ARTICLES_RECOMMENDED_TOP_CATEGORIES).map(([c]) => c));
-      const topOrientations = new Set(Array.from(orientationFreq.entries())
-        .sort((a, b) => b[1] - a[1]).slice(0, OPINION_ARTICLES_RECOMMENDED_TOP_ORIENTATIONS).map(([o]) => o));
+      const topCategoriesRanked = Array.from(categoryFreq.entries())
+        .sort((a, b) => b[1] - a[1]).slice(0, OPINION_ARTICLES_RECOMMENDED_TOP_CATEGORIES).map(([c]) => c);
+      const topOrientationsRanked = Array.from(orientationFreq.entries())
+        .sort((a, b) => b[1] - a[1]).slice(0, OPINION_ARTICLES_RECOMMENDED_TOP_ORIENTATIONS).map(([o]) => o);
+      const topCategories = new Set(topCategoriesRanked);
+      const topOrientations = new Set(topOrientationsRanked);
+
+      // Score d'affinité = poids du rang de la catégorie + poids du rang de l'orientation
+      // (0 si hors du top). Un article qui matche fort sur les deux passe devant un article
+      // qui ne matche que faiblement sur un seul, indépendamment de leurs dates respectives.
+      const getAffinityScore = (article) => {
+        const categoryRank = topCategoriesRanked.indexOf(article.category);
+        const orientationRank = topOrientationsRanked.indexOf(getOpinionOrientationGroup(article.orientation));
+        const categoryScore = categoryRank === -1 ? 0 : (OPINION_ARTICLES_RECOMMENDED_CATEGORY_WEIGHTS[categoryRank] || 0);
+        const orientationScore = orientationRank === -1 ? 0 : (OPINION_ARTICLES_RECOMMENDED_ORIENTATION_WEIGHTS[orientationRank] || 0);
+        return categoryScore + orientationScore;
+      };
 
       appendUniqueRecommendations(pool
         .filter((a) => topCategories.has(a.category) || topOrientations.has(getOpinionOrientationGroup(a.orientation)))
-        .sort((a, b) => new Date(b.published_at) - new Date(a.published_at)));
+        .sort((a, b) => {
+          const scoreDiff = getAffinityScore(b) - getAffinityScore(a);
+          if (scoreDiff !== 0) return scoreDiff;
+          return new Date(b.published_at) - new Date(a.published_at);
+        }));
     }
 
     const trendingLinks = await getTrendingOpinionArticleLinksFallback();
