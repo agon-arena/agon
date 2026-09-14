@@ -2121,7 +2121,8 @@ function showStarPanel(star) {
   starPanelListEl.scrollTop = 0;
 
   (star.articles || []).forEach((article) => {
-    const hasFiche = (article.quizSlot && article.quizDate) ||
+    const hasFiche = (article.sourceType && article.sourceDebateId != null) ||
+      (article.quizSlot && article.quizDate) ||
       (Array.isArray(article.sourceDetail?.sections) && article.sourceDetail.sections.length > 0);
     const hasUrl = article.url && /^https?:\/\//i.test(String(article.url));
     const el = document.createElement(hasFiche ? "button" : (hasUrl ? "a" : "span"));
@@ -2534,17 +2535,34 @@ function renderKnowledgeSheet(article, star, fullFiche, loading = false, hideBac
 
 async function showKnowledgeSheet(article, star, hideBackButton = false) {
   const requestToken = ++starKnowledgeRequestToken;
-  const hasFullFiche = article.quizSlot && article.quizDate;
-  renderKnowledgeSheet(article, star, null, hasFullFiche, hideBackButton);
-  if (!hasFullFiche) return;
+  const ficheRequests = [];
+  if (article.sourceType && article.sourceDebateId != null) {
+    ficheRequests.push(new URLSearchParams({
+      linkType: String(article.sourceType),
+      linkSourceId: String(article.sourceDebateId),
+      legacyKey: getKey()
+    }));
+  } else if (article.quizSlot && article.quizDate) {
+    ficheRequests.push(new URLSearchParams({ slot: article.quizSlot, date: article.quizDate, legacyKey: getKey() }));
+  }
+  renderKnowledgeSheet(article, star, null, ficheRequests.length > 0, hideBackButton);
+  if (!ficheRequests.length) return;
 
   try {
-    const params = new URLSearchParams({ slot: article.quizSlot, date: article.quizDate, legacyKey: getKey() });
-    const response = await fetch(`/api/users/notion-quizzes/fiche?${params.toString()}`, { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok || data.error) throw new Error(data.error || "Fiche indisponible");
-    if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
-    renderKnowledgeSheet(article, star, data, false, hideBackButton);
+    let lastError = null;
+    for (const params of ficheRequests) {
+      try {
+        const response = await fetch(`/api/users/notion-quizzes/fiche?${params.toString()}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || data.error) throw new Error(data.error || "Fiche indisponible");
+        if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
+        renderKnowledgeSheet(article, star, data, false, hideBackButton);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error("Fiche indisponible");
   } catch (error) {
     if (requestToken !== starKnowledgeRequestToken || starPanelEl.hidden) return;
     console.warn("[mon-univers] fiche QCM complète indisponible :", error.message);

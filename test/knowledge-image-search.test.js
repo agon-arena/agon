@@ -156,10 +156,14 @@ test("searchKnowledgeImage : image hors domaine upload.wikimedia.org exclue (jam
   assert.equal(result, null);
 });
 
-test("searchKnowledgeImage : SVG exclu (carte/drapeau/blason, jamais une photo/illustration éditoriale)", async () => {
-  const fetchImpl = async () => jsonResponse(wikipediaPageBody({ thumbnail: { source: "https://upload.wikimedia.org/wikipedia/commons/thumb/map.svg" } }));
-  const result = await searchKnowledgeImage("Burundi", { fetchImpl });
-  assert.equal(result, null);
+test("searchKnowledgeImage : SVG accepté (demande du 14/09/2026, 'annule cette règle et prend aussi blason, drapeaux etc.') — plus jamais exclu, y compris un diagramme/courbe (ex. courbe de Laffer)", async () => {
+  const fetchImpl = async () => jsonResponse(wikipediaPageBody({
+    title: "Courbe de Laffer",
+    thumbnail: { source: "https://upload.wikimedia.org/wikipedia/commons/thumb/laffer-curve.svg" }
+  }));
+  const result = await searchKnowledgeImage("Courbe de Laffer", { fetchImpl });
+  assert.ok(result);
+  assert.equal(result.url, "https://upload.wikimedia.org/wikipedia/commons/thumb/laffer-curve.svg");
 });
 
 test("searchKnowledgeImage : titre de la page sans mot significatif commun avec la requête (résultat hors sujet) exclu", async () => {
@@ -264,13 +268,23 @@ test("searchKnowledgeImage : Commons — largeur native (iiprop=size) utilisée 
   assert.equal(result.width, 130);
 });
 
-test("searchKnowledgeImage : Commons — SVG/TIFF (non affichables par <img>) exclus, jamais retenus même sans alternative", async () => {
+test("searchKnowledgeImage : Commons — TIFF (non affichable par <img>) exclu, jamais retenu même sans alternative", async () => {
   const fetchImpl = async (url) => {
     if (url.includes("commons.wikimedia.org")) return jsonResponse(commonsFileBody({ mime: "image/tiff" }));
     return jsonResponse({ query: { pages: {} } });
   };
   const result = await searchKnowledgeImage("Aldo Moro Italy 1970s", { fetchImpl });
   assert.equal(result, null);
+});
+
+test("searchKnowledgeImage : Commons — SVG accepté (demande du 14/09/2026, même assouplissement que Wikipedia)", async () => {
+  const fetchImpl = async (url) => {
+    if (url.includes("commons.wikimedia.org")) return jsonResponse(commonsFileBody({ mime: "image/svg+xml", thumburl: "https://upload.wikimedia.org/wikipedia/commons/thumb/aldo-moro-commons.svg" }));
+    return jsonResponse({ query: { pages: {} } });
+  };
+  const result = await searchKnowledgeImage("Aldo Moro Italy 1970s", { fetchImpl });
+  assert.ok(result);
+  assert.equal(result.url, "https://upload.wikimedia.org/wikipedia/commons/thumb/aldo-moro-commons.svg");
 });
 
 test("searchKnowledgeImage : Commons — pageUrl reconstruite à partir du titre quand descriptionurl absent", async () => {

@@ -20547,19 +20547,15 @@ body.page-home-mobile .debate-card-mnoria-badge {
     z-index: 2;
   }
 
-  /* Tag de filtre thématique actif qui empiète sur le bandeau "À la une" (demande du
-     14/09/2026, "il devrait apparaître plus haut, quitte à laisser plus d'espace") :
-     --mnoria-home-first-row-mt ci-dessus est calculé (syncMnoriaHomeTrendsCaptionAnchor,
-     script.js) uniquement à partir de la légende masquée et du bouton Trier/Rechercher,
-     sans jamais tenir compte de la présence d'un tag actif juste au-dessus (#index-active-
-     filters, z-index 140 — au-dessus du bandeau, d'où le tag visuellement PAR-DESSUS le
-     bandeau plutôt que caché derrière). Volontairement une marge simple ajoutée ici plutôt
-     qu'une modification de ce calcul JS déjà très finement calé (cf. ses propres
-     commentaires) — un tag actif ajoute son espace propre, jamais soustrait de celui déjà
-     calculé pour la légende. */
-  body.is-standalone.page-home-mobile #index-active-filters:not(.index-active-filters-empty) {
-    margin-bottom: 24px;
-  }
+  /* Tag de filtre thématique actif qui empiétait sur le bandeau "À la une" (demande du
+     14/09/2026) : premier essai ici via une marge CSS simple, insuffisant — annulé à
+     chaque passe par syncMnoriaHomeTrendsCaptionAnchor (script.js), qui écrase
+     --mnoria-home-first-row-mt vers une position cible ignorant la hauteur de
+     #index-active-filters, donc recollait le bandeau contre le tag quelle que soit la
+     marge ajoutée ici. Vrai correctif déplacé dans le calcul JS lui-même
+     (activeFiltersExtraHeight, même angle mort déjà traité pour le panneau de filtres
+     ouvert juste au-dessus dans cette fonction) — rien à faire ici en CSS pur.
+  */
 
   /* Mode "Ma mémoire" seulement : le bouton "Autres actus" (référence de la
      logique symétrique ci-dessus) est masqué, cette logique ne s'applique donc
@@ -27021,6 +27017,37 @@ body.is-standalone.page-home-mobile #mnoria-tag-trends-cloud.mnoria-memoire-fram
     transparent 72%);
   opacity: 0.7;
   z-index: -1;
+  pointer-events: none;
+}
+.mnoria-tag-bubble-star.is-memory-eclipsed {
+  background: radial-gradient(circle at 42% 38%, #111827 0%, #05070a 56%, #000000 100%) !important;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.82),
+    0 0 14px 4px var(--mnoria-tag-bubble-glow, rgba(255,255,255,0.55)),
+    inset -5px -5px 8px rgba(255,255,255,0.16),
+    inset 5px 5px 10px rgba(0,0,0,0.9);
+}
+.mnoria-tag-bubble-star.is-memory-eclipsed::after {
+  display: block;
+  content: "";
+  position: absolute;
+  inset: 4%;
+  width: auto;
+  height: auto;
+  border-radius: 50%;
+  padding: 0;
+  background:
+    radial-gradient(circle at 68% 38%,
+      rgba(255,255,255,0.92) 0%,
+      rgba(255,255,255,0.72) 18%,
+      rgba(255,255,255,0.16) 34%,
+      transparent 58%);
+  -webkit-mask: none;
+  mask: none;
+  filter: none;
+  box-shadow: none;
+  opacity: 0.9;
+  z-index: 2;
   pointer-events: none;
 }
 /* Anneau en dégradé (conic-gradient, plusieurs teintes de noir/gris) à la place de l'ancien

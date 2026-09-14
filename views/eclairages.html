@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mnoria">
-<link rel="stylesheet" href="/style.min.css?v=20260913-yellow-nav-highlight">
+<link rel="stylesheet" href="/style.min.css?v=20260914-active-filters-band-fix">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700&family=Oswald:wght@600&display=swap">
@@ -184,27 +184,31 @@
        bas du contenu de la rubrique, une fois le texte lu — jamais près du
        titre replié, pour que ce soit un geste délibéré après lecture plutôt
        qu'une case cochée à l'aveugle. Coloré une fois actif (cf. .is-active,
-       posé par initMemorizeButtons). */
+       posé par initMemorizeButtons). Volontairement petit/discret (demande
+       du 14/09/2026) : ce n'est pas l'action principale de la page. */
     .ecl-rubric-memorize-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 9px;
-      width: 100%;
-      max-width: 320px;
-      margin: 20px auto 0;
-      padding: 13px 20px;
-      border: 2px solid #243038;
+      gap: 6px;
+      width: auto;
+      max-width: 200px;
+      margin: 14px auto 0;
+      padding: 6px 14px;
+      border: 1px solid #c7ced4;
       border-radius: 999px;
       background: #ffffff;
-      color: #243038;
+      color: #6b7680;
       font-family: "Barlow Condensed", Arial, sans-serif;
-      font-size: 17px;
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.03em;
       text-transform: uppercase;
       cursor: pointer;
       transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    }
+    .ecl-rubric-memorize-btn i {
+      font-size: 12px;
     }
     .ecl-rubric-memorize-btn:hover {
       background: #f4f6f8;
@@ -1071,7 +1075,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260914-confirm-modal-nolevel" defer></script>
+<script src="/script.min.js?v=20260914-memory-close-no-reinit" defer></script>
 <script>
 // Chrome partagé par les deux blocs : fermeture (bouton parent / Échap),
 // focus initial du panneau, et accordéon (un seul bloc ouvert à la fois,

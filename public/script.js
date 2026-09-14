@@ -2584,7 +2584,15 @@ function showPushInvite(reason = "action", options = {}) {
 
   const icon = document.createElement("div");
   icon.className = "push-invite-icon";
-  icon.innerHTML = '<img src="/mnoria-icon-192.png" alt="Mnoria">';
+  const iconImg = document.createElement("img");
+  iconImg.src = "/mnoria-icon-192.png";
+  iconImg.alt = "Mnoria";
+  iconImg.width = 192;
+  iconImg.height = 192;
+  iconImg.loading = "eager";
+  iconImg.decoding = "sync";
+  try { iconImg.fetchPriority = "high"; } catch {}
+  icon.appendChild(iconImg);
 
   copy.append(title, text);
   actions.append(primaryButton, laterButton);
@@ -7755,11 +7763,18 @@ function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
   } catch (error) {}
   showDebateIframeParentLoadingOverlay("Chargement de l'accueil en cours");
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      setTimeout(() => { window.location.href = homeNavigationUrl; }, 80);
-    });
-  });
+  // Demande du 14/09/2026, "le temps de chargement [en quittant le plein
+  // écran de Ma mémoire] soit beaucoup plus court" : les 2 requestAnimationFrame
+  // + 80ms ci-dessus (avant, cf. historique) ne servaient qu'à laisser le
+  // voile de chargement s'animer avant de partir — pure esthétique, jamais
+  // nécessaire techniquement (l'overlay est déjà peint de façon synchrone par
+  // showDebateIframeParentLoadingOverlay juste au-dessus). "/" est cache-first
+  // depuis le 07/09/2026 (cf. service-worker.js) : la navigation elle-même
+  // est déjà quasi instantanée une fois déclenchée, donc chaque milliseconde
+  // gagnée ici avant de la déclencher compte directement pour "Ma mémoire"
+  // (le cas d'usage le plus fréquent de ce repli, cf. mnoria_home_memory_return_loading
+  // juste au-dessus) — navigation immédiate plutôt que différée.
+  window.location.href = homeNavigationUrl;
 }
 
 function tryRestoreCachedHomeFromHistory(fallbackUrl = "/?skipStartup=1") {
@@ -7782,6 +7797,18 @@ function tryRestoreCachedHomeFromHistory(fallbackUrl = "/?skipStartup=1") {
     target: "cached-home",
     referrer: referrerUrl.pathname + referrerUrl.search + referrerUrl.hash
   });
+  // Demande du 14/09/2026, "quand je quitte le plein écran de Ma mémoire,
+  // l'animation Cultive ton esprit se lance" : history.back() ci-dessous ne
+  // porte jamais ?skipStartup=1 (contrairement au repli window.location.href
+  // plus bas dans cette même fonction, qui lui le porte toujours) — si le
+  // navigateur ne restaure pas "/" depuis le bfcache (page déjà vivante,
+  // aucun script ne rejoue) mais la recharge réellement (service worker
+  // actif, bfcache parfois désactivé de ce fait selon le navigateur),
+  // l'accueil rejoue alors sa vraie animation de démarrage faute d'un signal
+  // "skip" quelconque. Même mécanisme que sw-recovery-page ci-dessous
+  // (sessionStorage + __mnoriaRecordReloadReason), lu par index.html avant
+  // de décider shouldSkipStartup.
+  __mnoriaRecordReloadReason("history-back-from-fullpage");
   try {
     window.history.back();
   } catch (error) {
@@ -8323,9 +8350,11 @@ function closeDebateIframeModal(options = {}) {
   // est ouverte en iframe : une connaissance nouvellement acquise là-dedans n'apparaissait
   // donc qu'après avoir rebasculé sur un autre mode puis revenu sur Mémoire (seul moment où
   // reinitMemoireEmbed était rappelé) — demande du 01/09/2026, "simplement en retournant sur
-  // la page index ça devrait apparaître". Rafraîchissement bon marché désormais (cache serveur
-  // dédié à fetchUserAcquis), donc inconditionnel dès qu'on est en mode Mémoire au retour.
-  if (_memoireCloudMode && _memoireModuleLoadPromise) {
+  // la page index ça devrait apparaître". Exception importante : fermer le plein écran
+  // /mon-univers ne crée aucune connaissance et affichait déjà la même scène. Le relancer ici
+  // détruisait puis remontait la mémoire embarquée juste après la fermeture, ce qui ressemblait
+  // à un refresh et pouvait accentuer la pression mémoire iOS.
+  if (_memoireCloudMode && _memoireModuleLoadPromise && currentIframePathname !== "/mon-univers") {
     _memoireModuleLoadPromise.then((mod) => mod?.reinitMemoireEmbed?.()).catch(() => {});
   }
 
@@ -21009,7 +21038,7 @@ function setMemoireCloudMode(enable, skipSync = false) {
     }
     renderIndexActiveFilterTags();
     if (!_memoireModuleLoadPromise) {
-      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260914-memory-eclipse-v1').catch((error) => {
+      _memoireModuleLoadPromise = import('/mon-univers.js?v=20260914-memory-fiche-full-v2').catch((error) => {
         console.warn('[Mnoria] Module Ma mémoire indisponible :', error);
         const trendsSection = document.getElementById('mnoria-tag-trends-section');
         const cloudContainer = document.getElementById('mnoria-tag-trends-cloud');
@@ -37124,10 +37153,26 @@ function syncMnoriaHomeTrendsCaptionAnchor() {
       ? Math.max(0, controlsElForSort.getBoundingClientRect().bottom - sortRect.bottom)
       : 0;
 
+    // Tag(s) de filtre actif (#index-active-filters, entre le panneau et le bandeau dans
+    // l'ordre visuel order:3) : même angle mort que controlsExtraHeight ci-dessus avant le
+    // 14/09/2026 ("le tag actif de trier/rechercher apparaît sur le bandeau, il devrait
+    // apparaître au-dessus") — sortBottomDocAfterFix ignorait sa hauteur, donc le margin-top
+    // du bandeau était recalculé pour le recoller juste sous le bouton/panneau, recouvrant le
+    // tag quel que soit l'espace ajouté par ailleurs en CSS pur (cette fonction écrase le
+    // margin-top à chaque passe vers une position cible qui ne laissait aucune place au tag).
+    const activeFiltersElForSort = document.getElementById('index-active-filters');
+    const activeFiltersVisibleForSort = !!(activeFiltersElForSort &&
+      !activeFiltersElForSort.classList.contains('index-active-filters-empty') &&
+      isMnoriaVisibleElement(activeFiltersElForSort));
+    const activeFiltersPrevBottom = controlsOpenForSort ? controlsElForSort.getBoundingClientRect().bottom : sortRect.bottom;
+    const activeFiltersExtraHeight = activeFiltersVisibleForSort
+      ? Math.max(0, activeFiltersElForSort.getBoundingClientRect().bottom - activeFiltersPrevBottom)
+      : 0;
+
     const bandElForSort = firstRowForSort.querySelector('.theme-row-title') || firstRowForSort;
     const bandDocTopForSort = bandElForSort.getBoundingClientRect().top + scrollY;
     const currentBandMarginTop = parseFloat(window.getComputedStyle(firstRowForSort).marginTop) || 0;
-    const sortBottomDocAfterFix = sectionBottomDoc + MNORIA_SORT_BTN_GAP + sortRect.height + controlsExtraHeight;
+    const sortBottomDocAfterFix = sectionBottomDoc + MNORIA_SORT_BTN_GAP + sortRect.height + controlsExtraHeight + activeFiltersExtraHeight;
     const bandTargetTopFromSort = sortBottomDocAfterFix + MNORIA_SORT_BTN_BOTTOM_GAP;
     const nextBandMarginTop = Math.round(currentBandMarginTop + (bandTargetTopFromSort - bandDocTopForSort));
     if (Number.isFinite(nextBandMarginTop)) {

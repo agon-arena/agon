@@ -521,8 +521,17 @@ app.use((req, res, next) => {
 
 function shouldTraceSlowUserRoute(req) {
   const pathname = String(req.path || "").trim();
-  if (pathname === "/notifications" || pathname === "/debate") return true;
+  if (pathname === "/notifications" || pathname === "/debate" || pathname === "/apprentissage") return true;
   if (pathname === "/api/notifications") return true;
+  // Diagnostic du 14/09/2026 ("page Apprentissage qui bloque") : couvre toutes les
+  // routes sollicitées par /apprentissage au chargement (notion-quizzes et ses
+  // sous-routes, learn-next + ai-fallback, intellectual-universe pour "Ma mémoire"
+  // embarquée, knowledge/image pour les vignettes) — aucune n'était tracée avant,
+  // impossible de savoir laquelle traînait sans les devtools du visiteur.
+  if (pathname.startsWith("/api/users/notion-quizzes")) return true;
+  if (pathname.startsWith("/api/users/recommendations/learn-next")) return true;
+  if (pathname === "/api/users/intellectual-universe") return true;
+  if (pathname === "/api/knowledge/image") return true;
   return /^\/api\/debates\/[^/]+$/.test(pathname);
 }
 
@@ -5367,6 +5376,34 @@ function deserializeUserScoreCache(obj) {
   return out;
 }
 
+function recomputeNoesisScoreCacheSlice(cache) {
+  const relierAccuracyByAuthorKey = new Map();
+  for (const [authorKey, answered] of cache.relierAnsweredByAuthorKey || []) {
+    relierAccuracyByAuthorKey.set(authorKey, ((cache.relierCorrectByAuthorKey.get(authorKey) || 0) / answered) * 100);
+  }
+  cache.noesisScoreByAuthorKey = buildPercentileScoreMap(relierAccuracyByAuthorKey);
+  cache.noesisTotalUsers = relierAccuracyByAuthorKey.size;
+}
+
+function applyRelierAnswerToUserScoreCache(voterKey, isCorrect) {
+  const key = String(voterKey || "").trim();
+  if (!key || !_userScoreCache) return;
+  _userScoreCache.relierAnsweredByAuthorKey = _userScoreCache.relierAnsweredByAuthorKey instanceof Map
+    ? _userScoreCache.relierAnsweredByAuthorKey
+    : new Map();
+  _userScoreCache.relierCorrectByAuthorKey = _userScoreCache.relierCorrectByAuthorKey instanceof Map
+    ? _userScoreCache.relierCorrectByAuthorKey
+    : new Map();
+
+  _userScoreCache.relierAnsweredByAuthorKey.set(key, (_userScoreCache.relierAnsweredByAuthorKey.get(key) || 0) + 1);
+  if (isCorrect) {
+    _userScoreCache.relierCorrectByAuthorKey.set(key, (_userScoreCache.relierCorrectByAuthorKey.get(key) || 0) + 1);
+  }
+  recomputeNoesisScoreCacheSlice(_userScoreCache);
+  _userScoreCacheComputedAt = Date.now();
+  persistUserScoreCache(_userScoreCache).catch(() => {});
+}
+
 // Best-effort, jamais bloquant pour l'appelant (refreshUserScoreCache ci-dessous) : un
 // échec d'écriture app_config ne doit jamais faire échouer le calcul déjà réussi ni
 // invalider le cache mémoire tout juste posé — seule la survie au PROCHAIN redémarrage
@@ -5484,12 +5521,12 @@ app.get("/api/my-score", rateLimit("myScore", 60), async (req, res) => {
       // (memory_review_events, première review par (user, memory_item)
       // exclue).
       gnosisAnswered: gnosisAnsweredByAuthorKey.has(key) ? gnosisAnsweredByAuthorKey.get(key) : null,
-      gnosisCorrect: gnosisCorrectByAuthorKey.has(key) ? gnosisCorrectByAuthorKey.get(key) : null,
+      gnosisCorrect: gnosisAnsweredByAuthorKey.has(key) ? (gnosisCorrectByAuthorKey.get(key) || 0) : null,
       // Noesis (demande du 17/08/2026) : QCM "Relier" uniquement — valeurs
       // brutes affichées à côté du "Top X%" de noesisScore, même principe que
       // gnosisAnswered/gnosisCorrect.
       relierAnswered: relierAnsweredByAuthorKey.has(key) ? relierAnsweredByAuthorKey.get(key) : null,
-      relierCorrect: relierCorrectByAuthorKey.has(key) ? relierCorrectByAuthorKey.get(key) : null
+      relierCorrect: relierAnsweredByAuthorKey.has(key) ? (relierCorrectByAuthorKey.get(key) || 0) : null
     });
   } catch (e) {
     console.error("Erreur /api/my-score:", e);
@@ -6548,52 +6585,75 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
       (async () => {
         try {
           const acquisWithSourceIds = await fetchUserAcquis(validation.legacyKey, { includeSourceDebateId: true });
+          const ficheByKey = new Map(acquisWithSourceIds.map((item) => [`${item.sourceType}:${item.sourceDebateId}`, item]));
+
           // Ancrage FSRS par fiche (demande du 14/09/2026, effet "éclipse" sur une étoile dont
           // TOUTES les fiches se sont mises à décliner, cf. atRisk plus bas) : moyenne de
-          // rétrivabilité sur les seules questions déjà répondues au moins une fois pour ce
-          // slot. Volontairement plus simple que progressPct de /api/users/notion-quizzes (pas
-          // de plafond de niveau progressif ni d'exclusion de question passée) — acceptable ici
-          // car une fiche présente dans "Ma mémoire" a par construction déjà été correctement
-          // répondue au moins une fois (cf. recordDailyQuizEclairageAcquisition), donc l'essentiel
-          // de ses questions le sont déjà dans l'immense majorité des cas. Reste dans CETTE
-          // branche du Promise.all (jamais un 5e bloc séparé) : ne retarde que la résolution de
-          // acquisFicheByKey elle-même, jamais les 3 autres lectures parallèles ci-dessous.
-          const quizSlots = [...new Set(acquisWithSourceIds.map((item) => item.notionQuizSlot).filter(Boolean))];
+          // rétrivabilité sur les questions déjà répondues au moins une fois pour ce slot.
+          // Résolu ICI directement depuis (eclairage_type, eclairage_source_id) — jamais
+          // depuis acquisWithSourceIds/notionQuizSlot ci-dessus. Bug constaté le 14/09/2026 :
+          // fetchUserAcquis (streaks de fetchUserCultureGeneraleAnswerEvents, système distinct
+          // conçu pour les Éclairages historiques) renvoyait un tableau VIDE pour un compte
+          // ayant pourtant de vraies fiches "custom" avec repasses FSRS (ex. "Trail", 46%
+          // d'ancrage réel) — progressPct restait donc systématiquement null et l'effet
+          // "éclipse" ne se déclenchait jamais, quel que soit l'ancrage réel. Seuls "custom" et
+          // "comprendre" portent un vrai slot "notion:" reconstructible directement depuis ces
+          // deux champs ; les autres types (Éclairages : parallele/pensee/mecanisme/concept/
+          // citation/oeuvre/latin) ne passent jamais par ce mécanisme FSRS et gardent
+          // légitimement progressPct=null. Groupé par SLOT seul (jamais (quiz_date, slot)
+          // comme avant) : une fiche à mémoriser reste la même repasse après repasse, quelle
+          // que soit la ligne daily_quiz d'origine d'une question précise.
+          const slotByEclairageKey = new Map();
+          for (const a of eclairageAcquisitions) {
+            if (a.eclairage_type !== "custom" && a.eclairage_type !== "comprendre") continue;
+            slotByEclairageKey.set(`${a.eclairage_type}:${a.eclairage_source_id}`, `notion:${a.eclairage_type}:${a.eclairage_source_id}`);
+          }
+          const quizSlots = [...new Set(slotByEclairageKey.values())];
           if (quizSlots.length) {
             const { data: fsrsRows, error: fsrsError } = await supabase
               .from("memory_item_fsrs_states")
-              .select("state, stability, last_review_at, memory_items!inner(slot, quiz_date)")
+              .select("state, stability, last_review_at, memory_items!inner(slot)")
               .eq("user_id", user.id)
               .in("memory_items.slot", quizSlots);
             if (fsrsError) {
               console.warn("[intellectual universe] ancrage FSRS indisponible :", fsrsError.message);
             } else {
               const retrievabilityNow = new Date();
-              const retrievabilityByQuizKey = new Map();
+              const retrievabilityBySlot = new Map();
               for (const row of fsrsRows || []) {
                 const mi = row.memory_items;
                 if (!mi) continue;
-                const key = `${mi.quiz_date}:${mi.slot}`;
                 const r = computeRetrievability(
                   { state: row.state, stability: row.stability, lastReviewAt: row.last_review_at },
                   retrievabilityNow
                 );
-                if (!retrievabilityByQuizKey.has(key)) retrievabilityByQuizKey.set(key, []);
-                retrievabilityByQuizKey.get(key).push(r);
+                if (!retrievabilityBySlot.has(mi.slot)) retrievabilityBySlot.set(mi.slot, []);
+                retrievabilityBySlot.get(mi.slot).push(r);
               }
-              for (const item of acquisWithSourceIds) {
-                if (!item.notionQuizSlot || !item.notionQuizDate) continue;
-                const values = retrievabilityByQuizKey.get(`${item.notionQuizDate}:${item.notionQuizSlot}`);
-                if (values && values.length) {
-                  item.progressPct = Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 100);
+              for (const a of eclairageAcquisitions) {
+                const eclairageKey = `${a.eclairage_type}:${a.eclairage_source_id}`;
+                const slot = slotByEclairageKey.get(eclairageKey);
+                if (!slot) continue;
+                const values = retrievabilityBySlot.get(slot);
+                if (!values || !values.length) continue;
+                const progressPct = Math.round((values.reduce((sum, v) => sum + v, 0) / values.length) * 100);
+                const existing = ficheByKey.get(eclairageKey);
+                if (existing) {
+                  existing.progressPct = progressPct;
+                  if (!existing.notionQuizSlot) existing.notionQuizSlot = slot;
+                } else {
+                  ficheByKey.set(eclairageKey, {
+                    sourceDebateId: a.eclairage_source_id,
+                    sourceType: a.eclairage_type,
+                    notionQuizSlot: slot,
+                    notionQuizDate: null,
+                    progressPct
+                  });
                 }
               }
             }
           }
-          return new Map(acquisWithSourceIds.map((item) => [
-            `${item.sourceType}:${item.sourceDebateId}`,
-            item
-          ]));
+          return ficheByKey;
         } catch (error) {
           console.warn("[intellectual universe] fiches acquis indisponibles :", error.message);
           return new Map();
@@ -19228,15 +19288,17 @@ async function getDailyQuizQuestions(quizDate, slot, voterKey, requestedLevel, {
     if (!key) return [];
     return fetchCultureGeneraleReviewInjectionForToday(key, quizDate, { includeDisabledKnowledgeTargets });
   }
+  // "Comprendre les liens" : pas de cache ICI (contrairement à avant le
+  // 14/09/2026) — fetchCultureGeneraleComprehensionQuestions doit toujours
+  // exclure les questions tout juste répondues, jamais resservir une session
+  // figée jusqu'à expiration d'un TTL. La vraie partie coûteuse (notions,
+  // liens, génération/lecture des banques) reste, elle, mise en cache un
+  // niveau plus bas (cf. fetchCultureGeneraleComprehensionBanks), donc cet
+  // appel reste bon marché même sans cache ici.
   if (slot === DAILY_QUIZ_COMPREHENSION_SLOT) {
     const key = String(voterKey || "").trim();
     if (!key) return [];
-    const cacheKey = `comprendre:${quizDate}:${key}`;
-    const cached = _dailyQuizQuestionsCache.get(cacheKey);
-    if (cached && Date.now() - cached.at < DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS) return cached.questions;
-    const questions = await fetchCultureGeneraleComprehensionQuestions(key, quizDate);
-    _dailyQuizQuestionsCache.set(cacheKey, { at: Date.now(), questions });
-    return questions;
+    return fetchCultureGeneraleComprehensionQuestions(key, quizDate);
   }
 
   // V4.1.1 : le niveau persisté de l'adoption prime sur `requestedLevel`
@@ -19447,7 +19509,7 @@ function stripQuestionForClient(q) {
     ...(q.sourceDebateId != null ? { sourceDebateId: q.sourceDebateId } : {}),
     ...(q.sourceName ? { sourceName: q.sourceName } : {}),
     ...(image ? { image } : {}),
-    ...(q.knowledgeTargetId ? { knowledgeTargetId: q.knowledgeTargetId, memorizationEnabled: q.memorizationEnabled !== false } : {})
+    ...(q.knowledgeTargetId ? { knowledgeTargetId: q.knowledgeTargetId, memorizationEnabled: q.memorizationEnabled === true } : {})
   };
   if (type === "association") {
     const pairs = Array.isArray(q.pairs) ? q.pairs : [];
@@ -22620,9 +22682,18 @@ app.get("/api/users/notion-quizzes", rateLimit("users", 30), async (req, res) =>
           }
         } else if (excludedQuestionIds.has(q.id)) {
           answeredCount += 1;
-        } else {
-          progressDenominator += 1;
         }
+        // Question jamais répondue (ni "row" ci-dessus, ni exclue) : ne compte
+        // ni au numérateur ni au DÉNOMINATEUR (demande du 14/09/2026, "il
+        // compte dans les 46% les questions non faites dans le niveau") —
+        // même principe que les questions passées/retirées ci-dessus
+        // (commentaire "31/08/2026" juste au-dessus), étendu ici aux
+        // questions d'un niveau atteint mais pas encore toutes tentées (ex.
+        // Expert fraîchement débloqué, aucune question répondue) : sans
+        // cette correction, chacune valait 0% de rétrivabilité dans la
+        // moyenne au lieu d'être simplement absente du calcul — un ancrage
+        // de 46% pouvait ainsi masquer un 90%+ réel sur les seules questions
+        // vraiment tentées.
       }
       const progressPct = progressDenominator > 0 ? Math.round((creditSum / progressDenominator) * 100) : 0;
       const startedToday = !!earliestReviewCreatedAt && parisDateKey(new Date(earliestReviewCreatedAt)) === parisDateKey();
@@ -22853,26 +22924,52 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     // rankAdmittedKnowledge, ou import), knowledgeTargets sera alors [].
     let curriculum = null;
     if (linkType && linkSourceId) {
+      const masterSlot = buildNotionMasterSlot(linkType, linkSourceId);
+      const legacyLevelSlots = Object.keys(NOTION_QUIZ_LEVELS).map((level) => `${masterSlot}:${level}`);
+      let match = null;
+      // Chemin canonique pour les fiches ouvertes depuis "Ma mémoire" :
+      // l'identité source pointe directement vers le master notion. On évite
+      // ainsi de retomber sur une ancienne ligne historique dont la fiche
+      // serait seulement partielle.
+      const { data: directRows, error: directError } = await supabase
+        .from("daily_quiz").select("quiz_date, slot")
+        .eq("slot", masterSlot)
+        .not("slot", "ilike", "notion:private:%")
+        .order("quiz_date", { ascending: false }).limit(1);
+      if (directError) throw new Error(directError.message);
+      match = directRows?.[0] || null;
+      if (!match) {
+        const { data: legacyRows, error: legacyError } = await supabase
+          .from("daily_quiz").select("quiz_date, slot")
+          .in("slot", legacyLevelSlots)
+          .not("slot", "ilike", "notion:private:%")
+          .order("quiz_date", { ascending: false }).limit(1);
+        if (legacyError) throw new Error(legacyError.message);
+        match = legacyRows?.[0] || null;
+      }
+
       // Phase 1 (léger, audit egress du 03/09/2026) : le matching ne regarde
       // jamais que questions[0] (sourceType/sourceDebateId partagés par tout
       // le QCM) — on ne rapatrie donc que ce premier élément pour tout
       // l'historique au lieu du tableau `questions` complet + grounding_sources,
       // qui pouvaient peser jusqu'à 2000 lignes à ~300 Ko chacune.
-      const { data: rows, error } = await supabase
-        .from("daily_quiz").select("quiz_date, slot, first:questions->0")
-        .ilike("slot", "notion:%")
-        // Une copie privée forkée (cf. isOwnedPrivateNotionSlot) garde le même
-        // sourceType/sourceDebateId que son original pour l'affichage — sans
-        // cette exclusion, elle pourrait matcher ici et fuiter le contenu édité
-        // d'un utilisateur vers un autre visiteur naviguant "Les liens" (demande
-        // du 02/09/2026).
-        .not("slot", "ilike", "notion:private:%")
-        .order("quiz_date", { ascending: false }).limit(2000);
-      if (error) throw new Error(error.message);
-      const match = (rows || []).find((row) => {
-        const q = row.first;
-        return q?.sourceType === linkType && String(q?.sourceDebateId) === linkSourceId;
-      });
+      if (!match) {
+        const { data: rows, error } = await supabase
+          .from("daily_quiz").select("quiz_date, slot, first:questions->0")
+          .ilike("slot", "notion:%")
+          // Une copie privée forkée (cf. isOwnedPrivateNotionSlot) garde le même
+          // sourceType/sourceDebateId que son original pour l'affichage — sans
+          // cette exclusion, elle pourrait matcher ici et fuiter le contenu édité
+          // d'un utilisateur vers un autre visiteur naviguant "Les liens" (demande
+          // du 02/09/2026).
+          .not("slot", "ilike", "notion:private:%")
+          .order("quiz_date", { ascending: false }).limit(2000);
+        if (error) throw new Error(error.message);
+        match = (rows || []).find((row) => {
+          const q = row.first;
+          return q?.sourceType === linkType && String(q?.sourceDebateId) === linkSourceId;
+        }) || null;
+      }
       if (!match) return res.status(404).json({ error: "QCM introuvable." });
       // Phase 2 : le tableau complet + grounding_sources ne sont relus que
       // pour la SEULE ligne trouvée, jamais pour tout l'historique candidat.
@@ -23062,15 +23159,15 @@ app.get("/api/users/notion-quizzes/fiche", rateLimit("users", 60), async (req, r
     const curriculumQuestionLevelById = new Map((Array.isArray(curriculum) ? curriculum : [])
       .map((k) => [k?.id, normalizeCurriculumQuestionLevel(k?.level)])
       .filter(([id, level]) => id && level));
-    let disabledKnowledgeTargetKeys = new Set();
+    let memorizationPreferenceMap = new Map();
     if (linkOwnerUserId && first.sourceType && first.sourceDebateId != null && rawKnowledgeTargets.length) {
-      disabledKnowledgeTargetKeys = await fetchDisabledKnowledgeTargetKeys(linkOwnerUserId);
+      memorizationPreferenceMap = await fetchKnowledgeTargetMemorizationPreferenceMap(linkOwnerUserId);
     }
     const knowledgeTargets = rawKnowledgeTargets.map((k) => ({
       id: k.id,
       knowledgeTarget: k.knowledgeTarget,
       level: k.level || null,
-      memorizationEnabled: !disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(first.sourceType, String(first.sourceDebateId), k.id))
+      memorizationEnabled: memorizationPreferenceMap.get(knowledgeTargetPreferenceKey(first.sourceType, String(first.sourceDebateId), k.id))?.enabled === true
     }));
 
     res.json({
@@ -23591,7 +23688,17 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
         subjectSourceId: existingId,
         name: p.existingName || p.title,
         reasonText: p.reason,
-        recommendationType: p.proposalType
+        recommendationType: p.proposalType,
+        // Thématique (demande du 14/09/2026, "je n'en vois pas sur constructivisme,
+        // écologie urbaine [...] pas d'icône adaptée") : p.suggestedTheme existe déjà
+        // (généré par le prompt IA, cf. ai-fallback.js) mais n'était jamais renvoyé
+        // ici — le frontend (learnNextThemeIconClass) retombait donc sur l'icône
+        // générique "couches" faute de theme/suggestedTheme, alors même que la
+        // correspondance V1 (engine.js, corrigée le même jour) fonctionnait déjà pour
+        // les recommandations catalogue. Texte libre de l'IA (jamais garanti dans la
+        // taxonomie des 21 Galaxies), mais suffisant pour la correspondance regex
+        // côté frontend dans la quasi-totalité des cas réels observés.
+        theme: p.suggestedTheme || null
       } : null;
     }).filter(Boolean);
 
@@ -23615,6 +23722,114 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
     // "aucune proposition supplémentaire", jamais une erreur générale.
     console.error("[learn-next ai-fallback]", error.message);
     res.json({ proposals: [], triggered: false });
+  }
+});
+
+// Résolution d'image pour "Apprentissages proposés" (Découvrir, demande du
+// 14/09/2026 : "les vignettes ne s'affichent pas") : ces sujets ne sont pas
+// encore adoptés (pas de slot/quiz_date), donc pas de sourceDetail.image
+// comme le fait "Mes acquis" via la fiche déjà générée. Même recherche
+// d'image que la génération IA classique (searchKnowledgeImage,
+// lib/knowledge-image-search.js), mais appelée isolément par nom — jamais
+// précédée d'une génération complète de fiche/QCM. Mise en cache dans
+// knowledge_nodes (catalogue canonique global, PAS par utilisateur, cf.
+// data/migration-knowledge-nodes-image.sql à exécuter avant que cette route
+// fonctionne) : searchKnowledgeImage lui-même n'a aucun cache (cf. son
+// commentaire de tête) et un burst de recommandations affichées d'un coup
+// (10-20 par page) ne doit jamais déclencher autant de recherches Wikipedia
+// à chaque chargement — un sujet déjà résolu pour N'IMPORTE QUEL visiteur
+// sert ensuite à tous les autres. image_resolved_at distingue "jamais
+// essayé" de "essayé, rien trouvé" pour éviter de retenter en boucle un
+// sujet sans image Wikipedia, avec un cooldown avant nouvelle tentative.
+const KNOWLEDGE_IMAGE_RETRY_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+app.get("/api/knowledge/image", rateLimit("knowledge-image", 60), async (req, res) => {
+  try {
+    const subjectType = String(req.query?.subjectType || "").trim();
+    const subjectSourceId = String(req.query?.subjectSourceId || "").trim();
+    const name = String(req.query?.name || "").trim();
+    if (!subjectType || !subjectSourceId || !name) {
+      return res.status(400).json({ error: "Requête invalide." });
+    }
+
+    const { data: node, error: nodeError } = await supabase
+      .from("knowledge_nodes")
+      .select("image_url, image_credit, image_caption, image_page_url, image_source, image_resolved_at")
+      .eq("subject_type", subjectType)
+      .eq("subject_source_id", subjectSourceId)
+      .maybeSingle();
+    if (nodeError) throw new Error(nodeError.message);
+
+    if (node?.image_url) {
+      return res.json({
+        image: {
+          url: node.image_url,
+          credit: node.image_credit,
+          caption: node.image_caption,
+          pageUrl: node.image_page_url,
+          source: node.image_source
+        }
+      });
+    }
+    const resolvedRecently = node?.image_resolved_at
+      && (Date.now() - new Date(node.image_resolved_at).getTime()) < KNOWLEDGE_IMAGE_RETRY_COOLDOWN_MS;
+    if (resolvedRecently) return res.json({ image: null });
+
+    // Chemin rapide "custom"/"debat-notion" (demande du 14/09/2026, "comme
+    // c'est le cas pour les générations IA classiques") : un sujet recommandé
+    // par learn-next de ce type a par construction déjà été acquis par au
+    // moins un autre utilisateur (cf. backfill knowledge_nodes,
+    // data/migration-learn-next-engine.sql), donc un master daily_quiz existe
+    // déjà avec sa PROPRE image déjà résolue via imageSearchQuery (la
+    // recherche IA soignée de la génération d'origine, cf. server.js:16364) —
+    // strictement meilleure qu'une nouvelle recherche Wikipedia sur le seul
+    // nom brut ci-dessous. select("first:questions->0") reste le sélecteur
+    // JSON léger déjà utilisé ailleurs (server.js:17482 notamment) : ne
+    // transfère jamais tout le payload `questions`. Slot nu uniquement
+    // (jamais les anciens suffixes ":elementaire"/etc.) : un master legacy
+    // sans slot nu retombe simplement sur la recherche Wikipedia ci-dessous,
+    // dégradation acceptable plutôt qu'une requête coûteuse supplémentaire.
+    let result = null;
+    if (subjectType === "custom" || subjectType === "debat-notion") {
+      const { data: masterRow, error: masterError } = await supabase
+        .from("daily_quiz")
+        .select("first:questions->0")
+        .eq("slot", buildNotionMasterSlot(subjectType, subjectSourceId))
+        .limit(1)
+        .maybeSingle();
+      if (masterError) console.warn("[knowledge image] lecture master indisponible :", masterError.message);
+      const masterImage = masterRow?.first?.sourceDetail?.image;
+      if (masterImage?.url) {
+        result = {
+          url: masterImage.url,
+          credit: masterImage.credit || null,
+          caption: masterImage.caption || null,
+          pageUrl: masterImage.pageUrl || null,
+          source: masterImage.source || null
+        };
+      }
+    }
+
+    if (!result) {
+      result = await searchKnowledgeImage(name, { logLabel: `learn-next:${subjectType}:${subjectSourceId}` }).catch(() => null);
+    }
+
+    // Best-effort, jamais awaité : écrit UNIQUEMENT si la ligne existe déjà
+    // (knowledge_nodes est matérialisée ailleurs, jamais créée depuis cette
+    // route) — un échec d'écriture ne doit jamais empêcher de répondre.
+    supabase.from("knowledge_nodes").update({
+      image_url: result?.url || null,
+      image_credit: result?.credit || null,
+      image_caption: result?.caption || null,
+      image_page_url: result?.pageUrl || null,
+      image_source: result?.source || null,
+      image_resolved_at: new Date().toISOString()
+    }).eq("subject_type", subjectType).eq("subject_source_id", subjectSourceId)
+      .then(({ error }) => { if (error) console.warn("[knowledge image] cache indisponible :", error.message); });
+
+    res.json({ image: result || null });
+  } catch (error) {
+    console.error("[knowledge image]", error.message);
+    res.status(500).json({ error: "Erreur résolution image." });
   }
 });
 
@@ -24621,11 +24836,24 @@ async function hasPendingCultureGeneraleComprehensionQuestions(legacyKey, quizDa
   return questionIds.some((questionId) => !answeredIds.has(questionId));
 }
 
-// Parcours « Comprendre » : au plus COMPREHENSION_QUIZ_MAX_QUESTIONS questions par session, en
-// tournant chaque jour entre les liens disponibles. Le tri haché est stable pendant toute la
-// journée (reprise/réponse toujours sur le même lot), mais varie le lendemain pour ne pas
-// privilégier éternellement les premières relations d'un utilisateur très fourni.
-async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
+// Banques par (jour, visiteur) — la partie VRAIMENT coûteuse de "Comprendre"
+// (notions/liens possédés + génération/lecture d'un QCM par lien, cf.
+// ensureCultureGeneraleComprehensionQuiz). Mise en cache séparément de
+// fetchCultureGeneraleComprehensionQuestions ci-dessous (demande du
+// 14/09/2026, "le chargement est très long" après l'ajout du filtre
+// anti-réapparition) : ce filtre doit rester TOUJOURS frais (une réponse
+// vient d'être soumise), mais recalculer les banques à chaque question
+// répondue rouvrait tout le pipeline (notions, liens, génération) — beaucoup
+// plus coûteux que le filtre lui-même. Les banques ne changent, elles,
+// jamais au fil des réponses d'une même journée : seul ce qui est "déjà
+// répondu" évolue, donc seul ce filtre a besoin d'être fait sans cache.
+const _cultureGeneraleComprehensionBanksCache = new Map();
+const CULTURE_GENERALE_COMPREHENSION_BANKS_CACHE_TTL_MS = 5 * 60 * 1000;
+async function fetchCultureGeneraleComprehensionBanks(legacyKey, quizDate) {
+  const cacheKey = `${quizDate}:${legacyKey}`;
+  const cached = _cultureGeneraleComprehensionBanksCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CULTURE_GENERALE_COMPREHENSION_BANKS_CACHE_TTL_MS) return cached.banks;
+
   const user = await resolveLegacyUserForComprehension(legacyKey);
   if (!user) return [];
   const notions = await fetchUserAcquiredCultureGeneraleNotions(user.id);
@@ -24646,7 +24874,44 @@ async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
     const batch = await Promise.all(selectedLinks.slice(start, start + 3).map(ensureCultureGeneraleComprehensionQuiz));
     banks.push(...batch);
   }
-  return assembleComprehensionSession(banks, COMPREHENSION_QUIZ_MAX_QUESTIONS);
+  _cultureGeneraleComprehensionBanksCache.set(cacheKey, { at: Date.now(), banks });
+  return banks;
+}
+
+// Parcours « Comprendre » : au plus COMPREHENSION_QUIZ_MAX_QUESTIONS questions par session, en
+// tournant chaque jour entre les liens disponibles. Le tri haché est stable pendant toute la
+// journée (reprise/réponse toujours sur le même lot), mais varie le lendemain pour ne pas
+// privilégier éternellement les premières relations d'un utilisateur très fourni.
+async function fetchCultureGeneraleComprehensionQuestions(legacyKey, quizDate) {
+  const banks = await fetchCultureGeneraleComprehensionBanks(legacyKey, quizDate);
+  if (!banks.length) return [];
+
+  // Exclut les questions déjà répondues aujourd'hui (demande du 14/09/2026,
+  // "les éléments dans Relier, une fois répondu, ne doivent plus réapparaître
+  // ... quand des nouveaux éléments apparaissent, les anciens déjà répondus
+  // apparaissent encore") : hasPendingCultureGeneraleComprehensionQuestions
+  // plus haut filtrait déjà answeredIds pour décider si le bouton "Relier"
+  // reste disponible, mais cette fonction-ci — qui construit la VRAIE session
+  // affichée — ne le faisait pas, laissant réapparaître les questions
+  // répondues d'un lien déjà entamé dès qu'un nouveau lien complétait la
+  // session. Toujours recalculé ici, jamais mis en cache (contrairement aux
+  // banques ci-dessus) : c'est justement ce qui vient de changer à l'instant.
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(quizDate || "")) ? String(quizDate) : parisDateKey();
+  const allQuestionIds = banks.flatMap((bank) => bank.map((question) => question.id));
+  let answeredIds = new Set();
+  if (allQuestionIds.length) {
+    const { data: answerRows, error: answersError } = await supabase
+      .from("daily_quiz_answers")
+      .select("question_id")
+      .eq("quiz_date", dateKey)
+      .eq("voter_key", legacyKey)
+      .in("question_id", allQuestionIds);
+    if (answersError) throw new Error(answersError.message);
+    answeredIds = new Set((answerRows || []).map((row) => row.question_id));
+  }
+  const pendingBanks = banks.map((bank) => bank.filter((question) => !answeredIds.has(question.id)));
+
+  return assembleComprehensionSession(pendingBanks, COMPREHENSION_QUIZ_MAX_QUESTIONS);
 }
 
 // Recherche jusqu'à trois liens pédagogiquement très pertinents entre la
@@ -26267,6 +26532,9 @@ app.post("/api/daily-quiz/answer", rateLimit("daily-quiz-answer", 60), async (re
     // applyFsrsReviewForDailyQuizAnswer). Conséquence secondaire, jamais sur
     // le chemin critique — la réponse HTTP est déjà partie.
     if (isNewAnswer) {
+      if (slot === DAILY_QUIZ_COMPREHENSION_SLOT && questionId.startsWith("comprendre:")) {
+        applyRelierAnswerToUserScoreCache(voterKey, correct);
+      }
       applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate: todayKey, questionId, isCorrect: correct, difficulty })
         .then(() => invalidateIntellectualUniverseCache(voterKey))
         .catch((error) => console.warn("[fsrs review] failed :", error.message));
@@ -26297,10 +26565,20 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
   // même ligne daily_quiz (audit egress du 01/09/2026) — reste null pour
   // "cgreview-", qui ne passe jamais par cette fonction.
   let canonicalQuestion = null;
+  // Origine de CETTE repasse précise (demande du 14/09/2026, "les éléments de
+  // Relier ou Ancrer ne font pas partie de la jauge, et n'apparaissent pas
+  // dans la liste des éléments à mémoriser du jour") : déductible uniquement
+  // ici, depuis le préfixe du questionId reçu du client — jamais retrouvable
+  // après coup depuis memory_items (qui ne garde que l'origine de la toute
+  // PREMIÈRE réponse, pas celle de chaque repasse). Stockée sur la ligne
+  // memory_review_events elle-même (cf. plus bas, colonne review_origin) pour
+  // que fetchMemorizedTodayForUser puisse filtrer sur "decouvrir" seul.
+  let reviewOrigin = "decouvrir";
   if (questionId.startsWith("notion:")) {
     memoryItemRow = await upsertMemoryItemForNotionAnswer({ slot, quizDate, questionId });
     canonicalQuestion = memoryItemRow?.canonicalQuestion || null;
   } else if (questionId.startsWith("cgreview-")) {
+    reviewOrigin = "ancrer";
     // "Dernière génération gagne" (même convention que la réutilisation d'un
     // sujet libre déjà généré, cf. POST /api/users/notion-quizzes/custom) :
     // en usage normal un (slot, question_id) donné n'a qu'un seul memory_item,
@@ -26316,6 +26594,7 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
     if (error) throw error;
     memoryItemRow = data;
   } else if (questionId.startsWith("comprendre:")) {
+    reviewOrigin = "relier";
     // Le `slot` transmis par le client est le pseudo-slot agrégateur "comprendre" (jusqu'à 6
     // questions puisées dans plusieurs liens différents en une seule session, cf.
     // fetchCultureGeneraleComprehensionQuestions) — jamais le vrai slot par paire où la question
@@ -26399,7 +26678,8 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
     stability_after: nextState.stability,
     difficulty_after: nextState.difficulty,
     scheduler_model_id: schedulerModelId,
-    reviewed_at: now.toISOString()
+    reviewed_at: now.toISOString(),
+    review_origin: reviewOrigin
   });
   // 23505 : doublon idempotent (retry réseau du fire-and-forget côté client
   // ou du serveur), jamais une vraie erreur — cf. UNIQUE (user_id,
@@ -26660,10 +26940,18 @@ app.post("/api/users/knowledge-memorization", rateLimit("users", 30), async (req
 // dans ce fichier) puisse réutiliser exactement le même comptage plutôt que
 // deux implémentations séparées de la même chose. Lecture seule.
 async function fetchMemorizedTodayForUser(userId) {
+  // review_origin = 'decouvrir' uniquement (demande du 14/09/2026, "les
+  // éléments de Relier ou Ancrer ne font pas partie de la jauge, et
+  // n'apparaissent pas dans la liste des éléments à mémoriser du jour") :
+  // une repasse Ancrer/Relier d'une connaissance déjà mémorisée ne doit
+  // jamais la faire réapparaître ici, seule une réponse donnée pendant
+  // Découvrir compte (cf. applyFsrsReviewForDailyQuizAnswer, qui pose cette
+  // colonne à l'écriture).
   const { data: reviewRows, error: reviewError } = await supabase
     .from("memory_review_events")
     .select("memory_items(slot, quiz_date, question_id, subject_type, subject_source_id)")
     .eq("user_id", userId)
+    .eq("review_origin", "decouvrir")
     .gte("reviewed_at", parisStartOfDayIso());
   if (reviewError) throw new Error(reviewError.message);
   if (!reviewRows || !reviewRows.length) return { items: [], voluntary: [], suggested: [] };
@@ -26924,9 +27212,8 @@ app.post("/api/users/notion-quizzes/memorization-suggestions/apply", rateLimit("
 // Lecture batch des désactivations d'UN utilisateur (aucun filtre par sujet
 // à l'avance : le volume par utilisateur reste faible, cf. l'index
 // (user_id, memorization_enabled) de la migration) — réutilisée par
-// fetchCultureGeneraleReviewInjectionForToday, fetchLearningLoadGaugeForUser
-// et GET /api/users/notion-quizzes/fiche, jamais une requête par
-// knowledgeTarget (section 24 du diagnostic, "pas de N+1"). Clé de
+// fetchCultureGeneraleReviewInjectionForToday et fetchLearningLoadGaugeForUser,
+// jamais une requête par knowledgeTarget (section 24 du diagnostic, "pas de N+1"). Clé de
 // regroupement = knowledgeTargetPreferenceKey ci-dessous, jamais
 // knowledgeTargetId seul (pas globalement unique, scopé par master).
 function knowledgeTargetPreferenceKey(subjectType, subjectSourceId, knowledgeTargetId) {
@@ -26951,9 +27238,8 @@ async function fetchDisabledKnowledgeTargetKeys(userId) {
 // désactivations — nécessaire à attachMemorizationPreferenceToQuestions
 // (Découvrir, défaut décoché) pour distinguer "jamais choisi par
 // l'utilisateur" (absent de la Map, défaut appliqué par l'appelant) de
-// "explicitement recoché" (true) après un défaut décoché. Jamais utilisée
-// par Ancrer/la jauge/la fiche, qui continuent de lire
-// fetchDisabledKnowledgeTargetKeys (défaut coché, inchangé).
+// "explicitement recoché" (true) après un défaut décoché. Utilisée aussi par
+// la fiche, où le défaut est désormais décoché : absent de la Map => false.
 // Valeur de la Map : { enabled, source } depuis le 13/09/2026 (chantier
 // "distinguer volontairement mémorisées / préconisées à mémoriser",
 // cf. migration-knowledge-target-memorization-preference-source.sql) —

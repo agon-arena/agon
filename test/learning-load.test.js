@@ -9,8 +9,8 @@ const { levelFromPeakLoad, GAUGE_DISPLAY_PEAK_THRESHOLDS } = require("../lib/spa
 // jours comme actuellement") : seuils en nombre BRUT de connaissances mémorisées
 // aujourd'hui, jamais en ratio, jamais projetés sur plusieurs jours.
 
-test("GAUGE_DISPLAY_PEAK_THRESHOLDS : idéal (busy) à 6, surcharge à 9", () => {
-  assert.equal(GAUGE_DISPLAY_PEAK_THRESHOLDS.busy, 6);
+test("GAUGE_DISPLAY_PEAK_THRESHOLDS : busy à 7 (au-delà de l'idéal), surcharge à 9", () => {
+  assert.equal(GAUGE_DISPLAY_PEAK_THRESHOLDS.busy, 7);
   assert.equal(GAUGE_DISPLAY_PEAK_THRESHOLDS.overloaded, 9);
 });
 
@@ -19,13 +19,13 @@ test("levelFromPeakLoad : 0 à 2 -> calm", () => {
   assert.equal(levelFromPeakLoad(2), "calm");
 });
 
-test("levelFromPeakLoad : 3 à 5 -> moderate", () => {
+test("levelFromPeakLoad : 3 à 6 -> moderate (6 = l'idéal demandé, doit rester vert, cf. correctif du 14/09/2026)", () => {
   assert.equal(levelFromPeakLoad(3), "moderate");
-  assert.equal(levelFromPeakLoad(5), "moderate");
+  assert.equal(levelFromPeakLoad(6), "moderate");
 });
 
-test("levelFromPeakLoad : 6 à 8 -> busy (6 = l'idéal demandé)", () => {
-  assert.equal(levelFromPeakLoad(6), "busy");
+test("levelFromPeakLoad : 7 à 8 -> busy (au-delà de l'idéal)", () => {
+  assert.equal(levelFromPeakLoad(7), "busy");
   assert.equal(levelFromPeakLoad(8), "busy");
 });
 

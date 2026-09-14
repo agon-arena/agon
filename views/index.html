@@ -102,7 +102,7 @@
        apparaître par morceaux (peints ligne par ligne au fil des octets reçus).
        Préchargés ici, pendant un chargement de page normal, ils sont déjà
        entièrement en cache avant qu'un incident ne survienne. -->
-  <link rel="preload" href="/mnoria-logo.png" as="image">
+  <link rel="preload" href="/mnoria-logo.png?v=20260815-startup-v1" as="image" fetchpriority="high">
   <link rel="preload" href="/mnoria-error-robot.png" as="image">
   <!-- Icône de la fenêtre "On te prévient quand ça réagit ?" (invite notifications
        push, cf. showPushInvite dans script.js) — même souci que les deux préchargements
@@ -110,7 +110,7 @@
        s'affiche (typiquement juste après le lancement standalone), la faisant apparaître
        en retard par rapport au reste de la fenêtre (demande du 31/08/2026, "l'icône
        mnoria met trop de temps à apparaître"). -->
-  <link rel="preload" href="/mnoria-icon-192.png" as="image">
+  <link rel="preload" href="/mnoria-icon-192.png" as="image" fetchpriority="high">
 <link rel="manifest" href="/manifest.webmanifest?v=20260825-mnoria-icon-v2">
 <link rel="apple-touch-icon" sizes="192x192" href="/mnoria-icon-192.png?v=20260825-mnoria-icon-v2">
   <meta name="theme-color" content="#243038">
@@ -232,7 +232,7 @@
        particulièrement visible en standalone mobile au lancement depuis le
        cache du service worker. Font Awesome est également chargé ici sans
        délai afin que les boutons du bandeau soient complets dès le premier rendu. -->
-  <link rel="stylesheet" href="/style.min.css?v=20260914-memory-eclipse-v1">
+  <link rel="stylesheet" href="/style.min.css?v=20260914-memory-eclipse-visible-v1">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Oswald:wght@500;600;700;800;900&display=block">
   <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <!-- Précharge directement le fichier de police (pas juste le CSS qui le référence) : sans
@@ -993,7 +993,7 @@
       var raw = sessionStorage.getItem('mnoria_last_reload_reason');
       if (raw) {
         var parsed = JSON.parse(raw);
-        if (parsed && parsed.reason && parsed.reason.indexOf('sw-recovery-page') !== -1) {
+        if (parsed && parsed.reason && (parsed.reason.indexOf('sw-recovery-page') !== -1 || parsed.reason.indexOf('history-back-from-fullpage') !== -1)) {
           shouldSkipStartup = true;
         }
         // Ne pas consommer la clé ici : __mnoriaDebugStartupDiagnostic la lit aussi
@@ -2505,7 +2505,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260914-home-scroll-static-v1" defer></script>
+<script src="/script.min.js?v=20260914-memory-close-no-reinit" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

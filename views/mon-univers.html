@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mnoria">
 <link rel="preload" as="image" href="/mnoria_master_4K_seamless_infini.webp?v=20260816-webp-lossy" fetchpriority="high" />
-<link rel="stylesheet" href="/style.min.css?v=20260914-memory-eclipse-v1" />
+<link rel="stylesheet" href="/style.min.css?v=20260914-memory-eclipse-visible-v1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;600;700;800&family=Libre+Baskerville:wght@400;700&family=Oswald:wght@500;600;700;800;900&display=swap">
@@ -223,11 +223,27 @@
       transform: translate(-50%, -50%);
       margin: 0;
     }
-    /* Bandeau dégradé "suite ↓" (fiche d'un astre/nœud de connaissance,
-       cf. mon-univers.js) : retiré en plein écran (demande du 30/08/2026,
-       "je n'en veux pas") — jamais affiché, même si la liste déborde. */
+    /* Bandeau dégradé "suite ↓" des fiches Ma mémoire : même repère visuel
+       que les fiches QCM, uniquement quand le contenu déborde encore sous le
+       panneau (piloté par mon-univers.js). */
     body.page-memory-only .universe-star-panel__scroll-hint {
-      display: none !important;
+      display: block;
+      bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    }
+    body.page-memory-only .universe-star-panel {
+      padding:
+        max(14px, env(safe-area-inset-top, 0px))
+        12px
+        max(14px, env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body.page-memory-only .universe-star-panel__box {
+      width: min(500px, 100%);
+      max-height: calc(100dvh - max(28px, calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px))));
+    }
+    @supports (height: 100svh) {
+      body.page-memory-only .universe-star-panel__box {
+        max-height: calc(100svh - max(28px, calc(env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px))));
+      }
     }
     .universe-exit-fullscreen {
       display: none;
@@ -1620,7 +1636,7 @@ if (location.pathname === "/contributions") {
 }
 </script>
 
-<script src="/script.min.js?v=20260914-memory-eclipse-v1" defer></script>
+<script src="/script.min.js?v=20260914-memory-close-no-reinit" defer></script>
 <script type="module">
   if (location.pathname !== "/contributions") {
     import("/mon-univers.js?v=20260914-memory-eclipse-v1");
