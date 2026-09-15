@@ -27976,10 +27976,16 @@ body.mnoria-memoire-cloud-mode #mnoria-tag-trends-section #universe-status > p.u
   gap: 8px;
 }
 .universe-star-panel__scroll-hint {
-  left: 18px;
-  right: 18px;
+  left: 50%;
+  right: auto;
+  width: calc(100% - 36px);
+  transform: translateX(-50%);
   bottom: 18px;
   height: 52px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  text-align: center;
   border-radius: 0 0 9px 9px;
 }
 .universe-star-panel__item {

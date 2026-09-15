@@ -6622,6 +6622,27 @@ function ensureDebateIframeModal() {
     #debate-iframe-modal.open {
       display: flex;
     }
+    /* Préchargement invisible de /apprentissage (demande du 15/09/2026) :
+       display:none (état par défaut avant .open) donne un rect 0x0 à
+       l'iframe ET à tout ce qu'elle mesure EN SON PROPRE SEIN — la page
+       embarquée qcm-du-jour.html attend justement un panneau de largeur/
+       hauteur réelles avant de s'estimer "prête" et de poster
+       mnoria:debate-iframe-ready (cf. waitForActuallyVisiblePanel), donc un
+       simple préchargement display:none ne se signale jamais prêt. .open
+       est donc posée dès le préchargement (vrai display:flex, vraie mise en
+       page) mais .prewarming neutralise tout ce qui la rendrait visible ou
+       interactive (fond/flou de la modale, jamais géré par opacity comme
+       .loading/.debate-iframe-modal-frame-loading ci-dessous, d'où le besoin
+       de ce modificateur dédié) — retirée juste avant le dévoilement réel au
+       clic (cf. openDebateIframeModal, learningAlreadyReady). */
+    #debate-iframe-modal.prewarming {
+      opacity: 0 !important;
+      background: transparent !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      pointer-events: none !important;
+      z-index: -1 !important;
+    }
     /* Le plein écran (padding/align/justify/height/border-radius) est
        maintenant le comportement par défaut de #debate-iframe-modal.open,
        desktop compris (cf. @media min-width:769px plus bas) — seul l'inset
@@ -7469,8 +7490,17 @@ function scheduleDebateIframeFrameTeardown(frame, modal) {
     requestAnimationFrame(() => {
       if (modal?.classList?.contains('open')) return;
       try {
+        // mnoriaExpectedSrc/learningContentReady DOIVENT être effacés ici
+        // (demande du 15/09/2026, préchargement /apprentissage) : sans ça,
+        // learningAlreadyNavigating (cf. openDebateIframeModal) retrouverait
+        // un mnoriaExpectedSrc encore égal à "/apprentissage" après ce vidage
+        // et sauterait à tort la renavigation d'une réouverture ultérieure —
+        // dévoilement instantané d'un frame en réalité about:blank.
+        const wasLearningFrame = frame.dataset.mnoriaExpectedSrc === "/apprentissage";
         frame.removeAttribute('src');
         frame.src = 'about:blank';
+        delete frame.dataset.mnoriaExpectedSrc;
+        if (wasLearningFrame && modal) delete modal.dataset.learningContentReady;
       } catch (error) {}
       resumeIndexEmbedsAfterDebateModal();
     });
@@ -7701,6 +7731,42 @@ function openLearningPageWithArenaLoading(url = "/apprentissage") {
   });
 }
 
+let _learningPagePrewarmAttempted = false;
+// Précharge /apprentissage en arrière-plan dès l'arrivée/le refresh (demande
+// du 15/09/2026, "l'avoir directement quand on clique dessus") : pointe déjà
+// le frame de la modale iframe (jamais ouverte/visible tant que .open n'est
+// pas posée, cf. ensureDebateIframeModal) vers /apprentissage, pour que le
+// clic sur le bandeau bas (openLearningPageWithArenaLoading → openDebateIframeModal)
+// retrouve un contenu déjà chargé plutôt que de renaviguer — cf. learningAlreadyNavigating/
+// learningAlreadyReady dans openDebateIframeModal. Jamais en mode standalone
+// (Apprentissage y est une vraie navigation top-level, aucun frame modal à
+// préchauffer, cf. isStandaloneTopLevelPage) ni depuis l'intérieur d'une
+// iframe déjà embarquée (window.self !== window.top) ni sur /apprentissage
+// elle-même (rien à précharger pour soi-même). Coût assumé (egress Supabase
+// pour chaque visiteur, même sans clic) : décision explicite du 15/09/2026,
+// l'onglet étant cliqué quasi systématiquement.
+function prewarmLearningPageIframe() {
+  if (_learningPagePrewarmAttempted) return;
+  if (window.self !== window.top) return;
+  if (location.pathname === "/apprentissage") return;
+  if (typeof isStandaloneMode === "function" && isStandaloneMode()) return;
+  _learningPagePrewarmAttempted = true;
+  ensureDebateIframeModal();
+  const modal = document.getElementById("debate-iframe-modal");
+  const frame = document.getElementById("debate-iframe-modal-frame");
+  if (!modal || !frame) return;
+  // .open (vrai display:flex) + .prewarming (invisible/non-interactif) :
+  // cf. commentaire CSS ci-dessus (ensureDebateIframeModal) — nécessaire
+  // pour que la page embarquée se considère "prête" et poste
+  // mnoria:debate-iframe-ready, display:none ne lui donnant qu'un rect 0x0.
+  modal.classList.add("open");
+  modal.classList.add("prewarming");
+  learningIframeLoadingStartedAt = performance.now();
+  clearTimeout(learningIframeMinimumLoadingTimer);
+  learningIframeMinimumLoadingTimer = null;
+  navigateDebateIframeModalFrame(frame, "/apprentissage");
+}
+
 function openHomePageWithArenaLoading(url = "/?skipStartup=1") {
   let homeNavigationUrl = url;
   try {
@@ -7928,11 +7994,26 @@ function openDebateIframeModal(url, options = {}) {
   setDebateIframeModalCloseButtonVisible(true);
   window.__mnoriaDebateModalOpenedFromNotifications = location.pathname === "/notifications";
 
+  // Calculé AVANT la remise à zéro de learningContentReady juste en dessous
+  // (demande du 15/09/2026, préchargement /apprentissage) : cette remise à
+  // zéro suppose normalement une toute nouvelle navigation, ce qui effacerait
+  // à tort le signal "prêt" posé pendant un préchargement en arrière-plan
+  // (prewarmLearningPageIframe) avant même ce clic — cf. learningAlreadyReady
+  // plus bas, qui s'appuie sur l'état capturé ICI.
   const existingModal = document.getElementById("debate-iframe-modal");
+  const existingFrame = document.getElementById("debate-iframe-modal-frame");
+  let preClickPathname = url;
+  try { preClickPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
+  const preClickExpectedSrc = preClickPathname === "/apprentissage" ? normalizeDebateIframeModalUrl(url) : "";
+  const learningAlreadyNavigating = !!preClickExpectedSrc && existingFrame?.dataset.mnoriaExpectedSrc === preClickExpectedSrc;
+  const learningAlreadyReady = learningAlreadyNavigating && existingModal?.dataset.learningContentReady === "true";
+
   if (existingModal) {
     existingModal.classList.remove("argument-form-open-in-child");
-    existingModal.classList.remove("learning-frame-ready");
-    delete existingModal.dataset.learningContentReady;
+    if (!learningAlreadyReady) {
+      existingModal.classList.remove("learning-frame-ready");
+      delete existingModal.dataset.learningContentReady;
+    }
     setDebateIframeAiLoadingAnimationState(false);
   }
 
@@ -7956,7 +8037,17 @@ function openDebateIframeModal(url, options = {}) {
 
   let iframeUrlPathname = url;
   try { iframeUrlPathname = new URL(url, window.location.origin).pathname; } catch (e) {}
-  if (iframeUrlPathname === "/apprentissage") {
+  // learningAlreadyNavigating/learningAlreadyReady : calculés plus haut,
+  // avant que la remise à zéro de learningContentReady ne les rende
+  // invisibles (cf. commentaire à leur premier calcul). learningAlreadyNavigating
+  // évite de relancer frame.src (qui redéclencherait un rechargement complet
+  // et perdrait toute l'avance prise par prewarmLearningPageIframe) ;
+  // learningAlreadyReady signale que la page a même déjà envoyé son
+  // "mnoria:debate-iframe-ready" pendant ce préchargement — dans ce cas
+  // aucune nouvelle postMessage ne viendra jamais lever le voile de
+  // chargement puisqu'on ne renavigue pas, donc setDebateIframeModalLoadingState(false)
+  // est appelé nous-mêmes plus bas, juste après avoir ouvert la modale.
+  if (iframeUrlPathname === "/apprentissage" && !learningAlreadyNavigating) {
     learningIframeLoadingStartedAt = performance.now();
     clearTimeout(learningIframeMinimumLoadingTimer);
     learningIframeMinimumLoadingTimer = null;
@@ -7996,15 +8087,26 @@ function openDebateIframeModal(url, options = {}) {
     { instant: iframeUrlPathname === "/apprentissage" }
   );
   modal.classList.add("open");
+  modal.classList.remove("prewarming");
   if (useNativeParentScroll) {
     setDebateIframeNativeParentScrollMode(true);
   } else {
     setDebateIframeNativeParentScrollMode(false);
     lockPageScrollForDebateModal(_debateModalSavedScrollY);
   }
-  navigateDebateIframeModalFrame(frame, url);
+  if (!learningAlreadyNavigating) navigateDebateIframeModalFrame(frame, url);
 
   armDebateIframeParentLoadingFallback(iframeUrlPathname);
+
+  if (learningAlreadyReady) {
+    // Contenu déjà prêt depuis le préchargement : referme nous-mêmes le
+    // voile tout de suite (cf. commentaire plus haut) — setDebateIframeModalLoadingState
+    // applique quand même son propre délai minimal de 4s calculé depuis
+    // learningIframeLoadingStartedAt (jamais réinitialisé ci-dessus dans ce
+    // cas), donc un clic largement après la fin du préchargement se révèle
+    // instantanément, sans flash.
+    setDebateIframeModalLoadingState(false);
+  }
 }
 
 const prefetchedDebateUrls = new Set();
@@ -8284,6 +8386,7 @@ function closeDebateIframeModal(options = {}) {
   } catch (error) {}
 
   modal.classList.remove("open");
+  modal.classList.remove("prewarming");
   modal.classList.remove("argument-form-open-in-child");
   setDebateIframeAiLoadingAnimationState(false);
   setDebateIframeModalLoadingState(false);
@@ -23404,7 +23507,20 @@ function renderDebatesList(debates) {
   otherDebatesVisible = safeDebates.length;
   updateIndexTagTrends(safeDebates);
 
-  if (!safeDebates.length) {
+  // Bug corrigé le 15/09/2026 ("je n'ai plus aucune carte en mode Communauté") :
+  // `safeDebates` est ici la liste déjà filtrée par currentTypeFilter (cf.
+  // getFilteredDebatesForIndex), donc VIDE en mode Bulles Mnoria dès que le
+  // cache de débats récents (debatesCache) ne contient plus aucune arène
+  // communautaire — ce qui arrive naturellement quand le volume d'arènes
+  // générées par le bot a fini par repousser les arènes communauté hors de la
+  // fenêtre "récentes" chargée côté client. Sans cette exception, le early
+  // return ci-dessous empêchait TOUJOURS buildIndexThematicSectionsHtml
+  // d'être appelée — la seule à contenir la logique qui force l'injection des
+  // 10 arènes du nuage Mnoria dans le bandeau "Arènes sous tension"
+  // (_mnoriaBubbleTensionDebates, peuplé indépendamment via
+  // loadMnoriaBubbleTensionDebates, cf. toggleMnoriaCloud) — d'où zéro carte
+  // affichée malgré un nuage de bulles pourtant bien rempli.
+  if (!safeDebates.length && !(_mnoriaCloudMode && _mnoriaBubbleTensionDebates.length)) {
     if (header) header.style.display = "none";
     div.innerHTML = indexDebatesApiHasMore ? buildIndexGlobalLoadMoreSentinelHtml() : "";
     document.documentElement.classList.remove("thematic-scroll");
@@ -35526,6 +35642,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (location.pathname !== "/apprentissage" && hasLearningNavHighlightTarget()) {
     refreshLearningNavHighlight();
+    // Différé (idle, sinon setTimeout court) pour ne jamais entrer en
+    // concurrence avec le chargement critique de LA page réellement demandée
+    // (bulles d'accueil, etc.) — cf. prewarmLearningPageIframe.
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => prewarmLearningPageIframe(), { timeout: 3000 });
+    } else {
+      setTimeout(prewarmLearningPageIframe, 1200);
+    }
   }
   renderGlobalShareBar();
   ensureProgressSortOption();
@@ -37303,6 +37427,10 @@ function markMnoriaHomeTrendsSectionTopReady() {
 // (rotation, autre appareil) invalide le cache et redéclenche une mesure normale.
 function mnoriaFrameCacheSignature() {
   var standalone = document.body.classList.contains('is-standalone') ? '1' : '0';
+  if (standalone === '1' && window.innerWidth <= 768) {
+    var screenInfo = window.screen || {};
+    return window.innerWidth + 'x' + (screenInfo.width || 0) + 'x' + (screenInfo.height || 0) + 'x' + standalone;
+  }
   return window.innerWidth + 'x' + window.innerHeight + 'x' + standalone;
 }
 function readMnoriaFrameCache(key) {
@@ -37319,6 +37447,14 @@ function readMnoriaFrameCache(key) {
 function writeMnoriaFrameCache(key, data) {
   try {
     data.sig = mnoriaFrameCacheSignature();
+    data.width = window.innerWidth;
+    data.standalone = document.body.classList.contains('is-standalone');
+    if (data.standalone && window.innerWidth <= 768) {
+      var screenInfo = window.screen || {};
+      data.screenWidth = screenInfo.width || 0;
+      data.screenHeight = screenInfo.height || 0;
+      data.stableSig = data.sig;
+    }
     localStorage.setItem(key + ':' + location.pathname, JSON.stringify(data));
   } catch (e) {}
 }
@@ -38609,8 +38745,15 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // mesures réelles. Comparées avec la même tolérance que la revérification 400ms plus bas.
   var rawCached = recheckToken === MOBILE_CLOUD_FRAME_RECHECK ? null : readMnoriaFrameCache('mnoriaMobileFrame');
   var cached = rawCached
-    && typeof rawCached.headerBottom === 'number' && typeof rawCached.bottomBarTop === 'number'
-    && Math.abs(rawCached.headerBottom - headerBottom) <= 1 && Math.abs(rawCached.bottomBarTop - bottomBarTop) <= 1
+    && (
+      rawCached.frameCacheVersion >= 2 ||
+      (
+        typeof rawCached.headerBottom === 'number' &&
+        typeof rawCached.bottomBarTop === 'number' &&
+        Math.abs(rawCached.headerBottom - headerBottom) <= 1 &&
+        Math.abs(rawCached.bottomBarTop - bottomBarTop) <= 1
+      )
+    )
     ? rawCached
     : null;
   var marginTopToApply, boxHeight;
@@ -38640,7 +38783,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
     var boxTop = desiredFrameTop - MNORIA_MOBILE_FRAME_TOP_INSET;
     marginTopToApply = boxTop - naturalTop;
 
-    boxHeight = Math.max(200, (desiredFrameBottom + MNORIA_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
+    boxHeight = Math.max(isStandalone ? 636 : 200, (desiredFrameBottom + MNORIA_MOBILE_FRAME_BOTTOM_INSET) - boxTop);
     if (scrollYAtMeasure <= 4) {
       // Mesure fiable (barre d'adresse garantie dépliée) : devient/confirme la référence de confiance.
       _mobileCloudFrameTrustedHeight = boxHeight;
@@ -38679,7 +38822,13 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // chaque frame lorsque la géométrie ne change pas.
   observeMobileCloudModeSwitchAlignment(cloud);
   _mobileCloudFrameLocked = true;
-  writeMnoriaFrameCache('mnoriaMobileFrame', { marginTop: marginTopToApply, boxHeight: boxHeight, headerBottom: headerBottom, bottomBarTop: bottomBarTop });
+  writeMnoriaFrameCache('mnoriaMobileFrame', {
+    frameCacheVersion: 2,
+    marginTop: marginTopToApply,
+    boxHeight: boxHeight,
+    headerBottom: headerBottom,
+    bottomBarTop: bottomBarTop
+  });
 
   // En standalone, env(safe-area-inset-top) ET env(safe-area-inset-bottom) (bandeaux haut et
   // bas, cf. style.css body.is-standalone.page-home-mobile .topbar / .home-bottom-nav) peuvent

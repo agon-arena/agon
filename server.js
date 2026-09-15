@@ -532,6 +532,12 @@ function shouldTraceSlowUserRoute(req) {
   if (pathname.startsWith("/api/users/recommendations/learn-next")) return true;
   if (pathname === "/api/users/intellectual-universe") return true;
   if (pathname === "/api/knowledge/image") return true;
+  // Oubliée du balayage du 14/09/2026 malgré le même chargement /apprentissage
+  // (demande du 15/09/2026, "pourquoi les connaissances mémorisées ce jour
+  // mettent autant de temps à apparaître ?") : jusqu'ici invisible dans les
+  // logs, donc jamais mesurée en pratique alors que fetchMemorizedTodayForUser
+  // enchaîne 3 allers-retours Supabase.
+  if (pathname === "/api/users/memorized-today") return true;
   return /^\/api\/debates\/[^/]+$/.test(pathname);
 }
 
@@ -17334,6 +17340,47 @@ async function getCustomTopicQuizRows() {
   }
 }
 
+// Variante allégée de getCustomTopicQuizRows ci-dessus, SANS `curriculum` (audit
+// egress du 15/09/2026, "le catalogue fait grimper l'egress") : `curriculum`
+// représente ~80% du volume de cette lecture (mesuré : 0,63 Mo sur 0,79 Mo
+// pour 89 sujets) mais n'est utile qu'à findEquivalentGeneratedCustomTopic
+// (isMasterEligibleQuiz, appelé uniquement pendant la génération d'un sujet
+// libre) — jamais à GET /explore ni à fetchGeneratedCustomTopics
+// (déduplication learn-next), qui ne lisent que `summary`. Cache séparé
+// (même TTL) plutôt que dérivé du cache complet : sert le cas fréquent
+// (ouverture du catalogue, tous utilisateurs confondus) sans jamais payer
+// `curriculum`, au prix d'une lecture indépendante si générateur ET
+// catalogue sont sollicités dans la même fenêtre de 2 min — ce qui reste
+// nettement moins coûteux que de toujours inclure `curriculum`.
+const CUSTOM_TOPIC_QUIZ_SUMMARY_ROWS_CACHE_TTL_MS = 2 * 60 * 1000;
+let _customTopicQuizSummaryRowsCache = null;
+let _customTopicQuizSummaryRowsFreshUntil = 0;
+let _customTopicQuizSummaryRowsInFlight = null;
+
+async function getCustomTopicQuizSummaryRows() {
+  if (_customTopicQuizSummaryRowsCache && Date.now() < _customTopicQuizSummaryRowsFreshUntil) {
+    return _customTopicQuizSummaryRowsCache;
+  }
+  if (_customTopicQuizSummaryRowsInFlight) return _customTopicQuizSummaryRowsInFlight;
+
+  _customTopicQuizSummaryRowsInFlight = (async () => {
+    const { data, error } = await supabase
+      .from("daily_quiz")
+      .select("slot, quiz_date, summary:daily_quiz_question_summaries")
+      .like("slot", "notion:custom:%");
+    if (error) throw new Error(error.message);
+    _customTopicQuizSummaryRowsCache = data || [];
+    _customTopicQuizSummaryRowsFreshUntil = Date.now() + CUSTOM_TOPIC_QUIZ_SUMMARY_ROWS_CACHE_TTL_MS;
+    return _customTopicQuizSummaryRowsCache;
+  })();
+
+  try {
+    return await _customTopicQuizSummaryRowsInFlight;
+  } finally {
+    _customTopicQuizSummaryRowsInFlight = null;
+  }
+}
+
 // Compteur de popularité des sujets libres (userCount, GET /explore) : même cache que
 // getCustomTopicQuizRows ci-dessus (même TTL, même dédoublonnage des requêtes
 // concurrentes) — ajouté le 13/09/2026 suite au correctif du même jour qui a rendu
@@ -21929,15 +21976,17 @@ app.get("/api/users/notion-quizzes/level-status", rateLimit("users", 60), async 
 // à revoir si le volume grossit significativement (cf. [[project_supabase_1000_rows]]).
 app.get("/api/users/notion-quizzes/explore", rateLimit("users", 30), async (req, res) => {
   try {
-    // Scan mutualisé (cf. getCustomTopicQuizRows, cache TTL 2 min) : un seul
-    // aller-retour Supabase, partagé avec findEquivalentGeneratedCustomTopic,
-    // remplace les 2 requêtes indépendantes d'avant (léger questions->0 pour
-    // le dédoublonnage/libellé, puis relecture complète pour le questionCount
+    // Scan mutualisé (cf. getCustomTopicQuizSummaryRows, cache TTL 2 min) : un
+    // seul aller-retour Supabase, sans `curriculum` (audit egress du
+    // 15/09/2026 — cf. getCustomTopicQuizSummaryRows pour le détail), partagé
+    // avec fetchGeneratedCustomTopics (dédup learn-next) — remplace les 2
+    // requêtes indépendantes d'avant (léger questions->0 pour le
+    // dédoublonnage/libellé, puis relecture complète pour le questionCount
     // exact — cf. audit egress du 01/09/2026 puis du 08/09/2026 : la 2e passe
     // portait en pratique sur la quasi-totalité des lignes dès qu'aucune
     // recherche n'était tapée, donc à peu près à chaque chargement initial de
     // la page).
-    const quizRows = await getCustomTopicQuizRows();
+    const quizRows = await getCustomTopicQuizSummaryRows();
     const userCountBySlot = await getCustomTopicUserCountBySlot();
 
     // Un même sujet normalisé (slot) peut avoir plusieurs lignes daily_quiz
@@ -23650,9 +23699,11 @@ app.get("/api/users/recommendations/learn-next/ai-fallback", rateLimit("users", 
     // lecture (y compris sur un cache-hit) : le catalogue peut avoir changé
     // depuis le calcul initial de cette signature (quelqu'un d'autre a
     // depuis créé ce sujet) — jamais proposer "Créer" pour quelque chose qui
-    // existe déjà. Une seule lecture bornée (même requête que
-    // findEquivalentGeneratedCustomTopic), jamais une par proposition.
-    const existingTopics = learnNextRepository.fetchGeneratedCustomTopics(await getCustomTopicQuizRows());
+    // existe déjà. Une seule lecture bornée, jamais une par proposition ;
+    // variante allégée sans `curriculum` (audit egress du 15/09/2026, cf.
+    // getCustomTopicQuizSummaryRows) — fetchGeneratedCustomTopics ne lit que
+    // `summary`, jamais curriculum.
+    const existingTopics = learnNextRepository.fetchGeneratedCustomTopics(await getCustomTopicQuizSummaryRows());
     let resolved = learnNextAiFallback.resolveProposalsAgainstCatalog(proposals, existingTopics);
     if (resolved.some((p) => !p.isNew)) {
       recordAiUsage(supabase, { feature: "learn_next_ai_fallback_deduplicated", success: true });
@@ -27098,6 +27149,18 @@ app.post("/api/users/knowledge-memorization", rateLimit("users", 30), async (req
 // dans ce fichier) puisse réutiliser exactement le même comptage plutôt que
 // deux implémentations séparées de la même chose. Lecture seule.
 async function fetchMemorizedTodayForUser(userId) {
+  // Lancée en parallèle, tout de suite (demande du 15/09/2026, "pourquoi les
+  // connaissances mémorisées ce jour mettent autant de temps à apparaître ?") :
+  // fetchKnowledgeTargetMemorizationPreferenceMap ne dépend que de userId,
+  // jamais de reviewRows/itemsByKey plus bas — l'attendre APRÈS ces deux
+  // lectures (l'ancien ordre) ajoutait un 3e aller-retour Supabase entièrement
+  // séquentiel pour rien (~250ms mesurés en local, sur un total ~900ms).
+  // Jamais catchée ici : la fonction elle-même avale déjà toute erreur
+  // Supabase et retourne une Map vide (cf. son propre commentaire), donc
+  // aucun risque de rejet non attendu même sur le retour anticipé juste en
+  // dessous (reviewRows vide).
+  const preferenceMapPromise = fetchKnowledgeTargetMemorizationPreferenceMap(userId);
+
   // review_origin = 'decouvrir' uniquement (demande du 14/09/2026, "les
   // éléments de Relier ou Ancrer ne font pas partie de la jauge, et
   // n'apparaissent pas dans la liste des éléments à mémoriser du jour") :
@@ -27166,7 +27229,7 @@ async function fetchMemorizedTodayForUser(userId) {
   // (préconisée ou explicitement touchée par l'utilisateur), pas de l'état
   // coché. `memorizationEnabled` porte l'état réel de la case ; un décochage
   // ne doit jamais faire disparaître la ligne au retour sur la page.
-  const preferenceMap = await fetchKnowledgeTargetMemorizationPreferenceMap(userId);
+  const preferenceMap = await preferenceMapPromise;
   const voluntary = [];
   const suggested = [];
   for (const [key, item] of itemsByKey.entries()) {
