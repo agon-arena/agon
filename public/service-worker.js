@@ -44,7 +44,7 @@
 // démarré, avant que le site soit réellement utilisable — ça laissait voir le
 // site nu (sans style.min.css/script.min.js encore joignables) derrière. Le
 // retry() vérifie maintenant aussi la page cible et ces deux fichiers.
-const SW_VERSION = "20260915-memory-frame-bottom-align-v1";
+const SW_VERSION = "20260915-memory-frame-bottom-align-v2";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 

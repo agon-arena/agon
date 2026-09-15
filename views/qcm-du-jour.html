@@ -2907,14 +2907,24 @@
        battre en spécificité .qcm-mesqcm-name-thumb img ci-dessus (100%/100%) —
        sinon ce sablier de 28px s'étirait à la taille pleine de la vignette
        (152/220px), bien plus gros qu'un simple indicateur de chargement. */
+    /* Anime translate ET rotate ensemble (jamais transform:translate(-50%,-50%) statique
+       + animation qcmHourglassSpin héritée) : une animation CSS remplace toute la valeur
+       de 'transform' à chaque frame — elle ne se combine pas avec un transform posé par
+       ailleurs. Avec le seul rotate() de qcmHourglassSpin, le centrage était donc perdu dès
+       le lancement de l'animation (coin haut-gauche du sablier au centre de la vignette, au
+       lieu de son propre centre) — corrigé avec ce keyframe dédié qui inclut les deux. */
     .qcm-mesqcm-name-thumb .qcm-mesqcm-name-thumb-spinner {
       position: absolute;
       top: 50%;
       left: 50%;
       width: 28px;
       height: 28px;
-      transform: translate(-50%, -50%);
       margin: 0;
+      animation: qcmMesqcmThumbSpinnerSpin 0.9s linear infinite;
+    }
+    @keyframes qcmMesqcmThumbSpinnerSpin {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to { transform: translate(-50%, -50%) rotate(360deg); }
     }
     .qcm-mesqcm-name-thumb.is-loaded .qcm-mesqcm-name-thumb-spinner,
     .qcm-mesqcm-name-thumb.is-empty .qcm-mesqcm-name-thumb-spinner {
@@ -2978,26 +2988,12 @@
     /* Vignette AU-DESSUS du nom, l'une et l'autre centrées (demande du
        15/09/2026) : bascule .qcm-mesqcm-name-btn en colonne au lieu de la
        ligne horizontale de base — scopé aux mêmes groupes que ci-dessus,
-       jamais Découvrir. Le chevron d'ouverture (.qcm-mesqcm-row-toggle-
-       chevron, normalement 3e élément de la ligne) est sorti du flux en
-       position absolute plutôt que de devenir un 3e bloc empilé sous le nom,
-       ce qui l'aurait laissé flottant sans lien visuel avec le reste de la
-       rangée — ancré en haut à droite du bouton comme une pastille
-       d'expansion classique. position:relative posé ici (jamais sur la règle
-       de base) pour servir de repère à cette seule position absolute. */
+       jamais Découvrir. */
     .qcm-mesqcm-group--all .qcm-mesqcm-name-btn,
     .qcm-mesqcm-group--comprehension .qcm-mesqcm-name-btn {
       flex-direction: column;
       align-items: center;
-      position: relative;
       gap: 8px;
-      padding-right: 24px;
-    }
-    .qcm-mesqcm-group--all .qcm-mesqcm-row-toggle-chevron,
-    .qcm-mesqcm-group--comprehension .qcm-mesqcm-row-toggle-chevron {
-      position: absolute;
-      top: 2px;
-      right: 0;
     }
     /* Vignette carrée agrandie dans "Mes acquis" (demande du 15/09/2026 :
        d'abord tentée pleine largeur, "non ca ne va pas, remet le format
@@ -8429,7 +8425,16 @@
         .then(function (data) {
           if (!data.ok) { itemBtn.disabled = false; return; }
           closeMesQcmExploreModal();
+          // Placeholder posé APRÈS loadMesQcm(true), jamais avant : loadMesQcm
+          // repeint #qcm-body de façon synchrone dès son appel (cache
+          // sessionStorage instantané, ou message générique "Chargement de tes
+          // QCM…") avant même de lancer le fetch réseau — un placeholder posé
+          // avant serait donc écrasé instantanément. Posé juste après, il
+          // s'ajoute par-dessus ce premier rendu et reste visible jusqu'à ce
+          // que le fetch (asynchrone) rappelle renderMesQcmList avec la vraie
+          // liste, qui remplace tout #qcm-body de toute façon.
           loadMesQcm(true);
+          showMesQcmPendingLoadingPlaceholder();
         })
         .catch(function () { itemBtn.disabled = false; });
     }
@@ -9652,6 +9657,40 @@
     renderMessage('');
   }
 
+  // Placeholder immédiat de "En attente de réalisation" (demande du
+  // 15/09/2026, "il y a un petit délai... je veux que la rubrique apparaisse
+  // tout de suite... avec sablier tournant") : posé juste après l'adoption
+  // réussie d'un sujet du catalogue (adoptExploreItem), AVANT le
+  // loadMesQcm(true) qui re-fetch la vraie liste (aller-retour réseau, cf.
+  // GET /api/users/notion-quizzes) — sans ce placeholder, rien ne signalait
+  // que l'ajout avait été pris en compte pendant ce court délai, la rubrique
+  // semblant alors apparaître d'un coup une fois la vraie liste chargée.
+  // Insère la section en tête de .qcm-mesqcm-groups (jamais un remplacement
+  // de tout #qcm-body) pour ne pas faire disparaître d'éventuelles autres
+  // rubriques déjà affichées ("Apprentissages commencés"...) ; si aucun
+  // conteneur .qcm-mesqcm-groups n'existe encore (page vide/"Rien en
+  // attente"/"Chargement de tes QCM…"), en crée un minimal — loadMesQcm(true)
+  // remplacera de toute façon l'ensemble de #qcm-body dès que la vraie liste
+  // sera là.
+  function showMesQcmPendingLoadingPlaceholder() {
+    if (!body) return;
+    var sectionHtml = '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending"><details open>' +
+      '<summary class="qcm-mesqcm-group-title">En attente de réalisation</summary>' +
+      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement…</p>' +
+      '</details></section>';
+    var existingPending = body.querySelector('.qcm-mesqcm-group--pending');
+    if (existingPending) {
+      existingPending.outerHTML = sectionHtml;
+      return;
+    }
+    var groups = body.querySelector('.qcm-mesqcm-groups');
+    if (groups) {
+      groups.insertAdjacentHTML('afterbegin', sectionHtml);
+    } else {
+      body.innerHTML = '<div class="qcm-mesqcm-groups">' + sectionHtml + '</div>';
+    }
+  }
+
   // Une seule pastille : la thématique principale qui pilote également le
   // classement de la connaissance dans "Mes apprentissages". Le slice est
   // une défense côté client pour les réponses encore mises en cache dans un
@@ -10015,7 +10054,6 @@
       html += '<tr>';
       html += '<td><button type="button" class="qcm-mesqcm-name-btn' + (inlineDetails ? ' qcm-mesqcm-row-toggle' : '') + '" ' + (inlineDetails ? 'data-mesqcm-toggle-index="' + index + '" aria-expanded="false" aria-controls="' + detail.detailId + '"' : 'data-mesqcm-index="' + index + '"') + '>';
       html += renderMesQcmNameVisualHtml(q, meta, index) + '<span class="qcm-mesqcm-name-title">' + renderMesQcmThemeIconHtml(q) + '<span class="qcm-mesqcm-name-label">' + escapeHtml(q.label || meta.label) + '</span></span>';
-      if (inlineDetails) html += '<i class="fa-solid fa-chevron-right qcm-mesqcm-row-toggle-chevron" aria-hidden="true"></i>';
       html += '</button></td>';
       if (!inlineDetails) {
         html += '<td>' + stateHtml + '</td>';

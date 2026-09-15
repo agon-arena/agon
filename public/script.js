@@ -38616,6 +38616,7 @@ var _cloudSectionBaseHeight = Number.isFinite(Number(window.__mnoriaInitialCloud
 // 16/08/2026, "les boutons semblent accrochés au cadre").
 var MNORIA_MOBILE_FRAME_TOP_INSET = 55;
 var MNORIA_MOBILE_FRAME_BOTTOM_INSET = 78;
+var MNORIA_MOBILE_FRAME_BOTTOM_OVERLAP = 8;
 // Calculé une seule fois à l'arrivée sur le site (premier affichage réel du cadre), puis
 // verrouillé : les appels suivants (resize, changement de mode Actu/Mnoria/Ma mémoire) ne
 // recalculent plus rien — demande du 16/08/2026, "il bouge plus" après ce premier calage.
@@ -38746,7 +38747,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // mesures réelles. Comparées avec la même tolérance que la revérification 400ms plus bas.
   var rawCached = recheckToken === MOBILE_CLOUD_FRAME_RECHECK ? null : readMnoriaFrameCache('mnoriaMobileFrame');
   var cached = rawCached
-    && rawCached.frameCacheVersion >= 3
+    && rawCached.frameCacheVersion >= 4
     && typeof rawCached.headerBottom === 'number'
     && typeof rawCached.bottomBarTop === 'number'
     && Math.abs(rawCached.headerBottom - headerBottom) <= 1
@@ -38761,7 +38762,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
     _mobileCloudFrameTrustedHeight = boxHeight;
   } else {
     var desiredFrameTop = headerBottom - 8;
-    var desiredFrameBottom = bottomBarTop;
+    var desiredFrameBottom = bottomBarTop + MNORIA_MOBILE_FRAME_BOTTOM_OVERLAP;
 
     // Neutralise la marge le temps de mesurer la position naturelle (sans elle) du bloc,
     // comme alignStandaloneBubbleFrameToActiveFilter le fait pour le standalone.
@@ -38820,7 +38821,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
   observeMobileCloudModeSwitchAlignment(cloud);
   _mobileCloudFrameLocked = true;
   writeMnoriaFrameCache('mnoriaMobileFrame', {
-    frameCacheVersion: 3,
+    frameCacheVersion: 4,
     marginTop: marginTopToApply,
     boxHeight: boxHeight,
     headerBottom: headerBottom,

@@ -6616,11 +6616,29 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
           }
           const quizSlots = [...new Set(slotByEclairageKey.values())];
           if (quizSlots.length) {
-            const { data: fsrsRows, error: fsrsError } = await supabase
-              .from("memory_item_fsrs_states")
-              .select("state, stability, last_review_at, memory_items!inner(slot)")
-              .eq("user_id", user.id)
-              .in("memory_items.slot", quizSlots);
+            const [{ data: fsrsRows, error: fsrsError }, { data: notionQuizRows, error: notionQuizRowsError }] = await Promise.all([
+              supabase
+                .from("memory_item_fsrs_states")
+                .select("state, stability, last_review_at, memory_items!inner(slot)")
+                .eq("user_id", user.id)
+                .in("memory_items.slot", quizSlots),
+              // Fiche canonique lue DIRECTEMENT depuis daily_quiz (correctif du
+              // 15/09/2026, cas réel "Fernand Léger" — fiche complète à 9 sections
+              // fraîchement générée le jour même, pourtant tronquée dans l'étoile) :
+              // acquisWithSourceIds ci-dessus (fetchUserAcquis, streaks de
+              // fetchUserCultureGeneraleAnswerEvents) exige que TOUTES les réponses
+              // d'un même sourceDebateId un même jour soient correctes pour compter ce
+              // jour comme "correct" (cf. computeStreaksGroupedBy) — pensé pour les
+              // Éclairages historiques (1-3 questions/jour), ce critère n'est presque
+              // jamais atteint pour une notion "custom"/"comprendre" répondue le jour
+              // même de sa création (jusqu'à 16 questions Élémentaire/Avancé/Expert
+              // partageant le même sourceDebateId, une seule erreur suffit à invalider
+              // TOUTE la journée) : ficheByKey n'a alors aucune entrée exploitable,
+              // quel que soit l'âge de la notion. "custom"/"comprendre" ont toujours un
+              // slot "notion:" stable (cf. slotByEclairageKey ci-dessus) : on relit donc
+              // leur fiche complète ici, indépendamment de ce système de streaks.
+              supabase.from("daily_quiz").select("slot, questions").in("slot", quizSlots)
+            ]);
             if (fsrsError) {
               console.warn("[intellectual universe] ancrage FSRS indisponible :", fsrsError.message);
             } else {
@@ -6654,6 +6672,38 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
                     notionQuizSlot: slot,
                     notionQuizDate: null,
                     progressPct
+                  });
+                }
+              }
+            }
+            if (notionQuizRowsError) {
+              console.warn("[intellectual universe] fiches notion indisponibles :", notionQuizRowsError.message);
+            } else {
+              const canonicalBySlot = new Map();
+              for (const row of notionQuizRows || []) {
+                const rawQuestions = Array.isArray(row.questions) ? row.questions : [];
+                const sourceDetail = findCanonicalSourceDetail(rawQuestions);
+                const sourceName = rawQuestions[0]?.sourceName || null;
+                if (sourceDetail || sourceName) canonicalBySlot.set(row.slot, { sourceDetail, sourceName });
+              }
+              for (const a of eclairageAcquisitions) {
+                const eclairageKey = `${a.eclairage_type}:${a.eclairage_source_id}`;
+                const slot = slotByEclairageKey.get(eclairageKey);
+                const canonical = slot && canonicalBySlot.get(slot);
+                if (!canonical) continue;
+                const existing = ficheByKey.get(eclairageKey);
+                if (existing) {
+                  if (canonical.sourceDetail?.sections?.length) existing.sourceDetail = canonical.sourceDetail;
+                  if (canonical.sourceName) existing.sourceName = canonical.sourceName;
+                } else {
+                  ficheByKey.set(eclairageKey, {
+                    sourceDebateId: a.eclairage_source_id,
+                    sourceType: a.eclairage_type,
+                    sourceName: canonical.sourceName || null,
+                    sourceDetail: canonical.sourceDetail,
+                    notionQuizSlot: slot,
+                    notionQuizDate: null,
+                    progressPct: null
                   });
                 }
               }
@@ -17895,7 +17945,7 @@ async function fetchUserCultureGeneraleAnswerEvents(voterKey) {
   }
   for (const a of reviewAnswers) {
     const question = contentByQuestionId.get(a.ref);
-    if (!question) continue; // contenu hors fenêtre de rétention (DAILY_QUIZ_RETENTION_DAYS), ou ancien ref sourceDebateId d'avant le 10/08/2026 : ignoré
+    if (!question) continue; // contenu antérieur à la purge daily_quiz abandonnée le 15/09/2026, ou ancien ref sourceDebateId d'avant le 10/08/2026 : ignoré
     events.push({
       sourceDebateId: question.sourceDebateId,
       questionId: a.ref,

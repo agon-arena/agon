@@ -2402,7 +2402,7 @@ window.addEventListener("pageshow", function() {
           );
           if (
             mobileCacheFitsScreen &&
-            mobileCache.frameCacheVersion >= 3 &&
+            mobileCache.frameCacheVersion >= 4 &&
             typeof mobileCache.bottomBarTop === 'number' &&
             Math.abs(mobileCache.bottomBarTop - bottomBarTop) <= 2 &&
             typeof mobileCache.marginTop === 'number' &&
@@ -2424,7 +2424,7 @@ window.addEventListener("pageshow", function() {
       }
 
       var desiredFrameTop = headerBottom - 8;
-      var desiredFrameBottom = bottomBarTop;
+      var desiredFrameBottom = bottomBarTop + 8;
 
       section.style.marginTop = '0px';
       var scrollYAtMeasure = window.scrollY || document.documentElement.scrollTop || 0;
@@ -2668,7 +2668,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260915-memory-frame-bottom-align-v1" defer></script>
+<script src="/script.min.js?v=20260915-memory-frame-bottom-align-v2" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
