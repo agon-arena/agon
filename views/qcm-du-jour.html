@@ -2894,6 +2894,32 @@
     .qcm-mesqcm-name-thumb.is-empty .qcm-mesqcm-name-thumb-fallback {
       display: flex;
     }
+    /* Sablier tournant pendant le chargement de l'image de la vignette, affiché dès
+       le premier rendu (demande du 15/09/2026, "ils doivent apparaître
+       immédiatement" — Découvrir ET Mes acquis puisque renderMesQcmNameVisualHtml
+       est partagé) : centré sur la vignette, retiré dès que l'image charge
+       (is-loaded) ou échoue/n'est pas trouvée (is-empty, qui affiche déjà le repli
+       icône ci-dessus) — cf. renderMesQcmNameVisualHtml et
+       hydrateVisibleMesQcmNameThumbs/markMesQcmThumbEmptyByIndex pour les deux
+       chemins qui y mènent (image connue dès le rendu, ou hydratation
+       asynchrone). */
+    /* Sélecteur à deux classes (jamais juste .qcm-mesqcm-name-thumb-spinner) pour
+       battre en spécificité .qcm-mesqcm-name-thumb img ci-dessus (100%/100%) —
+       sinon ce sablier de 28px s'étirait à la taille pleine de la vignette
+       (152/220px), bien plus gros qu'un simple indicateur de chargement. */
+    .qcm-mesqcm-name-thumb .qcm-mesqcm-name-thumb-spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 28px;
+      height: 28px;
+      transform: translate(-50%, -50%);
+      margin: 0;
+    }
+    .qcm-mesqcm-name-thumb.is-loaded .qcm-mesqcm-name-thumb-spinner,
+    .qcm-mesqcm-name-thumb.is-empty .qcm-mesqcm-name-thumb-spinner {
+      display: none;
+    }
     /* Icône de thématique avant le nom (demande du 13/09/2026) : même
        gabarit compact que .qcm-learn-next-inline-icon sur "Apprentissages
        proposés" — couleur/flex déjà hérités de la règle générique
@@ -9200,7 +9226,8 @@
         return '<div class="qcm-mesqcm-carousel-card">' +
           '<button type="button" class="qcm-mesqcm-carousel-card-btn" data-mesqcm-toggle-index="' + i + '" aria-expanded="false" aria-controls="' + detailId + '">' +
             '<span class="qcm-mesqcm-name-thumb' + (visualUrl ? '' : ' is-empty') + '" data-learn-next-thumb-index="' + i + '">' +
-              (visualUrl ? '<img src="' + escapeHtml(visualUrl) + '" alt="' + label + '" loading="lazy" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
+              (visualUrl ? '<img src="' + escapeHtml(visualUrl) + '" alt="' + label + '" class="qcm-mesqcm-name-thumb-img" loading="lazy" onload="this.parentElement.classList.add(\'is-loaded\');" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
+              (visualUrl ? '<img src="/sablier-96.png" alt="" class="qcm-mesqcm-name-thumb-spinner qcm-loading-hourglass" aria-hidden="true">' : '') +
               '<i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-thumb-fallback" aria-hidden="true"></i>' +
             '</span>' +
             '<span class="qcm-mesqcm-carousel-card-name"><i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-theme-icon" aria-hidden="true"></i>' + label + '</span>' +
@@ -9784,8 +9811,23 @@
     // getMesAcquisThemeFallbackImage) — sinon comportement inchangé (icône).
     var theme = q && Array.isArray(q.themes) ? q.themes[0] : null;
     var visualUrl = img ? img.url : getMesAcquisThemeFallbackImage(normalizeKnowledgeThemeLabel(theme));
-    return '<span class="qcm-mesqcm-name-thumb' + (visualUrl ? '' : ' is-empty') + '" data-mesqcm-thumb-index="' + index + '">' +
-      (visualUrl ? '<img src="' + escapeHtml(visualUrl) + '" alt="' + escapeHtml(altText) + '" loading="lazy" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
+    // Sablier tournant dès l'affichage de la vignette, tant que son image n'est pas
+    // là (demande du 15/09/2026, "ils doivent apparaître immédiatement") : même
+    // image/animation que .qcm-loading-hourglass déjà utilisée ailleurs sur cette
+    // page. Deux cas sans URL connue à ce stade : pas d'image ET pas de thématique
+    // de repli (q.slot/q.quizDate absents, jamais hydratable, cf.
+    // hydrateVisibleMesQcmNameThumbs qui skip ce cas) -> repli icône direct,
+    // is-empty posé tout de suite, pas de sablier qui tournerait indéfiniment ;
+    // sinon -> is-pending-image, sablier affiché en attendant l'hydratation
+    // asynchrone (hydrateVisibleMesQcmNameThumbs/applyMesQcmThumbImageByIndex plus
+    // bas, qui bascule vers l'image ou vers is-empty selon le résultat). Cas avec
+    // URL connue dès le rendu : is-loaded/is-empty posés par onload/onerror de
+    // l'image elle-même, comme avant.
+    var isHydratable = !visualUrl && q && q.slot && q.quizDate;
+    var thumbStateClass = visualUrl ? '' : (isHydratable ? ' is-pending-image' : ' is-empty');
+    return '<span class="qcm-mesqcm-name-thumb' + thumbStateClass + '" data-mesqcm-thumb-index="' + index + '">' +
+      (visualUrl ? '<img src="' + escapeHtml(visualUrl) + '" alt="' + escapeHtml(altText) + '" class="qcm-mesqcm-name-thumb-img" loading="lazy" onload="this.parentElement.classList.add(\'is-loaded\');" onerror="this.remove();this.parentElement.classList.add(\'is-empty\');">' : '') +
+      (visualUrl || isHydratable ? '<img src="/sablier-96.png" alt="" class="qcm-mesqcm-name-thumb-spinner qcm-loading-hourglass" aria-hidden="true">' : '') +
       '<i class="fa-solid ' + iconClass + ' qcm-mesqcm-name-thumb-fallback" aria-hidden="true"></i>' +
       '</span>';
   }
@@ -10171,22 +10213,53 @@
 
   function applyMesQcmThumbImage(thumb, img, q) {
     if (!thumb || !img || !img.url) return;
-    thumb.querySelectorAll('img').forEach(function (node) { node.remove(); });
-    var image = document.createElement('img');
-    image.loading = 'lazy';
-    image.alt = (q && q.label) || '';
-    image.onerror = function () {
-      image.remove();
-      thumb.classList.add('is-empty');
+    // Préchargée hors DOM avant tout retrait de l'image actuelle (demande du
+    // 15/09/2026, "saut... fond gris... réapparaissent") : cette fonction peut
+    // remplacer une image déjà affichée (ex. repli thématique -> vraie image
+    // trouvée par hydrateLearnNextThumbs) — retirer l'ancienne AVANT que la
+    // nouvelle ait fini de charger exposait un instant le fond gris nu de la
+    // vignette (le sablier lui-même restait masqué, déjà retiré par un
+    // is-loaded posé plus tôt). Ici, l'ancienne image ne disparaît qu'au
+    // moment exact où la nouvelle, déjà chargée, la remplace — aucun trou
+    // visible entre les deux.
+    var preload = new Image();
+    preload.onload = function () {
+      if (!thumb.isConnected) return;
+      thumb.querySelectorAll('.qcm-mesqcm-name-thumb-img').forEach(function (node) { node.remove(); });
+      var image = document.createElement('img');
+      image.className = 'qcm-mesqcm-name-thumb-img';
+      image.alt = (q && q.label) || '';
+      image.src = img.url;
+      thumb.insertBefore(image, thumb.firstChild);
+      thumb.classList.remove('is-pending-image', 'is-empty');
+      thumb.classList.add('is-loaded');
     };
-    image.src = img.url;
-    thumb.insertBefore(image, thumb.firstChild);
-    thumb.classList.remove('is-empty');
+    preload.onerror = function () {
+      if (!thumb.isConnected) return;
+      // Garde l'image déjà affichée le cas échéant (mieux qu'un retour à
+      // l'icône) ; sinon bascule vers le repli icône comme avant.
+      if (!thumb.querySelector('.qcm-mesqcm-name-thumb-img')) {
+        thumb.classList.remove('is-pending-image');
+        thumb.classList.add('is-empty');
+      }
+    };
+    preload.src = img.url;
   }
 
   function applyMesQcmThumbImageByIndex(index, img, q) {
     body.querySelectorAll('[data-mesqcm-thumb-index="' + index + '"]').forEach(function (thumb) {
       applyMesQcmThumbImage(thumb, img, q);
+    });
+  }
+
+  // Bascule une vignette en attente d'hydratation (is-pending-image, sablier
+  // affiché) vers son repli icône définitif (is-empty) quand il s'avère
+  // qu'aucune image ne sera trouvée — sans quoi le sablier tournerait
+  // indéfiniment (demande du 15/09/2026, cf. renderMesQcmNameVisualHtml).
+  function markMesQcmThumbEmptyByIndex(index) {
+    body.querySelectorAll('[data-mesqcm-thumb-index="' + index + '"]').forEach(function (thumb) {
+      thumb.classList.remove('is-pending-image');
+      thumb.classList.add('is-empty');
     });
   }
 
@@ -10296,16 +10369,20 @@
 
   function hydrateVisibleMesQcmNameThumbs(quizzes) {
     if (!Array.isArray(quizzes) || !quizzes.length) return;
-    var thumbs = Array.prototype.slice.call(body.querySelectorAll('.qcm-mesqcm-name-thumb.is-empty[data-mesqcm-thumb-index]'))
+    // .is-pending-image (jamais .is-empty) : le sablier de renderMesQcmNameVisualHtml
+    // n'est posé que sur ce sous-ensemble hydratable — un .is-empty a déjà son repli
+    // icône définitif, rien à tenter dessus (cf. commentaire de la fonction de rendu).
+    var thumbs = Array.prototype.slice.call(body.querySelectorAll('.qcm-mesqcm-name-thumb.is-pending-image[data-mesqcm-thumb-index]'))
       .filter(function (thumb) { return thumb.getClientRects().length > 0; })
       .slice(0, 12);
     thumbs.forEach(function (thumb) {
       var index = Number(thumb.getAttribute('data-mesqcm-thumb-index'));
       var q = quizzes[index];
-      if (!q || !q.slot || !q.quizDate) return;
+      if (!q || !q.slot || !q.quizDate) { markMesQcmThumbEmptyByIndex(index); return; }
       var key = getMesQcmRowKey(q);
       if (Object.prototype.hasOwnProperty.call(mesQcmThumbImageCache, key)) {
         if (mesQcmThumbImageCache[key]) applyMesQcmThumbImageByIndex(index, mesQcmThumbImageCache[key], q);
+        else markMesQcmThumbEmptyByIndex(index);
         return;
       }
       if (!mesQcmThumbImagePending[key]) {
@@ -10323,6 +10400,7 @@
       }
       mesQcmThumbImagePending[key].then(function (img) {
         if (img) applyMesQcmThumbImageByIndex(index, img, q);
+        else markMesQcmThumbEmptyByIndex(index);
       });
     });
   }

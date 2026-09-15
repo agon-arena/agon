@@ -1181,6 +1181,18 @@
     }
   };
 
+  // Une rubrique "generating" se signale déjà "settled" (non visible) dès sa
+  // première réponse — cf. eclNotifyBlockSettled ci-dessus, qui n'attend donc
+  // plus la fin de son polling (jusqu'à 20s) pour retirer "Chargement…" /
+  // afficher "Aucune rubrique disponible". Elle continue de poller en fond ;
+  // si elle se publie plus tard, ce helper ré-affiche "Chargement" un instant
+  // puis masque le message vide, pour ne pas laisser "Aucune rubrique" visible
+  // à côté d'une rubrique qui vient d'apparaître.
+  window.eclHideEmptyMessageOnLateReveal = function () {
+    var emptyMsg = document.getElementById('ecl-empty-message');
+    if (emptyMsg && !emptyMsg.hidden) emptyMsg.hidden = true;
+  };
+
   // Le séparateur (bordure + marge) entre blocs est posé en CSS via
   // ".ecl-block + .ecl-block", qui s'applique dès qu'un bloc masqué précède
   // un bloc visible dans le DOM — d'où ce recalcul à chaque révélation pour
@@ -1564,6 +1576,7 @@
     if (wrapperBlock && wrapperBlock.hidden) {
       wrapperBlock.hidden = false;
       if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+      if (typeof window.eclHideEmptyMessageOnLateReveal === 'function') window.eclHideEmptyMessageOnLateReveal();
     }
   }
 
@@ -1694,12 +1707,17 @@
       if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
+      // Signalée "settled" (non visible) dès cette première réponse plutôt
+      // qu'après épuisement du polling — sinon "Chargement des rubriques…"
+      // reste affiché jusqu'à 20s en attendant cette rubrique seule pendant
+      // que les 6 autres sont déjà tranchées. Le polling continue en fond
+      // (cf. revealBlock -> eclHideEmptyMessageOnLateReveal si elle se publie).
+      if (!viewedDateKey) notifySettled(false);
       pollAttempts += 1;
       if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
-        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
@@ -1877,6 +1895,7 @@
     if (wrapperBlock && wrapperBlock.hidden) {
       wrapperBlock.hidden = false;
       if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+      if (typeof window.eclHideEmptyMessageOnLateReveal === 'function') window.eclHideEmptyMessageOnLateReveal();
     }
   }
 
@@ -2005,12 +2024,17 @@
       if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
+      // Signalée "settled" (non visible) dès cette première réponse plutôt
+      // qu'après épuisement du polling — sinon "Chargement des rubriques…"
+      // reste affiché jusqu'à 20s en attendant cette rubrique seule pendant
+      // que les 6 autres sont déjà tranchées. Le polling continue en fond
+      // (cf. revealBlock -> eclHideEmptyMessageOnLateReveal si elle se publie).
+      if (!viewedDateKey) notifySettled(false);
       pollAttempts += 1;
       if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
-        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
@@ -2188,6 +2212,7 @@
     if (wrapperBlock && wrapperBlock.hidden) {
       wrapperBlock.hidden = false;
       if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+      if (typeof window.eclHideEmptyMessageOnLateReveal === 'function') window.eclHideEmptyMessageOnLateReveal();
     }
   }
 
@@ -2316,12 +2341,17 @@
       if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
+      // Signalée "settled" (non visible) dès cette première réponse plutôt
+      // qu'après épuisement du polling — sinon "Chargement des rubriques…"
+      // reste affiché jusqu'à 20s en attendant cette rubrique seule pendant
+      // que les 6 autres sont déjà tranchées. Le polling continue en fond
+      // (cf. revealBlock -> eclHideEmptyMessageOnLateReveal si elle se publie).
+      if (!viewedDateKey) notifySettled(false);
       pollAttempts += 1;
       if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
-        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
@@ -2509,6 +2539,7 @@
     if (wrapperBlock && wrapperBlock.hidden) {
       wrapperBlock.hidden = false;
       if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+      if (typeof window.eclHideEmptyMessageOnLateReveal === 'function') window.eclHideEmptyMessageOnLateReveal();
     }
   }
 
@@ -2639,12 +2670,17 @@
       if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
+      // Signalée "settled" (non visible) dès cette première réponse plutôt
+      // qu'après épuisement du polling — sinon "Chargement des rubriques…"
+      // reste affiché jusqu'à 20s en attendant cette rubrique seule pendant
+      // que les 6 autres sont déjà tranchées. Le polling continue en fond
+      // (cf. revealBlock -> eclHideEmptyMessageOnLateReveal si elle se publie).
+      if (!viewedDateKey) notifySettled(false);
       pollAttempts += 1;
       if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
-        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
@@ -2822,6 +2858,7 @@
     if (wrapperBlock && wrapperBlock.hidden) {
       wrapperBlock.hidden = false;
       if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+      if (typeof window.eclHideEmptyMessageOnLateReveal === 'function') window.eclHideEmptyMessageOnLateReveal();
     }
   }
 
@@ -2944,12 +2981,17 @@
       if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
+      // Signalée "settled" (non visible) dès cette première réponse plutôt
+      // qu'après épuisement du polling — sinon "Chargement des rubriques…"
+      // reste affiché jusqu'à 20s en attendant cette rubrique seule pendant
+      // que les 6 autres sont déjà tranchées. Le polling continue en fond
+      // (cf. revealBlock -> eclHideEmptyMessageOnLateReveal si elle se publie).
+      if (!viewedDateKey) notifySettled(false);
       pollAttempts += 1;
       if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
-        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
@@ -3127,6 +3169,7 @@
     if (wrapperBlock && wrapperBlock.hidden) {
       wrapperBlock.hidden = false;
       if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+      if (typeof window.eclHideEmptyMessageOnLateReveal === 'function') window.eclHideEmptyMessageOnLateReveal();
     }
   }
 
@@ -3250,12 +3293,17 @@
       if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
+      // Signalée "settled" (non visible) dès cette première réponse plutôt
+      // qu'après épuisement du polling — sinon "Chargement des rubriques…"
+      // reste affiché jusqu'à 20s en attendant cette rubrique seule pendant
+      // que les 6 autres sont déjà tranchées. Le polling continue en fond
+      // (cf. revealBlock -> eclHideEmptyMessageOnLateReveal si elle se publie).
+      if (!viewedDateKey) notifySettled(false);
       pollAttempts += 1;
       if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
-        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();
@@ -3433,6 +3481,7 @@
     if (wrapperBlock && wrapperBlock.hidden) {
       wrapperBlock.hidden = false;
       if (typeof window.eclUpdateFirstVisibleBlockStyling === 'function') window.eclUpdateFirstVisibleBlockStyling();
+      if (typeof window.eclHideEmptyMessageOnLateReveal === 'function') window.eclHideEmptyMessageOnLateReveal();
     }
   }
 
@@ -3561,12 +3610,17 @@
       if (!viewedDateKey) notifySettled(false);
     } else if (status === 'generating') {
       renderGenerating();
+      // Signalée "settled" (non visible) dès cette première réponse plutôt
+      // qu'après épuisement du polling — sinon "Chargement des rubriques…"
+      // reste affiché jusqu'à 20s en attendant cette rubrique seule pendant
+      // que les 6 autres sont déjà tranchées. Le polling continue en fond
+      // (cf. revealBlock -> eclHideEmptyMessageOnLateReveal si elle se publie).
+      if (!viewedDateKey) notifySettled(false);
       pollAttempts += 1;
       if (!viewedDateKey && pollAttempts < MAX_POLL_ATTEMPTS) {
         pollTimer = setTimeout(loadToday, POLL_INTERVAL_MS);
       } else {
         renderError();
-        if (!viewedDateKey) notifySettled(false);
       }
     } else {
       stopPolling();

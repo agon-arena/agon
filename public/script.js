@@ -38746,15 +38746,11 @@ function syncMobileCloudFrameHeight(recheckToken) {
   // mesures réelles. Comparées avec la même tolérance que la revérification 400ms plus bas.
   var rawCached = recheckToken === MOBILE_CLOUD_FRAME_RECHECK ? null : readMnoriaFrameCache('mnoriaMobileFrame');
   var cached = rawCached
-    && (
-      rawCached.frameCacheVersion >= 2 ||
-      (
-        typeof rawCached.headerBottom === 'number' &&
-        typeof rawCached.bottomBarTop === 'number' &&
-        Math.abs(rawCached.headerBottom - headerBottom) <= 1 &&
-        Math.abs(rawCached.bottomBarTop - bottomBarTop) <= 1
-      )
-    )
+    && rawCached.frameCacheVersion >= 3
+    && typeof rawCached.headerBottom === 'number'
+    && typeof rawCached.bottomBarTop === 'number'
+    && Math.abs(rawCached.headerBottom - headerBottom) <= 1
+    && Math.abs(rawCached.bottomBarTop - bottomBarTop) <= 1
     ? rawCached
     : null;
   var marginTopToApply, boxHeight;
@@ -38765,7 +38761,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
     _mobileCloudFrameTrustedHeight = boxHeight;
   } else {
     var desiredFrameTop = headerBottom - 8;
-    var desiredFrameBottom = bottomBarTop - 25;
+    var desiredFrameBottom = bottomBarTop;
 
     // Neutralise la marge le temps de mesurer la position naturelle (sans elle) du bloc,
     // comme alignStandaloneBubbleFrameToActiveFilter le fait pour le standalone.
@@ -38824,7 +38820,7 @@ function syncMobileCloudFrameHeight(recheckToken) {
   observeMobileCloudModeSwitchAlignment(cloud);
   _mobileCloudFrameLocked = true;
   writeMnoriaFrameCache('mnoriaMobileFrame', {
-    frameCacheVersion: 2,
+    frameCacheVersion: 3,
     marginTop: marginTopToApply,
     boxHeight: boxHeight,
     headerBottom: headerBottom,

@@ -133,13 +133,14 @@
   <style>
     .mnoria-home-return-prepaint-underlay {
       display: none;
-      position: absolute;
+      position: fixed;
       top: 0;
       left: 0;
       right: 0;
-      min-height: calc(100vh + env(safe-area-inset-bottom, 0px) + 240px);
-      min-height: calc(100lvh + env(safe-area-inset-bottom, 0px) + 240px);
-      z-index: 2147483645;
+      bottom: calc(-1 * (env(safe-area-inset-bottom, 0px) + 180px));
+      height: auto;
+      min-height: 0;
+      z-index: 2147483646;
       pointer-events: none;
       background: #243038;
     }
@@ -154,14 +155,12 @@
       /* Le voile affiché dès le premier paint doit rejoindre sans coupure
          celui de la page de départ. Il déborde donc sous le viewport iOS ;
          le padding équivalent garde le sablier centré dans la zone visible. */
-      bottom: auto;
-      height: calc(100vh + env(safe-area-inset-bottom, 0px) + 260px);
-      min-height: calc(100vh + env(safe-area-inset-bottom, 0px) + 260px);
-      height: calc(100lvh + env(safe-area-inset-bottom, 0px) + 260px);
-      min-height: calc(100lvh + env(safe-area-inset-bottom, 0px) + 260px);
+      bottom: calc(-1 * (env(safe-area-inset-bottom, 0px) + 180px));
+      height: auto;
+      min-height: 0;
       box-sizing: border-box;
-      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 160px);
-      z-index: 2147483646;
+      padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px) + 180px);
+      z-index: 2147483647;
       background: #243038;
       align-items: center;
       justify-content: center;
@@ -194,7 +193,7 @@
         top: 50vh;
         top: 50dvh;
         width: min(90vw, 220px);
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%) translateZ(0);
       }
     }
     @media (display-mode: standalone) and (max-width: 768px) {
@@ -441,6 +440,7 @@
         top: 0;
         left: 0;
         right: 0;
+        bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 180px));
         /* Même construction que .mnoria-startup-loader (plus bas) : déborde
            volontairement sous le bas visible, pour qu'un resize transitoire
            du viewport (barre d'adresse Safari qui bouge) ne laisse jamais
@@ -448,10 +448,11 @@
            03/09/2026 ("elle doit s'étendre jusqu'en bas"). Compensé par un
            padding-bottom équivalent (box-sizing:border-box) pour garder le
            sablier centré sur le vrai viewport. */
-        bottom: calc(-1 * (var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px));
-        padding-bottom: calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 160px);
+        height: auto;
+        min-height: 0;
+        padding-bottom: calc(var(--mnoria-safe-bottom, env(safe-area-inset-bottom, 0px)) + 180px);
         box-sizing: border-box;
-        z-index: 10030;
+        z-index: 2147483647;
         align-items: center;
         justify-content: center;
         padding-left: 20px;
@@ -486,6 +487,22 @@
       border: none;
       box-shadow: none;
       text-align: center;
+    }
+    @media (max-width: 768px) {
+      #mnoria-memoire-loading-veil-box {
+        position: absolute;
+        left: 50%;
+        top: 50vh;
+        top: 50dvh;
+        width: min(90vw, 220px);
+        transform: translate(-50%, -50%) translateZ(0);
+      }
+    }
+    @media (display-mode: standalone) and (max-width: 768px) {
+      #mnoria-memoire-loading-veil-box {
+        top: 50vh;
+        top: 50lvh;
+      }
     }
     #mnoria-memoire-loading-veil-hourglass {
       width: 64px;
@@ -1725,6 +1742,15 @@ body:not(.mnoria-memoire-cloud-mode) .mnoria-memory-frame-loading {
   }
 }
 @media (max-width: 768px) {
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    min-height: 100vh;
+    overflow: hidden !important;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
   body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame {
     height: calc(100vh + 180px) !important;
     min-height: calc(100vh + 180px) !important;
@@ -1734,6 +1760,17 @@ body:not(.mnoria-memoire-cloud-mode) .mnoria-memory-frame-loading {
   body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame .mnoria-memory-prepaint-bg,
   body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame .mnoria-memory-frame-loading {
     inset-bottom: 2px;
+  }
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame .mnoria-memory-frame-loading {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9998;
+    border-radius: 0;
+    align-items: center;
+    justify-content: center;
+  }
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame .mnoria-memory-frame-loading__bg {
+    opacity: 0;
   }
 }
 @supports (height: 100dvh) {
@@ -2365,6 +2402,9 @@ window.addEventListener("pageshow", function() {
           );
           if (
             mobileCacheFitsScreen &&
+            mobileCache.frameCacheVersion >= 3 &&
+            typeof mobileCache.bottomBarTop === 'number' &&
+            Math.abs(mobileCache.bottomBarTop - bottomBarTop) <= 2 &&
             typeof mobileCache.marginTop === 'number' &&
             typeof mobileCache.boxHeight === 'number' &&
             mobileCache.boxHeight >= 520
@@ -2384,7 +2424,7 @@ window.addEventListener("pageshow", function() {
       }
 
       var desiredFrameTop = headerBottom - 8;
-      var desiredFrameBottom = bottomBarTop - 25;
+      var desiredFrameBottom = bottomBarTop;
 
       section.style.marginTop = '0px';
       var scrollYAtMeasure = window.scrollY || document.documentElement.scrollTop || 0;
@@ -2628,7 +2668,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260915-memory-loading-frame-long-v1" defer></script>
+<script src="/script.min.js?v=20260915-memory-frame-bottom-align-v1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 
