@@ -27456,10 +27456,57 @@ async function fetchMemorizedTodayForUser(userId) {
       knowledgeTargetId,
       subjectType: mi.subject_type,
       subjectSourceId: mi.subject_source_id,
-      label: question.knowledgeTarget || question.question || ""
+      label: question.knowledgeTarget || question.question || "",
+      // Nom de l'apprentissage parent (demande du 15/09/2026, "faire apparaître le nom
+      // de l'apprentissage dans les listes des connaissances à mémoriser") : cette liste
+      // mélange des connaissances de plusieurs apprentissages différents, contrairement à
+      // buildKnowledgeMemorizationSectionHtml (scopée à un seul), d'où le besoin d'afficher
+      // ce nom ici. Même champ que celui déjà utilisé comme `label` de "Mes apprentissages"
+      // (cf. GET /api/users/notion-quizzes, quizMeta.sourceName) — jamais un nom inventé.
+      subjectLabel: question.sourceName || null,
+      // Thématique de repli (même règle que GET /api/users/notion-quizzes,
+      // cf. getPrimaryNotionQuizTheme) : écrasée juste en dessous par la vraie
+      // galaxie "Ma mémoire" quand cette connaissance est déjà acquise.
+      theme: getPrimaryNotionQuizTheme(question)
     });
   }
   if (!itemsByKey.size) return { items: [], voluntary: [], suggested: [] };
+
+  // Thématique "Ma mémoire" prioritaire (demande du 15/09/2026, "faire apparaître le logo
+  // de la thématique devant le titre") : même principe et même source que GET
+  // /api/users/notion-quizzes (cf. son propre commentaire "Même rubrique que « Ma
+  // mémoire »") — une connaissance déjà acquise doit afficher sa vraie galaxie, pas
+  // seulement la classification de génération posée par `theme` ci-dessus. Ne bloque
+  // jamais la réponse en cas d'échec : `theme` déjà posé reste un repli cohérent.
+  try {
+    const { data: memoryAcquisitions, error: memoryAcquisitionsError } = await supabase
+      .from("user_article_acquisitions")
+      .select("eclairage_type, eclairage_source_id, solar_system_id")
+      .eq("user_id", userId)
+      .not("eclairage_type", "is", null)
+      .not("solar_system_id", "is", null);
+    if (memoryAcquisitionsError) throw new Error(memoryAcquisitionsError.message);
+    const solarIds = [...new Set((memoryAcquisitions || []).map((item) => item.solar_system_id).filter(Boolean))];
+    let solarById = new Map();
+    if (solarIds.length) {
+      const { data: solars, error: solarsError } = await supabase
+        .from("solar_systems").select("id, galaxy").in("id", solarIds);
+      if (solarsError) throw new Error(solarsError.message);
+      solarById = new Map((solars || []).map((solar) => [solar.id, solar]));
+    }
+    const galaxyByKnowledgeKey = new Map();
+    for (const acquisition of memoryAcquisitions || []) {
+      const galaxy = String(solarById.get(acquisition.solar_system_id)?.galaxy || "").trim();
+      if (!galaxy) continue;
+      galaxyByKnowledgeKey.set(`${acquisition.eclairage_type}:${acquisition.eclairage_source_id}`, galaxy);
+    }
+    for (const item of itemsByKey.values()) {
+      const galaxy = galaxyByKnowledgeKey.get(`${item.subjectType}:${item.subjectSourceId}`);
+      if (galaxy) item.theme = galaxy;
+    }
+  } catch (error) {
+    console.warn("[memorized-today] rubriques Ma mémoire indisponibles :", error.message);
+  }
 
   // Même règle de défaut que Découvrir (attachMemorizationPreferenceToQuestions,
   // "décoché par défaut", 12/09/2026) : une connaissance jamais explicitement

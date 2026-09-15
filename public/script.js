@@ -7881,13 +7881,20 @@ function tryRestoreCachedHomeFromHistory(fallbackUrl = "/?skipStartup=1") {
     window.removeEventListener("pagehide", onPageHide);
     return false;
   }
+  // 250ms (réduit de 700ms le 15/09/2026, "quand je passe de la page apprentissage à la
+  // page accueil, c'est beaucoup trop long") : un vrai pagehide, quand history.back()
+  // provoque effectivement une navigation (bfcache ou reload), arrive en quelques
+  // dizaines de ms — attendre 700ms avant de basculer sur le repli window.location.href
+  // ne faisait qu'ajouter un demi-seconde d'attente pure à chaque échec du bfcache
+  // (fréquent en PWA standalone), sans jamais laisser une vraie navigation le temps
+  // d'aboutir plus tôt.
   setTimeout(() => {
     window.removeEventListener("pagehide", onPageHide);
     if (!didLeave) {
       __mnoriaRecordReloadReason("history-back-home-fallback");
       window.location.href = fallbackUrl;
     }
-  }, 700);
+  }, 250);
   return true;
 }
 
@@ -38475,11 +38482,22 @@ window.addEventListener('pageshow', (event) => {
   if (!event.persisted) return;
   const p = location.pathname;
   if (p !== "/" && p !== "/debates" && !p.startsWith("/debates/")) return;
-  __mnoriaDebugRefreshLog("pageshow-bfcache", "rerender", { persisted: true, pathname: p });
-  clearIndexDebatesSessionCache();
   if (window.__mnoriaDebateModalOpen) {
     try { closeDebateIframeModal(); } catch (e) {}
   }
+  // Cache encore valide (< INDEX_DEBATES_CACHE_TTL, cf. getDebatesFromSessionCache) :
+  // revu le 15/09/2026, "ça se rafraîchit en plus après le retour" — ce refetch réseau
+  // était jusqu'ici inconditionnel à CHAQUE restauration bfcache, y compris quelques
+  // secondes après le premier chargement, provoquant un second rafraîchissement visible
+  // juste après le retour instantané du bfcache. Le TTL existant reflète déjà ce qu'on
+  // considère "assez frais" ailleurs sur cette même page ; un cache encore valide n'a
+  // aucune raison d'être traité différemment ici.
+  if (getDebatesFromSessionCache() !== null) {
+    __mnoriaDebugRefreshLog("pageshow-bfcache", "skip-fresh-cache", { persisted: true, pathname: p });
+    return;
+  }
+  __mnoriaDebugRefreshLog("pageshow-bfcache", "rerender", { persisted: true, pathname: p });
+  clearIndexDebatesSessionCache();
   fetchJSON(getIndexDebatesApiUrl(INDEX_INITIAL_DEBATES_FETCH_LIMIT, 0, { cacheBust: true }), { cache: "no-store" })
     .then(function(fresh) {
       if (!Array.isArray(fresh)) return;

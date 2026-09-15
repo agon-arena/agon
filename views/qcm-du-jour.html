@@ -2880,7 +2880,18 @@
       display: block;
       width: 100%;
       height: 100%;
+      /* cover (retour au zoom demandé le 15/09/2026 après un essai en contain
+         jugé moins lisible) + object-position biaisé vers le haut plutôt que
+         50% 50% par défaut : la plupart de ces vignettes sont des portraits
+         (Wikipedia/Commons, bustes cadrés serrés) où le sujet pertinent —
+         le visage — se trouve dans le tiers haut de l'image, jamais au
+         centre. Un centrage vertical strict recadrait donc souvent sur le
+         torse en coupant la tête ("on voit pas sa tête"). Pas de détection de
+         visage réelle ici (aucune infra pour ça) : 50% 20% est une
+         heuristique qui remonte le point de recadrage sans non plus couper le
+         haut du crâne sur les portraits cadrés très serré. */
       object-fit: cover;
+      object-position: 50% 20%;
     }
     .qcm-mesqcm-name-thumb .qcm-mesqcm-name-thumb-fallback {
       display: none;
@@ -4151,6 +4162,26 @@
     .qcm-fiche-memorization-toggle.is-unmemorized {
       color: #9aa5ac;
     }
+    /* Groupe par apprentissage dans "Connaissances mémorisées ce jour" (revu le
+       15/09/2026, "un seul titre si plusieurs connaissances y sont issues, pas le titre
+       à chaque fois") : icône + police identiques à .qcm-mesqcm-name-theme-icon/
+       .qcm-mesqcm-name-label déjà utilisées pour le nom d'apprentissage dans les
+       rubriques "Mes apprentissages" du dessous, jamais un style propre inventé ici — le
+       titre n'apparaît qu'une fois par apprentissage, suivi de ses connaissances. */
+    .qcm-memorized-today-group + .qcm-memorized-today-group {
+      margin-top: 10px;
+    }
+    .qcm-memorized-today-source {
+      display: flex;
+      align-items: center;
+      gap: 0.55em;
+      margin: 0 0 4px;
+    }
+    .qcm-memorized-today-group-items {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
     .qcm-fiche-bottom-close {
       display: block;
       width: 100%;
@@ -5033,7 +5064,7 @@
     </div>
   </section>
 </main>
-<script src="/script.min.js?v=20260915-community-cards-fix" defer></script>
+<script src="/script.min.js?v=20260915-home-return-refresh-fix" defer></script>
 <script>
 (function () {
   var body = document.getElementById('qcm-body');
@@ -8243,7 +8274,7 @@
       var count = Number(item.questionCount) || 0;
       var countText = count + ' question' + (count > 1 ? 's' : '');
       var queryHtml = item.searchTopic ? '<span class="qcm-explore-item-query">' + escapeHtml(item.searchTopic) + '</span>' : '';
-      return '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '"' + (already ? ' disabled' : '') + '>' +
+      return '<button type="button" class="qcm-explore-item" data-slot="' + escapeHtml(item.slot) + '" data-quiz-date="' + escapeHtml(item.quizDate) + '" data-label="' + escapeHtml(item.label) + '"' + (already ? ' disabled' : '') + '>' +
         '<span class="qcm-explore-item-label">' + escapeHtml(item.label) + '<span class="qcm-explore-item-count">' + escapeHtml(countText) + '</span>' + queryHtml + '</span>' +
         '<span class="qcm-explore-item-meta">' + escapeHtml(metaText) + '</span>' +
       '</button>';
@@ -8382,7 +8413,7 @@
       listEl.innerHTML = html;
       listEl.querySelectorAll('.qcm-explore-item:not(:disabled)').forEach(function (itemBtn) {
         itemBtn.addEventListener('click', function () {
-          adoptExploreItem(itemBtn.getAttribute('data-slot'), itemBtn.getAttribute('data-quiz-date'), itemBtn);
+          adoptExploreItem(itemBtn.getAttribute('data-slot'), itemBtn.getAttribute('data-quiz-date'), itemBtn, itemBtn.getAttribute('data-label'));
         });
       });
       listEl.querySelectorAll('.qcm-explore-theme-toggle').forEach(function (toggle) {
@@ -8409,7 +8440,7 @@
         });
     }
 
-    function adoptExploreItem(slot, quizDate, itemBtn) {
+    function adoptExploreItem(slot, quizDate, itemBtn, label) {
       // Niveau toujours Élémentaire, plus de sélecteur (demande du 14/09/2026, "pour explorer,
       // préconisation, catalogue, on met aussi élémentaire par défaut") — même traitement que
       // startCustomTopicGeneration/activateDebateNotion, showNotionQuizLevelPicker n'est plus
@@ -8434,7 +8465,7 @@
           // que le fetch (asynchrone) rappelle renderMesQcmList avec la vraie
           // liste, qui remplace tout #qcm-body de toute façon.
           loadMesQcm(true);
-          showMesQcmPendingLoadingPlaceholder();
+          showMesQcmPendingLoadingPlaceholder(label);
         })
         .catch(function () { itemBtn.disabled = false; });
     }
@@ -8829,15 +8860,54 @@
   function renderMemorizedTodayGroup(groupEl, listEl, items, defaultChecked) {
     if (!groupEl || !listEl) return;
     if (!items || !items.length) { groupEl.hidden = true; return; }
-    listEl.innerHTML = items.map(function (item, i) {
-      var checked = Object.prototype.hasOwnProperty.call(item || {}, 'memorizationEnabled')
-        ? item.memorizationEnabled === true
-        : defaultChecked;
-      return '<li class="qcm-fiche-memorization-item">' +
-        '<button type="button" class="qcm-fiche-memorization-toggle ' + (checked ? 'is-memorized' : 'is-unmemorized') + '" data-memorized-today-index="' + i + '" aria-pressed="' + (checked ? 'true' : 'false') + '">' +
-        '<i class="fa-solid ' + (checked ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i>' +
-        '<span>' + escapeHtml(item.label || '') + '</span>' +
-        '</button>' +
+    // Regroupée par apprentissage (revu le 15/09/2026, "on met qu'un seul titre si
+    // plusieurs connaissances y sont issues, pas le titre à chaque fois" — annule
+    // l'affichage répété par ligne du même jour) : un même apprentissage (subjectType +
+    // subjectSourceId) n'affiche son nom qu'une fois — même icône/police que le nom
+    // d'apprentissage dans les rubriques "Mes apprentissages" du dessous
+    // (.qcm-mesqcm-name-theme-icon/.qcm-mesqcm-name-label, cf. renderMesQcmThemeIconHtml) —
+    // suivi de toutes ses connaissances de ce sous-groupe. `i` reste l'index dans le
+    // tableau `items` d'origine (jamais recalculé), seul repère lu par
+    // wireMemorizedTodayToggles/data-memorized-today-index.
+    var groups = [];
+    var groupByKey = new Map();
+    items.forEach(function (item, i) {
+      var key = (item.subjectType || '') + '::' + (item.subjectSourceId || '');
+      var group = groupByKey.get(key);
+      if (!group) {
+        var meta = ACQUIS_SOURCE_TYPE_META[item.subjectType] || ACQUIS_SOURCE_TYPE_META.histoire;
+        // Icône de THÉMATIQUE (revu le 15/09/2026, "tu dois faire apparaître le logo de
+        // la thématique devant aussi le titre" — remplace l'icône générique par
+        // subjectType utilisée jusqu'ici) : même fonction que renderMesQcmThemeIconHtml
+        // dans les rubriques "Mes apprentissages" du dessous, jamais une icône propre
+        // inventée ici. Repli sur meta.label seulement pour le NOM (aucun rapport avec
+        // l'icône, qui retombe elle-même sur fa-layer-group si aucune thématique connue).
+        group = {
+          subjectLabel: item.subjectLabel || meta.label,
+          icon: getMesAcquisThemeIconClass(normalizeKnowledgeThemeLabel(item.theme)),
+          entries: []
+        };
+        groupByKey.set(key, group);
+        groups.push(group);
+      }
+      group.entries.push({ item: item, index: i });
+    });
+    listEl.innerHTML = groups.map(function (group) {
+      var itemsHtml = group.entries.map(function (entry) {
+        var item = entry.item, i = entry.index;
+        var checked = Object.prototype.hasOwnProperty.call(item || {}, 'memorizationEnabled')
+          ? item.memorizationEnabled === true
+          : defaultChecked;
+        return '<li class="qcm-fiche-memorization-item">' +
+          '<button type="button" class="qcm-fiche-memorization-toggle ' + (checked ? 'is-memorized' : 'is-unmemorized') + '" data-memorized-today-index="' + i + '" aria-pressed="' + (checked ? 'true' : 'false') + '">' +
+          '<i class="fa-solid ' + (checked ? 'fa-square-check' : 'fa-square') + '" aria-hidden="true"></i>' +
+          '<span>' + escapeHtml(item.label || '') + '</span>' +
+          '</button>' +
+          '</li>';
+      }).join('');
+      return '<li class="qcm-memorized-today-group">' +
+        (group.subjectLabel ? '<div class="qcm-memorized-today-source"><i class="fa-solid ' + group.icon + ' qcm-mesqcm-name-theme-icon" aria-hidden="true"></i><span class="qcm-mesqcm-name-label">' + escapeHtml(group.subjectLabel) + '</span></div>' : '') +
+        '<ul class="qcm-memorized-today-group-items">' + itemsHtml + '</ul>' +
         '</li>';
     }).join('');
     wireMemorizedTodayToggles(listEl, items);
@@ -9423,12 +9493,29 @@
   // adopté entre-temps.
   function fetchAiFallbackProposals() {
     if (!voterKey) return Promise.resolve([]);
-    return fetch('/api/users/recommendations/learn-next/ai-fallback?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store' })
+    // Timeout côté client (correctif du 15/09/2026, "sablier seul sous la
+    // jauge de charge, obligé de rafraîchir pour voir les noms") : cette
+    // route peut enchaîner jusqu'à 4 appels IA côté serveur
+    // (fetchGpt5JsonContentWithRetry, server.js) sans aucune limite de temps
+    // connue du client — sans ce garde-fou, un aller-retour anormalement
+    // long (ou un réseau qui ne répond jamais, cf. incidents documentés sur
+    // d'autres routes IA de cette page) laissait le squelette "sablier seul"
+    // affiché indéfiniment, jusqu'à ce qu'un rechargement complet de la page
+    // reparte d'un état réseau propre. Abandon silencieux au-delà de 20s :
+    // même repli "best-effort" que le .catch ci-dessous (V1 reste seule
+    // affichée, jamais d'erreur visible).
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 20000) : null;
+    return fetch('/api/users/recommendations/learn-next/ai-fallback?legacyKey=' + encodeURIComponent(voterKey) + '&limit=' + LEARN_NEXT_POOL_LIMIT, { cache: 'no-store', signal: controller ? controller.signal : undefined })
       .then(function (res) { return res.ok ? res.json() : { proposals: [] }; })
       .then(function (data) {
         return Array.isArray(data && data.proposals) ? data.proposals : [];
       })
-      .catch(function () { return []; });
+      .catch(function () { return []; })
+      .then(function (result) {
+        if (timeoutId) clearTimeout(timeoutId);
+        return result;
+      });
   }
   // Un seul aller-retour V1 "à froid" pour toute la durée de vie de la page
   // (garde learnNextInlinePhase !== 'idle', cf. ci-dessus) — appelée en
@@ -9672,11 +9759,12 @@
   // attente"/"Chargement de tes QCM…"), en crée un minimal — loadMesQcm(true)
   // remplacera de toute façon l'ensemble de #qcm-body dès que la vraie liste
   // sera là.
-  function showMesQcmPendingLoadingPlaceholder() {
+  function showMesQcmPendingLoadingPlaceholder(label) {
     if (!body) return;
+    var loadingText = label ? 'Chargement de « ' + escapeHtml(label) + ' »…' : 'Chargement…';
     var sectionHtml = '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending"><details open>' +
       '<summary class="qcm-mesqcm-group-title">En attente de réalisation</summary>' +
-      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">Chargement…</p>' +
+      '<p class="qcm-state-message"><img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" aria-hidden="true">' + loadingText + '</p>' +
       '</details></section>';
     var existingPending = body.querySelector('.qcm-mesqcm-group--pending');
     if (existingPending) {
@@ -10215,6 +10303,24 @@
         var card = toggle.closest('.qcm-mesqcm-carousel-card');
         var group = card && card.closest('.qcm-mesqcm-carousel-group');
         if (group) {
+          var carouselEl = group.querySelector('.qcm-mesqcm-carousel');
+          // Masquer les cartes sœurs (ci-dessous) rétrécit .qcm-mesqcm-carousel,
+          // ce qui peut forcer le navigateur à recaler scrollLeft (ex: 3e carte
+          // scrollée à droite avant ouverture, plus aucune place à droite une
+          // fois les sœurs masquées) — un "scroll" natif se déclenche alors, que
+          // closeOpenCarouselCardOnScrollAttempt (initMesQcmCarouselScrollHydration,
+          // plus bas) interprète comme une tentative de scroll manuel et referme
+          // aussitôt le panneau qu'on vient d'ouvrir (constaté le 15/09/2026 sur
+          // la 3e carte "Apprentissages proposés" : "impossible de l'ouvrir... ça
+          // scroll à gauche"). On suspend cette fermeture-réflexe le temps que ce
+          // recalage se produise (deux rAF : le clamp de scrollLeft n'est pas
+          // toujours synchrone avec le changement de layout).
+          if (carouselEl) {
+            carouselEl.dataset.suppressScrollClose = '1';
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () { delete carouselEl.dataset.suppressScrollClose; });
+            });
+          }
           group.querySelectorAll('.qcm-mesqcm-inline-detail:not([hidden])').forEach(function (openDetail) {
             if (openDetail === detail) return;
             openDetail.hidden = true;
@@ -10229,7 +10335,6 @@
           // que celle-ci — sans is-single-card-view (justify-content:center,
           // cf. CSS), elle resterait collée au bord gauche du rang au lieu
           // d'être visuellement centrée.
-          var carouselEl = group.querySelector('.qcm-mesqcm-carousel');
           if (carouselEl) carouselEl.classList.toggle('is-single-card-view', willOpen);
         }
         detail.hidden = !willOpen;
@@ -10387,8 +10492,13 @@
       carousel.addEventListener('scroll', function () {
         // Filet de sécurité : couvre le cas rare où un vrai scroll se
         // déclenche malgré tout (rebond élastique iOS, ou scroll posé
-        // programmatiquement ailleurs sur la page).
-        closeOpenCarouselCardOnScrollAttempt();
+        // programmatiquement ailleurs sur la page). Sauf pendant
+        // suppressScrollClose (cf. initInlineLearningDetails) : le scroll
+        // qu'on reçoit alors n'est que le recalage de scrollLeft provoqué par
+        // le masquage des cartes sœurs à l'ouverture, pas un vrai geste de
+        // l'utilisateur — sans cette garde, la carte qu'on vient d'ouvrir se
+        // refermait aussitôt.
+        if (!carousel.dataset.suppressScrollClose) closeOpenCarouselCardOnScrollAttempt();
         if (ticking) return;
         ticking = true;
         requestAnimationFrame(function () {
