@@ -44,7 +44,14 @@
 // démarré, avant que le site soit réellement utilisable — ça laissait voir le
 // site nu (sans style.min.css/script.min.js encore joignables) derrière. Le
 // retry() vérifie maintenant aussi la page cible et ces deux fichiers.
-const SW_VERSION = "20260915-memory-frame-bottom-align-v2";
+//
+// Correctif du 15/09/2026 (bis) : "quand je passe de la page apprentissage à la page
+// accueil, c'est beaucoup trop long" — "/?skipStartup=1" (ajouté par
+// openHomePageWithArenaLoading à chaque retour Accueil) ne matchait jamais l'entrée de
+// cache posée sous "/" nue, forçant un aller-retour réseau complet à la place du
+// cache-first attendu. skipStartup est désormais retiré de la clé de cache, cf. plus
+// bas.
+const SW_VERSION = "20260915-skip-startup-cache-key-fix";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -246,6 +253,16 @@ self.addEventListener("fetch", (event) => {
     const requestUrl = new URL(request.url);
     const forcedRefresh = requestUrl.searchParams.has("_swrefresh");
     const homeReturnMarker = requestUrl.searchParams.has("mnoriaHomeReturn");
+    // skipStartup (correctif du 15/09/2026, "quand je passe de la page apprentissage à
+    // la page accueil, c'est beaucoup trop long") : ce paramètre ne change jamais le HTML
+    // servi (il ne pilote qu'un comportement JS client, lu depuis location.search),
+    // mais sans ce retrait de la clé de cache, `cache.match` ci-dessous exige une
+    // correspondance EXACTE de l'URL — "/?skipStartup=1" ne matchait donc jamais
+    // l'entrée déjà en cache sous "/" (posée sans ce paramètre lors d'un lancement
+    // normal), forçant un aller-retour réseau complet à chaque retour Accueil qui
+    // l'ajoute (openHomePageWithArenaLoading, script.js) alors que "/" est censée être
+    // cache-first instantané (cf. commentaire de tête sur SW_VERSION).
+    const skipStartupMarker = requestUrl.searchParams.has("skipStartup");
     const forcedFresh = forcedRefresh;
     // "/" volontairement absente de cette liste (correctif du 07/09/2026,
     // "lancement standalone lent") : c'est le start_url du manifest, donc LA
@@ -272,9 +289,10 @@ self.addEventListener("fetch", (event) => {
       "/autres-sources"
     ].includes(requestUrl.pathname);
     let cacheKeyRequest = request;
-    if (forcedFresh || homeReturnMarker) {
+    if (forcedFresh || homeReturnMarker || skipStartupMarker) {
       requestUrl.searchParams.delete("_swrefresh");
       requestUrl.searchParams.delete("mnoriaHomeReturn");
+      requestUrl.searchParams.delete("skipStartup");
       cacheKeyRequest = new Request(requestUrl.toString(), { headers: request.headers });
     }
 

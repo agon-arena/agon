@@ -1013,7 +1013,15 @@
       var raw = sessionStorage.getItem('mnoria_last_reload_reason');
       if (raw) {
         var parsed = JSON.parse(raw);
-        if (parsed && parsed.reason && (parsed.reason.indexOf('sw-recovery-page') !== -1 || parsed.reason.indexOf('history-back-from-fullpage') !== -1)) {
+        // 'history-back-home-fallback' ajouté le 15/09/2026 : filet de sécurité contre une
+        // course possible dans tryRestoreCachedHomeFromHistory (script.js) — si le vrai
+        // history.back() met plus de 250ms à déclencher pagehide mais finit quand même par
+        // aboutir APRÈS que le repli window.location.href (qui, lui, écrit cette raison) a
+        // déjà réécrit cette clé, la page qui se charge in fine doit quand même sauter
+        // l'animation, qu'elle vienne du repli (déjà couvert par son propre ?skipStartup=1)
+        // ou du history.back() tardif (aucun ?skipStartup=1 dans son URL, seule cette raison
+        // le protège).
+        if (parsed && parsed.reason && (parsed.reason.indexOf('sw-recovery-page') !== -1 || parsed.reason.indexOf('history-back-from-fullpage') !== -1 || parsed.reason.indexOf('history-back-home-fallback') !== -1)) {
           shouldSkipStartup = true;
         }
         // Ne pas consommer la clé ici : __mnoriaDebugStartupDiagnostic la lit aussi
