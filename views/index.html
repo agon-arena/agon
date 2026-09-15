@@ -819,7 +819,7 @@
   <script src="/header-score-widget.min.js?v=20260909-anti-heat-hidden-pause" defer></script>
 </head>
 
-<body class="page-home page-home-mobile mnoria-memoire-cloud-mode">
+<body class="page-home page-home-mobile mnoria-memoire-cloud-mode mnoria-memory-frame-loading-active">
 <div class="mnoria-home-return-prepaint-underlay" aria-hidden="true"></div>
 <div class="mnoria-home-return-prepaint" role="status" aria-live="polite" aria-busy="true">
   <div class="mnoria-home-return-prepaint-box">
@@ -1724,6 +1724,26 @@ body:not(.mnoria-memoire-cloud-mode) .mnoria-memory-frame-loading {
     height: 92px;
   }
 }
+@media (max-width: 768px) {
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame {
+    height: calc(100vh + 180px) !important;
+    min-height: calc(100vh + 180px) !important;
+  }
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame::before,
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame::after,
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame .mnoria-memory-prepaint-bg,
+  body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame .mnoria-memory-frame-loading {
+    inset-bottom: 2px;
+  }
+}
+@supports (height: 100dvh) {
+  @media (max-width: 768px) {
+    body.is-standalone.page-home-mobile.mnoria-memory-frame-loading-active #mnoria-tag-trends-cloud.mnoria-memoire-frame {
+      height: calc(100dvh + 180px) !important;
+      min-height: calc(100dvh + 180px) !important;
+    }
+  }
+}
 .mnoria-memory-fullpage-btn {
   display: none;
   position: absolute;
@@ -2608,7 +2628,7 @@ window.addEventListener("pageshow", function() {
 </script>
 
 <script type="application/json" id="veille-medias-json">__VEILLE_MEDIAS_JSON__</script>
-<script src="/script.min.js?v=20260915-community-cards-fix" defer></script>
+<script src="/script.min.js?v=20260915-memory-loading-frame-long-v1" defer></script>
 <script src="/index-ai-badge.js?v=20260606-final7" defer></script>
 
 

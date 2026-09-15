@@ -37,7 +37,14 @@
 // revalidation arrière-plan ci-dessous, même stratégie que les assets
 // statiques immuables locaux (cf. isMutableStaticAsset plus bas) — une police
 // change assez rarement pour que ça ne soit jamais un problème de fraîcheur.
-const SW_VERSION = "20260915-memory-suite-centered-v1";
+//
+// Correctif du 15/09/2026 ("la page de reconnexion disparaît trop vite pendant
+// un redéploiement Render") : buildRecoveryResponse ci-dessous ne quittait cet
+// écran que sur un /ping OK, alors que cette route répond dès que le process a
+// démarré, avant que le site soit réellement utilisable — ça laissait voir le
+// site nu (sans style.min.css/script.min.js encore joignables) derrière. Le
+// retry() vérifie maintenant aussi la page cible et ces deux fichiers.
+const SW_VERSION = "20260915-memory-loading-frame-long-v2";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -159,10 +166,22 @@ function buildRecoveryResponse(targetUrl) {
       }
       fetch('/ping?sw-recover=' + Date.now(), { cache: 'no-store' })
         .then(function(r){
-          if (r.ok) {
+          if (!r.ok) return;
+          // Un /ping OK signifie juste que le process a démarré, pas que le site est
+          // réellement utilisable (correctif du 15/09/2026 : sur Render, /ping répond
+          // avant que la page réponde en pleine forme pendant un redéploiement — cette
+          // page se refermait alors sur un site encore nu, sans CSS/JS). On vérifie donc
+          // en plus la page cible ET les deux fichiers dont dépend tout le rendu avant de
+          // considérer que c'est bon.
+          return Promise.all([
+            fetch(target, { cache: 'no-store' }),
+            fetch('/style.min.css', { cache: 'no-store' }),
+            fetch('/script.min.js', { cache: 'no-store' })
+          ]).then(function(results){
+            if (!results.every(function(res){ return res && res.ok; })) return;
             try { sessionStorage.setItem("mnoria_last_reload_reason", JSON.stringify({ reason: "sw-recovery-page (serveur indisponible puis revenu)", at: Date.now() })); } catch(e) {}
             location.replace(target);
-          }
+          });
         })
         .catch(function(){});
     }

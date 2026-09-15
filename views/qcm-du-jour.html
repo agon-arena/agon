@@ -2930,28 +2930,60 @@
     .qcm-mesqcm-group--comprehension .qcm-mesqcm-name-label {
       font-size: 13px;
     }
-    /* Nom décalé à gauche dans "Mes acquis" (demande du 14/09/2026) : la règle de
-       base .qcm-mesqcm-name-title centre le nom dans l'espace flex entre la
-       vignette et la flèche (justify-content:center + transform:translateX(-10px)),
-       ce qui le fait empiéter sur .qcm-mesqcm-row-toggle-chevron dès que le nom
-       est un peu long — jamais gênant sur Découvrir (rangées plus courtes,
-       "Apprentissages du jour"), donc corrigé seulement ici plutôt que sur la
-       règle de base. padding-left mis à 0 (au lieu des 10px de la règle de base,
-       toujours actifs à droite) pour rapprocher encore le nom de la vignette
-       (demande du 14/09/2026, suite) : seul le gap de 11px de .qcm-mesqcm-name-btn
-       sépare maintenant la vignette du nom — ce gap est réduit à 4px ci-dessous
-       (toujours demande du 14/09/2026, "encore un peu") pour rapprocher davantage,
-       scopé de la même façon pour ne pas toucher Découvrir. */
+    /* Nom centré sous la vignette dans "Mes acquis" (demande du 14/09/2026,
+       puis bascule en colonne le 15/09/2026 : "on met le nom des
+       apprentissages en dessous, pas à droite des vignettes", puis recentrage
+       le 15/09/2026 : "centre la vignette et le nom") : la règle de base
+       .qcm-mesqcm-name-title centre déjà le nom (justify-content:center),
+       mais avec un transform:translateX(-10px) pensé pour la ligne
+       horizontale de Découvrir — jamais pertinent ici, donc annulé seulement
+       dans ce scope plutôt que sur la règle de base. max-width alignée sur la
+       largeur de .qcm-mesqcm-name-thumb (220px, agrandie le 15/09/2026) pour
+       que le nom se comporte comme une légende centrée sous l'image plutôt
+       que de s'étirer sur toute la largeur de la rangée. */
     .qcm-mesqcm-group--all .qcm-mesqcm-name-title,
     .qcm-mesqcm-group--comprehension .qcm-mesqcm-name-title {
-      justify-content: flex-start;
-      text-align: left;
+      justify-content: center;
+      text-align: center;
       transform: none;
       padding-left: 0;
+      max-width: 220px;
     }
+    /* Vignette AU-DESSUS du nom, l'une et l'autre centrées (demande du
+       15/09/2026) : bascule .qcm-mesqcm-name-btn en colonne au lieu de la
+       ligne horizontale de base — scopé aux mêmes groupes que ci-dessus,
+       jamais Découvrir. Le chevron d'ouverture (.qcm-mesqcm-row-toggle-
+       chevron, normalement 3e élément de la ligne) est sorti du flux en
+       position absolute plutôt que de devenir un 3e bloc empilé sous le nom,
+       ce qui l'aurait laissé flottant sans lien visuel avec le reste de la
+       rangée — ancré en haut à droite du bouton comme une pastille
+       d'expansion classique. position:relative posé ici (jamais sur la règle
+       de base) pour servir de repère à cette seule position absolute. */
     .qcm-mesqcm-group--all .qcm-mesqcm-name-btn,
     .qcm-mesqcm-group--comprehension .qcm-mesqcm-name-btn {
-      gap: 4px;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      gap: 8px;
+      padding-right: 24px;
+    }
+    .qcm-mesqcm-group--all .qcm-mesqcm-row-toggle-chevron,
+    .qcm-mesqcm-group--comprehension .qcm-mesqcm-row-toggle-chevron {
+      position: absolute;
+      top: 2px;
+      right: 0;
+    }
+    /* Vignette carrée agrandie dans "Mes acquis" (demande du 15/09/2026 :
+       d'abord tentée pleine largeur, "non ca ne va pas, remet le format
+       carré, et agrandit le (par rapport à avant)") : la règle de base
+       .qcm-mesqcm-name-thumb est un carré fixe 152x152px (pensé pour la ligne
+       horizontale de Découvrir) — repris ici en carré, juste agrandi à
+       220x220px. Scopé à --all uniquement, jamais --comprehension qui n'a de
+       toute façon aucune vignette (display:none ci-dessous). */
+    .qcm-mesqcm-group--all .qcm-mesqcm-name-thumb {
+      flex: 0 0 220px;
+      width: 220px;
+      height: 220px;
     }
     /* Pas de vignette dans "Comprendre les liens" (demande du 14/09/2026) :
        jamais d'image/icône de repli pertinente pour ces apprentissages
@@ -3421,6 +3453,18 @@
        seulement replié depuis l'ajout du repli (les 30px "aération autour du contenu
        ouvert" ci-dessous restent, eux, scopés au seul état ouvert). */
     .qcm-learn-next-inline {
+      margin: 0 0 20px;
+    }
+    /* Même espacement que les autres rubriques de premier niveau ci-dessus
+       (demande du 15/09/2026) : #qcm-creating-inline vit hors de
+       .qcm-mesqcm-groups (cf. son commentaire HTML), donc hors de la règle
+       .qcm-mesqcm-group + .qcm-mesqcm-group (margin-top:20px, plus haut) —
+       reproduit ici le même 20px, en margin-bottom comme ses voisins
+       #qcm-memorized-today/.qcm-learn-next-inline plutôt qu'en margin-top,
+       pour ne rien devoir à ce qui suit. [hidden] retire déjà tout affichage
+       (donc toute marge) sans règle supplémentaire — posé/retiré par
+       renderMesQcmList selon qu'il y a un contenu réel ou non. */
+    #qcm-creating-inline {
       margin: 0 0 20px;
     }
     /* Même espace que sous les autres rubriques (demande du 13/09/2026,
@@ -4051,6 +4095,16 @@
        la jauge de charge de mémorisation (.qcm-load-gauge, même valeur). */
     #qcm-memorized-today {
       margin: 0 0 20px;
+    }
+    /* Sablier tournant "Connaissances mémorisées ce jour" (demande du
+       15/09/2026) : même gabarit que .qcm-learn-next-inline-hourglass
+       (rubrique voisine "Apprentissages proposés") — un peu d'air
+       vertical pour ne pas coller au sommaire juste au-dessus. */
+    .qcm-memorized-today-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 0;
     }
     .qcm-fiche-memorization-item {
       margin: 4px 0;
@@ -4871,6 +4925,19 @@
     <div class="qcm-memorized-today" id="qcm-memorized-today" hidden>
       <details open>
         <summary class="qcm-mesqcm-group-title">Connaissances mémorisées ce jour</summary>
+        <!-- Sablier tournant (demande du 15/09/2026, "si il y a vraiment une
+             latence, je souhaite que la rubrique apparaisse vide et qu'un
+             sablier tournant soit présent") : affiché UNIQUEMENT quand
+             loadMemorizedToday n'a rien en sessionStorage à peindre tout de
+             suite (cf. son commentaire) — donc seulement sur une vraie
+             latence réseau, jamais quand le cache a déjà quelque chose à
+             montrer. Masqué par renderMemorizedToday dès qu'une réponse
+             (réseau ou cache) arrive, réponse vide comprise. Même classe/
+             image que partout ailleurs sur cette page (qcm-loading-hourglass,
+             /sablier-96.png), jamais une variante inventée. -->
+        <div class="qcm-memorized-today-loading" id="qcm-memorized-today-loading" hidden>
+          <img src="/sablier-96.png" alt="" class="qcm-loading-hourglass" role="status" aria-label="Chargement des connaissances mémorisées ce jour">
+        </div>
         <!-- Deux sous-groupes distincts (demande du 13/09/2026, "distinguer les
              connaissances volontairement mémorisées des connaissances préconisées à
              mémoriser") : un vrai clic "Mémoriser" (voluntary) d'une préconisation
@@ -4897,6 +4964,16 @@
          uniquement sur "Mes apprentissages" (même visibilité que le bouton
          ci-dessus, cf. refreshLearnNextInlineVisibility) ET seulement une fois
          un contenu réel obtenu (jamais un état vide/erreur affiché ici). -->
+    <!-- "En cours de création" (demande du 15/09/2026, "doit apparaître avant
+         la rubrique apprentissages proposés") : rendue par renderMesQcmList
+         (renderCreatingNotionQuizzesHtml), mais dans CE conteneur séparé
+         plutôt que préfixée à #qcm-body — #qcm-body vient après
+         #qcm-learn-next-inline ci-dessous dans le HTML statique, donc tout ce
+         qui y est injecté apparaît nécessairement après "Apprentissages
+         proposés" quel que soit l'ordre voulu à l'intérieur de #qcm-body.
+         hidden par défaut, retiré dès que renderMesQcmList y écrit un
+         contenu réel (jamais de bandeau vide affiché). -->
+    <div class="qcm-creating-inline" id="qcm-creating-inline" hidden></div>
     <div class="qcm-learn-next-inline" id="qcm-learn-next-inline">
       <details open>
         <summary class="qcm-mesqcm-group-title">Apprentissages proposés</summary>
@@ -4971,7 +5048,9 @@
   var memorizedTodayVoluntaryList = document.getElementById('qcm-memorized-today-voluntary-list');
   var memorizedTodaySuggestedEl = document.getElementById('qcm-memorized-today-suggested');
   var memorizedTodaySuggestedList = document.getElementById('qcm-memorized-today-suggested-list');
+  var memorizedTodayLoadingEl = document.getElementById('qcm-memorized-today-loading');
   var memorizedTodayToken = 0;
+  var creatingInlineEl = document.getElementById('qcm-creating-inline');
   var learnNextInline = document.getElementById('qcm-learn-next-inline');
   var learnNextInlineList = document.getElementById('qcm-learn-next-inline-list');
   var learningReturnBottom = document.getElementById('qcm-learning-return-bottom');
@@ -5133,7 +5212,15 @@
   function quizAnswerEndpoint() {
     return practiceMode ? '/api/daily-quiz/practice-answer' : '/api/daily-quiz/answer';
   }
-  function recordAnsweredQuestion(questionId, data) {
+  // Mêmes 3 gardes-fous que le calcul de fin de bloc (finishCurrentBlockOrContinue) :
+  // jamais en entraînement, jamais hors Découvrir, jamais sur un slot sans
+  // curriculum progressif. Extrait ici pour être partagé avec le déclenchement
+  // immédiat de recordAnsweredQuestion ci-dessous (demande du 15/09/2026).
+  function canOfferMemorizationSuggestionsNow() {
+    return !practiceMode && !!voterKey && currentCategory === 'mesqcm' &&
+      !!currentSlot && currentSlot.indexOf('notion:') === 0 && !!currentQuizDate;
+  }
+  function recordAnsweredQuestion(questionId, data, difficulty) {
     (practiceMode ? practiceAnsweredByQuestionId : answeredByQuestionId)[questionId] = data;
     // Une bonne réponse réelle peut créer la toute première acquisition affichée dans
     // "Ma mémoire". Supprime immédiatement la confirmation locale d'univers vide : au retour
@@ -5143,6 +5230,30 @@
       invalidateMnoriaUniverseCacheForCurrentUser();
       qcmCorrectStreakCount += 1;
       showProgressPlusOne(qcmCorrectStreakCount);
+    } else if (!practiceMode && data && data.correct === false) {
+      // Même son "dramatique" que la jauge de charge en surcharge (demande du
+      // 15/09/2026) : réutilisé ici pour une mauvaise réponse, jamais en plus
+      // du carillon encourageant — les deux sont mutuellement exclusifs par
+      // construction (correct vs correct===false).
+      playDramaticChime();
+    }
+    // Proposition de mémorisation IMMÉDIATE, sans attendre la fin du niveau
+    // (demande du 15/09/2026, "peut-on proposer directement, sans attendre que
+    // le niveau soit terminé ?" — choix retenu : dès un signal de fragilité,
+    // jamais sur toute bonne réponse pour limiter les appels réseau/Supabase,
+    // priorité #1 du moment). Mêmes critères de fragilité EXACTS que
+    // selectMemorizationSuggestions (lib/memorization-suggestions.js) : ratée,
+    // ou réussie difficile/moyen — jamais réussie+facile ni réussie+null, qui
+    // n'y sont jamais un signal. Le calcul de fin de bloc
+    // (finishCurrentBlockOrContinue -> applyMemorizationSuggestions) reste en
+    // place : idempotent, il sert de filet pour la toute dernière question du
+    // bloc si elle-même n'était pas un signal de fragilité.
+    var isMemorizationFragilitySignal = data && (
+      data.correct === false ||
+      (data.correct === true && (difficulty === 'difficile' || difficulty === 'moyen'))
+    );
+    if (isMemorizationFragilitySignal && canOfferMemorizationSuggestionsNow()) {
+      applyMemorizationSuggestions(currentSlot, currentQuizDate);
     }
   }
   // +N furtif au milieu de l'écran à chaque bonne réponse, sur les 3 catégories
@@ -5205,6 +5316,40 @@
         osc.frequency.value = partial.freq;
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(partial.gain, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + partial.decay);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + partial.decay + 0.05);
+      });
+    } catch (e) {}
+  }
+  // Variante plus dramatique et plus discrète du carillon ci-dessus (demande
+  // du 15/09/2026, "à partir de 7" connaissances mémorisées d'affilée — le
+  // seuil "busy" de la jauge de charge de mémorisation, cf.
+  // getLoadGaugeLevelForCount/GAUGE_DISPLAY_PEAK_THRESHOLDS plus bas dans ce
+  // fichier) : joué à la place de playEncouragingChime, jamais en plus,
+  // quand coche/décoche dans les listes "Connaissances mémorisées ce jour"
+  // amène le compte à 7 ou plus. Quinte diminuée (tritone F3/B3, dissonante,
+  // évoque la tension) au lieu de l'octave douce du carillon encourageant ;
+  // gains sensiblement plus bas (0.16/0.12/0.05 contre 0.28/0.2/0.08/0.04).
+  function playDramaticChime() {
+    try {
+      var ctx = getChimeAudioCtx();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      var now = ctx.currentTime;
+      [
+        { freq: 174.6, gain: 0.16, decay: 3.2 },
+        { freq: 246.9, gain: 0.12, decay: 3.2 },
+        { freq: 349.2, gain: 0.05, decay: 2.4 }
+      ].forEach(function (partial) {
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = partial.freq;
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(partial.gain, now + 0.08);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + partial.decay);
         osc.connect(gain);
         gain.connect(ctx.destination);
@@ -6304,6 +6449,19 @@
   // rapprochées ici avant d'abandonner sur l'écran de score (jamais un délai
   // fixe avant le premier essai : la promotion est déjà là la plupart du
   // temps, inutile de ralentir ce cas courant).
+  // Budget de polling délibérément COURT (perf, 15/09/2026, "reste bloqué
+  // longtemps sur le chargement" — Expert en particulier) : ce polling ne
+  // visait à l'origine (cf. commentaire au-dessus de cette fonction) qu'à
+  // rattraper une course d'écriture DB de quelques centaines de ms, jamais à
+  // attendre une génération de niveau qui peut prendre plusieurs MINUTES
+  // (Expert surtout, dernier maillon d'une chaîne Élémentaire->Avancé->Expert
+  // côté serveur, cf. continueProgressiveGeneration). Un budget de 90s
+  // (l'ancienne valeur) ne faisait donc que garder l'utilisateur sur un plein
+  // écran "Chargement de la suite…" pendant près d'une minute et demie pour
+  // rien dans ce cas — l'écran de score (cf. renderFinalScore ci-dessous)
+  // gère déjà ce cas bien mieux : sablier honnête "en cours de création" +
+  // polling non bloquant à 8s (startProgressiveNextLevelPoll).
+  var CONTINUE_NEXT_LEVEL_READINESS_POLL_BUDGET = 4; // ~8s (4 x 2000ms)
   function continueToNextProgressiveLevel(slotAtCall, dateAtCall, nextLevel, attempt) {
     attempt = attempt || 0;
     renderMessage('Chargement de la suite…');
@@ -6311,8 +6469,18 @@
       .then(function (res) { return res.json(); })
       .then(function (statusData) {
         if (currentSlot !== slotAtCall || currentQuizDate !== dateAtCall) return null;
-        if (statusData && statusData.progressive && statusData.nextLevel && !statusData.nextLevelReady && attempt < 45) {
+        var stillNotReady = statusData && statusData.progressive && statusData.nextLevel && !statusData.nextLevelReady;
+        if (stillNotReady && attempt < CONTINUE_NEXT_LEVEL_READINESS_POLL_BUDGET) {
           setTimeout(function () { continueToNextProgressiveLevel(slotAtCall, dateAtCall, nextLevel || statusData.nextLevel, attempt + 1); }, 2000);
+          return null;
+        }
+        if (stillNotReady) {
+          // Budget épuisé : bascule tout de suite sur l'écran de score
+          // (renderFinalScore() sans argument re-vérifie honnêtement le
+          // statut et affiche sablier + polling, cf. maybeShowProgressiveNextLevelHint)
+          // plutôt que de continuer à bloquer sur ce plein écran, ou de
+          // tenter un /today qu'on sait déjà voué à ne rien renvoyer de neuf.
+          renderFinalScore();
           return null;
         }
         return fetch(
@@ -6461,7 +6629,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        recordAnsweredQuestion(question.id, data);
+        recordAnsweredQuestion(question.id, data, difficulty);
         applyChoiceAnswerState(question, data);
         scrollToRevealLearningReturn();
       })
@@ -6551,7 +6719,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        recordAnsweredQuestion(question.id, data);
+        recordAnsweredQuestion(question.id, data, difficulty);
         applyAssociationAnswerState(question, data, selects);
         scrollToRevealLearningReturn();
       })
@@ -6663,7 +6831,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        recordAnsweredQuestion(question.id, data);
+        recordAnsweredQuestion(question.id, data, difficulty);
         applyMultiChoiceAnswerState(data, buttons);
         scrollToRevealLearningReturn();
       })
@@ -6779,7 +6947,7 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.error) throw new Error(data.error);
-        recordAnsweredQuestion(question.id, data);
+        recordAnsweredQuestion(question.id, data, difficulty);
         applyOrderAnswerState(data, poolEl, chosenEl, question.items);
         scrollToRevealLearningReturn();
       })
@@ -8604,6 +8772,18 @@
   function hideMemorizedToday() {
     memorizedTodayToken++;
     if (memorizedTodayEl) memorizedTodayEl.hidden = true;
+    if (memorizedTodayLoadingEl) memorizedTodayLoadingEl.hidden = true;
+  }
+  // Sablier tournant (demande du 15/09/2026) : rubrique visible mais vide
+  // (juste le sablier, les deux sous-groupes restent hidden) — uniquement
+  // pour une vraie latence réseau, jamais quand loadMemorizedToday a déjà de
+  // quoi peindre depuis le cache. Masqué par renderMemorizedToday dès la
+  // première réponse réelle, cache ou réseau, contenu ou vide.
+  function showMemorizedTodayLoading() {
+    if (memorizedTodayEl) memorizedTodayEl.hidden = false;
+    if (memorizedTodayLoadingEl) memorizedTodayLoadingEl.hidden = false;
+    if (memorizedTodayVoluntaryEl) memorizedTodayVoluntaryEl.hidden = true;
+    if (memorizedTodaySuggestedEl) memorizedTodaySuggestedEl.hidden = true;
   }
   // Réutilise telles quelles les classes/l'apparence de la fiche
   // (.qcm-fiche-memorization-toggle, cf. buildKnowledgeMemorizationSectionHtml)
@@ -8638,6 +8818,7 @@
   // global n'est visible que si AU MOINS l'un des deux a du contenu.
   function renderMemorizedToday(voluntary, suggested) {
     if (!memorizedTodayEl) return;
+    if (memorizedTodayLoadingEl) memorizedTodayLoadingEl.hidden = true;
     if ((!voluntary || !voluntary.length) && (!suggested || !suggested.length)) {
       memorizedTodayEl.hidden = true;
       return;
@@ -8675,6 +8856,17 @@
         var loadGaugeDelta = (nextCountsInLoadGauge ? 1 : 0) - (previousCountsInLoadGauge ? 1 : 0);
         countsInLoadGauge = nextCountsInLoadGauge;
         renderState(nextEnabled);
+        // Même carillon que les bonnes réponses du QCM (demande du 15/09/2026),
+        // sur coche ET décoche, dans les deux sous-groupes (Préconisées/Volontairement) —
+        // remplacé par playDramaticChime si le compte résultant atteint le seuil
+        // "busy" de la jauge (7+, cf. getLoadGaugeLevelForCount plus bas). Sans
+        // lastLoadGaugeData connu (jauge non affichée), on garde le carillon normal.
+        var nextGaugeCount = lastLoadGaugeData ? Math.max(0, (Number(lastLoadGaugeData.count) || 0) + loadGaugeDelta) : null;
+        if (nextGaugeCount !== null && getLoadGaugeLevelForCount(nextGaugeCount) !== 'calm' && getLoadGaugeLevelForCount(nextGaugeCount) !== 'moderate') {
+          playDramaticChime();
+        } else {
+          playEncouragingChime();
+        }
         setKnowledgeMemorization(item.subjectType, item.subjectSourceId, item.knowledgeTargetId, nextEnabled, function (ok) {
           if (myToken !== requestToken) return;
           if (!ok) {
@@ -8686,21 +8878,76 @@
       });
     });
   }
+  // Persistance sessionStorage (demande du 15/09/2026, "les connaissances
+  // mémorisées ce jour mettent du temps à apparaître") : même cause et même
+  // remède que MES_QCM_SESSION_CACHE_KEY/LEARN_NEXT_SESSION_CACHE_KEY plus
+  // haut — cette rubrique restait `hidden` sans aucun affichage instantané
+  // pendant l'aller-retour réseau, à chaque nouvelle ouverture de la page
+  // (le raccourcissement du 15/09/2026 de fetchMemorizedTodayForUser, cf.
+  // server.js, réduit ce temps mais ne l'annule jamais). La vraie réponse
+  // réseau reste toujours appelée juste après (jamais remplacée) et
+  // corrige/complète l'affichage dès qu'elle répond, cache ou pas.
+  var MEMORIZED_TODAY_SESSION_CACHE_KEY = 'mnoria_memorizedtoday_entry_cache_v1';
+  var MEMORIZED_TODAY_SESSION_CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+  function readMemorizedTodaySessionCache() {
+    if (!voterKey) return null;
+    try {
+      var raw = sessionStorage.getItem(MEMORIZED_TODAY_SESSION_CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || parsed.key !== voterKey) return null;
+      if (Date.now() - Number(parsed.fetchedAt || 0) > MEMORIZED_TODAY_SESSION_CACHE_MAX_AGE_MS) return null;
+      return parsed;
+    } catch (error) {
+      return null;
+    }
+  }
+  function writeMemorizedTodaySessionCache(entry) {
+    try {
+      if (!entry) { sessionStorage.removeItem(MEMORIZED_TODAY_SESSION_CACHE_KEY); return; }
+      sessionStorage.setItem(MEMORIZED_TODAY_SESSION_CACHE_KEY, JSON.stringify(entry));
+    } catch (error) {
+      // Best-effort (quota dépassé, navigation privée...) : jamais bloquant.
+    }
+  }
+  // Délai avant d'afficher le sablier (demande du 15/09/2026, "SI il y a
+  // vraiment une latence") : jamais affiché pour une réponse rapide — sinon
+  // un simple flash gênant sur la majorité des chargements, qui répondent
+  // largement avant ça. Volontairement même ordre de grandeur que les autres
+  // délais de "latence perceptible" de cette page (cf. NAVIGATION_FETCH_TIMEOUT_MS
+  // côté service worker pour un seuil de la même famille, à une autre échelle).
+  var MEMORIZED_TODAY_LOADING_DELAY_MS = 250;
   function loadMemorizedToday() {
     if (!voterKey) { hideMemorizedToday(); return; }
     var myToken = ++memorizedTodayToken;
+    var sessionEntry = readMemorizedTodaySessionCache();
+    var loadingTimer = null;
+    if (sessionEntry) {
+      renderMemorizedToday(
+        Array.isArray(sessionEntry.voluntary) ? sessionEntry.voluntary : [],
+        Array.isArray(sessionEntry.suggested) ? sessionEntry.suggested : []
+      );
+    } else {
+      loadingTimer = setTimeout(function () {
+        if (myToken === memorizedTodayToken) showMemorizedTodayLoading();
+      }, MEMORIZED_TODAY_LOADING_DELAY_MS);
+    }
     fetch('/api/users/memorized-today?legacyKey=' + encodeURIComponent(voterKey), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
+        if (loadingTimer) clearTimeout(loadingTimer);
         if (myToken !== memorizedTodayToken) return;
         var ok = data && !data.error;
-        renderMemorizedToday(
-          ok && Array.isArray(data.voluntary) ? data.voluntary : [],
-          ok && Array.isArray(data.suggested) ? data.suggested : []
-        );
+        var voluntary = ok && Array.isArray(data.voluntary) ? data.voluntary : [];
+        var suggested = ok && Array.isArray(data.suggested) ? data.suggested : [];
+        renderMemorizedToday(voluntary, suggested);
+        if (ok) writeMemorizedTodaySessionCache({ key: voterKey, voluntary: voluntary, suggested: suggested, fetchedAt: Date.now() });
       })
       .catch(function () {
-        if (myToken === memorizedTodayToken) renderMemorizedToday([], []);
+        if (loadingTimer) clearTimeout(loadingTimer);
+        // !sessionEntry : une réponse déjà peinte depuis le cache reste affichée
+        // telle quelle sur un échec réseau, jamais effacée pour rien.
+        if (myToken === memorizedTodayToken && !sessionEntry) renderMemorizedToday([], []);
       });
   }
 
@@ -9503,7 +9750,10 @@
     var stateHtml = q.realized
       ? '<span class="qcm-mesqcm-state is-realized">Réalisé<br>(' + (Number(q.trueAnsweredCount) || 0) + '/' + questionCount + ')</span>'
       : (q.completedLevel
-        ? '<span class="qcm-mesqcm-state is-realized">Acquis<br>' + escapeHtml(formatMesQcmLevelLabel(q.completedLevel) || q.completedLevel) + '</span>'
+        // Demande du 15/09/2026, "sur la même ligne" (auparavant un <br>, comme
+        // les autres pastilles État) : .qcm-mesqcm-state a déjà white-space:nowrap,
+        // un simple espace suffit donc à garder "Acquis Élémentaire" sur une ligne.
+        ? '<span class="qcm-mesqcm-state is-realized">Acquis ' + escapeHtml(formatMesQcmLevelLabel(q.completedLevel) || q.completedLevel) + '</span>'
         : (q.inProgress
           ? '<span class="qcm-mesqcm-state is-inprogress">' + (mergedLevelLabel ? escapeHtml(mergedLevelLabel) + '<br>' : '') + 'En cours (' + (Number(q.answeredCount) || 0) + '/' + questionCount + ')</span>'
           : '<span class="qcm-mesqcm-state">En attente de<br>réalisation</span>'));
@@ -9784,7 +10034,12 @@
   }
 
   function initMesQcmTableScrollHints() {
-    body.querySelectorAll('.qcm-mesqcm-table-shell').forEach(function (shell) {
+    // document, jamais body (= #qcm-body) : même raison que
+    // initMesQcmCarouselScrollHydration ci-dessous — #qcm-creating-inline
+    // (demande du 15/09/2026, "En cours de création" déplacée hors de
+    // #qcm-body pour passer avant "Apprentissages proposés") est un FRÈRE de
+    // #qcm-body dans le HTML statique, pas un descendant.
+    document.querySelectorAll('.qcm-mesqcm-table-shell').forEach(function (shell) {
       var scroller = shell.querySelector('.qcm-mesqcm-table-wrap');
       if (!scroller) return;
       scroller.addEventListener('scroll', function () { syncMesQcmTableScrollHint(shell); }, { passive: true });
@@ -10167,6 +10422,17 @@
     setQcmStateMessageMode(false);
     currentMesQcmQuizzes = quizzes;
     var creatingHtml = renderCreatingNotionQuizzesHtml();
+    // Rendue dans son propre conteneur, séparé de #qcm-body (demande du
+    // 15/09/2026, "doit apparaître avant la rubrique apprentissages
+    // proposés") : cf. le commentaire HTML de #qcm-creating-inline pour la
+    // raison (#qcm-body vient après #qcm-learn-next-inline dans le HTML
+    // statique). Toujours mis à jour ici, avant tout retour anticipé
+    // ci-dessous, pour rester synchronisé même quand quizzes est vide.
+    if (creatingInlineEl) {
+      creatingInlineEl.innerHTML = creatingHtml;
+      creatingInlineEl.hidden = !creatingHtml;
+      if (creatingHtml) initInlineLearningDetails(creatingInlineEl);
+    }
     if (!quizzes.length && !creatingHtml) { renderMesQcmEmpty(); return; }
 
     // Jamais retrié par nom ici (contrairement à renderMesAcquisList) : l'ordre
@@ -10206,7 +10472,7 @@
     // acquis") : ni la barre "Tout cocher" (MESQCM_BULK_BAR_HTML, non préfixée ci-dessous) ni
     // la colonne de cases à cocher par ligne (showCheckbox=false plus bas) — la suppression
     // individuelle (icône corbeille par ligne) reste disponible.
-    var html = '<div class="qcm-mesqcm-groups">' + creatingHtml;
+    var html = '<div class="qcm-mesqcm-groups">';
     if (notStartedQuizzes.length) {
       html += '<section class="qcm-mesqcm-group qcm-mesqcm-group--pending"><details open>';
       html += '<summary class="qcm-mesqcm-group-title">En attente de réalisation</summary>';
@@ -11519,6 +11785,19 @@
     renderMessage('Chargement en cours');
 
     var dateParam = currentQuizDate ? '&date=' + encodeURIComponent(currentQuizDate) : '';
+    // Perf (15/09/2026, "latence lancement QCM") : /today et /results sont
+    // lancés EN PARALLÈLE (aucun des deux n'a besoin de la réponse de
+    // l'autre au niveau des paramètres réseau — slot/date/voterKey sont déjà
+    // tous connus ici) plutôt qu'enchaînés en .then, ce qui économise un
+    // aller-retour réseau complet sur le chemin critique pour tout visiteur
+    // identifié (cas quasi général). /results n'est démarré que si voterKey
+    // est présent, exactement comme avant ; son échec retombe sur le même
+    // repli qu'avant (première question affichée sans reprise).
+    var resultsPromise = voterKey
+      ? fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey) + '&slot=' + encodeURIComponent(slotKey) + dateParam, { cache: 'no-store' })
+          .then(function (res) { return res.json(); })
+          .catch(function () { return null; })
+      : null;
     fetch('/api/daily-quiz/today?slot=' + encodeURIComponent(slotKey) + dateParam + (voterKey ? '&voterKey=' + encodeURIComponent(voterKey) : ''), { cache: 'no-store' })
       .then(function (res) { return res.json(); })
       .then(function (data) {
@@ -11545,45 +11824,42 @@
         // "Retourner aux apprentissages" n'apparaît qu'avec la vraie question
         // (jamais pendant le sablier "Chargement du QCM…", y compris le temps
         // du fetch des réponses ci-dessous — demande du 30/08/2026).
-        if (!voterKey) {
+        if (!resultsPromise) {
           currentIndex = 0;
           renderQuestion();
           if (learningReturnBottom) learningReturnBottom.hidden = false;
           return;
         }
-        fetch('/api/daily-quiz/results?voterKey=' + encodeURIComponent(voterKey) + '&slot=' + encodeURIComponent(slotKey) + dateParam, { cache: 'no-store' })
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            if (myToken !== loadToken) return;
-            (data.answers || []).forEach(function (a) { answeredByQuestionId[a.questionId] = a; });
-            var firstUnanswered = questions.findIndex(function (q) { return !answeredByQuestionId[q.id]; });
-            if (firstUnanswered === -1) {
-              // Reprise d'un QCM déjà entièrement répondu (demande du
-              // 08/09/2026, "ça ne marche pas d'Approfondir à Expert" —
-              // reproduit : le bug touchait précisément cette reprise, jamais
-              // le fil direct pendant la session) : passait tout droit par
-              // renderFinalScore(), qui ne fait JAMAIS lui-même enchaîner sur
-              // le niveau suivant même prêt (ce rôle est exclusivement celui
-              // de finishCurrentBlockOrContinue, seul appelant qui teste
-              // nextLevelReady avant de choisir). Un utilisateur qui avait
-              // déjà terminé Approfondi puis rouvrait le sujet plus tard
-              // (Expert entre-temps devenu prêt) ne voyait donc ni la suite
-              // ni le message d'attente — jamais rien. Même chemin que la fin
-              // "en direct" d'un bloc désormais.
-              finishCurrentBlockOrContinue();
-            } else {
-              currentIndex = firstUnanswered;
-              renderQuestion();
-            }
+        resultsPromise.then(function (data) {
+          if (myToken !== loadToken) return;
+          if (!data) {
+            currentIndex = 0;
+            renderQuestion();
             if (learningReturnBottom) learningReturnBottom.hidden = false;
-          })
-          .catch(function () {
-            if (myToken === loadToken) {
-              currentIndex = 0;
-              renderQuestion();
-              if (learningReturnBottom) learningReturnBottom.hidden = false;
-            }
-          });
+            return;
+          }
+          (data.answers || []).forEach(function (a) { answeredByQuestionId[a.questionId] = a; });
+          var firstUnanswered = questions.findIndex(function (q) { return !answeredByQuestionId[q.id]; });
+          if (firstUnanswered === -1) {
+            // Reprise d'un QCM déjà entièrement répondu (demande du
+            // 08/09/2026, "ça ne marche pas d'Approfondir à Expert" —
+            // reproduit : le bug touchait précisément cette reprise, jamais
+            // le fil direct pendant la session) : passait tout droit par
+            // renderFinalScore(), qui ne fait JAMAIS lui-même enchaîner sur
+            // le niveau suivant même prêt (ce rôle est exclusivement celui
+            // de finishCurrentBlockOrContinue, seul appelant qui teste
+            // nextLevelReady avant de choisir). Un utilisateur qui avait
+            // déjà terminé Approfondi puis rouvrait le sujet plus tard
+            // (Expert entre-temps devenu prêt) ne voyait donc ni la suite
+            // ni le message d'attente — jamais rien. Même chemin que la fin
+            // "en direct" d'un bloc désormais.
+            finishCurrentBlockOrContinue();
+          } else {
+            currentIndex = firstUnanswered;
+            renderQuestion();
+          }
+          if (learningReturnBottom) learningReturnBottom.hidden = false;
+        });
       })
       .catch(function () {
         if (myToken === loadToken) renderMessage('Impossible de charger ce QCM pour le moment.');

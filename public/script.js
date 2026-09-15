@@ -21024,6 +21024,7 @@ let _memoireModuleLoadPromise = null;
 
 function setMemoireFrameLoadingOverlayVisible(visible) {
   const overlay = document.getElementById('mnoria-memory-frame-loading');
+  document.body?.classList?.toggle('mnoria-memory-frame-loading-active', !!visible);
   if (!overlay) return;
   overlay.classList.toggle('is-hidden', !visible);
 }

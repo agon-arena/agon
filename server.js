@@ -18038,17 +18038,45 @@ async function fetchExcludedQuestionIds(voterKey) {
 // wireExcludeButton côté client) — cette désactivation ne doit jamais
 // empêcher de noter la question affichée, seulement ne plus la reproposer
 // ENSUITE.
-async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey, { includeDisabledKnowledgeTargets = false } = {}) {
+// Perf (15/09/2026, "latence Ancrer") : /api/daily-quiz/status, /today et
+// /results peuvent appeler cette fonction quasi simultanément pour le MÊME
+// (voterKey, includeDisabledKnowledgeTargets) — status en parallèle de
+// today côté client, puis results juste après (cf. loadSlot) — sans que le
+// résultat de l'un dépende de l'autre. Un simple verrou en mémoire sur les
+// appels VRAIMENT concurrents (jamais une durée de vie au-delà d'un aller-
+// retour réseau, contrairement à un cache à TTL) fusionne ces calculs
+// redondants sans jamais resservir un résultat obsolète : dès que la
+// promesse est résolue, l'entrée est retirée, donc un appel qui suit de
+// quelques centaines de ms (ex. une réponse tout juste soumise) relance bien
+// un calcul frais. Même patron que _cultureGeneraleComprehensionGenerationPromises.
+const _cultureGeneraleReviewInjectionInFlight = new Map();
+
+async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey, options = {}) {
   const key = String(voterKey || "").trim();
   if (!key) return [];
+  const includeDisabledKnowledgeTargets = !!options.includeDisabledKnowledgeTargets;
+  const dedupKey = `${key}:${includeDisabledKnowledgeTargets ? 1 : 0}`;
+  const pending = _cultureGeneraleReviewInjectionInFlight.get(dedupKey);
+  if (pending) return pending;
+  const computation = fetchCultureGeneraleReviewInjectionForTodayUncached(key, { includeDisabledKnowledgeTargets });
+  _cultureGeneraleReviewInjectionInFlight.set(dedupKey, computation);
+  try {
+    return await computation;
+  } finally {
+    if (_cultureGeneraleReviewInjectionInFlight.get(dedupKey) === computation) {
+      _cultureGeneraleReviewInjectionInFlight.delete(dedupKey);
+    }
+  }
+}
 
+async function fetchCultureGeneraleReviewInjectionForTodayUncached(key, { includeDisabledKnowledgeTargets = false } = {}) {
   // Lecture seule (jamais resolveLegacyUser, qui crée la ligne) : un
   // visiteur sans historique n'a par définition aucune ligne memory_items ni
   // memory_item_fsrs_states, inutile de lui créer une ligne users ici — la
   // création reste réservée au chemin d'écriture (POST /answer).
-  const { data: userRow, error: userError } = await supabase.from("users").select("id").eq("legacy_key", key).maybeSingle();
+  const { id: userId, error: userError } = await resolveCachedLegacyUserId(key);
   if (userError) { console.warn("[fsrs due] lecture user échouée :", userError.message); return []; }
-  if (!userRow) return [];
+  if (!userId) return [];
 
   const [{ data: dueStates, error: dueError }, excludedIds, disabledKnowledgeTargetKeys] = await Promise.all([
     supabase.from("memory_item_fsrs_states")
@@ -18062,7 +18090,7 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey, 
       // (memory_items_subject_idx), jamais redérivée du contenu de la
       // question — sert au filtre par knowledgeTargetId ci-dessous.
       .select("reps, state, stability, memory_items(slot, quiz_date, question_id, subject_type, subject_source_id)")
-      .eq("user_id", userRow.id)
+      .eq("user_id", userId)
       .lte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true })
       .limit(DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY),
@@ -18074,7 +18102,7 @@ async function fetchCultureGeneraleReviewInjectionForToday(voterKey, _todayKey, 
     // (legacy question_id OU nouvelle désactivation par knowledgeTarget),
     // jamais l'un à la place de l'autre : cf. commentaire de tête sur
     // fetchExcludedQuestionIds, comportement historique préservé à l'identique.
-    fetchDisabledKnowledgeTargetKeys(userRow.id)
+    fetchDisabledKnowledgeTargetKeys(userId)
   ]);
   if (dueError) { console.warn("[fsrs due] lecture memory_item_fsrs_states échouée :", dueError.message); return []; }
   if (!dueStates || !dueStates.length) return [];
@@ -19295,21 +19323,53 @@ const DAILY_QUIZ_QUESTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 // IMMÉDIATEMENT sur le prochain /today, sans fenêtre de staleness — seul le
 // CONTENU (par (date, slot, niveau effectif)) reste mis en cache plus bas,
 // jamais la résolution du niveau lui-même.
+// Cache légère (perf, 15/09/2026, "latence QCM") : legacy_key -> user.id.
+// Cette correspondance ne change jamais pour un visiteur donné une fois
+// créée — contrairement au NIVEAU lui-même (jamais mis en cache, cf.
+// commentaire ci-dessous), la caching ici ne réintroduit donc aucune
+// staleness sur le niveau servi. Évite 1 aller-retour Supabase sur 2 (celui
+// qui ne dépend d'aucun état mutable) à chaque réponse soumise sur un quiz
+// de notion pour tout visiteur déjà vu. TTL de sécurité modeste seulement
+// pour borner une éventuelle incohérence si jamais la ligne `users` change.
+const _legacyKeyToUserIdCache = new Map();
+const LEGACY_KEY_TO_USER_ID_CACHE_TTL_MS = 10 * 60 * 1000;
+
+// Extrait en helper partagé (perf, 15/09/2026, "latence Ancrer") : la même
+// correspondance legacy_key -> user.id est aussi nécessaire, en lecture
+// seule, dans fetchCultureGeneraleReviewInjectionForToday (plus haut dans le
+// fichier, mais function declaration hoistée — appelable sans risque, la
+// const ci-dessus est de toute façon déjà initialisée avant qu'aucune requête
+// HTTP ne soit traitée). Retourne { id, error } plutôt que de lever, pour que
+// chaque appelant garde son propre message de log / valeur de repli.
+async function resolveCachedLegacyUserId(legacyKey) {
+  const key = String(legacyKey || "").trim();
+  if (!key) return { id: null, error: null };
+  const cached = _legacyKeyToUserIdCache.get(key);
+  if (cached && Date.now() - cached.at < LEGACY_KEY_TO_USER_ID_CACHE_TTL_MS) {
+    return { id: cached.id, error: null };
+  }
+  const { data: user, error } = await supabase
+    .from("users").select("id").eq("legacy_key", key).maybeSingle();
+  if (error) return { id: null, error };
+  if (!user) return { id: null, error: null };
+  _legacyKeyToUserIdCache.set(key, { id: user.id, at: Date.now() });
+  return { id: user.id, error: null };
+}
+
 async function resolvePersistedNotionRequestedLevel(voterKey, quizDate, slot) {
   if (!String(slot || "").startsWith("notion:")) return null;
   const key = String(voterKey || "").trim();
   if (!key) return null;
-  const { data: user, error: userError } = await supabase
-    .from("users").select("id").eq("legacy_key", key).maybeSingle();
+  const { id: userId, error: userError } = await resolveCachedLegacyUserId(key);
   if (userError) {
     console.warn("[notion-quiz] résolution utilisateur (niveau persistant) :", userError.message);
     return null;
   }
-  if (!user) return null;
+  if (!userId) return null;
   const { data: rows, error: linkError } = await supabase
     .from("user_notion_quizzes")
     .select("requested_level")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("quiz_date", quizDate)
     .eq("slot", slot)
     .order("added_at", { ascending: false })
@@ -20655,6 +20715,23 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       paragraphGroundingRejectedCount
     } = blockResult;
 
+    // Classification thématique (correctif du 15/09/2026, "vignette/icône par
+    // défaut sur les apprentissages fraîchement adoptés depuis le catalogue")
+    // : ce chemin rapide écrivait jusqu'ici sourcePlacement:null en dur (cf.
+    // plus bas), sans jamais appeler classifyCultureGeneraleKnowledgePlacementWithAI
+    // — la seule correction venait du rattrapage fire-and-forget de GET
+    // /api/users/notion-quizzes (backfillMissingKnowledgeThemeClassification),
+    // jamais garanti avant la première lecture de la liste. Même principe que
+    // generateNotionLevelQuiz/classificationContext (cf. son commentaire) :
+    // lancée tôt, en parallèle du reste (pedagogicalRank/logs ci-dessous),
+    // awaitée seulement juste avant de construire `questions`. .catch(() => {})
+    // uniquement pour éviter l'avertissement Node "unhandledRejection" pendant
+    // cette attente parallèle — l'erreur réelle reste propagée à l'await plus bas.
+    const sourcePlacementPromise = classifyCultureGeneraleKnowledgePlacementWithAI(
+      "custom", sourceName, sourceDetail, userId, id
+    );
+    sourcePlacementPromise.catch(() => {});
+
     // pedagogicalRank = order du curriculum (dans [1, taille du curriculum],
     // plus nécessairement 1-5) — RÉUTILISE attachPedagogicalRanks tel quel
     // (lib/question-formats.js), jamais une seconde logique de rattachement :
@@ -20756,6 +20833,12 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       elementary_evidence_rejection_reasons: elementaryEvidenceRejectionReasons
     }));
 
+    // Awaitée ICI seulement (même endroit que buildCustomTopicQuiz) : la
+    // Promise a déjà été lancée plus haut, en parallèle du rattachement
+    // pédagogique/logging ci-dessus — jamais un second appel IA.
+    const sourcePlacement = await sourcePlacementPromise;
+    const sourceThemes = sourcePlacement?.category ? [sourcePlacement.category] : [];
+
     const questions = rankedQuestions.map((q, index) => ({
       id: `notion:custom:${id}-elementary-q${index + 1}`,
       ...q,
@@ -20766,8 +20849,8 @@ async function ensureProgressiveElementaryGenerated(masterSlot, topic, id, userI
       // slimSourceDetailForDuplicateQuestion — invariant conservé à travers
       // toutes les continuations (continueProgressiveGeneration).
       sourceDetail: index === 0 ? sourceDetail : slimSourceDetailForDuplicateQuestion(sourceDetail),
-      sourceThemes: [],
-      sourcePlacement: null,
+      sourceThemes,
+      sourcePlacement,
       level: "elementaire",
       sourceDebateId: id,
       searchTopic: topic
@@ -24950,6 +25033,115 @@ async function fetchCultureGeneraleComprehensionBanks(legacyKey, quizDate) {
   return banks;
 }
 
+// Pré-génération en tâche de fond des banques « Comprendre » (perf, 15/09/2026, "chargement
+// long au lancement d'un QCM Relier") : sans ceci, la toute première ouverture d'un lien
+// jamais consulté déclenche 1-2 appels OpenAI SYNCHRONES dans la requête HTTP GET
+// /api/daily-quiz/today (cf. buildCultureGeneraleComprehensionQuiz), perçus comme plusieurs
+// secondes de chargement. Ce scheduler traite ces liens EN AMONT, pendant qu'aucun visiteur
+// n'attend : à chaque cycle, un petit lot de liens sans banque reçoit la sienne via le MÊME
+// chemin qu'un visiteur réel (ensureCultureGeneraleComprehensionQuiz) — la banque est partagée
+// par paire (jamais par visiteur, cf. commentaire plus haut), donc un lien pré-généré ici
+// profite à tout futur visiteur qui possède ce même lien. Aucun risque de double génération
+// avec un visiteur qui ouvrirait "Relier" entre-temps : verrou en mémoire
+// (_cultureGeneraleComprehensionGenerationPromises) + relecture "banque déjà existante" dans
+// ensureCultureGeneraleComprehensionQuizPersisted, exactement comme pour deux visiteurs
+// concurrents.
+const COMPREHENSION_PREGEN_SCHEDULER_ENABLED = isRenderScopedTaskEnabled("MNORIA_COMPREHENSION_PREGEN_SCHEDULER");
+const COMPREHENSION_PREGEN_INTERVAL_MS = 10 * 60 * 1000;
+// Lot volontairement petit (même esprit que le "par lots de 3" de fetchCultureGeneraleComprehensionBanks
+// ci-dessus) : jamais toutes les générations IA manquantes d'un coup, un cycle suffisant tous
+// les 10 min pour rattraper le flux normal de nouveaux liens détectés.
+const COMPREHENSION_PREGEN_BATCH_SIZE = 3;
+// Bornes le coût de lecture Supabase par cycle (table culture_generale_notion_links) — les
+// liens les plus RÉCENTS (id desc) sont les plus susceptibles de ne pas encore avoir de
+// banque, donc les plus utiles à traiter en priorité si la table dépasse cette limite.
+const COMPREHENSION_PREGEN_LINKS_SCAN_LIMIT = 500;
+
+async function pregenerateCultureGeneraleComprehensionBanks() {
+  const { data: linkRows, error: linkError } = await supabase
+    .from("culture_generale_notion_links")
+    .select("id,type_a,source_id_a,name_a,type_b,source_id_b,name_b,label")
+    .order("id", { ascending: false })
+    .limit(COMPREHENSION_PREGEN_LINKS_SCAN_LIMIT);
+  if (linkError) {
+    console.warn("[comprehension-pregen] lecture des liens échouée :", linkError.message);
+    return;
+  }
+  if (!linkRows?.length) return;
+
+  const links = linkRows.map((row) => ({
+    id: row.id,
+    typeA: row.type_a, idA: String(row.source_id_a), nameA: row.name_a,
+    typeB: row.type_b, idB: String(row.source_id_b), nameB: row.name_b,
+    label: row.label
+  }));
+  const slotByLinkId = new Map(links.map((link) => [link.id, cultureGeneraleComprehensionQuizSlot(link)]));
+  const allSlots = [...new Set(slotByLinkId.values())];
+
+  // Même syntaxe de sélection allégée que hasPendingCultureGeneraleComprehensionQuestions
+  // (audit egress du 01/09/2026) : "a une banque ?" ne nécessite jamais de rapatrier le
+  // tableau `questions` complet.
+  const { data: bankRows, error: bankError } = await fetchAllSupabaseRowsIn(allSlots, (slotsChunk) =>
+    supabase.from("daily_quiz").select("slot, first:questions->0").in("slot", slotsChunk)
+  );
+  if (bankError) {
+    console.warn("[comprehension-pregen] lecture des banques existantes échouée :", bankError.message);
+    return;
+  }
+  const slotsWithBank = new Set((bankRows || []).filter((row) => row.first != null).map((row) => row.slot));
+
+  const missingLinks = links.filter((link) => !slotsWithBank.has(slotByLinkId.get(link.id)));
+  if (!missingLinks.length) return;
+  const batch = missingLinks.slice(0, COMPREHENSION_PREGEN_BATCH_SIZE);
+
+  // detailA/detailB ne sont PAS stockés sur culture_generale_notion_links (table globale, ne
+  // garde que name_a/name_b) : reconstitués ici depuis user_article_acquisitions.eclairage_detail
+  // par (type, source_id) — n'importe quelle ligne suffit, ce détail est identique quel que
+  // soit l'utilisateur qui l'a acquis (même logique que fetchOwnedCultureGeneraleNotionLinks,
+  // simplement sans la restriction "appartient à CET utilisateur").
+  const sourceIds = [...new Set(batch.flatMap((link) => [link.idA, link.idB]))];
+  const { data: acquisitionRows, error: acqError } = await fetchAllSupabaseRowsIn(sourceIds, (idsChunk) =>
+    supabase.from("user_article_acquisitions")
+      .select("eclairage_type, eclairage_source_id, eclairage_detail")
+      .in("eclairage_source_id", idsChunk)
+      .not("eclairage_detail", "is", null)
+  );
+  if (acqError) {
+    console.warn("[comprehension-pregen] lecture des détails échouée :", acqError.message);
+    return;
+  }
+  const detailByKey = new Map();
+  for (const row of acquisitionRows || []) {
+    const detail = String(row.eclairage_detail || "").trim();
+    if (!detail) continue;
+    const key = cultureGeneraleNotionKey(row.eclairage_type, row.eclairage_source_id);
+    if (!detailByKey.has(key)) detailByKey.set(key, detail);
+  }
+
+  for (const link of batch) {
+    const detailA = detailByKey.get(cultureGeneraleNotionKey(link.typeA, link.idA));
+    const detailB = detailByKey.get(cultureGeneraleNotionKey(link.typeB, link.idB));
+    // Pas assez de matière pour un quiz de qualité tant que les deux détails ne sont pas
+    // disponibles — un visiteur réel qui ouvrirait ce lien entre-temps régénérera normalement
+    // (même repli qu'avant ce chantier), jamais bloquant pour lui.
+    if (!detailA || !detailB) continue;
+    try {
+      await ensureCultureGeneraleComprehensionQuiz({ ...link, detailA, detailB });
+    } catch (e) {
+      console.warn(`[comprehension-pregen] génération échouée pour le lien ${link.id} :`, e.message);
+    }
+  }
+}
+
+if (COMPREHENSION_PREGEN_SCHEDULER_ENABLED) {
+  setInterval(() => {
+    pregenerateCultureGeneraleComprehensionBanks().catch((e) => console.error("[comprehension-pregen] Erreur:", e.message));
+  }, COMPREHENSION_PREGEN_INTERVAL_MS).unref();
+  pregenerateCultureGeneraleComprehensionBanks().catch((e) => console.error("[comprehension-pregen] Erreur:", e.message));
+} else {
+  console.log("[comprehension-pregen] scheduler désactivé hors Render (forcer avec MNORIA_COMPREHENSION_PREGEN_SCHEDULER=on).");
+}
+
 // Parcours « Comprendre » : au plus COMPREHENSION_QUIZ_MAX_QUESTIONS questions par session, en
 // tournant chaque jour entre les liens disponibles. Le tri haché est stable pendant toute la
 // journée (reprise/réponse toujours sur le même lot), mais varie le lendemain pour ne pas
@@ -26813,7 +27005,8 @@ async function applyFsrsReviewForDailyQuizAnswer({ voterKey, slot, quizDate, que
   }
 
   const { data: existingStateRow, error: stateError } = await supabase.from("memory_item_fsrs_states")
-    .select("*").eq("user_id", user.id).eq("memory_item_id", memoryItemRow.id).maybeSingle();
+    .select("state, due_at, stability, difficulty, scheduled_days, learning_steps, reps, lapses, last_review_at")
+    .eq("user_id", user.id).eq("memory_item_id", memoryItemRow.id).maybeSingle();
   if (stateError) throw stateError;
 
   const currentState = existingStateRow ? {
@@ -27357,21 +27550,30 @@ app.get("/api/users/notion-quizzes/memorization-suggestions", rateLimit("users",
 // Surface automatiquement les propositions de fin de bloc (demande du
 // 12/09/2026, "je veux que ces connaissances apparaissent dans la nouvelle
 // rubrique Connaissances mémorisées ce jour", revu le 13/09/2026 "pas cochées
-// par défaut... état réel") : pose une ligne source="suggested" ENCORE
-// INACTIVE (memorization_enabled=false) pour chaque connaissance choisie par
-// computeMemorizationSuggestionsForQuiz — jamais "Mémoriser" tant que
-// l'utilisateur n'a pas cliqué lui-même — SAUF si une préférence EXPLICITE
-// existe déjà pour elle (true OU false, cf. fetchKnowledgeTargetMemorization
-// PreferenceMap) — jamais d'écrasement d'un choix déjà posé, quelle que soit
-// sa source (un clic sur une ligne déjà "suggested" reste "suggested" depuis
-// le 14/09/2026, cf. POST /api/users/knowledge-memorization). Idempotent par construction : peut être rappelée sans
-// risque à chaque transition de niveau (Élémentaire -> Avancé -> Expert) du
-// même parcours, cf. son appel côté client (finishCurrentBlockOrContinue).
-// Une fois la ligne posée, la connaissance apparaît d'elle-même dans le
-// groupe "suggested" de GET /api/users/memorized-today (jamais dans
-// "voluntary", qui exige enabled===true) dès qu'elle a aussi reçu une review
-// aujourd'hui — toujours le cas ici puisque la suggestion vient d'une
-// question réellement répondue dans cette même session.
+// par défaut", PUIS RE-REVU le 15/09/2026 "je souhaite qu'ils soient cochés
+// par défaut avec possibilité de les décocher" — annule ce choix du
+// 13/09/2026) : pose une ligne source="suggested" DÉJÀ ACTIVE
+// (memorization_enabled=true) pour chaque connaissance choisie par
+// computeMemorizationSuggestionsForQuiz — comme un vrai clic "Mémoriser"
+// immédiat (alimente Ancrer/la répétition espacée et "Ma mémoire", cf.
+// l'appel fire-and-forget à recordDailyQuizEclairageAcquisition plus bas,
+// répliqué depuis POST /api/users/knowledge-memorization) — SAUF si une
+// préférence EXPLICITE existe déjà pour elle (true OU false, cf.
+// fetchKnowledgeTargetMemorizationPreferenceMap) — jamais d'écrasement d'un
+// choix déjà posé, quelle que soit sa source. Un décochage reste possible à
+// tout moment via POST /api/users/knowledge-memorization, qui ne touche
+// jamais `source` sur un conflit (un clic sur une ligne déjà "suggested"
+// reste "suggested" depuis le 14/09/2026) : la connaissance reste affichée
+// dans "Préconisées à mémoriser", juste décochée. Idempotent par
+// construction : peut être rappelée sans risque à chaque transition de
+// niveau (Élémentaire -> Avancé -> Expert) du même parcours, cf. son appel
+// côté client (finishCurrentBlockOrContinue). Une fois la ligne posée, la
+// connaissance apparaît d'elle-même dans le groupe "suggested" de GET
+// /api/users/memorized-today (le classement par groupe dépend uniquement de
+// `source`, jamais de `enabled`, cf. fetchMemorizedTodayForUser) dès qu'elle
+// a aussi reçu une review aujourd'hui — toujours le cas ici puisque la
+// suggestion vient d'une question réellement répondue dans cette même
+// session.
 async function applyMemorizationSuggestionsForQuiz(quizDate, slot, voterKey) {
   const key = String(voterKey || "").trim();
   const suggestions = await computeMemorizationSuggestionsForQuiz(quizDate, slot, key);
@@ -27392,15 +27594,15 @@ async function applyMemorizationSuggestionsForQuiz(quizDate, slot, voterKey) {
       subject_type: suggestion.subjectType,
       subject_source_id: suggestion.subjectSourceId,
       knowledge_target_id: suggestion.knowledgeTargetId,
-      // FALSE, pas true (revu le 13/09/2026, "les préconisées ne doivent pas être
-      // cochées par défaut... état réel, inactive tant que je ne clique pas") : une
-      // préconisation surfacée automatiquement ne compte PAS encore comme mémorisée
-      // (jamais prise par Ancrer/la répétition espacée, cf. fetchDisabledKnowledgeTargetKeys/
-      // attachMemorizationPreferenceToQuestions, qui lisent cette même valeur) tant que
-      // l'utilisateur ne l'a pas confirmée d'un vrai clic — lequel passe alors par POST
-      // /api/users/knowledge-memorization (source devient "manual", enabled true), donc
-      // ne repasse plus jamais par cette fonction pour cette connaissance.
-      memorization_enabled: false,
+      // TRUE (revu le 15/09/2026, "cochés par défaut, avec possibilité de les
+      // décocher" — annule le FALSE du 13/09/2026) : une préconisation
+      // surfacée automatiquement compte désormais tout de suite comme
+      // mémorisée (prise par Ancrer/la répétition espacée dès sa création,
+      // cf. fetchDisabledKnowledgeTargetKeys/attachMemorizationPreferenceToQuestions,
+      // qui lisent cette même valeur) — l'utilisateur peut la décocher à tout
+      // moment via POST /api/users/knowledge-memorization (source reste
+      // "suggested", seul enabled change).
+      memorization_enabled: true,
       // Distingue cette écriture automatique d'un vrai clic (demande du 13/09/2026,
       // "distinguer volontairement mémorisées / préconisées à mémoriser") — jamais
       // écrite si une préférence existait déjà (cf. "continue" juste au-dessus), donc
@@ -27409,6 +27611,20 @@ async function applyMemorizationSuggestionsForQuiz(quizDate, slot, voterKey) {
       updated_at: new Date().toISOString()
     }, { onConflict: "user_id,subject_type,subject_source_id,knowledge_target_id" });
     if (error) throw new Error(error.message);
+
+    // Réplique le même effet de bord que POST /api/users/knowledge-memorization
+    // quand enabled=true (cf. plus haut dans ce fichier) : sans cet appel, une
+    // préconisation cochée par défaut n'alimenterait "Ma mémoire" qu'après un
+    // décochage/recochage manuel de l'utilisateur, ce qui romprait la
+    // cohérence "cochée = comme un vrai clic" voulue le 15/09/2026.
+    // Fire-and-forget, jamais sur le chemin critique de la réponse HTTP.
+    const masterSlot = buildNotionMasterSlot(suggestion.subjectType, suggestion.subjectSourceId);
+    const candidateSlots = [masterSlot, ...Object.keys(NOTION_QUIZ_LEVELS).map((lvl) => `${masterSlot}:${lvl}`)];
+    resolveCultureGeneraleSourceQuestionForSubject(suggestion.subjectType, suggestion.subjectSourceId, candidateSlots)
+      .then((sourceQuestion) => sourceQuestion
+        ? recordDailyQuizEclairageAcquisition(key, sourceQuestion).then(() => invalidateIntellectualUniverseCache(key))
+        : console.warn(`[memorization-suggestions:apply] aucune question source retrouvée pour sourceType=${suggestion.subjectType} sourceDebateId=${suggestion.subjectSourceId}`))
+      .catch((acquisitionError) => console.warn("[memorization-suggestions:apply] acquisition univers intellectuel échouée :", acquisitionError.message));
   }
   return suggestions;
 }
