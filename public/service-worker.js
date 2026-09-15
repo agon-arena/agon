@@ -51,7 +51,13 @@
 // cache posée sous "/" nue, forçant un aller-retour réseau complet à la place du
 // cache-first attendu. skipStartup est désormais retiré de la clé de cache, cf. plus
 // bas.
-const SW_VERSION = "20260915-skip-startup-cache-key-fix";
+//
+// Correctif du 15/09/2026 (ter) : "quelques instants après, ça refresh la page tout
+// seul" — le diff HTML brut déclenchant mnoria:page-stale incluait
+// #veille-medias-json, qui se régénère côté serveur toutes les 5 min sans rapport avec
+// un vrai déploiement. Retiré de la comparaison, cf. stripVolatileHtmlForStaleCheck
+// plus bas.
+const SW_VERSION = "20260915-stale-check-ignore-veille-medias";
 const STATIC_CACHE = `mnoria-static-${SW_VERSION}`;
 const NAVIGATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -222,6 +228,21 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Retire du HTML les blocs sans rapport avec un vrai déploiement avant de
+// comparer deux versions (cf. leur appel dans le handler "fetch" ci-dessous) :
+// #veille-medias-json (server.js replaceMetaPlaceholders, __VEILLE_MEDIAS_JSON__)
+// se régénère côté serveur toutes les 5 min (VEILLE_MEDIAS_CACHE_TTL_MS),
+// indépendamment de toute nouvelle version du site — sans ce retrait, son
+// contenu à lui seul suffisait à déclencher le rechargement automatique
+// mnoria:page-stale. Un bloc absent (page sans ce script, regex sans match)
+// laisse le HTML inchangé, jamais d'erreur.
+function stripVolatileHtmlForStaleCheck(html) {
+  return String(html || "").replace(
+    /<script type="application\/json" id="veille-medias-json">[\s\S]*?<\/script>/,
+    ""
+  );
+}
+
 function notifyClientsOfStalePage(url) {
   return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
     for (const client of clients) {
@@ -322,7 +343,13 @@ self.addEventListener("fetch", (event) => {
               const responseForCache = response.clone();
               return response.text().then((newHtml) => {
                 cache.put(cacheKeyRequest, responseForCache);
-                if (oldHtml !== null && newHtml !== oldHtml) {
+                // stripVolatileHtmlForStaleCheck (correctif du 15/09/2026, "quelques
+                // instants après, ça refresh la page tout seul") : #veille-medias-json
+                // (server.js replaceMetaPlaceholders) se régénère toutes les 5 min côté
+                // serveur, indépendamment de tout déploiement réel — un diff brut du HTML
+                // entier le prenait à tort pour un vrai changement de page et déclenchait
+                // un rechargement automatique sans rapport avec ce que l'utilisateur voit.
+                if (oldHtml !== null && stripVolatileHtmlForStaleCheck(newHtml) !== stripVolatileHtmlForStaleCheck(oldHtml)) {
                   return notifyClientsOfStalePage(cacheKeyRequest.url);
                 }
               });
