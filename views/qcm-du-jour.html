@@ -353,10 +353,42 @@
       margin: 0 auto 8px;
       padding: 0 34px;
       color: #166534;
+      -webkit-text-stroke: 0.6px #000;
+      text-stroke: 0.6px #000;
       font-size: clamp(28px, 4.5vw, 34px);
       line-height: 1;
       text-align: center;
       text-wrap: balance;
+    }
+    /* Titre générique de séance (Ancrer "Renforcement des connaissances" /
+       Relier "Comprendre les liens") : reste noir sans liseret, comme avant
+       le vert du 16/09/2026 — seul le nom d'une connaissance précise
+       (Découvrir) prend la couleur ci-dessus (cf. le classList.toggle
+       'qcm-title-generic' dans loadSlot). */
+    body.qcm-title-generic.qcm-in-session .qcm-panel h1.qcm-page-heading-hidden {
+      color: #17212a;
+      -webkit-text-stroke-width: 0;
+      text-stroke-width: 0;
+    }
+    /* Logo thématique avant le titre du QCM pendant la séance (demande du
+       16/09/2026) : masqué par défaut ([hidden], cf. le [hidden] posé aussi
+       sur .qcm-title-theme-icon côté HTML) — révélé seulement quand loadSlot
+       reçoit une thématique connue (cf. setQcmTitleThemeIcon), jamais un
+       repli générique inventé quand elle est inconnue (Ancrer/Relier, sujets
+       en recherche libre...). Même couleur/liseret que le titre pour former
+       un seul bloc visuel cohérent avec lui.
+       */
+    .qcm-title-theme-icon {
+      display: inline-block;
+      margin-right: 0.28em;
+      color: #166534;
+      -webkit-text-stroke: 0.6px #000;
+      text-stroke: 0.6px #000;
+      font-size: 0.85em;
+      vertical-align: -0.06em;
+    }
+    .qcm-title-theme-icon[hidden] {
+      display: none;
     }
     /* Petit liseret noir sous le titre du QCM pendant la séance (demande du
        30/08/2026). */
@@ -379,6 +411,8 @@
       margin: 20px auto 0;
       padding: 0 34px;
       color: #166534;
+      -webkit-text-stroke: 0.6px #000;
+      text-stroke: 0.6px #000;
       font-family: "Barlow Condensed", Arial, sans-serif;
       /* Même taille que .qcm-question (cf. section "Session QCM immersive"
          plus bas, qui prime sur la base ci-dessous) — juste mise en gras
@@ -4947,7 +4981,7 @@
     <button type="button" class="qcm-panel-close" id="qcm-panel-close" aria-label="Retourner aux apprentissages" title="Retourner aux apprentissages">
       <i class="fa-solid fa-xmark" aria-hidden="true"></i>
     </button>
-    <h1 class="qcm-page-heading-hidden" aria-hidden="true"><span id="qcm-title-text">Découvrir</span></h1>
+    <h1 class="qcm-page-heading-hidden" aria-hidden="true"><i class="fa-solid qcm-title-theme-icon" id="qcm-title-theme-icon" aria-hidden="true" hidden></i><span id="qcm-title-text">Découvrir</span></h1>
     <p class="qcm-subtitle qcm-page-heading-hidden" id="qcm-subtitle-text" aria-hidden="true"></p>
     <p class="qcm-question-source-name" id="qcm-question-source-name" hidden></p>
     <div class="qcm-category-group">
@@ -5124,6 +5158,7 @@
 (function () {
   var body = document.getElementById('qcm-body');
   var titleText = document.getElementById('qcm-title-text');
+  var titleThemeIconEl = document.getElementById('qcm-title-theme-icon');
   var subtitleText = document.getElementById('qcm-subtitle-text');
   var questionSourceNameEl = document.getElementById('qcm-question-source-name');
   var categorySwitcher = document.getElementById('qcm-category-switcher');
@@ -9214,7 +9249,7 @@
         // encore débuté (loadSlot direct, jamais un retour sur Découvrir avec
         // scroll/clignotement — ça, c'était l'ancien comportement du clic sur la
         // carte elle-même, remplacé par ce panneau).
-        loadSlot(resolvedSlot, resolvedQuizDate, item.name || item.title, level);
+        loadSlot(resolvedSlot, resolvedQuizDate, item.name || item.title, level, item.theme || item.suggestedTheme || item.category);
       })
       .catch(function () {
         // Best-effort strict (même esprit que le reste de cette section,
@@ -10690,7 +10725,7 @@
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-start-index'))];
         if (!q || !q.slot) return;
         markMesQcmStartedLocally(q, quizzes);
-        loadSlot(q.slot, q.quizDate, q.label, q.level);
+        loadSlot(q.slot, q.quizDate, q.label, q.level, Array.isArray(q.themes) ? q.themes[0] : null);
       });
     });
     body.querySelectorAll('[data-mesqcm-continue-index]').forEach(function (btn) {
@@ -10698,7 +10733,7 @@
         event.stopPropagation();
         var q = quizzes[Number(btn.getAttribute('data-mesqcm-continue-index'))];
         if (!q || !q.nextLevel || !q.nextLevelReady) return;
-        loadSlot(q.slot, q.quizDate, q.label, q.nextLevel);
+        loadSlot(q.slot, q.quizDate, q.label, q.nextLevel, Array.isArray(q.themes) ? q.themes[0] : null);
       });
     });
     body.querySelectorAll('[data-mesqcm-delete-index]').forEach(function (btn) {
@@ -11707,7 +11742,7 @@
         });
         overlay.querySelector('[data-action="quiz"]').addEventListener('click', function () {
           closeMesQcmActionModal();
-          loadSlot(q.slot, q.quizDate, q.label, continuationLevel || q.level);
+          loadSlot(q.slot, q.quizDate, q.label, continuationLevel || q.level, Array.isArray(q.themes) ? q.themes[0] : null);
         });
         overlay.querySelector('[data-action="delete"]').addEventListener('click', function () {
           closeMesQcmActionModal();
@@ -12033,12 +12068,29 @@
     openMesQcmFicheFromUrl('/api/users/notion-quizzes/fiche?linkType=' + encodeURIComponent(type) + '&linkSourceId=' + encodeURIComponent(sourceId) + '&legacyKey=' + encodeURIComponent(voterKey || ''), fallbackName);
   }
 
+  // Logo thématique avant le titre (demande du 16/09/2026) : `theme` vient du
+  // même champ que les vignettes (q.themes[0]/item.theme...) — absent pour
+  // Ancrer/Relier (questions mélangées, aucune thématique unique) et pour les
+  // sujets en recherche libre dont la thématique n'est pas encore connue côté
+  // client, jamais un repli générique inventé dans ces cas (icône masquée).
+  function setQcmTitleThemeIcon(theme) {
+    if (!titleThemeIconEl) return;
+    var normalized = theme ? normalizeKnowledgeThemeLabel(theme) : null;
+    if (!normalized) {
+      titleThemeIconEl.hidden = true;
+      titleThemeIconEl.className = 'fa-solid qcm-title-theme-icon';
+      return;
+    }
+    titleThemeIconEl.className = 'fa-solid ' + getMesAcquisThemeIconClass(normalized) + ' qcm-title-theme-icon';
+    titleThemeIconEl.hidden = false;
+  }
+
   // `quizDate` : un QCM de notion vit sous sa date de création, jamais
   // forcément aujourd'hui (cf. server.js resolveDailyQuizRequestDate) — null
   // pour "renforcement", toujours calculé sur aujourd'hui côté serveur.
   // `label` : nom de la notion (ex. "Crise de Cuba"), affiché comme titre à
-  // la place de "Connaissances" générique.
-  function loadSlot(slotKey, quizDate, label, servedLevelHint) {
+  // la place de "Connaissances" générique. `theme` : cf. setQcmTitleThemeIcon.
+  function loadSlot(slotKey, quizDate, label, servedLevelHint, theme) {
     // Un nouveau QCM chargé rend obsolète tout polling "suite en cours de
     // création" du précédent (cf. startProgressiveNextLevelPoll) — jamais
     // laissé tourner jusqu'à sa propre détection isConnected/slot (jusqu'à
@@ -12082,6 +12134,13 @@
     // sans attendre la réponse serveur pour ces deux catégories. CATEGORY_LABELS reste le
     // repli pour "mesqcm" (toujours accompagné d'un vrai `label` en pratique) et tout autre cas.
     titleText.textContent = label || QCM_INITIAL_TITLE_BY_CATEGORY[currentCategory] || CATEGORY_LABELS[currentCategory] || 'Apprentissage';
+    // Titre générique de séance ("Renforcement des connaissances"/"Comprendre
+    // les liens") reste noir comme avant (demande du 16/09/2026) : le vert +
+    // liseret n'a de sens que pour le nom d'une connaissance précise
+    // (Découvrir), jamais pour ces deux libellés qui mélangent plusieurs
+    // connaissances différentes.
+    document.body.classList.toggle('qcm-title-generic', currentCategory === 'renforcement' || currentCategory === 'comprendre');
+    setQcmTitleThemeIcon(theme);
     if (subtitleText) subtitleText.textContent = QCM_SUBTITLE_BY_CATEGORY[currentCategory] || '';
     renderCategorySwitcher();
     renderMessage('Chargement en cours');
