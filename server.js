@@ -6637,7 +6637,15 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
               // quel que soit l'âge de la notion. "custom"/"comprendre" ont toujours un
               // slot "notion:" stable (cf. slotByEclairageKey ci-dessus) : on relit donc
               // leur fiche complète ici, indépendamment de ce système de streaks.
-              supabase.from("daily_quiz").select("slot, questions").in("slot", quizSlots)
+              // questions->0 (jamais la colonne "questions" entière, égress mesuré à
+              // ~43 Ko/ligne en moyenne, jusqu'à 19 questions avec énoncés/options/
+              // explications) : seule la question d'indice 0 du tableau BRUT porte la
+              // fiche complète (invariant garanti à l'écriture, cf. commentaire plus haut
+              // et findCanonicalSourceDetail/slimSourceDetailForDuplicateQuestion) —
+              // vérifié le 19/09/2026 sur les 143 lignes "notion:%" en base, aucune
+              // exception. ~8 Ko/ligne au lieu de ~43 Ko, sans perte : sourceDetail n'est
+              // de toute façon jamais présent ailleurs que sur cet indice.
+              supabase.from("daily_quiz").select("slot, questions->0").in("slot", quizSlots)
             ]);
             if (fsrsError) {
               console.warn("[intellectual universe] ancrage FSRS indisponible :", fsrsError.message);
@@ -6681,9 +6689,12 @@ app.get("/api/users/intellectual-universe", rateLimit("users", 30), async (req, 
             } else {
               const canonicalBySlot = new Map();
               for (const row of notionQuizRows || []) {
-                const rawQuestions = Array.isArray(row.questions) ? row.questions : [];
-                const sourceDetail = findCanonicalSourceDetail(rawQuestions);
-                const sourceName = rawQuestions[0]?.sourceName || null;
+                // row.questions = questions->0 seul (jamais un tableau ici, cf. select
+                // ci-dessus) : lecture directe, findCanonicalSourceDetail (pensée pour un
+                // tableau complet) n'a plus lieu d'être sur ce seul élément.
+                const canonicalQuestion = row.questions || null;
+                const sourceDetail = canonicalQuestion?.sourceDetail?.sections?.length ? canonicalQuestion.sourceDetail : null;
+                const sourceName = canonicalQuestion?.sourceName || null;
                 if (sourceDetail || sourceName) canonicalBySlot.set(row.slot, { sourceDetail, sourceName });
               }
               for (const a of eclairageAcquisitions) {
@@ -18043,6 +18054,11 @@ function computeCultureGeneraleStreaks(events) {
 // suffixe change à chaque passage FSRS et permet donc une nouvelle tentative
 // le même jour après un échec.
 const DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY = 20;
+// Pagination de la lecture des échéances (cf. fetchCultureGeneraleReviewInjectionForTodayUncached) :
+// 10 pages de 50 = au plus 500 états FSRS parcourus par appel, borne dure contre
+// un historique très largement décoché.
+const DAILY_QUIZ_REVIEW_SCAN_PAGE_SIZE = 50;
+const DAILY_QUIZ_REVIEW_MAX_SCAN_PAGES = 10;
 
 // Questions qu'un visiteur a explicitement écartées de ses futures repasses
 // (cf. POST /api/daily-quiz/exclude-question) — il les connaît déjà ou n'est
@@ -18128,8 +18144,39 @@ async function fetchCultureGeneraleReviewInjectionForTodayUncached(key, { includ
   if (userError) { console.warn("[fsrs due] lecture user échouée :", userError.message); return []; }
   if (!userId) return [];
 
-  const [{ data: dueStates, error: dueError }, excludedIds, disabledKnowledgeTargetKeys] = await Promise.all([
-    supabase.from("memory_item_fsrs_states")
+  // Désactivations personnelles par knowledgeTarget (nouveau mécanisme,
+  // remplace user_question_exclusions pour tout nouveau choix) — une seule
+  // lecture batch pour TOUT l'utilisateur, jamais une requête par carte due
+  // (section 24 du diagnostic). Les deux filtres s'appliquent en OU logique
+  // (legacy question_id OU nouvelle désactivation par knowledgeTarget),
+  // jamais l'un à la place de l'autre : cf. commentaire de tête sur
+  // fetchExcludedQuestionIds, comportement historique préservé à l'identique.
+  const [excludedIds, disabledKnowledgeTargetKeys] = await Promise.all([
+    fetchExcludedQuestionIds(key),
+    fetchDisabledKnowledgeTargetKeys(userId)
+  ]);
+
+  // Lecture PAGINÉE des échéances (correctif du 19/09/2026, "je n'ai pas
+  // d'éléments à ancrer alors que j'ai mémorisé de nombreux éléments") : le
+  // plafond DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY ne doit compter que les
+  // repasses RÉELLEMENT proposables. L'ancien .limit(20) portait sur les 20
+  // plus anciennes échéances AVANT les filtres (décochées, exclues, contenu
+  // introuvable) : si ces 20 étaient toutes écartées, Ancrer restait vide alors
+  // que des dizaines d'autres repasses valides étaient dues. On parcourt donc
+  // les échéances par pages (plus en retard d'abord) jusqu'à avoir
+  // DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY repasses non désactivées. Le chemin
+  // "notation" (includeDisabledKnowledgeTargets:true) parcourt exactement le
+  // même préfixe (la condition d'arrêt ne compte que les non désactivées) :
+  // sa liste est un sur-ensemble de celle servie par GET /today, donc une
+  // question servie en page 2 reste retrouvable par POST /answer.
+  const questionByDateSlotId = new Map();
+  const curriculumBySlotDate = new Map();
+  const loadedSlotDates = new Set();
+  const due = [];
+  let proposableCount = 0;
+  for (let page = 0; page < DAILY_QUIZ_REVIEW_MAX_SCAN_PAGES && proposableCount < DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY; page++) {
+    const from = page * DAILY_QUIZ_REVIEW_SCAN_PAGE_SIZE;
+    const { data: dueStates, error: dueError } = await supabase.from("memory_item_fsrs_states")
       // state/stability : ajoutés pour la gradation de l'aide (cf.
       // lib/spaced-repetition/help-level.js, deriveHelpLevel) — lus ici en
       // même temps que reps (déjà utilisé pour la rotation de variante),
@@ -18143,78 +18190,72 @@ async function fetchCultureGeneraleReviewInjectionForTodayUncached(key, { includ
       .eq("user_id", userId)
       .lte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true })
-      .limit(DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY),
-    fetchExcludedQuestionIds(key),
-    // Désactivations personnelles par knowledgeTarget (nouveau mécanisme,
-    // remplace user_question_exclusions pour tout nouveau choix) — une seule
-    // lecture batch pour TOUT l'utilisateur, jamais une requête par carte due
-    // (section 24 du diagnostic). Les deux filtres s'appliquent en OU logique
-    // (legacy question_id OU nouvelle désactivation par knowledgeTarget),
-    // jamais l'un à la place de l'autre : cf. commentaire de tête sur
-    // fetchExcludedQuestionIds, comportement historique préservé à l'identique.
-    fetchDisabledKnowledgeTargetKeys(userId)
-  ]);
-  if (dueError) { console.warn("[fsrs due] lecture memory_item_fsrs_states échouée :", dueError.message); return []; }
-  if (!dueStates || !dueStates.length) return [];
+      .order("memory_item_id", { ascending: true }) // départage stable entre deux pages
+      .range(from, from + DAILY_QUIZ_REVIEW_SCAN_PAGE_SIZE - 1);
+    if (dueError) { console.warn("[fsrs due] lecture memory_item_fsrs_states échouée :", dueError.message); break; }
+    if (!dueStates || !dueStates.length) break;
 
-  const dueItems = dueStates
-    .map((s) => ({ reps: s.reps, helpLevel: deriveHelpLevel({ state: s.state, stability: s.stability }), memoryItem: s.memory_items }))
-    .filter((s) => s.memoryItem && !excludedIds.has(s.memoryItem.question_id));
-  if (!dueItems.length) return [];
+    const dueItems = dueStates
+      .map((s) => ({ reps: s.reps, helpLevel: deriveHelpLevel({ state: s.state, stability: s.stability }), memoryItem: s.memory_items }))
+      .filter((s) => s.memoryItem && !excludedIds.has(s.memoryItem.question_id));
 
-  // Regroupe par ligne daily_quiz d'origine pour ne la relire qu'une fois,
-  // même si plusieurs de ses questions sont dues en même temps. `curriculum`
-  // (chantier "Mémoriser/Non mémorisée") : lu dans la même passe, seulement
-  // utilisé en fallback pour les questions d'un ancien master antérieur au
-  // champ question.knowledgeTargetId (cf. resolveLegacyQuestionKnowledgeTargetId).
-  const bySlotDate = new Map();
-  for (const { memoryItem } of dueItems) {
-    const k = `${memoryItem.quiz_date}:${memoryItem.slot}`;
-    if (!bySlotDate.has(k)) bySlotDate.set(k, { quizDate: memoryItem.quiz_date, slot: memoryItem.slot });
-  }
-  const quizRowResults = await Promise.all([...bySlotDate.values()].map(({ quizDate, slot }) =>
-    supabase.from("daily_quiz").select("quiz_date, slot, questions, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
-  const questionByDateSlotId = new Map();
-  const curriculumBySlotDate = new Map();
-  for (const { data } of quizRowResults) {
-    if (!data) continue;
-    curriculumBySlotDate.set(`${data.quiz_date}:${data.slot}`, data.curriculum || null);
-    for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
-  }
-
-  const due = [];
-  for (const { reps, helpLevel, memoryItem } of dueItems) {
-    const question = questionByDateSlotId.get(`${memoryItem.quiz_date}:${memoryItem.slot}:${memoryItem.question_id}`);
-    if (!question) continue; // contenu hors fenêtre de rétention (cas des anciens slots hors "notion:%", jamais backfillés)
-    // Filtre par knowledgeTarget désactivé (chantier "Mémoriser/Non
-    // mémorisée") : résolution AVANT tout, y compris pour un ancien master
-    // sans question.knowledgeTargetId (fallback texte réservé à la lecture,
-    // jamais persisté ici). subject_type/subject_source_id viennent de
-    // memory_items (identité stable du Subject), pas de la question.
-    const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${memoryItem.quiz_date}:${memoryItem.slot}`));
-    const isDisabled = knowledgeTargetId && memoryItem.subject_type && memoryItem.subject_source_id
-      && disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(memoryItem.subject_type, memoryItem.subject_source_id, knowledgeTargetId));
-    if (isDisabled && !includeDisabledKnowledgeTargets) {
-      continue;
+    // Regroupe par ligne daily_quiz d'origine pour ne la relire qu'une fois,
+    // même si plusieurs de ses questions sont dues en même temps (et d'une
+    // page à l'autre, cf. loadedSlotDates). `curriculum` (chantier
+    // "Mémoriser/Non mémorisée") : lu dans la même passe, seulement utilisé en
+    // fallback pour les questions d'un ancien master antérieur au champ
+    // question.knowledgeTargetId (cf. resolveLegacyQuestionKnowledgeTargetId).
+    const missingSlotDates = new Map();
+    for (const { memoryItem } of dueItems) {
+      const k = `${memoryItem.quiz_date}:${memoryItem.slot}`;
+      if (!loadedSlotDates.has(k) && !missingSlotDates.has(k)) missingSlotDates.set(k, { quizDate: memoryItem.quiz_date, slot: memoryItem.slot });
     }
-    due.push({
-      ...resolveActiveQuestionVariant(question, reps),
-      id: buildCultureGeneraleReviewQuestionId(memoryItem.question_id, reps),
-      // helpLevel : distinct de resolveActiveQuestionVariant (variant =
-      // quelle formulation, helpLevel = combien d'aide) — jamais fusionné
-      // dans son calcul, jamais lu par selectVariantIndex.
-      helpLevel,
-      // knowledgeTargetId/memorizationEnabled : memorizationEnabled vaut
-      // toujours true pour l'appelant "liste" (un item désactivé vient d'être
-      // exclu ci-dessus, jamais poussé dans `due`) ; reflète le vrai état pour
-      // l'appelant "notation" (includeDisabledKnowledgeTargets:true), qui a
-      // justement besoin de retrouver un item tout juste désactivé.
-      // knowledgeTargetId reste absent (undefined) quand ni le champ direct
-      // ni le fallback texte n'ont rien résolu (ancien master ambigu/sans
-      // curriculum) : le frontend n'affiche alors aucun contrôle plutôt que
-      // d'en brancher un sur un id inventé.
-      ...(knowledgeTargetId ? { knowledgeTargetId, memorizationEnabled: !isDisabled } : {})
-    });
+    const quizRowResults = await Promise.all([...missingSlotDates.values()].map(({ quizDate, slot }) =>
+      supabase.from("daily_quiz").select("quiz_date, slot, questions, curriculum").eq("quiz_date", quizDate).eq("slot", slot).maybeSingle()));
+    for (const k of missingSlotDates.keys()) loadedSlotDates.add(k);
+    for (const { data } of quizRowResults) {
+      if (!data) continue;
+      curriculumBySlotDate.set(`${data.quiz_date}:${data.slot}`, data.curriculum || null);
+      for (const q of data.questions || []) questionByDateSlotId.set(`${data.quiz_date}:${data.slot}:${q.id}`, q);
+    }
+
+    for (const { reps, helpLevel, memoryItem } of dueItems) {
+      if (proposableCount >= DAILY_QUIZ_ACQUIS_REVIEW_MAX_PER_DAY) break;
+      const question = questionByDateSlotId.get(`${memoryItem.quiz_date}:${memoryItem.slot}:${memoryItem.question_id}`);
+      if (!question) continue; // contenu hors fenêtre de rétention (cas des anciens slots hors "notion:%", jamais backfillés)
+      // Filtre par knowledgeTarget désactivé (chantier "Mémoriser/Non
+      // mémorisée") : résolution AVANT tout, y compris pour un ancien master
+      // sans question.knowledgeTargetId (fallback texte réservé à la lecture,
+      // jamais persisté ici). subject_type/subject_source_id viennent de
+      // memory_items (identité stable du Subject), pas de la question.
+      const knowledgeTargetId = resolveLegacyQuestionKnowledgeTargetId(question, curriculumBySlotDate.get(`${memoryItem.quiz_date}:${memoryItem.slot}`));
+      const isDisabled = knowledgeTargetId && memoryItem.subject_type && memoryItem.subject_source_id
+        && disabledKnowledgeTargetKeys.has(knowledgeTargetPreferenceKey(memoryItem.subject_type, memoryItem.subject_source_id, knowledgeTargetId));
+      if (isDisabled && !includeDisabledKnowledgeTargets) {
+        continue;
+      }
+      if (!isDisabled) proposableCount++;
+      due.push({
+        ...resolveActiveQuestionVariant(question, reps),
+        id: buildCultureGeneraleReviewQuestionId(memoryItem.question_id, reps),
+        // helpLevel : distinct de resolveActiveQuestionVariant (variant =
+        // quelle formulation, helpLevel = combien d'aide) — jamais fusionné
+        // dans son calcul, jamais lu par selectVariantIndex.
+        helpLevel,
+        // knowledgeTargetId/memorizationEnabled : memorizationEnabled vaut
+        // toujours true pour l'appelant "liste" (un item désactivé vient d'être
+        // exclu ci-dessus, jamais poussé dans `due`) ; reflète le vrai état pour
+        // l'appelant "notation" (includeDisabledKnowledgeTargets:true), qui a
+        // justement besoin de retrouver un item tout juste désactivé.
+        // knowledgeTargetId reste absent (undefined) quand ni le champ direct
+        // ni le fallback texte n'ont rien résolu (ancien master ambigu/sans
+        // curriculum) : le frontend n'affiche alors aucun contrôle plutôt que
+        // d'en brancher un sur un id inventé.
+        ...(knowledgeTargetId ? { knowledgeTargetId, memorizationEnabled: !isDisabled } : {})
+      });
+    }
+
+    if (dueStates.length < DAILY_QUIZ_REVIEW_SCAN_PAGE_SIZE) break; // dernière page
   }
   return due;
 }

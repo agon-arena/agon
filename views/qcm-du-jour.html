@@ -671,7 +671,49 @@
       margin: 9px 0 0;
       color: #6b7280;
       font-size: 12.5px;
-      text-align: left;
+      text-align: center;
+    }
+    /* Chiffre mis en avant dans la phrase (demande du 19/09/2026, "mettre en gras
+       et plus gros le chiffre (exemple : 9)") : posé par renderLoadGauge via
+       innerHTML, jamais dans le texte "Aucune connaissance..." qui n'en a pas. */
+    .qcm-load-gauge-caption-count {
+      display: inline-block;
+      font-weight: 800;
+      font-size: 16px;
+      color: #384852;
+    }
+    /* Respiration à chaque évolution du chiffre (demande du 19/09/2026, ex.
+       "passage de 2 à 3 connaissances") : un agrandissement/retour doux, jamais
+       un rebond avec dépassement (cf. .qcm-progress-counter-bounce, réservé au
+       compteur de question) — display:inline-block ci-dessus nécessaire pour
+       que le scale() reste centré sur le chiffre. */
+    .qcm-load-gauge-caption-count-pulse {
+      animation: qcm-load-gauge-caption-count-breathe 800ms ease-in-out;
+    }
+    @keyframes qcm-load-gauge-caption-count-breathe {
+      0% { transform: scale(1); }
+      45% { transform: scale(2.2); }
+      100% { transform: scale(1); }
+    }
+    /* Vert clignotant tant que le rythme idéal du jour est atteint ou dépassé
+       (demande du 19/09/2026, "quand il est à 6, il doit etre en vert et
+       clignoter") : même vert que .qcm-load-gauge-ideal-label.is-celebrating
+       (#16a34a), en continu tant que la classe reste posée par renderLoadGauge —
+       jamais un simple survol, ce chiffre reste vert toute la durée du clignotement
+       (seule l'opacité varie), contrairement à .qcm-load-gauge-caption-count-pulse
+       qui reste ponctuel et se combine avec ce clignotement le temps d'une seule
+       transition (règle combinée juste en dessous). */
+    .qcm-load-gauge-caption-count-ideal {
+      animation: qcm-load-gauge-caption-count-ideal-blink 1.1s ease-in-out infinite;
+    }
+    .qcm-load-gauge-caption-count-pulse.qcm-load-gauge-caption-count-ideal {
+      animation:
+        qcm-load-gauge-caption-count-breathe 800ms ease-in-out,
+        qcm-load-gauge-caption-count-ideal-blink 1.1s ease-in-out infinite;
+    }
+    @keyframes qcm-load-gauge-caption-count-ideal-blink {
+      0%, 100% { color: #16a34a; opacity: 1; }
+      50% { color: #16a34a; opacity: 0.25; }
     }
     @media (max-width: 480px) {
       .qcm-load-gauge {
@@ -4850,7 +4892,9 @@
       .qcm-progress-plus-one,
       .qcm-progress-bar-fill::after,
       .qcm-progress-bar-smoke-puff,
-      .qcm-progress-counter {
+      .qcm-progress-counter,
+      .qcm-load-gauge-caption-count-pulse,
+      .qcm-load-gauge-caption-count-ideal {
         animation: none !important;
       }
       .qcm-option-btn,
@@ -8855,6 +8899,11 @@
 
   function renderLoadGauge(gauge) {
     if (!loadGaugeEl || !gauge) return;
+    // Capturé AVANT d'écraser lastLoadGaugeData (demande du 19/09/2026, "ça doit
+    // faire comme une respiration sur le chiffre, à chaque fois qu'il évolue") :
+    // null au tout premier rendu de la page (jamais de pulse sur un simple
+    // affichage initial), sinon l'ancien compte pour comparer au nouveau plus bas.
+    var previousLoadGaugeCount = lastLoadGaugeData ? lastLoadGaugeData.count : null;
     lastLoadGaugeData = {
       level: gauge.level,
       count: Math.max(0, Number(gauge.count) || 0)
@@ -8922,7 +8971,22 @@
     if (loadGaugeLabel) loadGaugeLabel.textContent = meta.shortLabel || meta.label;
     if (loadGaugeCaption) {
       if (peakLoad > 0) {
-        loadGaugeCaption.textContent = peakLoad + ' connaissance' + (peakLoad > 1 ? 's' : '') + ' mémorisée' + (peakLoad > 1 ? 's' : '') + ' aujourd’hui.';
+        // innerHTML (pas textContent) : peakLoad reste un nombre, jamais une
+        // valeur utilisateur à échapper (demande du 19/09/2026, "mettre en gras
+        // et plus gros le chiffre"). Respiration (même demande, suite) : seulement
+        // quand le chiffre a réellement changé depuis le rendu précédent (jamais
+        // au tout premier affichage, previousLoadGaugeCount alors null) — un noeud
+        // neuf à chaque appel (innerHTML remplacé en bloc), donc la classe posée
+        // dès la construction suffit à rejouer l'animation CSS.
+        var loadGaugeCountChanged = previousLoadGaugeCount !== null && previousLoadGaugeCount !== peakLoad;
+        // Vert clignotant tant que le rythme idéal est atteint ou dépassé (demande
+        // du 19/09/2026, "quand il est à 6, il doit etre en vert et clignoter") :
+        // même condition isIdealReached que .qcm-load-gauge-ideal-label.is-celebrating/
+        // .qcm-load-gauge-bar-fill.is-ideal plus haut, jamais un second seuil inventé.
+        var loadGaugeCountClasses = 'qcm-load-gauge-caption-count' +
+          (loadGaugeCountChanged ? ' qcm-load-gauge-caption-count-pulse' : '') +
+          (isIdealReached ? ' qcm-load-gauge-caption-count-ideal' : '');
+        loadGaugeCaption.innerHTML = '<span class="' + loadGaugeCountClasses + '">' + peakLoad + '</span> connaissance' + (peakLoad > 1 ? 's' : '') + ' mémorisée' + (peakLoad > 1 ? 's' : '') + ' aujourd’hui.';
       } else {
         loadGaugeCaption.textContent = 'Aucune connaissance mémorisée pour l’instant aujourd’hui.';
       }
